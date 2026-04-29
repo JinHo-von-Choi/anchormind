@@ -229,8 +229,17 @@ export const MEMORY_CONFIG = {
     default   : 60
   },
   rrfSearch: {
-    k             : 60,   // RRF denominator constant. Larger values reduce top-rank dependency
-    l1WeightFactor: 2.0   // Weight multiplier for L1 Redis results (highest priority injection)
+    k                : 60,    // RRF denominator constant. Larger values reduce top-rank dependency
+    l1WeightFactor   : 2.0,   // Weight multiplier for L1 Redis results
+    l2WeightFactor   : 1.0,   // Default L2 keyword/topic weight
+    l3WeightFactor   : 1.0,   // Default L3 pgvector weight
+    graphWeightFactor: 1.5,
+    mixed: {
+      l1WeightFactor   : 2.5, // text + keywords/topic/type path
+      l2WeightFactor   : 1.7,
+      l3WeightFactor   : 0.6,
+      graphWeightFactor: 1.5
+    }
   },
   linkedFragmentLimit: 10,  // Max 1-hop linked fragments on recall with includeLinks
   embeddingWorker: {
@@ -277,8 +286,11 @@ export const MEMORY_CONFIG = {
     maxDeletePerCycle: 30        // Max deletions per cycle
   },
   semanticSearch: {
-    minSimilarity: 0.2,          // L3 pgvector search minimum similarity (default 0.2)
-    limit        : 10            // L3 max return count
+    minSimilarity     : 0.35,    // L3 pgvector search minimum similarity
+    limit             : 30,      // L3 max return count
+    timeoutMs         : 5000,    // caller-side L3 deadline
+    statementTimeoutMs: 4500,    // PostgreSQL statement_timeout
+    hnswEfSearch      : 80       // SET LOCAL hnsw.ef_search
   },
   temperatureBoost: {
     warmWindowDays     : 7,      // Apply warmBoost to fragments accessed within this window
@@ -290,7 +302,7 @@ export const MEMORY_CONFIG = {
 };
 ```
 
-The sum of importanceWeight + recencyWeight + semanticWeight must equal 1.0. halfLifeDays determines decay speed and operates independently of staleThresholds. rrfSearch.k is the RRF denominator stabilization constant, with 60 as the general-purpose default. gc.factDecisionPolicy cleans up orphan fact/decision fragments under separate criteria to reduce search noise.
+The sum of importanceWeight + recencyWeight + semanticWeight must equal 1.0. halfLifeDays determines decay speed and operates independently of staleThresholds. rrfSearch.k is the RRF denominator stabilization constant, with 60 as the general-purpose default. Mixed RRF weights apply only when `text` is combined with at least one keywords/topic/type signal, preserving semantic recall for text-only searches. gc.factDecisionPolicy cleans up orphan fact/decision fragments under separate criteria to reduce search noise.
 
 ### SearchParamAdaptor (Automatic Search Parameter Learning)
 
@@ -313,9 +325,11 @@ Validated items:
 - `ranking` weights (importanceWeight + recencyWeight + semanticWeight) sum = 1.0
 - `contextInjection.rankWeights` sum = 1.0
 - `semanticSearch.minSimilarity`, `morphemeIndex.minSimilarity`, `gc.utilityThreshold` are in the 0-1 range
+- `rrfSearch.*WeightFactor` and `rrfSearch.mixed.*WeightFactor` are non-negative finite numbers
 - All `halfLifeDays` entries are positive
 - `gc.gracePeriodDays` < `gc.inactiveDays`
-- `embeddingWorker.batchSize`, `embeddingWorker.intervalMs`, `pagination.defaultPageSize`, `pagination.maxPageSize`, `gc.maxDeletePerCycle` are positive integers
+- `embeddingWorker.batchSize`, `embeddingWorker.intervalMs`, `pagination.defaultPageSize`, `pagination.maxPageSize`, `gc.maxDeletePerCycle`, `semanticSearch.limit`, `semanticSearch.timeoutMs`, `semanticSearch.hnswEfSearch` are positive integers
+- `semanticSearch.statementTimeoutMs` is a non-negative integer
 
 ---
 
