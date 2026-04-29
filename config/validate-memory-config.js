@@ -41,6 +41,24 @@ export function validateMemoryConfig(cfg) {
     }
   }
 
+  // RRF 가중치 검증: 음수/NaN은 레이어 순위를 왜곡한다.
+  const rrf = cfg.rrfSearch || {};
+  const rrfWeightFields = [
+    ["rrfSearch.l1WeightFactor", rrf.l1WeightFactor],
+    ["rrfSearch.l2WeightFactor", rrf.l2WeightFactor],
+    ["rrfSearch.l3WeightFactor", rrf.l3WeightFactor],
+    ["rrfSearch.graphWeightFactor", rrf.graphWeightFactor],
+    ["rrfSearch.mixed.l1WeightFactor", rrf.mixed?.l1WeightFactor],
+    ["rrfSearch.mixed.l2WeightFactor", rrf.mixed?.l2WeightFactor],
+    ["rrfSearch.mixed.l3WeightFactor", rrf.mixed?.l3WeightFactor],
+    ["rrfSearch.mixed.graphWeightFactor", rrf.mixed?.graphWeightFactor],
+  ];
+  for (const [name, val] of rrfWeightFields) {
+    if (val !== undefined && (typeof val !== "number" || val < 0 || !Number.isFinite(val))) {
+      errors.push(`${name} must be a non-negative finite number (got ${val})`);
+    }
+  }
+
   // halfLifeDays 양수 검증
   for (const [key, val] of Object.entries(cfg.halfLifeDays)) {
     if (typeof val !== "number" || val <= 0) {
@@ -60,11 +78,20 @@ export function validateMemoryConfig(cfg) {
     ["pagination.defaultPageSize",   cfg.pagination.defaultPageSize],
     ["pagination.maxPageSize",       cfg.pagination.maxPageSize],
     ["gc.maxDeletePerCycle",         cfg.gc.maxDeletePerCycle],
+    ["semanticSearch.limit",         cfg.semanticSearch.limit],
+    ["semanticSearch.timeoutMs",     cfg.semanticSearch.timeoutMs],
+    ["semanticSearch.hnswEfSearch",  cfg.semanticSearch.hnswEfSearch],
   ];
   for (const [name, val] of positiveIntFields) {
     if (typeof val !== "number" || val <= 0 || !Number.isInteger(val)) {
       errors.push(`${name} must be a positive integer (got ${val})`);
     }
+  }
+
+  if (typeof cfg.semanticSearch.statementTimeoutMs !== "number" ||
+      cfg.semanticSearch.statementTimeoutMs < 0 ||
+      !Number.isInteger(cfg.semanticSearch.statementTimeoutMs)) {
+    errors.push(`semanticSearch.statementTimeoutMs must be a non-negative integer (got ${cfg.semanticSearch.statementTimeoutMs})`);
   }
 
   if (errors.length > 0) {

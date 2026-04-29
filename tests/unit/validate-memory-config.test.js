@@ -51,4 +51,16 @@ describe("validateMemoryConfig", () => {
     bad.embeddingWorker.batchSize = 0;
     assert.throws(() => validateMemoryConfig(bad), /positive integer/i);
   });
+
+  it("RRF 가중치가 음수이면 에러", () => {
+    const bad = structuredClone(MEMORY_CONFIG);
+    bad.rrfSearch.mixed.l3WeightFactor = -0.1;
+    assert.throws(() => validateMemoryConfig(bad), /rrfSearch\.mixed\.l3WeightFactor.*non-negative/i);
+  });
+
+  it("semanticSearch statementTimeoutMs가 음수이면 에러", () => {
+    const bad = structuredClone(MEMORY_CONFIG);
+    bad.semanticSearch.statementTimeoutMs = -1;
+    assert.throws(() => validateMemoryConfig(bad), /statementTimeoutMs.*non-negative integer/i);
+  });
 });

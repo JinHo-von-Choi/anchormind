@@ -261,8 +261,17 @@ export const MEMORY_CONFIG = {
     default   : 60
   },
   rrfSearch: {
-    k             : 60,   // RRF 분모 상수. 값이 클수록 상위 랭크 의존도 완화
-    l1WeightFactor: 2.0   // L1 Redis 결과에 곱하는 가중치 배수 (최우선 주입)
+    k                : 60,    // RRF 분모 상수. 값이 클수록 상위 랭크 의존도 완화
+    l1WeightFactor   : 2.0,   // L1 Redis 결과에 곱하는 가중치 배수
+    l2WeightFactor   : 1.0,   // L2 keyword/topic 기본 가중치
+    l3WeightFactor   : 1.0,   // L3 pgvector 기본 가중치
+    graphWeightFactor: 1.5,
+    mixed: {
+      l1WeightFactor   : 2.5, // text + keywords/topic/type 경로
+      l2WeightFactor   : 1.7,
+      l3WeightFactor   : 0.6,
+      graphWeightFactor: 1.5
+    }
   },
   linkedFragmentLimit: 10,  // recall의 includeLinks 시 1-hop 연결 파편 최대 수
   embeddingWorker: {
@@ -309,8 +318,11 @@ export const MEMORY_CONFIG = {
     maxDeletePerCycle: 30        // 1회 최대 삭제 건수
   },
   semanticSearch: {
-    minSimilarity: 0.2,          // L3 pgvector 검색 최소 유사도 (기본 0.2)
-    limit        : 10            // L3 반환 최대 건수
+    minSimilarity     : 0.35,    // L3 pgvector 검색 최소 유사도
+    limit             : 30,      // L3 반환 최대 건수
+    timeoutMs         : 5000,    // caller-side L3 deadline
+    statementTimeoutMs: 4500,    // PostgreSQL statement_timeout
+    hnswEfSearch      : 80       // SET LOCAL hnsw.ef_search
   },
   temperatureBoost: {
     warmWindowDays     : 7,      // 이 기간 내 접근 파편에 warmBoost 적용
@@ -322,7 +334,7 @@ export const MEMORY_CONFIG = {
 };
 ```
 
-importanceWeight + recencyWeight + semanticWeight의 합은 1.0이어야 한다. halfLifeDays는 감쇠의 속도를 결정하며 staleThresholds와 독립적으로 동작한다. rrfSearch.k는 RRF 점수의 분모 안정화 상수로, 60이 일반 용도 기본값이다. gc.factDecisionPolicy는 fact/decision 유형의 고립 파편을 별도 기준으로 정리하여 검색 노이즈를 줄인다.
+importanceWeight + recencyWeight + semanticWeight의 합은 1.0이어야 한다. halfLifeDays는 감쇠의 속도를 결정하며 staleThresholds와 독립적으로 동작한다. rrfSearch.k는 RRF 점수의 분모 안정화 상수로, 60이 일반 용도 기본값이다. mixed RRF 가중치는 `text`와 keywords/topic/type 중 하나 이상이 함께 들어온 경로에만 적용되어 text-only 경로의 semantic recall을 유지한다. gc.factDecisionPolicy는 fact/decision 유형의 고립 파편을 별도 기준으로 정리하여 검색 노이즈를 줄인다.
 
 ### SearchParamAdaptor (자동 검색 파라미터 학습)
 
@@ -345,9 +357,11 @@ SearchParamAdaptor는 별도 환경변수 없이 자동으로 동작한다. `con
 - `ranking` 가중치(importanceWeight + recencyWeight + semanticWeight) 합계 = 1.0
 - `contextInjection.rankWeights` 합계 = 1.0
 - `semanticSearch.minSimilarity`, `morphemeIndex.minSimilarity`, `gc.utilityThreshold`는 0~1 범위
+- `rrfSearch.*WeightFactor`와 `rrfSearch.mixed.*WeightFactor`는 0 이상의 유한 숫자
 - `halfLifeDays` 모든 항목은 양수
 - `gc.gracePeriodDays` < `gc.inactiveDays`
-- `embeddingWorker.batchSize`, `embeddingWorker.intervalMs`, `pagination.defaultPageSize`, `pagination.maxPageSize`, `gc.maxDeletePerCycle`는 양의 정수
+- `embeddingWorker.batchSize`, `embeddingWorker.intervalMs`, `pagination.defaultPageSize`, `pagination.maxPageSize`, `gc.maxDeletePerCycle`, `semanticSearch.limit`, `semanticSearch.timeoutMs`, `semanticSearch.hnswEfSearch`는 양의 정수
+- `semanticSearch.statementTimeoutMs`는 0 이상의 정수
 
 ---
 

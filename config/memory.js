@@ -42,7 +42,15 @@ export const MEMORY_CONFIG = {
   rrfSearch: {
     k                : 60,    // RRF 상수 (높을수록 상위 랭크 부스트 감소)
     l1WeightFactor   : 2.0,   // L1(Redis) 결과 가중치 배수
-    graphWeightFactor: 1.5    // L2.5 그래프 이웃 가중치 배수
+    l2WeightFactor   : 1.0,   // L2(PostgreSQL keyword/topic) 기본 가중치
+    l3WeightFactor   : 1.0,   // L3(pgvector semantic) 기본 가중치
+    graphWeightFactor: 1.5,   // L2.5 그래프 이웃 가중치 배수
+    mixed: {
+      l1WeightFactor   : 2.5, // text + structured query는 명시 키워드 신호를 우선한다
+      l2WeightFactor   : 1.7,
+      l3WeightFactor   : 0.6,
+      graphWeightFactor: 1.5
+    }
   },
   /** L2.5 그래프 이웃 검색 설정 */
   graph: {
@@ -105,8 +113,11 @@ export const MEMORY_CONFIG = {
   },
   /** 시맨틱 검색 설정 */
   semanticSearch: {
-    minSimilarity: 0.35,
-    limit        : 30
+    minSimilarity     : 0.35,
+    limit             : 30,
+    timeoutMs         : 5000,
+    statementTimeoutMs: 4500,
+    hnswEfSearch      : 80
   },
   /** 파편 GC 정책 */
   gc: {
