@@ -42,6 +42,7 @@
 | MEMENTO_REMEMBER_ATOMIC | false | When true, atomizes the quota check + INSERT in remember() into a single transaction. Sequence: BEGIN → api_keys FOR UPDATE (quota re-validation) → INSERT → COMMIT, fully eliminating TOCTOU. false (default) performs only a pre-check and is appropriate for environments with low concurrent request volume |
 | MEMENTO_CASE_BACKPROP_ENABLED | false | When true, enables CaseRewardBackprop, which back-propagates tool_feedback reward signals along case_id fragment chains. Adjust importance scores of cause fragments based on outcome quality |
 | MEMENTO_STORAGE | pgvector | Storage adapter selection. `pgvector` (default, PostgreSQL + pgvector). Additional adapters can be registered in `lib/storage/`. Changing this value requires all fragments to be re-indexed in the target backend |
+| MEMENTO_RECALL_MIN_SIM_FLOOR | (unset) | Opt-in floor for the adaptive similarity threshold returned by `SearchParamAdaptor.getMinSimilarity`. Example: when set to `0.45`, the returned value is clamped to at least 0.45 even if the learned value is lower. Unset preserves the existing behavior |
 
 #### Migration Linting
 

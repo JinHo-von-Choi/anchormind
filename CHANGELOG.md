@@ -1,5 +1,30 @@
 # Changelog
 
+## [4.0.1] - 2026-05-14
+
+기존 API·DB 스키마 호환. 외부 호출자 응답 구조 무변경.
+
+### Added
+
+- `MEMENTO_RECALL_MIN_SIM_FLOOR` 환경변수. `SearchParamAdaptor.getMinSimilarity`가 반환하는 적응형 임계값에 옵트인 하한을 강제한다. 미설정 시 기존 동작 그대로.
+
+### Changed
+
+- `lib/memory/read/FragmentSearch.js` `_executeSearch`:
+  - Cross-encoder Reranker 호출 시 `topic: <topic> keywords: <keywords> text: <text>` 형식의 query를 전달하여 정확 매칭 신호가 재정렬 단계까지 보존된다.
+  - `l1MissIds`를 `l1IsFallback`에 따라 빈 배열로 강제. fallback fragment가 `_searchL2.getByIds`로 추가 조회되어 결과에 섞이는 경로를 차단.
+  - RRF의 L1 layer 가중치를 `l1IsFallback ? 0.5 : MEMORY_CONFIG.rrfSearch.l1WeightFactor`로 분기. fallback 경로의 L1 결과가 정상 L2/L3보다 위로 올라오지 않게 강등.
+- `config/memory.js` `semanticSearch.minSimilarity` 0.35 → 0.5.
+- `lib/memory/embedding/EmbeddingCache._key`: 캐시 키에 `EMBEDDING_MODEL` prefix 결합. 모델 변경 시 stale 벡터 hit 방지.
+- `lib/memory/assistant-query.js` `boostAssistantFragments` 기본 boost 0.05 → 0.02.
+
+### Tests
+
+- `tests/unit/fragment-search-fallback-guard.test.js` 신설. 정적 가드 3건 + 동적 가드 2건.
+- 영향권 단위 테스트 114건 회귀 0.
+
+---
+
 ## [4.0.0] - 2026-05-13
 
 기존 API·DB 스키마 호환. 외부 호출자 인터페이스 무변경. major 표시는 storage 어댑터 계층 도입으로 데이터 액세스 surface가 추가됐기 때문이다.

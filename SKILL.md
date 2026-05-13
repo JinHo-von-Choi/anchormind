@@ -2,7 +2,11 @@
 
 AI 에이전트가 Memento MCP 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
 
-## 현재 버전: v4.0.0
+## 현재 버전: v4.0.1
+
+v4.0.1은 recall 정확도 보정 patch 릴리즈다. Cross-encoder Reranker query에 `topic`·`keywords`·`text` prefix가 결합되어 정확 매칭 신호가 재정렬 단계까지 보존된다. `_searchL1` fallback의 L1 결과가 RRF에서 가중 강등(0.5)되고, fallback fragment가 `_searchL2.getByIds`로 누수되는 경로가 차단된다. `semanticSearch.minSimilarity` 기본값이 0.5로 상향됐고, 옵트인 ENV `MEMENTO_RECALL_MIN_SIM_FLOOR`로 적응형 임계값 하한을 강제할 수 있다. `EmbeddingCache` 캐시 키에 `EMBEDDING_MODEL` prefix가 결합되어 모델 변경 시 stale 벡터 hit이 차단된다. `boostAssistantFragments`의 기본 boost가 0.05 → 0.02로 축소됐다.
+
+## v4.0.0
 
 v4.0.0은 검색 정합성과 데이터 액세스 surface 두 축을 정리한 major 릴리즈다.
 
