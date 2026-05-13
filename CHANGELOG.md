@@ -1,5 +1,25 @@
 # Changelog
 
+## [3.8.0] - 2026-05-13
+
+기존 API·DB 스키마 호환. Breaking change 없음. 외부 호출자 `search()` 응답 구조 무변경.
+
+### Changed
+
+- `lib/memory/read/FragmentSearch.js`: `search()` 본문의 부작용 처리(검색 이벤트 영속화 `recordSearchEvent` + SearchParamAdaptor `recordOutcome`)를 `_commitSearchSideEffects` 메서드로 추출. 검색 파이프라인은 결과 자체 생성에 집중하고 부작용은 단일 단계로 격리된다. `_searchEventId` 동기 반환 계약 유지.
+
+### Tests
+
+- `tests/unit/fragment-search-side-effect-split.test.js`: 5 케이스 정적 회귀 가드. `_commitSearchSideEffects` 정의 존재, `search()` 호출, `recordSearchEvent`/`recordOutcome` 단일 호출 위치, `_searchEventId` 반환 계약을 검증.
+- 영향권 단위 테스트 125건 + FragmentSearch 관련 111건 모두 회귀 0.
+
+### 향후
+
+- 후속 PR에서 `SearchSideEffects` 모듈로 외부화하여 `FragmentSearch`에서 완전히 분리할 수 있다(F10 2차).
+- `SearchScope` contract 도입(F11)으로 L1/HotCache/Graph/L2/L3 검색 레이어가 동일 scope 객체를 받게 되면 `_executeSearch`의 후처리 보정 코드도 제거 가능.
+
+---
+
 ## [3.7.0] - 2026-05-13
 
 기존 API·DB 스키마 호환. 외부 import 경로 호환 (stub re-export).

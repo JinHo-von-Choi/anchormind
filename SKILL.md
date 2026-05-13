@@ -2,9 +2,11 @@
 
 AI 에이전트가 Memento MCP 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
 
-## 현재 버전: v3.7.0
+## 현재 버전: v3.8.0
 
-v3.7.0은 `lib/memory/`의 14개 핵심 모듈을 6개 서브디렉토리(`read/`, `write/`, `link/`, `consolidate/`, `embedding/`, `signals/`)로 분류 이동한 minor 릴리즈다. 기존 위치(`lib/memory/<File>.js`)에 stub re-export 파일을 유지하므로 외부 호출자의 import 경로는 변경되지 않는다. 신규 코드는 직접 서브디렉토리 경로(`lib/memory/<sub>/<File>.js`)를 사용하면 책임 경계가 명확해진다.
+v3.8.0은 `FragmentSearch.search()`의 부작용 처리(검색 이벤트 영속화 + SearchParamAdaptor 학습)를 `_commitSearchSideEffects` 메서드로 추출하여 검색 파이프라인과 부작용을 책임상 격리한 minor 릴리즈다. 외부 응답 구조와 `_searchEventId` 동기 반환 계약은 무변경이다. 후속 PR에서 `SearchSideEffects` 모듈로 외부화하기 위한 1차 분리다.
+
+v3.7.0 변경 요약: `lib/memory/`의 14개 핵심 모듈을 6개 서브디렉토리(`read/`, `write/`, `link/`, `consolidate/`, `embedding/`, `signals/`)로 분류 이동. 기존 위치에 stub re-export 유지로 외부 import 무변경.
 
 v3.6.0 변경 요약: `CaseRewardBackprop`에 `MEMENTO_CASE_BACKPROP_ENABLED` 런타임 토글 도입(기본 off). `docs/features.md` 실험 플래그 표 정합화.
 
