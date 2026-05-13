@@ -73,4 +73,34 @@ describe("parseJsonResponse — heuristic JSON 파싱", () => {
     assert.deepEqual(result, { x: 99 });
   });
 
+  it("reasoning 모델의 <think> 블록을 제거하고 본문 JSON을 파싱한다 (MiniMax-M2.7)", () => {
+    const input  = '<think>\nThe user wants {"ok":true,"n":42}.\nLet me return that.\n</think>\n\n{"ok":true,"n":42}';
+    const result = parseJsonResponse(input);
+    assert.deepEqual(result, { ok: true, n: 42 });
+  });
+
+  it("<think> 본문 안에 JSON 예시가 있어도 본문 JSON을 파싱한다", () => {
+    const input  = '<think>example: {"wrong":1} but should be {"right":2}</think>\n{"right":2}';
+    const result = parseJsonResponse(input);
+    assert.deepEqual(result, { right: 2 });
+  });
+
+  it("<think> 닫힘만 있는 비대칭 응답도 파싱한다 (모델이 잘렸다 복귀)", () => {
+    const input  = 'truncated reasoning</think>\n{"a":1}';
+    const result = parseJsonResponse(input);
+    assert.deepEqual(result, { a: 1 });
+  });
+
+  it("<think> 다음에 markdown 펜스로 감싼 JSON도 파싱한다", () => {
+    const input  = '<think>...</think>\n```json\n{"k":"v"}\n```';
+    const result = parseJsonResponse(input);
+    assert.deepEqual(result, { k: "v" });
+  });
+
+  it("배열 응답에 <think> 블록이 있어도 파싱한다", () => {
+    const input  = '<think>need an array</think>\n[1, 2, 3]';
+    const result = parseJsonResponse(input);
+    assert.deepEqual(result, [1, 2, 3]);
+  });
+
 });
