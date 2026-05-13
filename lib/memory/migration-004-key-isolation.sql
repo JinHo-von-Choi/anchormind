@@ -5,7 +5,6 @@
 --   key_id IS NULL  → 마스터 키(MEMENTO_ACCESS_KEY)로 저장된 기억 (마스터만 조회 가능)
 --   key_id = 'xxx'  → 해당 API 키로 저장된 기억 (그 키만 조회 가능)
 
-BEGIN;
 
 ALTER TABLE agent_memory.fragments
     ADD COLUMN IF NOT EXISTS key_id TEXT
@@ -15,4 +14,3 @@ CREATE INDEX IF NOT EXISTS idx_frag_key_id
     ON agent_memory.fragments(key_id)
     WHERE key_id IS NOT NULL;
 
-COMMIT;

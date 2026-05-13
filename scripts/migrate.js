@@ -119,12 +119,13 @@ async function migrate() {
     for (const file of pending) {
       console.log(`  Applying ${file}...`);
       let sql = fs.readFileSync(path.join(MIGRATION_DIR, file), "utf-8");
+      /** opclass placeholder 치환 — 환경에 따라 vector_cosine_ops를 다른 opclass(예: halfvec_cosine_ops)로
+       *  변경한다. 마이그레이션 파일은 vector_cosine_ops를 placeholder로 그대로 두고, migrate.js가
+       *  적용 시점에 치환한다. */
       sql = sql.replaceAll("vector_cosine_ops", opsClass);
-      // Strip inner BEGIN/COMMIT (migrate.js wraps with outer transaction)
-      sql = sql.replace(/^\s*BEGIN\s*;?\s*$/gmi, "");
-      sql = sql.replace(/^\s*COMMIT\s*;?\s*$/gmi, "");
-      // Strip inner schema_migrations INSERT (migrate.js handles this)
-      sql = sql.replace(/INSERT\s+INTO\s+agent_memory\.schema_migrations[\s\S]*?ON\s+CONFLICT[\s\S]*?;\s*/gi, "");
+      /** body-only 규약(docs/migration-conventions.md) 이후로는 마이그레이션 파일이 인라인 BEGIN/COMMIT이나
+       *  INSERT INTO agent_memory.schema_migrations를 포함하지 않는다. 기존 파일도 일괄 normalize 완료.
+       *  신규 파일은 scripts/lint-migrations.js가 PR 시점에 차단한다. */
 
       await client.query("BEGIN");
       await client.query(searchPathSQL);

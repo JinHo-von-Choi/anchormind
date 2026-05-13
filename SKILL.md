@@ -2,9 +2,11 @@
 
 AI 에이전트가 Memento MCP 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
 
-## 현재 버전: v3.8.0
+## 현재 버전: v3.9.0
 
-v3.8.0은 `FragmentSearch.search()`의 부작용 처리(검색 이벤트 영속화 + SearchParamAdaptor 학습)를 `_commitSearchSideEffects` 메서드로 추출하여 검색 파이프라인과 부작용을 책임상 격리한 minor 릴리즈다. 외부 응답 구조와 `_searchEventId` 동기 반환 계약은 무변경이다. 후속 PR에서 `SearchSideEffects` 모듈로 외부화하기 위한 1차 분리다.
+v3.9.0은 두 가지 책임 분리·정리 작업을 한 묶음으로 처리한 minor 릴리즈다. (1) `FragmentSearch`의 부작용 처리를 `lib/memory/read/SearchSideEffects.js` 모듈로 외부화하여 검색 파이프라인과 부작용을 완전히 분리했다(F10 2차). (2) `scripts/migrate.js`의 인라인 BEGIN/COMMIT·schema_migrations INSERT 제거 정규식을 삭제하고, 기존 14개 마이그레이션 파일을 body-only 규약(`docs/migration-conventions.md`)으로 일괄 normalize했다(F13 본격). 신규 마이그레이션은 `scripts/lint-migrations.js`가 PR 시점에 동일 규약을 강제한다.
+
+v3.8.0 변경 요약: `FragmentSearch.search()`의 부작용 처리를 `_commitSearchSideEffects` 메서드로 1차 추출(메서드 단위).
 
 v3.7.0 변경 요약: `lib/memory/`의 14개 핵심 모듈을 6개 서브디렉토리(`read/`, `write/`, `link/`, `consolidate/`, `embedding/`, `signals/`)로 분류 이동. 기존 위치에 stub re-export 유지로 외부 import 무변경.
 

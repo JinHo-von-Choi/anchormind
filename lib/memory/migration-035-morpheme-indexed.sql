@@ -12,7 +12,6 @@
 --
 -- 멱등: ADD COLUMN IF NOT EXISTS + CREATE INDEX IF NOT EXISTS
 
-BEGIN;
 
 SET search_path TO agent_memory;
 
@@ -32,4 +31,3 @@ CREATE INDEX IF NOT EXISTS idx_fragments_morpheme_indexed
     ON fragments (morpheme_indexed)
     WHERE morpheme_indexed = false;
 
-COMMIT;

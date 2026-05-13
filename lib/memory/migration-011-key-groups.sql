@@ -1,7 +1,6 @@
 -- Migration 011: API 키 그룹 (N:M 매핑)
 -- 작성자: 최진호 / 2026-03-15
 
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS agent_memory.api_key_groups (
     id          TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -20,4 +19,3 @@ CREATE TABLE IF NOT EXISTS agent_memory.api_key_group_members (
 CREATE INDEX IF NOT EXISTS idx_group_members_key_id
     ON agent_memory.api_key_group_members(key_id);
 
-COMMIT;

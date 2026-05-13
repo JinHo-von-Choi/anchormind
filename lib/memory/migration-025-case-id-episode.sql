@@ -3,7 +3,6 @@
 -- 작성자: 최진호
 -- 작성일: 2026-04-03
 
-BEGIN;
 
 ALTER TABLE agent_memory.fragments
     ADD COLUMN IF NOT EXISTS case_id VARCHAR(255) DEFAULT NULL;
@@ -38,8 +37,3 @@ CREATE INDEX IF NOT EXISTS idx_frag_assertion_status
     ON agent_memory.fragments (assertion_status)
     WHERE assertion_status IS NOT NULL;
 
-INSERT INTO agent_memory.schema_migrations (filename)
-VALUES ('migration-025-case-id-episode.sql')
-ON CONFLICT (filename) DO NOTHING;
-
-COMMIT;

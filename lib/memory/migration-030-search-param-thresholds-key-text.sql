@@ -5,7 +5,6 @@
 --       런타임에서 INTEGER 캐스팅 실패로 적응형 학습 무력화. UUID 호환을 위해
 --       TEXT로 통일. sentinel -1 (마스터 키) → '-1' 로 문자열 보존.
 
-BEGIN;
 
 -- key_id INTEGER NOT NULL DEFAULT -1 → TEXT NOT NULL DEFAULT '-1'
 -- USING key_id::text 로 기존 INTEGER 데이터 무손실 변환
@@ -16,4 +15,3 @@ ALTER TABLE agent_memory.search_param_thresholds
 ALTER TABLE agent_memory.search_param_thresholds
     ALTER COLUMN key_id SET DEFAULT '-1';
 
-COMMIT;

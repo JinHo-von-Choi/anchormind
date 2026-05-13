@@ -1,7 +1,6 @@
 -- migration-017-episodic.sql
 -- Episode type과 context_summary, session_id 컬럼 추가
 
-BEGIN;
 
 -- 1. type CHECK 제약 조건 변경: episode 추가
 ALTER TABLE agent_memory.fragments
@@ -24,8 +23,3 @@ CREATE INDEX IF NOT EXISTS idx_fragments_session_id
   ON agent_memory.fragments (session_id)
   WHERE session_id IS NOT NULL;
 
-INSERT INTO agent_memory.schema_migrations (filename)
-VALUES ('migration-017-episodic.sql')
-ON CONFLICT (filename) DO NOTHING;
-
-COMMIT;

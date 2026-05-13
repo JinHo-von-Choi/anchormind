@@ -1,7 +1,6 @@
 -- Migration 003: API 키 관리 테이블
 -- 작성자: 최진호 / 2026-03-03
 
-BEGIN;
 
 -- API 키 마스터 테이블
 -- 원시 키는 저장하지 않음. key_hash(SHA-256)와 key_prefix(표시용)만 보관.
@@ -37,4 +36,3 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_key_hash
 CREATE INDEX IF NOT EXISTS idx_api_key_usage_date
     ON agent_memory.api_key_usage(usage_date);
 
-COMMIT;

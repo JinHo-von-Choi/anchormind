@@ -10,7 +10,6 @@
 -- 주의: fragments.key_id는 TEXT (migration-004, migration-027 확인)
 -- 멱등: IF EXISTS / IF NOT EXISTS 가드 사용
 
-BEGIN;
 
 -- 1) 기존 전역 UNIQUE 인덱스 drop
 DROP INDEX IF EXISTS agent_memory.idx_frag_hash;
@@ -25,4 +24,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_frag_hash_per_key
     ON agent_memory.fragments (key_id, content_hash)
     WHERE key_id IS NOT NULL;
 
-COMMIT;

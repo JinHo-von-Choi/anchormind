@@ -3,7 +3,6 @@
 -- 작성자: 최진호
 -- 작성일: 2026-04-03
 
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS agent_memory.case_events (
     event_id       UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -73,8 +72,3 @@ CREATE INDEX IF NOT EXISTS idx_fe_fragment_id
 CREATE INDEX IF NOT EXISTS idx_fe_event_id
     ON agent_memory.fragment_evidence (event_id);
 
-INSERT INTO agent_memory.schema_migrations (filename)
-VALUES ('migration-026-case-events.sql')
-ON CONFLICT (filename) DO NOTHING;
-
-COMMIT;

@@ -29,7 +29,6 @@
 
 SET search_path TO agent_memory;
 
-BEGIN;
 
 /* ─────────────────────────────────────────────────────────────────
  * 1) api_keys.default_mode (Mode preset 시스템)
@@ -78,4 +77,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_fragments_idempotency_master
   ON agent_memory.fragments (idempotency_key)
   WHERE idempotency_key IS NOT NULL AND key_id IS NULL;
 
-COMMIT;

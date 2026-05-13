@@ -21,7 +21,6 @@
 -- 멱등: IF EXISTS / IF NOT EXISTS 가드 사용
 -- 롤백: migration-032-rollback.sql
 
-BEGIN;
 
 -- 1) fragment_claims 테이블 생성
 CREATE TABLE IF NOT EXISTS agent_memory.fragment_claims (
@@ -63,4 +62,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_fragment_claims_tenant
 ALTER TABLE agent_memory.fragments
     ADD COLUMN IF NOT EXISTS validation_warnings JSONB NULL;
 
-COMMIT;

@@ -1,5 +1,26 @@
 # Changelog
 
+## [3.9.0] - 2026-05-13
+
+기존 API·DB 스키마 호환. 외부 호출자 인터페이스 무변경.
+
+### Added
+
+- `lib/memory/read/SearchSideEffects.js`: 검색 파이프라인 직후의 부작용(`recordSearchEvent` + `SearchParamAdaptor.recordOutcome`)을 단일 모듈로 격리. `commitSearchSideEffects(query, sq, cleanResult, ctx) → searchEventId` 함수 export.
+
+### Changed
+
+- `lib/memory/read/FragmentSearch.js`: 내부 헬퍼 `_commitSearchSideEffects`를 제거하고 SearchSideEffects 모듈로 위임. FragmentSearch는 검색 파이프라인 자체에만 집중한다. `_searchEventId` 반환 계약 유지.
+- `scripts/migrate.js`: 마이그레이션 SQL의 인라인 BEGIN/COMMIT 제거와 schema_migrations INSERT 제거를 위한 정규식 4줄을 삭제. 기존 14개 마이그레이션 파일을 일괄 normalize하여 body-only 규약(`docs/migration-conventions.md`)을 적용 완료. opclass placeholder 치환은 유지.
+- `lib/memory/migration-*.sql`: 14개 파일에서 인라인 `BEGIN;`/`COMMIT;` 라인 제거, 4개 파일에서 `INSERT INTO agent_memory.schema_migrations ... ON CONFLICT ...;` 블록 제거. 신규 파일은 `scripts/lint-migrations.js`가 PR 시점에 동일 규약을 강제한다.
+
+### Tests
+
+- `tests/unit/fragment-search-side-effect-split.test.js`: 정적 가드를 모듈 외부화에 맞춰 갱신. SearchSideEffects 모듈 존재, `commitSearchSideEffects` export, FragmentSearch import, `_commitSearchSideEffects` 메서드 잔존 0, 인라인 `recordSearchEvent`/`recordOutcome` 호출 0 검증(총 8 케이스).
+- 영향권 138건 회귀 0.
+
+---
+
 ## [3.8.0] - 2026-05-13
 
 기존 API·DB 스키마 호환. Breaking change 없음. 외부 호출자 `search()` 응답 구조 무변경.

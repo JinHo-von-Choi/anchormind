@@ -12,7 +12,6 @@
  * - superseded_by: 이 파편을 대체한 파편 ID
  */
 
-BEGIN;
 
 ALTER TABLE agent_memory.fragments
     ADD COLUMN IF NOT EXISTS valid_from    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -59,4 +58,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_fragments_one_active_per_id
     ON agent_memory.fragments (id)
     WHERE valid_to IS NULL;
 
-COMMIT;
