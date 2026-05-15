@@ -17,7 +17,7 @@ export const MEMORY_CONFIG = {
     /** recall 최종 정렬 lexical 보정 — hard override 아님, 제한된 가산항.
      *  lexWeight는 파편별 rerankerScore 유무로 결정한다(집합 단위 판정 아님). */
     lexicalWeightReranked    : 0.12, // rerankerScore 보유 파편의 lexical 미세 보정
-    lexicalWeightFallback    : 0.30, // rerankerScore 미보유 파편의 lexical 보강
+    lexicalWeightFallback    : 0.18, // rerankerScore 미보유 파편의 lexical 보강 (semanticWeight 0.30보다 명확히 낮게)
     lexicalLinkedMultiplier  : 0.5,  // includeLinks 파편의 lexical 가중치 감쇠
     lexicalSaturation        : 8,    // lexicalMatchScore log 정규화 분모
     unrerankedBaseDiscount   : 0.85, // rerankerScore 미보유 파편 base에 적용하는 페널티 (reranking 미검증 신호)

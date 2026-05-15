@@ -61,7 +61,7 @@ describe("computeRecallScore", () => {
     const now = Date.now();
     const onTopicOld = {
       topic: "memento-mcp", importance: 0.5,
-      created_at: new Date(now - 60 * 86400000).toISOString(), similarity: 0
+      created_at: new Date(now - 30 * 86400000).toISOString(), similarity: 0
     };
     const offTopicNew = {
       topic: "unrelated", importance: 0.5,
