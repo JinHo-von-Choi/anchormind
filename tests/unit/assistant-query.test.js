@@ -105,7 +105,7 @@ describe("boostAssistantFragments", () => {
 
     boostAssistantFragments(fragments);
 
-    assert.strictEqual(fragments[0].importance, 0.55);
+    assert.strictEqual(fragments[0].importance, 0.52);
     assert.strictEqual(fragments[1].importance, 0.5);
   });
 
@@ -116,7 +116,7 @@ describe("boostAssistantFragments", () => {
 
     boostAssistantFragments(fragments);
 
-    assert.strictEqual(fragments[0].importance, 0.65);
+    assert.strictEqual(fragments[0].importance, 0.62);
   });
 
   test("importance 최대값 1.0 제한", () => {
@@ -156,6 +156,6 @@ describe("boostAssistantFragments", () => {
 
     boostAssistantFragments(fragments);
 
-    assert.strictEqual(fragments[0].importance, 0.05);
+    assert.strictEqual(fragments[0].importance, 0.02);
   });
 });

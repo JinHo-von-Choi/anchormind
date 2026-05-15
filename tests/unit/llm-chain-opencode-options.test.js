@@ -33,6 +33,9 @@ mock.module("../../lib/config.js", {
       { provider: "opencode-cli", model: "github-copilot/claude-sonnet-4.5", agent: "general", variant: "low" },
       { provider: "opencode-cli", model: "github-copilot/claude-sonnet-4.5", agent: "general", variant: "high" }
     ],
+    LLM_CHAIN_TIMEOUT_MS    : 0,
+    LLM_PROVIDER_TIMEOUT_MS : 60_000,
+    LLM_PROVIDER_TIMEOUT_CONFIGURED: false,
     LLM_CONCURRENCY_ENABLED : false,
     LLM_CONCURRENCY_WAIT_MS : 30_000,
     getConcurrencyLimit     : () => 1

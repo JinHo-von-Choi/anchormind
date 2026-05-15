@@ -10,7 +10,7 @@
 import { test, describe } from "node:test";
 import assert              from "node:assert/strict";
 import { execFileSync }    from "node:child_process";
-import { fileURLToPath }   from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import path                from "node:path";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,8 +24,9 @@ const ROOT      = path.resolve(__dirname, "../..");
  * @returns {{ stdout: string, exitCode: number }}
  */
 function runConfigSnippet(env, snippet) {
+  const configUrl = pathToFileURL(path.join(ROOT, "lib", "config.js")).href;
   const script = `
-    import("${ROOT}/lib/config.js")
+    import("${configUrl}")
       .then(cfg => {
         ${snippet}
       })

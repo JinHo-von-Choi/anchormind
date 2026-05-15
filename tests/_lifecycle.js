@@ -52,11 +52,15 @@ export function defaultIgnore() {
     "GETNAMEINFOREQWRAP",
     "PipeConnectWrap",
     /**
-     * FSReqCallback — winston / logger의 파일 기록 pending. transient.
+     * FSReqCallback / FSReqPromise / FileHandleCloseReq — winston / logger,
+     * ESM loader, and Node's async FileHandle close work can remain visible
+     * briefly as active requests on Windows Node 26.
      * GETADDRINFOREQWRAP — DNS lookup pending.
      * TickObject — micro/macrotask 참조.
      */
     "FSReqCallback",
+    "FSReqPromise",
+    "FileHandleCloseReq",
     "GETADDRINFOREQWRAP",
     "TickObject",
     /**

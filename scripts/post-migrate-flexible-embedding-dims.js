@@ -30,12 +30,18 @@ const TABLES = [
   { table: "morpheme_dict", indexName: "idx_morpheme_dict_embedding",  whereClause: ""                            }
 ];
 
-async function migrateTable(pool, { table, indexName, whereClause }, colType, opsType, targetUdt) {
+async function migrateTable(pool, { table, indexName, whereClause }, colType, opsType) {
   /** 1. 현재 컬럼 타입 조회 */
   const { rows } = await pool.query(
-    `SELECT udt_name
-     FROM information_schema.columns
-     WHERE table_schema = $1 AND table_name = $2 AND column_name = 'embedding'`,
+    `SELECT a.atttypid::regtype::text AS udt_name,
+            format_type(a.atttypid, a.atttypmod) AS formatted_type
+     FROM pg_attribute a
+     JOIN pg_class c ON c.oid = a.attrelid
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = $1
+       AND c.relname = $2
+       AND a.attname = 'embedding'
+       AND NOT a.attisdropped`,
     [SCHEMA, table]
   );
 
@@ -44,10 +50,10 @@ async function migrateTable(pool, { table, indexName, whereClause }, colType, op
     return;
   }
 
-  const currentType = rows[0].udt_name;
+  const currentType = rows[0].formatted_type || rows[0].udt_name;
   console.log(`migration-007: ${table} — 현재 타입: ${currentType}`);
 
-  if (currentType === targetUdt) {
+  if (currentType.toLowerCase() === colType.toLowerCase()) {
     console.log(`migration-007: ${table} — 이미 ${colType}, 스킵`);
     return;
   }
@@ -81,7 +87,6 @@ async function main() {
   const useHalfvec = dims > 2000;
   const colType    = useHalfvec ? `halfvec(${dims})` : `vector(${dims})`;
   const opsType    = useHalfvec ? "halfvec_cosine_ops" : "vector_cosine_ops";
-  const targetUdt  = useHalfvec ? "halfvec" : "vector";
 
   console.log(`EMBEDDING_DIMENSIONS = ${dims}`);
   console.log(`컬럼 타입 → ${colType} (${useHalfvec ? "halfvec — pgvector ≥0.7.0 필요" : "vector"})`);
@@ -90,7 +95,7 @@ async function main() {
 
   try {
     for (const tableSpec of TABLES) {
-      await migrateTable(pool, tableSpec, colType, opsType, targetUdt);
+      await migrateTable(pool, tableSpec, colType, opsType);
     }
 
     console.log("\n마이그레이션 완료 (fragments + morpheme_dict).");

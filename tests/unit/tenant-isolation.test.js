@@ -1,42 +1,55 @@
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SessionLinker } from "../../lib/memory/SessionLinker.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT      = path.resolve(__dirname, "../..");
+const LIB_ROOT  = path.join(ROOT, "lib");
+
+function collectSourceFiles(dir) {
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectSourceFiles(full));
+    } else if (entry.isFile() && entry.name.endsWith(".js")) {
+      files.push(full);
+    }
+  }
+  return files;
+}
+
+function findSourceMatches(pattern) {
+  const matcher = pattern instanceof RegExp
+    ? (line) => pattern.test(line)
+    : (line) => line.includes(pattern);
+  const matches = [];
+  for (const file of collectSourceFiles(LIB_ROOT)) {
+    const rel = path.relative(ROOT, file);
+    const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
+    lines.forEach((line, index) => {
+      if (matcher(line)) {
+        matches.push(`${rel}:${index + 1}:${line}`);
+      }
+    });
+  }
+  return matches.join("\n");
+}
 
 describe("Tenant Isolation — key_id 격리 회귀 방지", () => {
 
   it("lib/ 내에 'key_id IS NULL OR key_id' 패턴이 없어야 함", () => {
-    let matches = "";
-    try {
-      matches = execFileSync("grep", ["-rn", "key_id IS NULL OR key_id", "lib/"], {
-        cwd:      ROOT,
-        encoding: "utf-8"
-      });
-    } catch (e) {
-      // grep exit code 1 = no match = 정상
-      if (e.status === 1) return;
-      throw e;
-    }
+    const matches = findSourceMatches("key_id IS NULL OR key_id");
     assert.equal(matches.trim(), "",
       `금지 패턴 발견:\n${matches}\n\n수정 방법: keyId가 null이면 조건 생략, 값이면 AND key_id = $N만 적용`);
   });
 
   it("lib/ 내에 'key_id' 대상 '::text IS NULL OR' 패턴이 없어야 함 (타입 불일치 방지)", () => {
-    let matches = "";
-    try {
-      matches = execFileSync("grep", ["-rn", "::text IS NULL OR.*key_id", "lib/"], {
-        cwd:      ROOT,
-        encoding: "utf-8"
-      });
-    } catch (e) {
-      if (e.status === 1) return;
-      throw e;
-    }
+    const matches = findSourceMatches(/::text IS NULL OR.*key_id/);
     assert.equal(matches.trim(), "",
       `타입 불일치 패턴 발견:\n${matches}`);
   });
