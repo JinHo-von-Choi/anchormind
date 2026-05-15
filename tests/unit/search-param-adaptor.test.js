@@ -30,6 +30,7 @@ const { SearchParamAdaptor, _resetForTesting } = await import(
 
 describe("SearchParamAdaptor", () => {
   beforeEach(() => {
+    delete process.env.MEMENTO_SEARCH_PARAM_ADAPTOR_ENABLED;
     mockQuery.mock.resetCalls();
     _resetForTesting();
   });
@@ -103,6 +104,25 @@ describe("SearchParamAdaptor", () => {
     // 예외가 전파되지 않아야 한다
     await adaptor.recordOutcome(42, "keywords", 15, 5);
   });
+
+  test("disabled env: getMinSimilarity returns default without DB query", async () => {
+    process.env.MEMENTO_SEARCH_PARAM_ADAPTOR_ENABLED = "false";
+
+    const adaptor = new SearchParamAdaptor();
+    const result  = await adaptor.getMinSimilarity(null, "text", 10);
+
+    assert.strictEqual(result, 0.35);
+    assert.strictEqual(mockQuery.mock.callCount(), 0);
+  });
+
+  test("disabled env: recordOutcome skips DB write", async () => {
+    process.env.MEMENTO_SEARCH_PARAM_ADAPTOR_ENABLED = "off";
+
+    const adaptor = new SearchParamAdaptor();
+    await adaptor.recordOutcome(null, "text", 10, 3);
+
+    assert.strictEqual(mockQuery.mock.callCount(), 0);
+  });
 });
 
 /**
@@ -118,6 +138,7 @@ describe("SearchParamAdaptor", () => {
  */
 describe("SearchParamAdaptor — array keyId 회귀 (Phase 0 Task 0.4)", () => {
   beforeEach(() => {
+    delete process.env.MEMENTO_SEARCH_PARAM_ADAPTOR_ENABLED;
     mockQuery.mock.resetCalls();
     _resetForTesting();
   });
