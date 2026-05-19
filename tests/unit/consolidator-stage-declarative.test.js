@@ -58,6 +58,42 @@ describe("MemoryConsolidator — stage 선언형화 회귀 가드", () => {
 
 });
 
+describe("MemoryConsolidator — enableRiskyStages skip 회귀 가드", () => {
+
+  it("split_long_fragments fn이 enableRiskyStages.splitLongFragments===false 분기를 포함한다", () => {
+    assert.match(
+      source,
+      /enableRiskyStages\?\.splitLongFragments\s*===\s*false/,
+      "splitLongFragments 플래그 skip 분기가 선언되어야 한다"
+    );
+  });
+
+  it("compress_old_fragments fn이 enableRiskyStages.compressOldFragments===false 분기를 포함한다", () => {
+    assert.match(
+      source,
+      /enableRiskyStages\?\.compressOldFragments\s*===\s*false/,
+      "compressOldFragments 플래그 skip 분기가 선언되어야 한다"
+    );
+  });
+
+  it("detect_contradictions fn이 enableRiskyStages.detectContradictions===false 분기를 포함한다", () => {
+    assert.match(
+      source,
+      /enableRiskyStages\?\.detectContradictions\s*===\s*false/,
+      "detectContradictions 플래그 skip 분기가 선언되어야 한다"
+    );
+  });
+
+  it("timedStage가 status 필드를 가진 제어 객체를 처리한다", () => {
+    assert.match(
+      source,
+      /typeof result\.status\s*===\s*["']string["']/,
+      "timedStage가 status 문자열 필드로 제어 객체를 판별해야 한다"
+    );
+  });
+
+});
+
 describe("MemoryConsolidator._runConsolidationCycle — 진행률 정합", () => {
 
   it("onProgress의 total이 단조 증가하는 processed와 함께 일관되며 마지막에 일치한다", async () => {

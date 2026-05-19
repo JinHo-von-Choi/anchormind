@@ -3,17 +3,21 @@
  *
  * 작성자: 최진호
  * 작성일: 2026-04-07
+ * 수정일: 2026-05-19
  *
  * RememberPostProcessor._proactiveRecall 기능 검증:
- *   - 유사 파편 발견 시 related_to 링크 생성
+ *   - mode="legacy" 시 유사 파편 발견 시 related_to 링크 생성
  *   - 유사 파편 없으면 링크 생성 안 함
  *   - search 없이 생성하면 ProactiveRecall 스킵
+ *
+ * mode별 상세 게이트 시나리오는 proactive-recall-gate.test.js 참조.
  */
 
 import { describe, it, mock, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 
 import { disconnectRedis } from "../../lib/redis.js";
+import { MEMORY_CONFIG }  from "../../config/memory.js";
 
 after(async () => { await disconnectRedis().catch(() => {}); });
 
@@ -68,35 +72,43 @@ describe("RememberPostProcessor -- ProactiveRecall", async () => {
   const mod = await import("../../lib/memory/RememberPostProcessor.js");
   RememberPostProcessor = mod.RememberPostProcessor;
 
-  it("유사 파편 발견 시 related_to 링크 생성", async () => {
-    const deps      = createMockDeps();
-    const processor = new RememberPostProcessor(deps);
+  it("mode=legacy 시 유사 파편 발견 시 related_to 링크 생성", async () => {
+    // mode=legacy에서는 workspace/caseId 무관하게 50% 오버랩이면 링크 생성
+    const orig    = MEMORY_CONFIG.proactiveRecall?.mode;
+    MEMORY_CONFIG.proactiveRecall.mode = "legacy";
 
-    deps.search.search = mock.fn(async () => ({
-      fragments: [
-        { id: "existing-1", content: "cpu 사용률 높음 성능 문제", keywords: ["cpu", "성능"] }
-      ]
-    }));
+    try {
+      const deps      = createMockDeps();
+      const processor = new RememberPostProcessor(deps);
 
-    await processor.run(
-      { id: "new-1", content: "cpu 사용률 급등으로 인한 성능 저하", type: "error", keywords: ["cpu", "성능"] },
-      { agentId: "test-agent", keyId: null }
-    );
+      deps.search.search = mock.fn(async () => ({
+        fragments: [
+          { id: "existing-1", content: "cpu 사용률 높음 성능 문제", keywords: ["cpu", "성능"] }
+        ]
+      }));
 
-    /** fire-and-forget Promise 추적 -- setTimeout 대신 안정적 대기 */
-    if (processor._proactiveRecallPromise) {
-      await processor._proactiveRecallPromise;
+      await processor.run(
+        { id: "new-1", content: "cpu 사용률 급등으로 인한 성능 저하", type: "error", keywords: ["cpu", "성능"] },
+        { agentId: "test-agent", keyId: null }
+      );
+
+      /** fire-and-forget Promise 추적 -- setTimeout 대신 안정적 대기 */
+      if (processor._proactiveRecallPromise) {
+        await processor._proactiveRecallPromise;
+      }
+
+      assert.equal(deps.store.createLink.mock.calls.length >= 1, true,
+        "createLink가 최소 1회 호출되어야 한다");
+
+      const call = deps.store.createLink.mock.calls.find(c =>
+        c.arguments[0] === "new-1" && c.arguments[1] === "existing-1"
+      );
+      assert.ok(call, "new-1 → existing-1 링크가 생성되어야 한다");
+      assert.equal(call.arguments[2], "related");
+      assert.equal(call.arguments[3], "test-agent");
+    } finally {
+      MEMORY_CONFIG.proactiveRecall.mode = orig;
     }
-
-    assert.equal(deps.store.createLink.mock.calls.length >= 1, true,
-      "createLink가 최소 1회 호출되어야 한다");
-
-    const call = deps.store.createLink.mock.calls.find(c =>
-      c.arguments[0] === "new-1" && c.arguments[1] === "existing-1"
-    );
-    assert.ok(call, "new-1 → existing-1 링크가 생성되어야 한다");
-    assert.equal(call.arguments[2], "related");
-    assert.equal(call.arguments[3], "test-agent");
   });
 
   it("유사 파편 없으면 링크 생성 안 함", async () => {

@@ -140,8 +140,65 @@ export const MEMORY_CONFIG = {
     ageDays  : Number(process.env.COMPRESS_AGE_DAYS   || 30),
     minGroup : Number(process.env.COMPRESS_MIN_GROUP   || 3),
   },
-  /** consolidate 주기 (ms) */
-  consolidateIntervalMs: Number(process.env.CONSOLIDATE_INTERVAL_MS || 3600000),
+  /**
+   * ProactiveRecall 자동 링크 정책
+   *
+   * 작성자: 최진호
+   * 수정일: 2026-05-19
+   *
+   * mode 값:
+   *   "off"    — 자동 링크 비활성. remember는 fragment만 저장.
+   *   "auto"   — symbolic gate + workspace + caseIdPolicy 검증 통과 시만 related 링크 생성.
+   *   "legacy" — 50% 키워드 오버랩 기준 자동 생성 (workspace/case 무관).
+   */
+  proactiveRecall: {
+    mode             : process.env.MEMENTO_PROACTIVE_RECALL_MODE ?? "auto",
+    keywordOverlapMin: parseFloat(process.env.MEMENTO_PROACTIVE_KW_OVERLAP_MIN ?? "0.5"),
+    // 다른 workspace 파편 간 자동 링크 금지 (mode=auto일 때만 적용)
+    requireSameWorkspace : true,
+    // caseId 절충 정책:
+    //   "both-required"      — 양쪽 모두 caseId 있고 일치해야 통과
+    //   "strict-or-adjacent" — null 허용하되 sessionId 동일/24h 인접/workspace 동일 중 하나 요구
+    //   "loose"              — 한쪽 null이면 무조건 허용 (legacy 동작)
+    caseIdPolicy         : process.env.MEMENTO_PROACTIVE_CASE_POLICY ?? "strict-or-adjacent",
+    // strict-or-adjacent에서 시간 인접 판단 폭 (ms)
+    adjacencyWindowMs    : 24 * 3600 * 1000,
+    // topic/type 일치 요구 — 운영 데이터 검토 후 활성화
+    requireSameTopicOrType: false
+  },
+  /** consolidate 주기 (ms). 기본 6시간 — scheduler.js가 본 값을 참조한다. */
+  consolidateIntervalMs: Number(process.env.CONSOLIDATE_INTERVAL_MS || 21600000),
+  /**
+   * consolidate 실행 조건 및 위험 stage 활성화 설정
+   *
+   * 작성자: 최진호
+   * 수정일: 2026-05-19
+   */
+  consolidate: {
+    /**
+     * schema-fit gate: 시간 트리거에 더해 데이터 상태 조건을 평가한다.
+     *
+     * mode:
+     *   "off"  — 시간 트리거만 사용, 조건 평가 생략
+     *   "any"  — 아래 세 조건 중 하나라도 충족 시 실행
+     *   "all"  — 아래 세 조건 전부 충족해야 실행
+     */
+    schemaFit: {
+      pendingCaseFragmentsMin : 5,   // 같은 caseId 미해결 fragment 누적 임계
+      recentRelatedLinksMin   : 20,  // 최근 6h 내 생성된 related 링크 수 임계
+      fragmentsSinceLastRunMin: 30,  // 마지막 consolidation 이후 INSERT된 fragment 수 임계
+      mode: process.env.MEMENTO_CONSOLIDATE_GATE_MODE ?? "any"
+    },
+    /**
+     * LLM 재작성을 수반하는 위험 stage 활성화 플래그.
+     * false로 설정된 stage는 실행 없이 status="skipped"를 반환한다.
+     */
+    enableRiskyStages: {
+      splitLongFragments  : (process.env.MEMENTO_CONSOLIDATE_SPLIT_LONG ?? "true") === "true",
+      detectContradictions: (process.env.MEMENTO_CONSOLIDATE_DETECT_CONTRADICT ?? "true") === "true",
+      compressOldFragments: (process.env.MEMENTO_CONSOLIDATE_COMPRESS_OLD ?? "false") === "true"
+    }
+  },
   /** 긴 파편 분할 정책 (Gemini CLI 사용) */
   fragmentSplit: {
     lengthThreshold  : 300,   // 이 길이(자) 초과 파편을 분할 대상으로 선정

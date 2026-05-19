@@ -1,7 +1,7 @@
 # Architecture
 
 작성자: 최진호
-수정일: 2026-05-13
+수정일: 2026-05-19
 
 ## 시스템 구조
 
@@ -1195,6 +1195,25 @@ results 카테고리별 재집계 → breakdown shape 보존
     ▼
 autoLinkSessionFragments (배치 처리)
 ```
+
+## Rewrite-Loop Mitigation
+
+기억 저장 직후 LLM 재작성 루프가 중복 파편을 폭발적으로 생성하는 것을 막는 4개 자동 후처리 층위다. 각 층위는 독립 트리거와 게이트를 가진다.
+
+| 층위 | 트리거 | 게이트 | 기본 모드 |
+|-|-|-|-|
+| ProactiveRecall | remember() 직후 키워드 50%+ 매치 | symbolic gate + workspace 일치 + caseIdPolicy | auto |
+| autoLinkSessionFragments | reflect() 호출 | 1:1 top-1 매칭 + caseId/sessionId 인접 + 키워드 60%+ + phase 정합성 | 항상 적용 |
+| MemoryConsolidator | 6h 타이머 (`consolidateIntervalMs`) | schema-fit gate (3개 조건, mode=any) | 타이머 + 게이트 |
+| AutoReflect | 세션 종료 (Gemini CLI 가용 시) | 별도 게이트 없음 | Gemini CLI 의존 |
+
+MemoryConsolidator의 LLM 재작성 stage 3종(`split_long_fragments`, `detect_contradictions`, `compress_old_fragments`)은 `enableRiskyStages` 플래그로 개별 비활성화할 수 있다. `compressOldFragments`는 기본 `false`다.
+
+ProactiveRecall의 caseIdPolicy는 `"strict-or-adjacent"`(기본)로 동작한다. 동일 case_id이거나 24h 이내 인접 케이스인 파편 쌍만 자동 링크 대상이 된다.
+
+autoLinkSessionFragments는 v4.2.0에서 errors×decisions 곱집합 방식에서 1:1 schema-fit 매칭으로 교체되었다. `linkSuggestions[]` 배열을 반환하며 ReflectProcessor가 `_meta.link_suggestions` 경로로 전파한다.
+
+---
 
 ### autoLinkSessionFragments 배치 처리
 

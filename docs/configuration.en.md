@@ -308,6 +308,46 @@ export const MEMORY_CONFIG = {
 
 The sum of importanceWeight + recencyWeight + semanticWeight must equal 1.0. halfLifeDays determines decay speed and operates independently of staleThresholds. rrfSearch.k is the RRF denominator stabilization constant, with 60 as the general-purpose default. gc.factDecisionPolicy cleans up orphan fact/decision fragments under separate criteria to reduce search noise.
 
+### proactiveRecall
+
+Post-processing settings for the automatic link creation that runs immediately after remember().
+
+| Key | ENV | Default | Description |
+|-|-|-|-|
+| `mode` | `MEMENTO_PROACTIVE_RECALL_MODE` | `"auto"` | `"auto"`: runs automatically when conditions are met. `"off"`: disabled |
+| `keywordOverlapMin` | `MEMENTO_PROACTIVE_KW_OVERLAP_MIN` | `0.5` | Minimum keyword overlap ratio. The ratio of common keywords between the stored fragment and a candidate must reach this threshold for a link to be created |
+| `requireSameWorkspace` | — | `true` | Fragments from a different workspace are excluded from ProactiveRecall |
+| `caseIdPolicy` | `MEMENTO_PROACTIVE_CASE_POLICY` | `"strict-or-adjacent"` | `"both-required"`: both fragments must share the same case_id. `"strict-or-adjacent"`: same case_id or a different case within adjacencyWindowMs. `"loose"`: case_id mismatches are allowed |
+| `adjacencyWindowMs` | — | `86400000` (24h) | Time window (ms) within which a different case is considered adjacent under the `"strict-or-adjacent"` policy |
+| `requireSameTopicOrType` | — | `false` | When true, only fragments sharing the same topic or type are eligible for linking |
+
+The `proactive-gate.js` symbolic gate evaluates `workspace_mismatch` and `case_policy` block reasons. Activated by `MEMENTO_SYMBOLIC_PROACTIVE_GATE=true`.
+
+### consolidate.schemaFit
+
+Gate conditions that evaluate whether sufficient changes have accumulated before running MemoryConsolidator automatically.
+
+| Key | Default | Description |
+|-|-|-|
+| `pendingCaseFragmentsMin` | `5` | Condition met when unprocessed case fragments reach this count |
+| `recentRelatedLinksMin` | `20` | Condition met when recently created related links reach this count |
+| `fragmentsSinceLastRunMin` | `30` | Condition met when new fragments since the last run reach this count |
+| `mode` | `"any"` | `"any"`: run if at least 1 of 3 conditions is met. `"all"`: run only if all 3 are met. `"off"`: disable gate (always run). ENV: `MEMENTO_CONSOLIDATE_GATE_MODE` |
+
+Each time the consolidateIntervalMs timer fires (default 6h = 21600000ms), this gate is evaluated. When the gate is not passed, that run cycle is skipped. `consolidateIntervalMs` is controlled by the `CONSOLIDATE_INTERVAL_MS` environment variable.
+
+### consolidate.enableRiskyStages
+
+Individual activation flags for the 3 stages that involve LLM rewriting and can modify fragment content.
+
+| Key | ENV | Default | Stage | Description |
+|-|-|-|-|-|
+| `splitLongFragments` | `MEMENTO_CONSOLIDATE_SPLIT_LONG` | `true` | stage 5 | Splits long fragments into 2–3 atomic fragments. LLM determines split boundaries |
+| `detectContradictions` | `MEMENTO_CONSOLIDATE_DETECT_CONTRADICT` | `true` | stage 14 | NLI + LLM hybrid contradiction detection and contradicts link creation |
+| `compressOldFragments` | `MEMENTO_CONSOLIDATE_COMPRESS_OLD` | `false` | stage 8 | LLM-based compression summary of old fragment groups. Disabled by default |
+
+A stage with its flag set to `false` emits `status: "skipped"` and proceeds to the next stage. `compressOldFragments` defaults to `false` because it modifies original fragment content.
+
 ### SearchParamAdaptor (Automatic Search Parameter Learning)
 
 SearchParamAdaptor operates automatically without any separate environment variables. It uses the `semanticSearch.minSimilarity` value from `config/memory.js` as the default. After 50 or more searches, the learned value per key_id x query_type x hour combination replaces the default.

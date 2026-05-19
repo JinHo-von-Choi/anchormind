@@ -3,6 +3,7 @@
  *
  * 작성자: 최진호
  * 작성일: 2026-04-15
+ * 수정일: 2026-05-19
  *
  * 검증 대상 (Phase 6):
  *  - polarity 충돌 존재 시 block (reason=polarity_conflict)
@@ -13,6 +14,8 @@
  *  - target 누락 시 invalid_target
  *  - released quarantine 은 통과
  *  - source 혹은 target case_id 한쪽만 있으면 cohort 검사 스킵
+ *  - workspace 불일치 시 block (reason=workspace_mismatch)
+ *  - caseIdPolicy 정책 위반 시 block (reason=case_policy)
  */
 
 import { test, describe, mock } from "node:test";
@@ -152,5 +155,93 @@ describe("evaluateProactiveGate — Phase 6 rule pack", () => {
     );
     assert.equal(res.allowed, true);
     assert.equal(res.reason, "ok");
+  });
+
+  test("requireSameWorkspace=true + 다른 workspace이면 workspace_mismatch block", async () => {
+    const res = await evaluateProactiveGate(
+      {
+        source: { id: "a", workspace_id: "ws-1" },
+        target: { id: "b", workspace_id: "ws-2" },
+      },
+      {
+        detector       : makeDetector([]),
+        proactiveConfig: { requireSameWorkspace: true, caseIdPolicy: "loose" },
+      }
+    );
+    assert.equal(res.allowed, false);
+    assert.equal(res.reason, "workspace_mismatch");
+  });
+
+  test("requireSameWorkspace=true + 동일 workspace이면 통과", async () => {
+    const res = await evaluateProactiveGate(
+      {
+        source: { id: "a", workspace_id: "ws-1" },
+        target: { id: "b", workspace_id: "ws-1" },
+      },
+      {
+        detector       : makeDetector([]),
+        proactiveConfig: { requireSameWorkspace: true, caseIdPolicy: "loose" },
+      }
+    );
+    assert.equal(res.allowed, true);
+    assert.equal(res.reason, "ok");
+  });
+
+  test("caseIdPolicy=both-required + 한쪽 null이면 case_policy block", async () => {
+    const res = await evaluateProactiveGate(
+      {
+        source: { id: "a", case_id: "case-1" },
+        target: { id: "b", case_id: null },
+      },
+      {
+        detector       : makeDetector([]),
+        proactiveConfig: {
+          requireSameWorkspace: false,
+          caseIdPolicy        : "both-required",
+          adjacencyWindowMs   : 86400000,
+        },
+      }
+    );
+    assert.equal(res.allowed, false);
+    assert.equal(res.reason, "case_policy");
+  });
+
+  test("caseIdPolicy=strict-or-adjacent + 한쪽 null + sessionId 동일이면 통과", async () => {
+    const res = await evaluateProactiveGate(
+      {
+        source: { id: "a", case_id: "case-1", session_id: "sess-x", created_at: new Date().toISOString() },
+        target: { id: "b", case_id: null, session_id: "sess-x", created_at: new Date().toISOString() },
+      },
+      {
+        detector       : makeDetector([]),
+        proactiveConfig: {
+          requireSameWorkspace: false,
+          caseIdPolicy        : "strict-or-adjacent",
+          adjacencyWindowMs   : 86400000,
+        },
+      }
+    );
+    assert.equal(res.allowed, true);
+    assert.equal(res.reason, "ok");
+  });
+
+  test("caseIdPolicy=strict-or-adjacent + 한쪽 null + 다른 세션 + 25h 초과이면 case_policy block", async () => {
+    const oldDate = new Date(Date.now() - 25 * 3600 * 1000).toISOString();
+    const res = await evaluateProactiveGate(
+      {
+        source: { id: "a", case_id: "case-1", session_id: "sess-new", created_at: new Date().toISOString() },
+        target: { id: "b", case_id: null, session_id: "sess-old", created_at: oldDate },
+      },
+      {
+        detector       : makeDetector([]),
+        proactiveConfig: {
+          requireSameWorkspace: false,
+          caseIdPolicy        : "strict-or-adjacent",
+          adjacencyWindowMs   : 24 * 3600 * 1000,
+        },
+      }
+    );
+    assert.equal(res.allowed, false);
+    assert.equal(res.reason, "case_policy");
   });
 });

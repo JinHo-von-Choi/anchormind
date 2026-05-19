@@ -1,5 +1,36 @@
 # Changelog
 
+## [4.2.0] - 2026-05-19
+
+자동 후처리 4개 층위(ProactiveRecall · autoLinkSessionFragments · MemoryConsolidator · AutoReflect)에서 misgrouping·interference·overfit을 유발하는 rewrite-loop 경로를 schema-fit gate로 차단한다. 기존 DB 스키마·외부 API 호환. `tool_reflect` 응답에 `_meta` 블록이 신설되어 `link_suggestions[]` 필드가 신규 노출된다.
+
+### Added
+
+- `config/memory.js` `proactiveRecall` 블록 신설: `mode`(env `MEMENTO_PROACTIVE_RECALL_MODE`, 기본 `auto`; 값 `off`/`auto`/`legacy`), `keywordOverlapMin`(env `MEMENTO_PROACTIVE_KW_OVERLAP_MIN`, 기본 0.5), `requireSameWorkspace`(true), `caseIdPolicy`(env `MEMENTO_PROACTIVE_CASE_POLICY`, 기본 `strict-or-adjacent`; 값 `both-required`/`strict-or-adjacent`/`loose`), `adjacencyWindowMs`(24h), `requireSameTopicOrType`(false).
+- `config/memory.js` `consolidate.schemaFit` 블록: `pendingCaseFragmentsMin`(5), `recentRelatedLinksMin`(20), `fragmentsSinceLastRunMin`(30), `mode`(env `MEMENTO_CONSOLIDATE_GATE_MODE`, 기본 `any`; 값 `all`/`any`/`off`).
+- `config/memory.js` `consolidate.enableRiskyStages` 블록: `splitLongFragments`(env `MEMENTO_CONSOLIDATE_SPLIT_LONG`, 기본 true), `detectContradictions`(env `MEMENTO_CONSOLIDATE_DETECT_CONTRADICT`, 기본 true), `compressOldFragments`(env `MEMENTO_CONSOLIDATE_COMPRESS_OLD`, 기본 false).
+- `lib/symbolic/rules/v1/proactive-gate.js` `evaluateProactiveGate`에 `workspace_mismatch`·`case_policy` 차단 사유 추가. `caseIdPolicy` 3-값 분기 구현.
+- `lib/scheduler.js` `evaluateSchemaFitGate(pool, cfg, lastRunTimestamp)` 함수. setInterval 콜백이 consolidate 호출 전 schema-fit gate를 평가하여 미충족 시 다음 tick으로 deferred. gate 오류 시 fail-open으로 안전 통과.
+- 신규 unit 테스트: `tests/unit/proactive-recall-gate.test.js`(8), `tests/unit/auto-link-session-gate.test.js`(10), `tests/unit/consolidator-schema-fit-gate.test.js`(15), `tests/unit/reflect-meta-link-suggestions.test.js`(3).
+
+### Changed
+
+- `lib/memory/RememberPostProcessor.js` `_proactiveRecall`: 50% 키워드 오버랩 단일 기준의 자동 `related_to` 링크가 `proactiveRecall.mode` 분기로 wrap. `off`이면 자동 링크 0건, `auto`이면 기존 symbolic gate + workspace + caseIdPolicy 통과 시만, `legacy`이면 v4.1.0 이전 행동.
+- `lib/memory/SessionLinker.js` `autoLinkSessionFragments`: errors×decisions(caused_by)·procedures×errors(resolved_by) 카르테시안 곱 이중 for문을 1:1 top-1 schema-fit 매칭으로 교체. 매칭 기준은 동일 caseId 또는 sessionId 인접 + 키워드 60% 오버랩 + phase 단방향 정합성(planning→debugging→verification). 게이트 미통과 후보는 `linkSuggestions[]`로 반환.
+- `lib/memory/ReflectProcessor.js`: `autoLinkSessionFragments` 반환값에서 `linkSuggestions`를 받아 `_link_suggestions`로 전파.
+- `lib/tools/memory.js` `tool_reflect` 응답: `_meta` 블록 신설. 구조는 `{ searchEventId, hints, suggestion, link_suggestions, serverTime }`로 recall/context와 동일. `link_suggestions[]`는 schema-fit 미통과로 자동 링크 안 된 후보를 LLM에게 위임하는 채널.
+- `lib/scheduler.js`: `CONSOLIDATE_INTERVAL_MS` 직접 ENV 파싱을 `MEMORY_CONFIG.consolidateIntervalMs` 참조로 교체. ENV 처리 단일 진입점화.
+- `lib/memory/consolidate/MemoryConsolidator.js`: `split_long_fragments`·`detect_contradictions`·`compress_old_fragments` 3개 stage에 `enableRiskyStages` 플래그 분기. 비활성 시 stage가 `status="skipped"`로 즉시 반환. `timedStage`가 `{status, affected}` 제어 객체를 처리.
+- `config/memory.js` `consolidateIntervalMs` 기본값 `3600000`(1h, dead) → `21600000`(6h, scheduler 실제 동작값과 일치).
+
+### Design notes
+
+자동 통합 4개 층위 중 ProactiveRecall과 MemoryConsolidator는 schema-fit gate로 보수 전환하고, autoLinkSessionFragments는 곱집합을 제거하여 1:1 매칭 + LLM 위임으로 교체했다. AutoReflect는 별도 게이트 없이 P2 범위로 분리. 검토 단계에서 `requireSameCaseOrNone: true` 단일 플래그가 legacy caseId-null 파편의 무차별 통과 누수를 발생시킨다는 지적이 들어와 `caseIdPolicy` 3-값으로 확장하고 기본을 `strict-or-adjacent`로 두어 sessionId·24h 인접·workspace 신호로 보강했다. `compress_old_fragments`는 가장 공격적인 LLM 재작성 stage라 기본 off로 둔다. schema-fit gate 조건은 SQL 실현 가능 형태(`fragments.case_id` GROUP BY, `fragment_links.created_at` window, `lastConsolidation.timestamp` 이후 fragment count)로 설계됐다.
+
+### Rationale
+
+Zhang et al. 2026("Useful Memories Become Faulty When Continuously Updated by LLMs", arXiv 2605.12978)이 LLM 자동 메모리 재작성에서 misgrouping/interference/overfit 3대 실패 메커니즘을 보고했고, GPT-5.4가 ground-truth로 consolidation 후 ARC-AGI 19문제 중 54%를 회귀로 잃었다. 권고는 raw episode 1급 보존과 schema-fit gate 기반 명시 통합. SSGM(arXiv 2603.11768)·CraniMem(2603.15642)·Position-Episodic(2502.06975)·ArcMemo(2509.04439)가 같은 방향(gated consolidation, episodic 보존)으로 수렴하는 학계 흐름과 정합. 본 릴리즈는 P1 권고 3건만 범위에 포함하고, Episodic↔Abstract 분리(P2)와 A/B 평가 루프(P3)는 후속 플랜으로 둔다.
+
 ## [4.1.0] - 2026-05-15
 
 recall 최종 정렬에서 cross-encoder reranker 결과를 보존하고, topic/keyword 직접 일치 신호를 제한된 가산항으로 반영한다. recall/context 응답 `_meta`에 서버 현재 시각을 일관되게 노출하여 LLM 클라이언트의 학습 시점 시간 고착을 방지한다. 기존 API·DB 스키마 호환, 응답 추가 필드(`_meta.serverTime`)만 신규 노출.

@@ -1183,6 +1183,25 @@ lib/memory/
 
 Legacy paths such as `lib/memory/FragmentSearch.js` are retained as stub files that re-export from their respective subdirectory module, so external import paths require no changes.
 
+## Rewrite-Loop Mitigation
+
+Four automatic post-processing layers that prevent LLM rewrite loops from generating duplicate fragments explosively after a memory save. Each layer has an independent trigger and gate.
+
+| Layer | Trigger | Gate | Default mode |
+|-|-|-|-|
+| ProactiveRecall | Immediately after remember() — 50%+ keyword match | symbolic gate + workspace match + caseIdPolicy | auto |
+| autoLinkSessionFragments | reflect() call | 1:1 top-1 matching + caseId/sessionId adjacency + 60%+ keyword overlap + phase coherence | always applied |
+| MemoryConsolidator | 6h timer (`consolidateIntervalMs`) | schema-fit gate (3 conditions, mode=any) | timer + gate |
+| AutoReflect | Session termination (when Gemini CLI is available) | No separate gate | Gemini CLI dependent |
+
+Three LLM rewriting stages in MemoryConsolidator (`split_long_fragments`, `detect_contradictions`, `compress_old_fragments`) can each be disabled individually via `enableRiskyStages` flags. `compressOldFragments` defaults to `false`.
+
+The ProactiveRecall caseIdPolicy operates as `"strict-or-adjacent"` by default. Only fragment pairs sharing the same case_id or within an adjacent case within 24h are eligible for automatic linking.
+
+autoLinkSessionFragments returns a `linkSuggestions[]` array; ReflectProcessor propagates it via the `_meta.link_suggestions` path.
+
+---
+
 ## SearchScope Contract (v4.0.0)
 
 `lib/memory/read/SearchScope.js`. Encapsulates filter conditions across all search layers in a single object.

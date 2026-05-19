@@ -2,13 +2,21 @@
 
 AI 에이전트가 Memento MCP 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
 
-## 현재 버전: v4.1.0
+## 현재 버전: v4.2.0
 
-v4.1.0은 recall 최종 정렬과 시간 인지 보강 릴리즈다. `MemoryRecaller.recall`의 통합 정렬이 `computeRecallScore` 단일 함수로 교체되어 cross-encoder reranker 결과가 base로 보존되고, topic/keyword 직접 일치 신호가 log 정규화된 제한 가산항(reranked 0.12 / fallback 0.18, 연결 파편은 절반 감쇠)으로 반영된다. hard override(`1000 + lexical`) 패치는 reranker 폐기·이중 계산·페이지네이션 불안정 5개 결함으로 다중 LLM 토론 후 기각됐다. recall/context 응답 `_meta`에 `serverTime { iso, epoch_ms, display_kst, timezone }` 필드가 신규 노출되어 LLM 클라이언트가 매 응답마다 서버 현재 시각을 재확인할 수 있다.
+v4.2.0은 자동 후처리 4개 층위(ProactiveRecall · autoLinkSessionFragments · MemoryConsolidator · AutoReflect)에서 misgrouping/interference를 유발하던 rewrite-loop 경로를 schema-fit gate로 차단하는 릴리즈다. ProactiveRecall 자동 링크가 `proactiveRecall.mode` 3-값(`off`/`auto`/`legacy`, 기본 `auto`)으로 분기되며, `auto`에서는 기존 symbolic gate에 `workspace_mismatch`·`case_policy` 차단 사유가 추가된다. `caseIdPolicy` 3-값(`both-required`/`strict-or-adjacent`/`loose`, 기본 `strict-or-adjacent`)으로 한쪽 caseId null인 legacy 파편의 무차별 통과 누수를 sessionId·24h 인접·workspace 일치 신호로 보강한다. `autoLinkSessionFragments`의 errors×decisions·procedures×errors 카르테시안 곱집합이 1:1 top-1 schema-fit 매칭(동일 caseId/sessionId, 키워드 60%+, phase 단방향)으로 교체되고, 게이트 미통과 후보는 `tool_reflect` 응답 `_meta.link_suggestions[]`로 LLM에 위임된다. `MemoryConsolidator` 6h 시간 트리거에 `consolidate.schemaFit` 3-조건 게이트(pendingCase ≥5, recentRelated ≥20, fragsSinceLastRun ≥30, mode `any`/`all`/`off`)가 결합되고, LLM 재작성 stage 3종(`split_long_fragments`·`detect_contradictions`·`compress_old_fragments`)은 `consolidate.enableRiskyStages` 플래그로 개별 비활성 가능(`compress_old_fragments` 기본 off).
+
+### `_meta.link_suggestions` 활용 의무
+
+`tool_reflect` 응답에 `_meta.link_suggestions[]`가 비어있지 않으면, 해당 후보들은 schema-fit gate를 통과하지 못해 자동 링크되지 않은 인과 관계다. LLM은 응답 직후 후보를 검토하여 정당한 인과로 판단되는 항목만 `link(fromId, toId, relationType=...)` 도구로 명시 호출하라. 자동 링크 폭증으로 인한 misgrouping을 피하면서도 진짜 인과 관계는 LLM 판단으로 보존한다.
 
 ### `_meta.serverTime` 활용 의무
 
-학습 시점에 시간 인식이 머무는 LLM 특성으로 인해 "오늘 며칠인지" "이 메모리가 얼마 전 것인지" 판단 오류가 발생한다. recall/context 응답을 받은 즉시 `_meta.serverTime.display_kst`(한국어 친화) 또는 `_meta.serverTime.iso`(정확한 기계 파싱)로 현재 시점을 재확인하고, 파편의 `created_at`·`age_days`와 대조하여 stale 여부를 판단하라. 응답 메타에 명시된 서버 시각이 자체 추정 시각과 다르면 서버 시각이 정답이다.
+학습 시점에 시간 인식이 머무는 LLM 특성으로 인해 "오늘 며칠인지" "이 메모리가 얼마 전 것인지" 판단 오류가 발생한다. recall/context/reflect 응답을 받은 즉시 `_meta.serverTime.display_kst`(한국어 친화) 또는 `_meta.serverTime.iso`(정확한 기계 파싱)로 현재 시점을 재확인하고, 파편의 `created_at`·`age_days`와 대조하여 stale 여부를 판단하라. 응답 메타에 명시된 서버 시각이 자체 추정 시각과 다르면 서버 시각이 정답이다.
+
+## v4.1.0
+
+v4.1.0은 recall 최종 정렬과 시간 인지 보강 릴리즈다. `MemoryRecaller.recall`의 통합 정렬이 `computeRecallScore` 단일 함수로 교체되어 cross-encoder reranker 결과가 base로 보존되고, topic/keyword 직접 일치 신호가 log 정규화된 제한 가산항(reranked 0.12 / fallback 0.18, 연결 파편은 절반 감쇠)으로 반영된다. hard override(`1000 + lexical`) 패치는 reranker 폐기·이중 계산·페이지네이션 불안정 5개 결함으로 다중 LLM 토론 후 기각됐다. recall/context 응답 `_meta`에 `serverTime { iso, epoch_ms, display_kst, timezone }` 필드가 신규 노출되어 LLM 클라이언트가 매 응답마다 서버 현재 시각을 재확인할 수 있다.
 
 ## v4.0.1
 
