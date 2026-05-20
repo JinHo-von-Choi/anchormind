@@ -17,8 +17,9 @@
  *  - config/symbolic.js 는 node:test mock.module 로 플래그 조합 제어
  */
 
-import { test, describe, beforeEach, afterEach, mock } from "node:test";
+import { test, describe, beforeEach, afterEach, after, mock } from "node:test";
 import assert from "node:assert/strict";
+import { teardownTestResources } from "../../_lifecycle.js";
 
 /* ------------------------------------------------------------------ */
 /*  Module mocks (must be registered before dynamic import)            */
@@ -85,6 +86,8 @@ const symbolicHolder = {
 mock.module("../../../config/symbolic.js", {
   namedExports: symbolicHolder
 });
+
+after(async () => { await teardownTestResources(); });
 
 /** ClaimExtractor 실제 구현을 static mock 으로 대체 */
 const extractFn = mock.fn(async () => ([{

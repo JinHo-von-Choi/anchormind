@@ -4,8 +4,9 @@
  * 실제 codex 바이너리 호출 0건 — lib/codex.js를 mock.module로 차단한다.
  */
 
-import { beforeEach, describe, it, mock } from "node:test";
+import { after, beforeEach, describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { teardownTestResources } from "../_lifecycle.js";
 
 const mockRunCodexCLI   = mock.fn();
 const mockRawIsCodexCli = mock.fn();
@@ -19,6 +20,8 @@ mock.module("../../lib/codex.js", {
 
 const { CodexCliProvider } = await import("../../lib/llm/providers/CodexCliProvider.js");
 const { createProvider, listProviderNames } = await import("../../lib/llm/registry.js");
+
+after(async () => { await teardownTestResources(); });
 
 describe("CodexCliProvider", () => {
   beforeEach(() => {

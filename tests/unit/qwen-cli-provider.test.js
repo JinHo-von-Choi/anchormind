@@ -4,8 +4,9 @@
  * 실제 qwen 바이너리 호출 0건 — lib/qwen.js를 mock.module로 차단한다.
  */
 
-import { beforeEach, describe, it, mock } from "node:test";
+import { after, beforeEach, describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { teardownTestResources } from "../_lifecycle.js";
 
 const mockRunQwenCLI   = mock.fn();
 const mockRawIsQwenCli = mock.fn();
@@ -19,6 +20,8 @@ mock.module("../../lib/qwen.js", {
 
 const { QwenCliProvider } = await import("../../lib/llm/providers/QwenCliProvider.js");
 const { createProvider, listProviderNames } = await import("../../lib/llm/registry.js");
+
+after(async () => { await teardownTestResources(); });
 
 describe("QwenCliProvider", () => {
   beforeEach(() => {

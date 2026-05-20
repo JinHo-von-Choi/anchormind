@@ -11,9 +11,9 @@
 import { describe, it, mock, before, after } from "node:test";
 import assert from "node:assert/strict";
 
-import { disconnectRedis } from "../../lib/redis.js";
+import { teardownTestResources } from "../_lifecycle.js";
 
-after(async () => { await disconnectRedis().catch(() => {}); });
+after(async () => { await teardownTestResources(); });
 
 /* ──────────────────────────────────────────────────────────────
    mock 의존성

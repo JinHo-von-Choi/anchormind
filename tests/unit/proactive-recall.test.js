@@ -16,10 +16,10 @@
 import { describe, it, mock, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 
-import { disconnectRedis } from "../../lib/redis.js";
-import { MEMORY_CONFIG }  from "../../config/memory.js";
+import { teardownTestResources } from "../_lifecycle.js";
+import { MEMORY_CONFIG }         from "../../config/memory.js";
 
-after(async () => { await disconnectRedis().catch(() => {}); });
+after(async () => { await teardownTestResources(); });
 
 /* ── mock 의존성 생성 헬퍼 ── */
 

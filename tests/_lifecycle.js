@@ -15,6 +15,25 @@
  *   });
  */
 
+import { disconnectRedis } from "../lib/redis.js";
+import { getPrimaryPool }  from "../lib/tools/db.js";
+
+/**
+ * 테스트가 연 외부 자원(Redis 클라이언트, PostgreSQL primary pool)을 멱등하게 정리한다.
+ *
+ * 단위 테스트가 lib/redis.js의 circuitBreaker 경로나 RememberPostProcessor의
+ * getPrimaryPool() lazy-open으로 소켓/idle 타이머를 남기면 process-isolation 워커가
+ * event loop를 비우지 못해 종료되지 않는다. after 훅에서 이 함수를 호출하여 양쪽 자원을
+ * 항상 닫는다. 자원을 쓰지 않은 테스트에서 호출해도 안전하다(close가 no-op이거나,
+ * getPrimaryPool()이 생성한 빈 풀을 즉시 종료).
+ *
+ * @returns {Promise<void>}
+ */
+export async function teardownTestResources() {
+  await disconnectRedis().catch(() => {});
+  await getPrimaryPool()?.end?.().catch(() => {});
+}
+
 /**
  * 테스트 환경에서 정상적으로 존재하는 handle 이름 화이트리스트를 반환한다.
  *

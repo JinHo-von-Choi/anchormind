@@ -4,8 +4,9 @@
  * No real opencode invocation. lib/opencode.js is mocked at module level.
  */
 
-import { beforeEach, describe, it, mock } from "node:test";
+import { after, beforeEach, describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { teardownTestResources } from "../_lifecycle.js";
 
 const mockRunOpenCodeCLI   = mock.fn();
 const mockRawIsOpenCodeCli = mock.fn();
@@ -20,6 +21,8 @@ mock.module("../../lib/opencode.js", {
 const { OpenCodeCliProvider } = await import("../../lib/llm/providers/OpenCodeCliProvider.js");
 const { createProvider, listProviderNames } = await import("../../lib/llm/registry.js");
 const { getConcurrencyLimit } = await import("../../lib/config.js");
+
+after(async () => { await teardownTestResources(); });
 
 describe("OpenCodeCliProvider", () => {
   beforeEach(() => {

@@ -13,9 +13,9 @@
 import { describe, it, mock, after } from "node:test";
 import assert from "node:assert/strict";
 
-import { disconnectRedis } from "../../lib/redis.js";
+import { teardownTestResources } from "../_lifecycle.js";
 
-after(async () => { await disconnectRedis().catch(() => {}); });
+after(async () => { await teardownTestResources(); });
 
 /** RememberPostProcessor 로드 */
 const { RememberPostProcessor } = await import("../../lib/memory/RememberPostProcessor.js");
