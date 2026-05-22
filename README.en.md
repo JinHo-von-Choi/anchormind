@@ -335,7 +335,8 @@ Memento is optimized for fact caching. When narrative context matters:
 - PostgreSQL 14+ (pgvector extension)
 - Redis 6+ (optional)
 - OpenAI Embedding API (optional) or `EMBEDDING_PROVIDER=transformers` (local zero-cost mode)
-- Gemini CLI / Codex CLI / GitHub Copilot CLI (quality evaluation, morpheme analysis, auto-reflect; optional, chain-configurable via LLM_PRIMARY / LLM_FALLBACKS)
+- garu-ko / natural PorterStemmer / @node-rs/jieba / kuromoji (local morpheme analysis, per-language CPU routing; default `MEMENTO_MORPHEME_TOKENIZER=local`)
+- Gemini CLI / Codex CLI / GitHub Copilot CLI (quality evaluation, auto-reflect; optional, chain-configurable via LLM_PRIMARY / LLM_FALLBACKS)
 - @huggingface/transformers + ONNX Runtime (NLI contradiction classification + local embeddings, CPU-only)
 - MCP Protocol 2025-11-25
 

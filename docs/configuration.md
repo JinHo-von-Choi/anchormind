@@ -44,6 +44,8 @@
 | MEMENTO_STORAGE | pgvector | storage 어댑터 선택. `pgvector`(기본, PgVectorStore) 또는 `sqlite-vec`(SqliteVecStore, v4.1 본격 구현 예정 stub). 변경 시 서버 재시작 필요 |
 | MEMENTO_RECALL_MIN_SIM_FLOOR | (없음) | `SearchParamAdaptor.getMinSimilarity`가 반환하는 적응형 임계값에 옵트인 하한을 강제. 예: `0.45` 설정 시 학습값이 0.45 미만이어도 0.45 반환. 미설정 시 기존 동작 그대로 |
 | MIGRATION_LINT_FROM | (없음) | `npm run lint:migrations` 검사 cutoff override. 지정 마이그레이션 번호 이후분만 검사. 미설정 시 전체 검사 |
+| MEMENTO_MORPHEME_TOKENIZER | local | 형태소 토크나이저 경로 선택. `local`: garu-ko(한글)·natural PorterStemmer(영어)·@node-rs/jieba(중국어)·kuromoji(일본어) 로컬 CPU 분석기 사용(기본). `llm`: LLM 서브프로세스 경로(`MorphemeIndex._tokenizeViaLLM()`)로 전환. |
+| MEMENTO_ENABLE_KUROMOJI | true | `false` 설정 시 kuromoji 일본어 분석기 로딩 생략. 일본어 파편이 없는 환경에서 상주 메모리 약 269MB 절감. `config/memory.js` `morphemeIndex.enableKuromoji`와 동기화됨. |
 
 #### CLI 원격 접속
 

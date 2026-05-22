@@ -331,7 +331,8 @@ docs/
 - PostgreSQL 14+ (pgvector 확장)
 - Redis 6+ (선택)
 - OpenAI Embedding API (선택) 또는 `EMBEDDING_PROVIDER=transformers` (로컬 저비용 모드)
-- Gemini CLI / Codex CLI / GitHub Copilot CLI (품질 평가, 형태소 분석, 자동 reflect; 선택, LLM_PRIMARY / LLM_FALLBACKS로 체인 구성)
+- garu-ko / natural PorterStemmer / @node-rs/jieba / kuromoji (로컬 형태소 분석, 언어별 CPU 라우팅; `MEMENTO_MORPHEME_TOKENIZER=local` 기본)
+- Gemini CLI / Codex CLI / GitHub Copilot CLI (품질 평가, 자동 reflect; 선택, LLM_PRIMARY / LLM_FALLBACKS로 체인 구성)
 - @huggingface/transformers + ONNX Runtime (NLI 모순 분류 + 로컬 임베딩, CPU 전용)
 - MCP Protocol 2025-11-25
 

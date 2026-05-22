@@ -78,7 +78,7 @@ recall(query)
   ├── L1 Redis 인메모리 캐시 (warm path)
   ├── L2 pgvector 임베딩 유사도
   ├── L2.5 그래프 이웃 (fragment_links 1-hop)
-  ├── L3 PostgreSQL 전문 검색 (형태소)
+  ├── L3 PostgreSQL 전문 검색 (형태소; MorphemeTokenizer 로컬 CPU 분석기 → morpheme_dict → tsquery)
   ├── L4 Cross-Encoder Reranker (RRF 상위 30건)
   ├── RRF 병합 (k=60)
   ├── SearchScope.applyTo() 필터 — workspace·caseId·resolutionStatus·phase·affect 정합

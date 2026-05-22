@@ -43,6 +43,8 @@
 | MEMENTO_CASE_BACKPROP_ENABLED | false | When true, enables CaseRewardBackprop, which back-propagates tool_feedback reward signals along case_id fragment chains. Adjust importance scores of cause fragments based on outcome quality |
 | MEMENTO_STORAGE | pgvector | Storage adapter selection. `pgvector` (default, PostgreSQL + pgvector). Additional adapters can be registered in `lib/storage/`. Changing this value requires all fragments to be re-indexed in the target backend |
 | MEMENTO_RECALL_MIN_SIM_FLOOR | (unset) | Opt-in floor for the adaptive similarity threshold returned by `SearchParamAdaptor.getMinSimilarity`. Example: when set to `0.45`, the returned value is clamped to at least 0.45 even if the learned value is lower. Unset preserves the existing behavior |
+| MEMENTO_MORPHEME_TOKENIZER | local | Morpheme tokenizer path. `local` (default): routes to per-language CPU analyzers — garu-ko (Korean), natural PorterStemmer (English), @node-rs/jieba (Chinese), kuromoji (Japanese). `llm`: falls back to the LLM subprocess path (`MorphemeIndex._tokenizeViaLLM()`). |
+| MEMENTO_ENABLE_KUROMOJI | true | When `false`, skips loading the kuromoji Japanese analyzer, saving ~269MB resident memory. Useful for deployments with no Japanese fragments. Synced with `config/memory.js` `morphemeIndex.enableKuromoji`. |
 
 #### Migration Linting
 

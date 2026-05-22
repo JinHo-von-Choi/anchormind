@@ -49,7 +49,8 @@ server.js  (HTTP 서버)
             ├── embedding/                임베딩 레이어 모듈 (v3.7.0 서브디렉토리 분할)
             │   ├── EmbeddingWorker.js    Redis 큐 기반 비동기 임베딩 생성 워커 (EventEmitter). 구버전 stub re-export: lib/memory/EmbeddingWorker.js
             │   ├── EmbeddingCache.js     쿼리 임베딩 Redis 캐시 (emb:q:{sha256} 키, TTL 1시간, 장애 격리). 구버전 stub re-export: lib/memory/EmbeddingCache.js
-            │   └── MorphemeIndex.js      형태소 기반 L3 폴백 인덱스. 구버전 stub re-export: lib/memory/MorphemeIndex.js
+            │   ├── MorphemeIndex.js      형태소 기반 L3 폴백 인덱스. 구버전 stub re-export: lib/memory/MorphemeIndex.js
+            │   └── MorphemeTokenizer.js  로컬 CPU 형태소 분석기. 유니코드 스크립트 런 분할 후 언어별 라우팅: 한글 garu-ko(filterHangulMorphemes 조사·어미·단음절 필터), 영어 natural PorterStemmer, 중국어 @node-rs/jieba, 일본어 kuromoji(enableKuromoji=false 시 생략). MorphemeIndex.tokenize()가 위임하며 기본 경로(MEMENTO_MORPHEME_TOKENIZER=local)에서 LLM 서브프로세스를 대체한다. 벤치마크: 1.06ms/call, 상주 RSS +28.9MB.
             ├── signals/                  신호 레이어 모듈 (v3.7.0 서브디렉토리 분할)
             │   ├── SpreadingActivation.js contextText 기반 비동기 활성화 전파 (ACT-R 모델, keywords GIN seed → 1-hop 그래프 확산, 10분 TTL 캐시). 구버전 stub re-export: lib/memory/SpreadingActivation.js
             │   ├── CaseRewardBackprop.js  case verification 이벤트 → 증거 파편 importance 원자적 역전파. MEMENTO_CASE_BACKPROP_ENABLED 환경변수 미설정 시 즉시 반환. 구버전 stub re-export: lib/memory/CaseRewardBackprop.js
@@ -1095,7 +1096,7 @@ llmJson(prompt, options)
             └── 첫 성공 응답 반환 / 전부 실패 시 Error throw
 ```
 
-기존 5개 호출자(AutoReflect, MorphemeIndex, ConsolidatorGC, ContradictionDetector, MemoryEvaluator)는 `llmJson`을 그대로 사용하며 코드 변경 없이 동작한다.
+기존 호출자(AutoReflect, ConsolidatorGC, ContradictionDetector, MemoryEvaluator)는 `llmJson`을 그대로 사용하며 코드 변경 없이 동작한다. MorphemeIndex는 기본 경로(`MEMENTO_MORPHEME_TOKENIZER=local`)에서 LLM chain을 호출하지 않고 MorphemeTokenizer 로컬 분석기를 사용한다. `MEMENTO_MORPHEME_TOKENIZER=llm` 설정 시에만 `_tokenizeViaLLM()`을 통해 chain을 호출한다.
 
 `codex-cli` provider는 `model` / `timeoutMs` 설정을 실제 CLI 호출까지 전달한다. `qwen-cli` provider도 지원된다.
 
@@ -1247,13 +1248,15 @@ SQL 타입 주의: `fragments.id`는 `frag-{16자 hex}` TEXT 타입이므로 mul
 
 `RememberPostProcessor`는 형태소 등록을 fire-and-forget으로 비동기 처리한다. 등록 완료 시 `fragments.morpheme_indexed = true`로 갱신한다.
 
+형태소 추출은 `MorphemeTokenizer.tokenize()`가 담당한다(기본 `MEMENTO_MORPHEME_TOKENIZER=local`). 유니코드 스크립트 런을 분할하여 언어별 분석기로 라우팅한다: 한글 garu-ko(`filterHangulMorphemes`로 조사·어미·단음절 제거), 영어 natural PorterStemmer, 중국어 @node-rs/jieba, 일본어 kuromoji(`MEMENTO_ENABLE_KUROMOJI=false` 시 생략). `MEMENTO_MORPHEME_TOKENIZER=llm` 설정 시 기존 `_tokenizeViaLLM()` 경로로 전환한다.
+
 `getOrRegisterEmbeddings`는 누락 형태소 전체를 `generateBatchEmbeddings` 1회 + multi-row INSERT(`ON CONFLICT DO NOTHING`) 1회로 처리한다. 청크: 200건 또는 256KB 누적 중 먼저 도달. 배치 실패 시 `_parseBadIndexes` 정규식으로 문제 항목 격리 후 나머지 재시도, 인덱스 미명시 에러는 `_fallbackSingleRegister` 단건 경로.
 
 Consistency Gate: `FragmentReader.searchBySemantic` 파라미터 `morphemeOnly=true` 설정 시 `f.morpheme_indexed = true` 조건을 WHERE절에 추가(`lib/memory/FragmentReader.js`). `lib/memory/read/FragmentSearch.js`의 `_searchL3` morpheme sub-path가 이 플래그를 전달한다. 형태소 등록 미완료 파편은 키워드 매칭(L2)은 가능하지만 형태소 기반 L3 시맨틱 검색에서는 제외된다.
 
 migration-035(`lib/memory/migration-035-morpheme-indexed.sql`): `fragments.morpheme_indexed BOOLEAN NOT NULL DEFAULT false` 컬럼 추가, 기존 파편 백필, 부분 인덱스(`WHERE morpheme_indexed = false`) 생성.
 
-관련 코드: `lib/memory/MorphemeIndex.js` line 116~266, `lib/memory/RememberPostProcessor.js` line 107~214.
+관련 코드: `lib/memory/embedding/MorphemeTokenizer.js`, `lib/memory/MorphemeIndex.js` line 116~266, `lib/memory/RememberPostProcessor.js` line 107~214.
 
 ### lib/memory 6서브디렉토리 구조 (v3.7.0)
 

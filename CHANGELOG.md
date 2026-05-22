@@ -1,6 +1,20 @@
 # Changelog
 
-## [Unreleased]
+## [4.3.0] - 2026-05-22
+
+### Added
+
+- `lib/memory/embedding/MorphemeTokenizer.js` 신규 모듈. 유니코드 스크립트 런 분할 후 언어별 분석기로 라우팅: 한글 garu-ko, 영어 natural PorterStemmer, 중국어 @node-rs/jieba, 일본어 kuromoji. `MorphemeIndex.tokenize()`가 이 모듈에 위임한다.
+- 환경변수 `MEMENTO_MORPHEME_TOKENIZER=local|llm` (기본 `local`). `llm` 설정 시 종전 LLM 서브프로세스 경로로 롤백.
+- 환경변수 `MEMENTO_ENABLE_KUROMOJI=true|false` (기본 `true`). `false` 설정 시 kuromoji 로딩 생략 (~269MB RSS 절감).
+- `config/memory.js` `morphemeIndex` 블록에 `kanaMinChars`(기본 2), `enableKuromoji`(기본 true) 키 추가.
+- 한글 형태소 stopword 필터 `filterHangulMorphemes`: 조사·어미·단음절을 제거하고 의미 형태소만 반환.
+
+### Changed
+
+- L3 형태소 토크나이저를 LLM 서브프로세스(쿼리당 ~10초)에서 로컬 CPU 분석기(MorphemeTokenizer)로 전환. 벤치마크: 1.06ms/call(약 9400배 개선), 상주 RSS +28.9MB.
+- `MorphemeIndex._tokenize()` 내부가 `MEMENTO_MORPHEME_TOKENIZER=local`(기본)일 때 `MorphemeTokenizer.tokenize()`로 위임. `llm` 경로는 기존 `_tokenizeViaLLM()` 그대로 유지.
+- OpenAI 임베딩 경로(`getOrRegisterEmbeddings`) 및 `morpheme_dict` DB 스키마 변경 없음.
 
 ### Removed
 - jest, @jest/globals, babel-jest devDependencies

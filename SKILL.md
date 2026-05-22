@@ -2,7 +2,9 @@
 
 AI 에이전트가 Memento MCP 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
 
-## 현재 버전: v4.2.0
+## 현재 버전: v4.3.0
+
+v4.3.0은 L3 형태소 토크나이저를 LLM 서브프로세스(쿼리당 ~10초)에서 로컬 CPU 분석기로 전환한 릴리즈다. `lib/memory/embedding/MorphemeTokenizer.js`가 입력을 유니코드 스크립트 런으로 분할해 한글 garu-ko·영어 PorterStemmer·중국어 @node-rs/jieba·일본어 kuromoji로 라우팅하며, `MorphemeIndex.tokenize()`가 이 모듈에 위임한다(벤치 1.06ms/call, 상주 RSS +28.9MB). 서버 기동 시 한글·영어 분석기를 프리로드해 첫 쿼리 지연을 제거하고, 중국어·일본어는 등장 시 지연 로드한다. `MEMENTO_MORPHEME_TOKENIZER=local|llm`(기본 `local`)로 종전 경로 롤백, `MEMENTO_ENABLE_KUROMOJI=false`로 일본어 분석기(~269MB) 로딩을 차단한다. 한글 분기는 조사·어미·단음절 stopword 필터로 의미 형태소만 추출하며, OpenAI 임베딩 캐시(morpheme_dict)는 무변경이다.
 
 v4.2.0은 자동 후처리 4개 층위(ProactiveRecall · autoLinkSessionFragments · MemoryConsolidator · AutoReflect)에서 misgrouping/interference를 유발하던 rewrite-loop 경로를 schema-fit gate로 차단하는 릴리즈다. ProactiveRecall 자동 링크가 `proactiveRecall.mode` 3-값(`off`/`auto`/`legacy`, 기본 `auto`)으로 분기되며, `auto`에서는 기존 symbolic gate에 `workspace_mismatch`·`case_policy` 차단 사유가 추가된다. `caseIdPolicy` 3-값(`both-required`/`strict-or-adjacent`/`loose`, 기본 `strict-or-adjacent`)으로 한쪽 caseId null인 legacy 파편의 무차별 통과 누수를 sessionId·24h 인접·workspace 일치 신호로 보강한다. `autoLinkSessionFragments`의 errors×decisions·procedures×errors 카르테시안 곱집합이 1:1 top-1 schema-fit 매칭(동일 caseId/sessionId, 키워드 60%+, phase 단방향)으로 교체되고, 게이트 미통과 후보는 `tool_reflect` 응답 `_meta.link_suggestions[]`로 LLM에 위임된다. `MemoryConsolidator` 6h 시간 트리거에 `consolidate.schemaFit` 3-조건 게이트(pendingCase ≥5, recentRelated ≥20, fragsSinceLastRun ≥30, mode `any`/`all`/`off`)가 결합되고, LLM 재작성 stage 3종(`split_long_fragments`·`detect_contradictions`·`compress_old_fragments`)은 `consolidate.enableRiskyStages` 플래그로 개별 비활성 가능(`compress_old_fragments` 기본 off).
 
@@ -406,7 +408,7 @@ CLI provider는 API 키 불필요. 로컬 바이너리(`gemini`/`codex`/`copilot
 
 - **토큰 기반 세션 재사용**: 같은 Bearer/API 키로 initialize 재호출 시 기존 세션 재활용. claude.ai 커넥터의 Mcp-Session-Id 유실 문제 대응
 - **null crash 방어**: 빈 POST body를 400 Invalid Request로 거부
-- **MorphemeIndex LLM timeout**: 15s → 60s (정상 응답이 타임아웃에 걸리던 문제 해소)
+- **MorphemeIndex LLM timeout**: 15s → 60s. `MEMENTO_MORPHEME_TOKENIZER=llm` 경로 사용 시에만 적용. 기본 경로(`local`)는 로컬 CPU 분석기(MorphemeTokenizer)를 사용하므로 이 값을 참조하지 않는다.
 
 ---
 
@@ -1507,7 +1509,7 @@ recall 또는 context 응답의 `_meta.hints` 필드를 읽는다(v3.1.0에서 t
 
 ## LLM Provider Fallback
 
-Gemini CLI 외 `codex-cli`, `copilot-cli`, `qwen-cli` 포함 15개 이상의 외부 provider로 자동 fallback 가능. 설정: `LLM_PRIMARY=gemini-cli` (기본) + `LLM_FALLBACKS` JSON 배열. env 미설정 시 기존 Gemini CLI 단독 동작 유지. 자세한 운영은 `docs/operations/llm-providers.md` 참조.
+Gemini CLI 외 `codex-cli`, `copilot-cli`, `qwen-cli` 포함 15개 이상의 외부 provider로 자동 fallback 가능. 설정: `LLM_PRIMARY=gemini-cli` (기본) + `LLM_FALLBACKS` JSON 배열. env 미설정 시 기존 Gemini CLI 단독 동작 유지. 형태소 분석은 기본적으로 로컬 CPU 분석기(MorphemeTokenizer)가 담당하며 LLM provider 체인을 사용하지 않는다(`MEMENTO_MORPHEME_TOKENIZER=llm` 설정 시에만 LLM 경로 활성화). 자세한 운영은 `docs/operations/llm-providers.md` 참조.
 
 ## Symbolic Memory 활용 (opt-in)
 

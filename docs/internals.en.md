@@ -78,7 +78,7 @@ recall(query)
   ├── L1 Redis in-memory cache (warm path)
   ├── L2 pgvector embedding similarity
   ├── L2.5 graph neighbors (fragment_links 1-hop)
-  ├── L3 PostgreSQL full-text search (morpheme)
+  ├── L3 PostgreSQL full-text search (morpheme; MorphemeTokenizer local CPU analyzer → morpheme_dict → tsquery)
   ├── L4 Cross-Encoder Reranker (top 30 from RRF)
   ├── RRF merge (k=60)
   ├── SearchScope.applyTo() filter — workspace/caseId/resolutionStatus/phase/affect consistency
