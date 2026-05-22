@@ -124,7 +124,7 @@ gemini-cli, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama,
 
 **geminiTimeoutMs**: `config/memory.js`의 `morphemeIndex.geminiTimeoutMs` 값이 15000ms에서 **60000ms**로 상향되었다. Gemini CLI 및 Ollama Cloud 환경에서 실측 응답 지연이 20~40s에 달해 반복적인 "all LLM providers failed" 오류가 발생하던 문제를 해소하기 위한 조정이다.
 
-이 값은 `MorphemeIndex.tokenize()` 내부의 `geminiCLIJson(userPrompt, { timeoutMs: cfg.geminiTimeoutMs })` 호출에 직접 전달된다. tokenize가 실패하면 형태소 추출 결과가 없으므로 L3 morpheme 검색(recall의 전문 검색 경로)이 비활성화된 것과 동일하게 동작한다 (`_fallbackTokenize` 로 graceful degrade). 따라서 타임아웃 미달로 인한 tokenize 실패는 recall 응답 품질 저하로 직결된다.
+이 값은 `MEMENTO_MORPHEME_TOKENIZER=llm` 설정 시 `MorphemeIndex._tokenizeViaLLM()` 내부의 `geminiCLIJson(userPrompt, { timeoutMs: cfg.geminiTimeoutMs })` 호출에 전달된다. 기본값(`MEMENTO_MORPHEME_TOKENIZER=local`)에서는 로컬 분석기(MorphemeTokenizer)를 사용하므로 이 값은 참조되지 않는다. LLM 경로에서 tokenize가 실패하면 형태소 추출 결과가 없으므로 L3 morpheme 검색(recall의 전문 검색 경로)이 비활성화된 것과 동일하게 동작한다 (`_fallbackTokenize` 로 graceful degrade).
 
 **GEMINI_TIMEOUT_MS**: `lib/memory/AutoReflect.js`의 LLM chain 호출 timeout은 30,000 ms로 고정된다(`GEMINI_TIMEOUT_MS = 30_000` 코드 상수, `process.env` 참조 없음). 값을 변경하려면 해당 파일의 상수를 직접 수정해야 한다. MorphemeIndex의 `geminiTimeoutMs`(config/memory.js, 기본 60000)와 별개임에 주의한다.
 
