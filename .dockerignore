@@ -1,6 +1,40 @@
+# Dependencies (컨테이너 내부 npm ci로 재설치 — 플랫폼별 네이티브 바이너리 확보)
 node_modules
+
+# VCS / 메타
 .git
+.gitignore
+.dockerignore
+.github/
+
+# 환경 변수 / 시크릿
 .env
+.env.*
+
+# 로그 / 런타임 산출물
 *.log
+logs/
+pids/
+coverage/
+.nyc_output/
+test-results/
+
+# 문서 / 테스트 (런타임 불필요)
 docs/
 tests/
+*.md
+
+# 에이전트 / IDE / 분석 도구 설정
+.claude/
+.serena/
+.cursor/
+.continue/
+.vscode/
+.idea/
+.worktrees/
+.gstack/
+.playwright-mcp/
+
+# 린트 설정
+.eslintrc*
+eslint.config.*
