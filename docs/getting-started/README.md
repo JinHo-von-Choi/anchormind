@@ -2,12 +2,15 @@
 title: "Getting Started"
 date: 2026-03-13
 author: 최진호
-updated: 2026-04-20
+updated: 2026-05-26
 ---
 
 # Getting Started
 
 Memento MCP 온보딩 문서 모음이다. 처음 설치하는 경우 아래 순서로 읽는 것을 권장한다.
+
+> [!TIP]
+> 한 번도 직접 설치해 본 적이 없다면 [`../INSTALL.md`의 "AI에게 맡기기"](../INSTALL.md#ai에게-맡기기) 섹션을 먼저 보면 된다. Claude Code·Cursor·Codex 같은 AI 어시스턴트에 한 줄을 던지면 의존성·`.env`·MCP 등록·헬스 체크까지 안내한다.
 
 ## 권장 읽기 순서
 

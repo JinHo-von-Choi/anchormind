@@ -1,5 +1,57 @@
 # Installation Guide
 
+> [!TIP]
+> Not confident installing this yourself? Jump to [Delegate to an AI Assistant](#delegate-to-an-ai-assistant). A single prompt covers prerequisites, dependencies, `.env`, MCP registration, and the health check.
+
+## Delegate to an AI Assistant
+
+The fastest path for someone new to this repository is to hand the work to an AI assistant. Claude Code, Cursor, and Codex all work.
+
+### Recommended Prompts
+
+**Clean install (first-time setup)**
+
+> "Clone the memento-mcp repository (`https://github.com/JinHo-von-Choi/memento-mcp`) into my environment, read `docs/INSTALL.en.md` and `SKILL.md`, and do the following:
+>
+> 1. Verify system prerequisites (Node.js, PostgreSQL, Redis)
+> 2. Run `npm install` and `bash setup.sh` to install dependencies and generate `.env`
+> 3. If PostgreSQL or Redis is missing, install them or propose a Docker Compose setup
+> 4. Run `npm run migrate`
+> 5. Confirm `node bin/memento.js health` passes
+> 6. Register memento-mcp in my current AI client's MCP settings (Claude Code / Cursor / Codex)
+> 7. Call `mcp__memento__memory_stats` to verify wiring
+>
+> Report each step as a table. On failure, consult `docs/getting-started/troubleshooting.md` and try to recover."
+
+**Integrate into an existing Claude Code setup**
+
+> "Add memento-mcp to my `~/.claude.json`. Follow `docs/getting-started/claude-code.md`:
+>
+> 1. Back up `~/.claude.json`
+> 2. Add memento-mcp under `mcpServers` with URL and ACCESS_KEY
+> 3. Tell me how to restart Claude Code
+> 4. Verify `mcp__memento__remember` etc. appear in the tool list"
+
+### Checklist the AI Should Satisfy
+
+After the assistant finishes, all of the following must hold:
+
+- `.env` exists, with `MEMENTO_ACCESS_KEY`, `POSTGRES_*`, and `REDIS_*` populated
+- `npm run migrate` succeeds through `migration-035`
+- `node bin/memento.js health` returns OK for DB, Redis, and the embedding provider
+- The AI client lists `mcp__*__remember`, `recall`, and `reflect`
+- A `memory_stats` call returns a valid response (zero fragments is fine)
+
+### When the AI Gets Stuck
+
+- Dependency errors: [Troubleshooting](getting-started/troubleshooting.md)
+- Windows: [Windows WSL2 Setup](getting-started/windows-wsl2.md)
+- Claude Code details: [Claude Code Configuration](getting-started/claude-code.md)
+- Smoke test: [First Memory Flow](getting-started/first-memory-flow.md)
+- Operating manual: [SKILL.md](../SKILL.md)
+
+---
+
 ## Choose Your Starting Path
 
 - Fastest bootstrap: [Quick Start](getting-started/quickstart.md)

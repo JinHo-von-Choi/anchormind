@@ -31,6 +31,13 @@ Memento MCP는 MCP(Model Context Protocol) 기반 에이전트 장기 기억 서
 
 단순한 기억의 도서관이 아니다. 피드백이 쌓이면 연결이 강해지고, 경험이 반복되면 패턴이 추상화되고, 세션이 이어지면 이야기가 생긴다. 기억하는 AI가 아니라 경험으로 성장하는 AI를 지향한다.
 
+> [!TIP]
+> 설치·설정을 직접 다루기 부담스럽다면 Claude Code·Cursor·Codex 같은 AI 어시스턴트에 다음 한 문장을 전달하면 된다.
+>
+> > "memento-mcp 저장소를 내 환경에 설치하고, `docs/INSTALL.md`와 `SKILL.md`를 읽어 권장 설정을 적용한 뒤 동작을 검증해 줘."
+>
+> 의존성 설치, `.env` 구성, MCP 등록, 헬스 체크까지 AI가 안내한다. 자세한 위임 절차는 [`docs/INSTALL.md`](docs/INSTALL.md#ai에게-맡기기) 참고.
+
 ## 30초 체험
 
 AI에게 무언가를 기억시키고, 다음 세션에서 꺼내 보는 흐름이다:
@@ -185,7 +192,7 @@ memento-mcp recall "query" --format table --limit 5
 memento-mcp remember "내용" --topic 프로젝트명 --idempotency-key k1
 ```
 
-`--format table|json|csv` 출력 형식 선택, 11개 서브명령에 `--help`/`-h` 지원. 자세한 플래그는 [docs/cli.md](docs/cli.md).
+`--format table|json|csv` 출력 형식 선택, 14개 서브명령에 `--help`/`-h` 지원. 자세한 플래그는 [docs/cli.md](docs/cli.md).
 
 ## API 응답 메타
 

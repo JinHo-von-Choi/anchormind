@@ -1,5 +1,57 @@
 # 설치 가이드
 
+> [!TIP]
+> 직접 설치할 자신이 없다면 [AI에게 맡기기](#ai에게-맡기기) 섹션부터 보면 된다. 한 줄 프롬프트로 환경 점검·의존성·`.env`·MCP 등록·헬스 체크까지 AI가 진행한다.
+
+## AI에게 맡기기
+
+이 저장소를 처음 다루는 사람이 가장 빠르게 시작하는 경로는 AI 어시스턴트에 위임하는 것이다. Claude Code, Cursor, Codex 같은 도구가 모두 동작한다.
+
+### 권장 프롬프트
+
+**클린 설치 (새 환경에 처음 도입)**
+
+> "memento-mcp 저장소(`https://github.com/JinHo-von-Choi/memento-mcp`)를 내 환경에 클론하고, `docs/INSTALL.md`와 `SKILL.md`를 읽어 다음을 수행해 줘:
+>
+> 1. 시스템 요구사항 확인 (Node.js, PostgreSQL, Redis 가용성)
+> 2. `npm install` 및 `bash setup.sh`로 의존성·.env 생성
+> 3. PostgreSQL과 Redis 미설치 시 설치 또는 Docker Compose 권장 구성 제시
+> 4. 마이그레이션(`npm run migrate`) 실행
+> 5. `node bin/memento.js health`로 헬스 체크 통과 확인
+> 6. 현재 사용 중인 AI 클라이언트(Claude Code/Cursor/Codex)의 MCP 설정에 memento-mcp 등록
+> 7. `mcp__memento__memory_stats` 호출로 동작 검증
+>
+> 각 단계 결과를 표로 보고하고, 실패 시 `docs/getting-started/troubleshooting.md` 참고해서 자동 복구를 시도해 줘."
+
+**기존 Claude Code 환경 통합**
+
+> "내 `~/.claude.json`에 memento-mcp MCP 서버를 추가하고 싶다. `docs/getting-started/claude-code.md`를 참고해서 다음을 진행해 줘:
+>
+> 1. 현재 `~/.claude.json` 백업
+> 2. memento-mcp 항목을 mcpServers 섹션에 추가 (URL, ACCESS_KEY)
+> 3. Claude Code 재시작 안내
+> 4. 도구 목록에 mcp__memento__remember 등이 표시되는지 확인 절차 제시"
+
+### AI가 수행할 작업 체크리스트
+
+위 프롬프트를 받은 AI가 정상적으로 처리했다면 다음이 모두 충족되어야 한다.
+
+- `.env` 파일이 생성되고 `MEMENTO_ACCESS_KEY`·`POSTGRES_*`·`REDIS_*` 키가 모두 채워져 있다
+- `npm run migrate`가 `migration-035`까지 통과한다
+- `node bin/memento.js health`가 DB/Redis/임베딩 제공자 모두 OK를 반환한다
+- AI 클라이언트 도구 목록에 `mcp__*__remember`·`recall`·`reflect`가 노출된다
+- `memory_stats` 호출이 0건이라도 정상 응답을 반환한다
+
+### AI가 막혔을 때 사람이 봐야 할 문서
+
+- 의존성 문제: [Troubleshooting](getting-started/troubleshooting.md)
+- Windows: [Windows WSL2 Setup](getting-started/windows-wsl2.md)
+- Claude Code 등록 세부: [Claude Code Configuration](getting-started/claude-code.md)
+- 첫 동작 검증: [First Memory Flow](getting-started/first-memory-flow.md)
+- 운영 매뉴얼: [SKILL.md](../SKILL.md)
+
+---
+
 ## 시작 경로 선택
 
 - 최소 실행만 빨리 확인: [Quick Start](getting-started/quickstart.md)

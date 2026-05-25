@@ -31,6 +31,13 @@ Memento MCP is a long-term memory server for AI agents, built on MCP (Model Cont
 
 This is not a library of memories. As feedback accumulates, connections strengthen. As experiences repeat, patterns abstract. As sessions continue, context becomes narrative. The goal is not an AI that remembers — it is an AI that grows from experience.
 
+> [!TIP]
+> If installing and configuring the server yourself feels daunting, hand a single sentence to an AI assistant (Claude Code, Cursor, Codex):
+>
+> > "Install the memento-mcp repository in my environment, read `docs/INSTALL.en.md` and `SKILL.md`, apply the recommended settings, then verify it works."
+>
+> The assistant will walk you through dependency setup, `.env` configuration, MCP registration, and the health check. Detailed delegation flow lives in [`docs/INSTALL.en.md`](docs/INSTALL.en.md#delegate-to-an-ai-assistant).
+
 ## 30-Second Demo
 
 Teach your AI something, then watch it recall the knowledge in a new session:
@@ -189,7 +196,7 @@ H group: _meta wrapper, sparse fields, CLI improvements, and idempotency.
 - _meta wrapper: recall / context responses now include a `_meta: { searchEventId, hints, suggestion }` field. The existing top-level `_searchEventId` / `_memento_hint` / `_suggestion` fields are deprecated and will be removed in v3.1.0. Use `_meta.*` instead.
 - sparse fields: Pass a `fields` array to recall to restrict the returned fields. Whitelist of 17: id / content / type / topic / keywords / importance / created_at / access_count / confidence / linked / explanations / workspace / context_summary / case_id / valid_to / affect / ema_activation.
 - CLI `--format`: `--format table|json|csv` flag controls output format. Defaults to table in TTY environments and json when piped. `--json` is an alias for `--format json`.
-- CLI `--help`: All 11 subcommands support `--help` / `-h`.
+- CLI `--help`: All 14 subcommands support `--help` / `-h`.
 - idempotencyKey: remember / batchRemember accept an `idempotencyKey` parameter (max 128 chars) to prevent duplicate storage within the same key_id scope. migration-034-v2.16.0-bundle adds the `fragments.idempotency_key` column.
 
 ### What's New in v3.0.0 — Admin Metrics Dashboard (folded from v2.16.0)
