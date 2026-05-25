@@ -91,7 +91,7 @@ recall(query)
   ├── pickFields(query.fields)  — sparse fieldset 적용
   │     query.fields 미지정 시 전체 반환 (하위 호환)
   │     L1/L2/RRF 캐시 단계는 전체 필드 유지, 최종 반환 직전에만 pick
-  └── commitSearchSideEffects() → _searchEventId 반환
+  └── commitSearchSideEffects() → _meta.searchEventId 반환
         SearchSideEffects 모듈에 위임. 검색 이벤트 영속화 + SearchParamAdaptor 학습 신호.
         _executeSearch() 후처리에서 SearchScope 필터가 이미 적용되었으므로
         이 단계에서 별도 보정 없이 searchEventId만 반환한다.

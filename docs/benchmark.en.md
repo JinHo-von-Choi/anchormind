@@ -166,6 +166,16 @@ Gemini and GPT-4o agree on 91.7% of judgments. The only substantial divergence i
 | Evaluation (Gemini API, per condition) | ~15 minutes |
 | Total (3 conditions) | ~3 hours |
 
+## MorphemeTokenizer Microbenchmark (v4.3.0)
+
+| Metric | Value |
+|-|-|
+| Average time per call | 1.06 ms/call |
+| Measured on | v4.3.0 |
+| Measurement date | 2026-05-22 |
+
+Standalone measurement of the tokenization step in `lib/memory/embedding/MorphemeTokenizer.js`. Used by the morpheme registration path in RememberPostProcessor (matched by L3 semantic search).
+
 ## Files
 
 - `results/retrieval_round_direct_k5_mcp.jsonl` -- retrieval results (K=5)

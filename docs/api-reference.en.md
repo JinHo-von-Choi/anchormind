@@ -671,7 +671,7 @@ Usefulness feedback on tool usage results. Evaluates whether the target tool's r
 | context | string | - | Usage context summary (50 characters max) |
 | session_id | string | - | Session ID |
 | trigger_type | string | - | Trigger type. sampled=hook sampling, voluntary=AI voluntary (default voluntary) |
-| search_event_id | integer | - | _searchEventId (or _meta.searchEventId) returned by the most recent recall. Used for search quality analysis. |
+| search_event_id | integer | - | _meta.searchEventId returned by the most recent recall. Used for search quality analysis. |
 | fragment_ids | string[] | - | Fragment ID list for feedback targets. When provided, activation scores of the specified fragments are adjusted based on the feedback. |
 
 ---

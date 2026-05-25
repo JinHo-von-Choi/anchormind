@@ -69,6 +69,9 @@ Flags available for all subcommands.
 | `inspect <id>` | Fragment detail + 1-hop links | Yes |
 | `session <sub>` | Session list / show / delete / rotate (master key required) | Yes |
 | `update [--execute] [--redetect]` | Check and apply updates (dry-run by default) | No |
+| `export [--topic x] [--type t]` | Dump fragments as JSONL | No |
+| `import [--input FILE]` | Ingest JSONL (file or stdin) | No |
+| `completion <shell>` | Print bash/zsh completion script | Yes |
 
 ---
 
@@ -345,6 +348,60 @@ Help:
 
 ```bash
 node bin/memento.js update --help
+```
+
+### export
+
+Dump fragments as JSONL (one fragment per line) for backup or migration.
+
+```bash
+node bin/memento.js export --topic memento-mcp --type fact > out.jsonl
+node bin/memento.js export --since 2026-04-01 --output backup.jsonl
+node bin/memento.js export --key mmcp_xxx --limit 500
+```
+
+Main options: `--topic`, `--type`, `--since <ISO>`, `--limit <n>`, `--output <FILE>`, `--json` (emit array).
+
+Help:
+
+```bash
+node bin/memento.js export --help
+```
+
+### import
+
+Read fragments from a JSONL file or stdin and insert them into the `fragments` table.
+
+```bash
+node bin/memento.js import --input out.jsonl
+cat out.jsonl | node bin/memento.js import
+node bin/memento.js import --input out.jsonl --idempotent --dry-run
+```
+
+`--idempotent` skips inserts that collide with an existing `idempotency_key` or `id`. `--dry-run` validates only.
+
+Help:
+
+```bash
+node bin/memento.js import --help
+```
+
+### completion
+
+Print a bash/zsh completion script to stdout.
+
+```bash
+node bin/memento.js completion bash >> ~/.bashrc
+node bin/memento.js completion zsh  >> ~/.zshrc
+source <(node bin/memento.js completion bash)
+```
+
+Supported shells: `bash`, `zsh` (bash-compat mode).
+
+Help:
+
+```bash
+node bin/memento.js completion --help
 ```
 
 ---

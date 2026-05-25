@@ -92,7 +92,7 @@ recall(query)
   ├── pickFields(query.fields)  — sparse fieldset
   │     when query.fields is not specified, all fields returned (backward compat)
   │     L1/L2/RRF cache stages retain full fields; pick is applied only at final return
-  └── commitSearchSideEffects() → returns _searchEventId
+  └── commitSearchSideEffects() → returns _meta.searchEventId
         Delegated to SearchSideEffects module. Search event persistence + SearchParamAdaptor learning.
         SearchScope filter is already applied inside _executeSearch(), so no additional
         post-processing correction is needed here; only searchEventId is returned.
@@ -532,7 +532,7 @@ The `run()` method in `lib/memory/RememberPostProcessor.js` executes 8 stages se
 
 ### FragmentSearch Hook Chain Insertion Points
 
-Three hooks execute in order after line 88 in `lib/memory/FragmentSearch.js`:
+Three hooks execute in order after line 88 in `lib/memory/read/FragmentSearch.js` (the `lib/memory/FragmentSearch.js` stub re-exports from this path):
 1. **shadow hook** (line 99): `SYMBOLIC_CONFIG.enabled && SYMBOLIC_CONFIG.shadow` → records `symbolicMetrics.observeLatency("shadow_recall", ...)` only
 2. **explain hook** (line 107): `SYMBOLIC_CONFIG.enabled && SYMBOLIC_CONFIG.explain` → `explanationBuilder.annotate(clean, { searchPath, layerLatency, query, caseContext })`
 3. **cbr filter** (line 124): `SYMBOLIC_CONFIG.enabled && SYMBOLIC_CONFIG.cbrFilter && sq.caseId` → `cbrEligibility.filter(clean, sq)`. Pre-filter `rawResultCount` is preserved separately to protect the SearchParamAdaptor learning signal.

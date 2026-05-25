@@ -496,7 +496,7 @@ Use for any OpenAI-compatible server such as LM Studio or llama.cpp.
 
 ```env
 EMBEDDING_PROVIDER=custom
-EMBEDDING_BASE_URL=http://my-server:8080/v1
+EMBEDDING_BASE_URL=http://my-server:8080/v1   # adjust port for your environment
 EMBEDDING_API_KEY=my-key
 EMBEDDING_MODEL=my-model
 EMBEDDING_DIMENSIONS=1024
