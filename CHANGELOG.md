@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- X-Forwarded-For 처리를 TRUST_PROXY_HOPS 기반 헬퍼로 통합 (미설정 시 기존 동작 유지)
+
+### Removed
+- 미사용 lib/tools/db-tools.js 모듈
+
+### Docs
+- ALLOWED_ORIGINS, TRUST_PROXY_HOPS, ADMIN_ALLOWED_ORIGINS, OAUTH_TRUSTED_ORIGINS 운영 권장값 안내 추가
+
 ## [4.3.0] - 2026-05-22
 
 ### Added

@@ -335,6 +335,17 @@ Memento is optimized for fact caching. When narrative context matters:
 - L1 Redis cache supports API key-based isolation only. Agent-level isolation in multi-agent deployments is enforced at L2/L3.
 - Automatic quality evaluation targets decision, preference, and relation types only. fact, procedure, and error types are excluded from the evaluation queue.
 - Authentication is disabled when MEMENTO_ACCESS_KEY is not set. Always configure it for externally exposed deployments.
+- ALLOWED_ORIGINS — Whitelist for browser-based MCP clients. When unset, only same-origin requests pass.
+  Desktop/CLI/IDE clients (Claude Code, Cursor, Windsurf, Continue, Cline, Zed, gemini CLI, etc.)
+  do not send Origin headers and need no whitelist entry.
+  Browser candidates: claude.ai, claude.com, chatgpt.com, chat.openai.com, copilot.microsoft.com,
+  gemini.google.com, aistudio.google.com, www.perplexity.ai, cursor.com, codeium.com,
+  windsurf.com, sourcegraph.com, typingmind.com (enable only the clients you actually use).
+- ADMIN_ALLOWED_ORIGINS — Whitelist for Admin UI origins. When unset, only same-origin requests pass.
+- TRUST_PROXY_HOPS — Trusted reverse-proxy hop count. When unset, retains legacy behavior
+  (first XFF entry). Set 0 for direct exposure, 1 behind a single proxy.
+- OAUTH_TRUSTED_ORIGINS — Whitelist of origins for automatic consent. When hosting multiple apps
+  on the same origin, prefer OAUTH_ALLOWED_REDIRECT_URIS for full URI matching.
 
 ## Tech Stack
 

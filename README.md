@@ -331,6 +331,17 @@ docs/
 - L1 Redis 캐시는 API 키 기반 격리만 지원한다. multi-agent 환경에서 에이전트 간 격리는 L2/L3에서 적용된다.
 - 자동 품질 평가는 decision, preference, relation 유형만 대상이다. fact, procedure, error는 평가 큐에서 제외된다.
 - MEMENTO_ACCESS_KEY를 설정하지 않으면 인증이 비활성화된다. 외부 노출 환경에서는 반드시 설정할 것.
+- ALLOWED_ORIGINS — 브라우저 기반 MCP 클라이언트 화이트리스트. 미설정 시 same-origin 외 차단.
+  데스크탑/CLI/IDE 확장(Claude Code, Cursor, Windsurf, Continue, Cline, Zed, gemini CLI 등)은
+  Origin 헤더를 보내지 않으므로 화이트리스트 불필요.
+  브라우저 후보: claude.ai, claude.com, chatgpt.com, chat.openai.com, copilot.microsoft.com,
+  gemini.google.com, aistudio.google.com, www.perplexity.ai, cursor.com, codeium.com,
+  windsurf.com, sourcegraph.com, typingmind.com (실제 호출하는 것만 선별).
+- ADMIN_ALLOWED_ORIGINS — Admin UI 호출 origin 화이트리스트. 미설정 시 same-origin 외 차단.
+- TRUST_PROXY_HOPS — 신뢰 가능한 리버스 프록시 hop 수. 미설정 시 기존 동작 유지(XFF 첫 항목).
+  직접 노출 시 0, 단일 프록시 뒤에서는 1.
+- OAUTH_TRUSTED_ORIGINS — 동의 자동 승인 대상 origin 화이트리스트. 동일 origin에서 여러 앱을 호스팅하면
+  OAUTH_ALLOWED_REDIRECT_URIS의 전체 URI 매칭 사용을 권장.
 
 ## 기술 스택
 
