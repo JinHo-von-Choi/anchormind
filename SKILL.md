@@ -2,7 +2,9 @@
 
 AI 에이전트가 Memento MCP 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
 
-## 현재 버전: v4.3.0
+## 현재 버전: v4.4.0
+
+v4.4.0은 보조 조회 도구의 키 격리 범위를 그룹 공유 키로 정렬한 릴리즈다. `graph_explore`(RCA 체인)·`search_traces`·`reconstruct_history`가 그룹 공유 키(`_groupKeyIds`) 범위의 파편을 조회하도록, 키 격리 WHERE 절을 신규 `lib/memory/keyScope.js`의 `keyScopeClause` 헬퍼로 통합했다. 헬퍼는 스칼라 키를 `IS NOT DISTINCT FROM`, 그룹 키를 `= ANY($n::text[])`로 매칭하며 `FragmentReader.getById`·`getByIds`·`LinkStore.getRCAChain`이 이를 공유한다. recall의 stale 판정은 `verified_at` 부재 시 `created_at`으로 폴백하고, 시각 정보가 없으면 판정을 보류한다.
 
 v4.3.0은 L3 형태소 토크나이저를 LLM 서브프로세스(쿼리당 ~10초)에서 로컬 CPU 분석기로 전환한 릴리즈다. `lib/memory/embedding/MorphemeTokenizer.js`가 입력을 유니코드 스크립트 런으로 분할해 한글 garu-ko·영어 PorterStemmer·중국어 @node-rs/jieba·일본어 kuromoji로 라우팅하며, `MorphemeIndex.tokenize()`가 이 모듈에 위임한다(벤치 1.06ms/call, 상주 RSS +28.9MB). 서버 기동 시 한글·영어 분석기를 프리로드해 첫 쿼리 지연을 제거하고, 중국어·일본어는 등장 시 지연 로드한다. `MEMENTO_MORPHEME_TOKENIZER=local|llm`(기본 `local`)로 종전 경로 롤백, `MEMENTO_ENABLE_KUROMOJI=false`로 일본어 분석기(~269MB) 로딩을 차단한다. 한글 분기는 조사·어미·단음절 stopword 필터로 의미 형태소만 추출하며, OpenAI 임베딩 캐시(morpheme_dict)는 무변경이다.
 

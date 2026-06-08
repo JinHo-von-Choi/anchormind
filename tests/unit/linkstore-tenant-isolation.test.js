@@ -14,6 +14,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { keyScopeClause } from "../../lib/memory/keyScope.js";
 
 const SCHEMA = "agent_memory";
 
@@ -74,15 +75,11 @@ class TestableIsReachable {
  *  TestableGetRCAChain — getRCAChain SQL 빌드 로직 추출
  */
 class TestableGetRCAChain {
-  buildSql(startId, keyId) {
+  buildSql(startId, keyId, groupKeyIds = []) {
     const params = [startId];
-    let keyFilter     = "";
-    let seedKeyFilter = "";
-    if (keyId != null) {
-      params.push(keyId);
-      keyFilter     = `AND f2.key_id IS NOT DISTINCT FROM $${params.length}`;
-      seedKeyFilter = `AND f.key_id IS NOT DISTINCT FROM $${params.length}`;
-    }
+    const scope  = { keyId, groupKeyIds: groupKeyIds.length > 0 ? groupKeyIds : (keyId != null ? [keyId] : []) };
+    const seedKeyFilter = keyScopeClause(params, "f.key_id",  scope);
+    const keyFilter     = keyScopeClause(params, "f2.key_id", scope);
     return {
       sql: `WITH rca AS (
          SELECT f.id, f.content, f.type, f.importance, f.topic,
@@ -155,7 +152,7 @@ describe("LinkStore SQL 빌드 -- cross-tenant 격리", async () => {
     assert.ok(occurrences >= 2,
       `key_id 필터가 2군데 이상 있어야 한다 (found: ${occurrences})`);
     assert.ok(params.includes("key-C"));
-    assert.equal(params.length, 2);
+    assert.equal(params.length, 5);   // startId + seed[keyId,arr] + link[keyId,arr]
   });
 
   // ── cross-tenant 시나리오 검증 ────────────────────────────────────────────

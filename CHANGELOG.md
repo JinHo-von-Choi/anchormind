@@ -2,14 +2,22 @@
 
 ## [Unreleased]
 
+## [4.4.0] - 2026-06-09
+
+### Added
+- `lib/memory/keyScope.js`: 키 격리 WHERE 절 생성 공용 헬퍼 `keyScopeClause`. 스칼라 키는 `IS NOT DISTINCT FROM`, 그룹 키는 `= ANY($n::text[])`로 매칭한다.
+
 ### Changed
-- X-Forwarded-For 처리를 TRUST_PROXY_HOPS 기반 헬퍼로 통합 (미설정 시 기존 동작 유지)
+- `graph_explore`(getRCAChain)·`search_traces`·`reconstruct_history`가 그룹 공유 키(`_groupKeyIds`) 범위의 파편을 조회하도록 키 격리 절을 적용. `LinkStore.getRCAChain`·`_queryFragmentTraces`·`HistoryReconstructor._fetchTimelineParameterized`가 `keyScopeClause`를 공유한다.
+- `FragmentReader.getByIds`에 `groupKeyIds` 인자 추가 (미전달 시 기존 단일 키 동작 유지).
+- recall의 stale 판정에 `verified_at` 부재 시 `created_at` 폴백을 적용하고, 시각 정보가 없으면 판정을 보류.
+- X-Forwarded-For 처리를 TRUST_PROXY_HOPS 기반 헬퍼로 통합 (미설정 시 기존 동작 유지).
 
 ### Removed
-- 미사용 lib/tools/db-tools.js 모듈
+- 미사용 lib/tools/db-tools.js 모듈.
 
 ### Docs
-- ALLOWED_ORIGINS, TRUST_PROXY_HOPS, ADMIN_ALLOWED_ORIGINS, OAUTH_TRUSTED_ORIGINS 운영 권장값 안내 추가
+- ALLOWED_ORIGINS, TRUST_PROXY_HOPS, ADMIN_ALLOWED_ORIGINS, OAUTH_TRUSTED_ORIGINS 운영 권장값 안내 추가.
 
 ## [4.3.0] - 2026-05-22
 
