@@ -2,7 +2,9 @@
 
 AI 에이전트가 Memento MCP 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
 
-## 현재 버전: v4.4.0
+## 현재 버전: v4.5.0
+
+v4.5.0은 `splitLongFragments` stage에 two-phase gate-then-commit·분할 품질 게이트(최소 길이 20자·대체 문자·CJK 혼입·대명사 시작 reject)·실패 backoff(`split_attempt_failed_at`)·분할 전용 provider 체인(`MEMENTO_SPLIT_LLM_*`)을 더하고, `FragmentGC`에 부모 tombstone된 split 자식 정리(branch-2)를 추가한 릴리즈다. 통과 자식이 `fragmentSplit.minItems`(기본 2) 미만이면 DB 커밋 없이 backoff만 기록하며, skip 사유는 `memento_consolidate_split_skipped_total{reason}` 메트릭에 누적된다.
 
 v4.4.0은 보조 조회 도구의 키 격리 범위를 그룹 공유 키로 정렬한 릴리즈다. `graph_explore`(RCA 체인)·`search_traces`·`reconstruct_history`가 그룹 공유 키(`_groupKeyIds`) 범위의 파편을 조회하도록, 키 격리 WHERE 절을 신규 `lib/memory/keyScope.js`의 `keyScopeClause` 헬퍼로 통합했다. 헬퍼는 스칼라 키를 `IS NOT DISTINCT FROM`, 그룹 키를 `= ANY($n::text[])`로 매칭하며 `FragmentReader.getById`·`getByIds`·`LinkStore.getRCAChain`이 이를 공유한다. recall의 stale 판정은 `verified_at` 부재 시 `created_at`으로 폴백하고, 시각 정보가 없으면 판정을 보류한다.
 

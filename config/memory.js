@@ -128,6 +128,11 @@ export const MEMORY_CONFIG = {
     errorResolvedPolicy    : {
       maxAgeDays           : 30,
       maxImportance        : 0.3
+    },
+    splitChildPolicy: {
+      maxImportance     : 0.3, // split 자식이 이 importance 미만이면 GC 후보 (branch 1)
+      orphanAgeDays     : 30,  // 생성 후 이 일수 경과 + 무접근 시 삭제 (branch 1)
+      tombstonedGraceDays: 7   // 부모가 tombstone된 split 자식의 유예 일수 (branch 2)
     }
   },
   /** 시맨틱 중복 제거 정책 (consolidate 사이클) */
@@ -203,9 +208,12 @@ export const MEMORY_CONFIG = {
   fragmentSplit: {
     lengthThreshold  : 300,   // 이 길이(자) 초과 파편을 분할 대상으로 선정
     batchSize        : 10,    // 한 사이클에 처리할 최대 파편 수
-    minItems         : 2,     // Gemini가 최소 이 수 이상 항목으로 분리해야 원본 대체
-    maxItems         : 8,     // Gemini에 요청할 최대 분리 항목 수
-    timeoutMs        : 30_000 // 파편당 Gemini 타임아웃
+    minItems         : 2,     // LLM이 최소 이 수 이상 항목으로 분리해야 원본 대체
+    maxItems         : 8,     // LLM에 요청할 최대 분리 항목 수
+    timeoutMs        : 30_000, // 파편당 LLM 타임아웃
+    minChildLength     : 20,   // 이 길이 미만 자식 단편은 폐기
+    excludeMetaTopics  : ["session_reflect", "consolidation", "reflection"], // 분할 제외 메타 토픽
+    failureBackoffHours: 24    // 분할 실패 후 이 시간 동안 재선정 제외 (무한 재분할 차단)
   },
   /** 형태소 사전 및 L3 fallback 설정 */
   morphemeIndex: {

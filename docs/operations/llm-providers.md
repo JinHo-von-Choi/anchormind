@@ -266,3 +266,56 @@ export class MyCustomProvider extends LlmProvider {
   }
 }
 ```
+
+---
+
+## Split 단계 전용 LLM 체인 설정
+
+`splitLongFragments`는 전역 `LLM_PRIMARY`/`LLM_FALLBACKS` 체인과 독립적으로 별도 provider 집합을 사용할 수 있다.
+
+### 환경 변수
+
+| 변수 | 설명 |
+|-|-|
+| `MEMENTO_SPLIT_LLM_PRIMARY` | split 단계 주 provider 이름 (예: `xai`, `opencode-cli`, `gemini-cli`). 미설정 시 전역 체인 사용. |
+| `MEMENTO_SPLIT_LLM_FALLBACKS` | JSON 배열. `LLM_FALLBACKS`와 동일한 원소 형태. 예: `[{"provider":"gemini-cli"}]` |
+
+미설정 시 `resolveSplitChainConfig()`는 `null`을 반환하고 `splitLongFragments`는 전역 체인을 그대로 사용한다.
+
+### 사용 가능한 provider 이름
+
+`listProviderNames()` 출력: `openai, anthropic, gemini, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai, gemini-cli, codex-cli, copilot-cli, qwen-cli, opencode-cli`
+
+- `xai` = Grok (xAI API, `https://api.x.ai/v1`)
+- `opencode-cli` = OpenCode CLI (provider/model은 `model` 필드로 선택, 예: `"xiaomi/mimo-v2.5-pro"`)
+
+### provider별 필수 의존성
+
+| split provider | 필수 의존성 | 미충족 시 |
+|-|-|-|
+| `xai` (Grok) | `XAI_API_KEY` (또는 엔트리의 `apiKey`); `https://api.x.ai/v1` 접근 가능 | `isAvailable()` 실패 → 체인에서 제외 |
+| `opencode-cli` | `opencode` 바이너리가 `PATH`에 존재; 허용된 `model` (예: `xiaomi/*`) | 바이너리 없음 → 체인에서 제외 |
+| `gemini-cli` | `gemini` 바이너리가 `PATH`에 존재 | 바이너리 없음 → 체인에서 제외 |
+| `codex-cli` / `copilot-cli` / `qwen-cli` | 해당 CLI 바이너리가 `PATH`에 존재 | 바이너리 없음 → 체인에서 제외 |
+| API providers (`anthropic`, `openai`, …) | 엔트리에 provider API 키 | 키 없음 → 체인에서 제외 |
+
+**주의:** split 단계 체인(`MEMENTO_SPLIT_LLM_PRIMARY`/`MEMENTO_SPLIT_LLM_FALLBACKS`)이 설정됐으나 모든 provider의 의존성이 충족되지 않으면, 체인이 비어 파편마다 `no LLM provider available` 예외가 발생한다. `splitLongFragments`는 이를 파편별 catch로 처리하여 `memento_consolidate_split_skipped_total{reason="provider_error"}`를 증가시키고 `logWarn`을 남기며, `split_attempt_failed_at`을 기록하여 `failureBackoffHours` 동안 재시도를 차단한다. `provider_error` 시리즈가 지속적으로 0이 아니면 split 단계가 잘못 설정된 provider로 인해 사실상 비활성화된 것이다.
+
+### 품질 게이트 설정 (`config/memory.js` → `fragmentSplit`)
+
+| 키 | 기본값 | 설명 |
+|-|-|-|
+| `minChildLength` | 20 | 이 길이(자) 미만 자식 단편 폐기 |
+| `excludeMetaTopics` | `["session_reflect","consolidation","reflection"]` | 분할 제외 topic 목록 |
+| `failureBackoffHours` | 24 | 분할 실패 후 재선정 제외 시간 (무한 재분할 루프 차단) |
+
+### `memento_consolidate_split_skipped_total` 카운터
+
+split skip 건수를 `reason` 라벨별로 측정한다.
+
+| reason | 의미 |
+|-|-|
+| `provider_error` | split 전용 체인이 비어 `dispatchChain` throw (키/바이너리 미충족) |
+| `llm_error` | LLM 호출/파싱 기타 실패 |
+| `low_yield` | 게이트 통과 자식 수 < `minItems` |
+| `insert_shortfall` | insert 후 자식 수 < `minItems` (롤백됨) |

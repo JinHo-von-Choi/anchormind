@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [4.5.0] - 2026-06-09
+
+### Added
+- `lib/memory/consolidate/split-gate.js`: 분할 자식 품질 게이트 순수 함수 모듈. `isAcceptableSplitChild`(최소 길이 20자·대체 문자·CJK 혼입·대명사 시작 reject)와 `clampChildImportance`(부모×0.7 상한 클램프; fact 타입은 0.4 미만 시 `null` 반환)를 export한다.
+- `lib/memory/consolidate/split-metrics.js`: `memento_consolidate_split_skipped_total{reason}` Prometheus 카운터 모듈. reason 라벨: `provider_error` · `llm_error` · `low_yield` · `insert_shortfall`.
+- `scripts/cleanup-legacy-split-fragments.js`: `source LIKE 'split:%'` 자식 파편 일괄 정리 스크립트.
+- `lib/memory/migration-036-split-attempt-failed-at.sql`: `fragments.split_attempt_failed_at TIMESTAMPTZ NULL` 컬럼 및 partial index 추가. 분할 실패 backoff 구현의 DB 기반.
+- `config/memory.js` `gc.splitChildPolicy` 블록: `maxImportance`(0.3), `orphanAgeDays`(30), `tombstonedGraceDays`(7) 키 신설.
+- `config/memory.js` `fragmentSplit` 블록에 `minChildLength`(20), `excludeMetaTopics`(`["session_reflect","consolidation","reflection"]`), `failureBackoffHours`(24) 키 신설.
+- `lib/config.js` `resolveSplitChainConfig(env)`: `MEMENTO_SPLIT_LLM_PRIMARY` + `MEMENTO_SPLIT_LLM_FALLBACKS` 환경변수에서 split 전용 provider 체인을 파싱한다. 미설정 시 `null` 반환 → 전역 체인 재사용.
+
+### Changed
+- `splitLongFragments` two-phase gate-then-commit: Phase 1에서 모든 자식 후보를 `isAcceptableSplitChild`·`clampChildImportance`로 검증하고, 통과 수 < `minItems`이면 DB 커밋 없이 해당 파편의 `split_attempt_failed_at`만 갱신한다. Phase 2는 통과 후보만 일괄 insert한다.
+- 분할 후 원본 파편 tombstone: `valid_to = NOW()`, `importance = GREATEST(0.2, importance × 0.3)`, `ttl_tier = 'cold'`.
+- 분할 후보 SELECT 쿼리에 `source NOT LIKE 'split:%'`·메타 토픽 제외·`split_attempt_failed_at < NOW() - backoffHours` 필터 추가. `buildSplitCandidateQuery` 함수로 분리.
+- `FragmentGC.deleteExpired`에 split 자식 branch-2 추가: 부모가 tombstone(`valid_to IS NOT NULL`)된 split 자식을 `tombstonedGraceDays`(7일) 후 삭제.
+
 ## [4.4.0] - 2026-06-09
 
 ### Added
