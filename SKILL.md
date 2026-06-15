@@ -60,13 +60,13 @@ v3.2.x 변경 요약은 다음과 같다.
 - v3.2.1: reasoning 모델 응답의 `<think>` 블록 사전 제거를 `parse-json.js`에 도입. 본 SKILL 상단의 기억 도구 사용 규칙 섹션이 추가됐다.
 - v3.2.0: `BatchRememberProcessor` 도입, `EmbeddingWorker`/`MorphemeIndex` 배치 경로 도입, `BATCH_DATABASE_URL` 분리, migration-035 적용.
 
-v3.1.1은 LLM Provider 체인 동시성 제어(concurrency semaphore + 429 cooldown)를 추가한 patch 릴리즈다. Ollama Cloud, fatherless 프록시 등에서 동시 요청 버스트로 인한 HTTP 429 연쇄 실패를 차단한다. 기본값으로 활성화되며 `LLM_CONCURRENCY_ENABLED=false`로 끌 수 있다. v3.1.0 기반 기능(`_meta.*` 경로, `scripts/post-migrate-flexible-embedding-dims.js`)은 그대로 유지된다.
+v3.1.1은 LLM Provider 체인 동시성 제어(concurrency semaphore + 429 cooldown)를 추가한 patch 릴리즈다. Ollama Cloud 및 외부 LLM 프록시 등에서 동시 요청 버스트로 인한 HTTP 429 연쇄 실패를 차단한다. 기본값으로 활성화되며 `LLM_CONCURRENCY_ENABLED=false`로 끌 수 있다. v3.1.0 기반 기능(`_meta.*` 경로, `scripts/post-migrate-flexible-embedding-dims.js`)은 그대로 유지된다.
 
 ### LLM 동시성 제어 (v3.1.1)
 
 - Provider별 세마포어: chain key(`provider|baseUrl|model`) 기준 슬롯 한도 관리. 한도 초과 시 대기, 30초 타임아웃 초과 시 다음 fallback provider로 자동 전환.
 - 429 쿨다운: HTTP 429 수신 시 해당 provider가 500-2000ms 랜덤 지터 동안 `isAvailable()=false` 반환. 체인 스킵 후 재진입.
-- 내장 기본 한도: `ollama=16`, `openai@fatherless|gemma-4-31B-it=3`, `openai@xiaomi|mimo-v2-pro=8`, `*-cli=1`, 기타 provider=10.
+- 내장 기본 한도: `ollama=16`, `openai@xiaomi|mimo-v2-pro=8`, `*-cli=1`, 기타 provider=10.
 - 환경 변수:
   - `LLM_CONCURRENCY_ENABLED=true|false` (기본 true, kill switch)
   - `LLM_CONCURRENCY_WAIT_MS=30000` (슬롯 대기 타임아웃 ms)
@@ -133,7 +133,7 @@ recall / context 응답 메타데이터는 `_meta.searchEventId` / `_meta.hints`
 | 발화 신호 | 예시 표현 | 의무 호출 |
 |-|-|-|
 | 명시적 과거 참조 | "이전에", "저번에", "지난번", "전에 했던" | `recall(text=관련 내용, includeContext=true)` |
-| 프로젝트명 등장 | "memento-mcp", "RealPT", "nerdvana" 등 고유 식별자 | `recall(topic=프로젝트명, contextText=현재 작업 요약)` |
+| 프로젝트명 등장 | "memento-mcp", "RealPT", "my-project" 등 고유 식별자 | `recall(topic=프로젝트명, contextText=현재 작업 요약)` |
 | 에러·실패·이상 동작 보고 | "에러 떴어", "안 돼", "실패했어", "터졌어" | `recall(type="error", keywords=[에러 키워드])` |
 | 설정·환경변수·포트 언급 | "포트 뭐였지", "설정 어떻게 했지", "키 어디 있지" | `recall(type="fact", keywords=[설정명])` |
 | 절차·빌드·배포 질문 | "어떻게 배포하지", "빌드 절차", "테스트 돌리는 법" | `recall(type="procedure", keywords=[프로젝트명, "deploy"])` |
@@ -573,7 +573,7 @@ reflect 규칙:
 2. 디바이스/호스트 구분이 가능한 경우: hostname 포함
    - 작업 디렉토리 경로에서 추출 (예: /srv/apps/paysvc -> "paysvc")
    - 환경변수, 시스템 정보에서 추출 (예: os.hostname())
-   - 예: `keywords: ["memento-mcp", "nerdvana", "oauth"]`
+   - 예: `keywords: ["memento-mcp", "my-host", "oauth"]`
 
 3. reflect의 summary/decisions/errors_resolved에도 동일 규칙 적용
 
@@ -699,7 +699,7 @@ remember(
   content="OAuth 구현 과정: DCR 엔드포인트 추가 -> Claude.ai가 client_id=Authorization을 보내는 버그 발견 -> auto-register로 우회 -> redirect_uri를 origin 기반으로 변경하여 ChatGPT connector 동적 경로 대응",
   type="episode",
   topic="memento-mcp",
-  keywords=["memento-mcp", "oauth", "DCR", "nerdvana"],
+  keywords=["memento-mcp", "oauth", "DCR", "my-host"],
   contextSummary="2026-04-02 세션에서 OAuth MCP 준수 구현. Claude.ai/ChatGPT 연동 완료."
 )
 ```
@@ -812,11 +812,11 @@ curl 응답 검증 체크:
 ### 구성 예시
 
 ```
-그룹: nerdvana
-  +-- nerdvana-claude (Claude Code용)
-  +-- nerdvana-cursor (Cursor용)
-  +-- nerdvana-gpt (ChatGPT용)
-  +-- nerdvana-GC (기존 기억 보관용)
+그룹: team-a
+  +-- team-a-claude (Claude Code용)
+  +-- team-a-cursor (Cursor용)
+  +-- team-a-gpt (ChatGPT용)
+  +-- team-a-GC (기존 기억 보관용)
 ```
 
 이 구성에서 Claude Code에서 저장한 기억을 Cursor에서도 recall 가능.
@@ -824,7 +824,7 @@ curl 응답 검증 체크:
 ### 키워드로 출처 구분
 
 같은 그룹 내에서도 어떤 플랫폼/디바이스에서 생긴 기억인지 구분하려면:
-- keywords에 플랫폼명 포함: `["memento-mcp", "claude-code", "nerdvana"]`
+- keywords에 플랫폼명 포함: `["memento-mcp", "claude-code", "my-host"]`
 - recall 시 플랫폼 필터: `recall(keywords=["claude-code"])`
 
 ## 도구 레퍼런스 (17개)
@@ -1315,7 +1315,7 @@ remember(
   content="nginx SSL 인증서 갱신 실패 조사 시작. certbot renew 실행 시 403 에러 발생.",
   type="episode",
   topic="nginx",
-  keywords=["nginx", "ssl", "certbot", "nerdvana"],
+  keywords=["nginx", "ssl", "certbot", "my-host"],
   caseId="debug-nginx-ssl-2026-04-05",
   goal="certbot SSL 인증서 갱신 403 에러 해결",
   phase="planning",

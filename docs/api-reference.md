@@ -142,7 +142,7 @@ X-Memento-Mode: recall-only
 POST /session/rotate HTTP/1.1
 Authorization: Bearer <API key or master key>
 Mcp-Session-Id: <대상 sessionId>
-Origin: https://example.nerdvana.kr
+Origin: https://example.com
 Content-Type: application/json
 
 { "reason": "suspected_leak" }
@@ -859,7 +859,7 @@ fragments를 정확 매칭으로 탐색한다 (recall의 시맨틱 검색과 달
 id, content, importance만 반환받아 토큰 절감:
 
 ```bash
-curl -X POST https://pmcp.nerdvana.kr/mcp \
+curl -X POST https://memento.example.com/mcp \
   -H "Authorization: Bearer $MEMENTO_KEY" \
   -H "Mcp-Session-Id: $SESSION" \
   -H "Content-Type: application/json" \
@@ -885,7 +885,7 @@ MCP JSON-RPC 동등 호출:
 네트워크 오류 후 동일 요청 재전송 시 중복 생성 없음:
 
 ```bash
-curl -X POST https://pmcp.nerdvana.kr/mcp \
+curl -X POST https://memento.example.com/mcp \
   -H "Authorization: Bearer $MEMENTO_KEY" \
   -H "Mcp-Session-Id: $SESSION" \
   -H "Content-Type: application/json" \
@@ -912,7 +912,7 @@ curl -X POST https://pmcp.nerdvana.kr/mcp \
 ### dryRun으로 저장 전 계획 확인
 
 ```bash
-curl -X POST https://pmcp.nerdvana.kr/mcp \
+curl -X POST https://memento.example.com/mcp \
   -H "Authorization: Bearer $MEMENTO_KEY" \
   -H "Mcp-Session-Id: $SESSION" \
   -H "Content-Type: application/json" \
@@ -947,7 +947,7 @@ curl -X POST https://pmcp.nerdvana.kr/mcp \
 
 ```bash
 # 응답 헤더 확인
-curl -si -X POST https://pmcp.nerdvana.kr/mcp \
+curl -si -X POST https://memento.example.com/mcp \
   -H "Authorization: Bearer $API_KEY" \
   ... | grep X-RateLimit
 # X-RateLimit-Limit: 5000

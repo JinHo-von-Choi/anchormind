@@ -24,12 +24,13 @@ Claude Code 등 에이전트 도구는 병렬 작업 격리를 위해 `git workt
 ```
 # 훅 파일 예시 위치: .claude/agent-hooks/post-finalize.sh
 
+REPO=/path/to/memento-mcp
 WORKTREE_PATH="$1"   # 에이전트가 생성한 워크트리 절대 경로
 
-if git -C /home/nirna/jobs/mcp/memento-mcp worktree list --porcelain \
+if git -C "$REPO" worktree list --porcelain \
      | grep -q "worktree $WORKTREE_PATH"; then
-  git -C /home/nirna/jobs/mcp/memento-mcp worktree unlock "$WORKTREE_PATH" 2>/dev/null || true
-  git -C /home/nirna/jobs/mcp/memento-mcp worktree remove --force "$WORKTREE_PATH"
+  git -C "$REPO" worktree unlock "$WORKTREE_PATH" 2>/dev/null || true
+  git -C "$REPO" worktree remove --force "$WORKTREE_PATH"
 fi
 rm -rf "$WORKTREE_PATH"
 ```
@@ -63,11 +64,13 @@ rm -rf "$WORKTREE_PATH"
 ### 현황 파악
 
 ```bash
+REPO=/path/to/memento-mcp
+
 # 현재 등록된 워크트리 전체 목록 (상태 포함)
-git -C /home/nirna/jobs/mcp/memento-mcp worktree list --porcelain
+git -C "$REPO" worktree list --porcelain
 
 # 더 이상 유효하지 않은 워크트리 메타 정리 (실제 디렉토리가 없는 경우)
-git -C /home/nirna/jobs/mcp/memento-mcp worktree prune -v
+git -C "$REPO" worktree prune -v
 ```
 
 ### 일괄 정리 절차
@@ -75,7 +78,7 @@ git -C /home/nirna/jobs/mcp/memento-mcp worktree prune -v
 아래 4단계를 순서대로 실행한다.
 
 ```bash
-REPO=/home/nirna/jobs/mcp/memento-mcp
+REPO=/path/to/memento-mcp
 PATTERN=".claude/worktrees/agent-"
 
 # (a) lock 해제 — prune/remove가 lock된 워크트리를 건너뛰므로 선행 필수
@@ -104,11 +107,13 @@ git -C "$REPO" branch \
 `git worktree list --porcelain`에서 경로는 존재하지만 실제 디스크에 디렉토리가 없는 경우 stale 상태다.
 
 ```bash
+REPO=/path/to/memento-mcp
+
 # stale 메타만 정리 (디스크 디렉토리가 없어도 메타는 삭제)
-git -C /home/nirna/jobs/mcp/memento-mcp worktree prune -v
+git -C "$REPO" worktree prune -v
 
 # prune 후에도 남는 경우 remove --force 로 강제 제거 (메타만 정리됨, rm은 불필요)
-git -C /home/nirna/jobs/mcp/memento-mcp worktree remove --force <path>
+git -C "$REPO" worktree remove --force <path>
 ```
 
 ---
@@ -117,7 +122,7 @@ git -C /home/nirna/jobs/mcp/memento-mcp worktree remove --force <path>
 
 ```crontab
 # 매일 03:00 에이전트 워크트리 GC
-0 3 * * * /home/nirna/jobs/mcp/memento-mcp/.claude/scripts/gc-worktrees.sh >> /var/log/memento-gc.log 2>&1
+0 3 * * * /path/to/memento-mcp/.claude/scripts/gc-worktrees.sh >> /var/log/memento-gc.log 2>&1
 ```
 
 스크립트 흐름(`gc-worktrees.sh`):
@@ -126,7 +131,7 @@ git -C /home/nirna/jobs/mcp/memento-mcp worktree remove --force <path>
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO=/home/nirna/jobs/mcp/memento-mcp
+REPO=/path/to/memento-mcp
 STALE_DAYS=7
 COUNT_LIMIT=5
 

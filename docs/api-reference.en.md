@@ -138,7 +138,7 @@ Request:
 POST /session/rotate HTTP/1.1
 Authorization: Bearer <API key or master key>
 Mcp-Session-Id: <target sessionId>
-Origin: https://example.nerdvana.kr
+Origin: https://example.com
 Content-Type: application/json
 
 { "reason": "suspected_leak" }
@@ -780,7 +780,7 @@ Search fragments by exact matching (unlike recall's semantic search, uses conten
 Return only id, content, importance to reduce token usage:
 
 ```bash
-curl -X POST https://pmcp.nerdvana.kr/mcp \
+curl -X POST https://memento.example.com/mcp \
   -H "Authorization: Bearer $MEMENTO_KEY" \
   -H "Mcp-Session-Id: $SESSION" \
   -H "Content-Type: application/json" \
