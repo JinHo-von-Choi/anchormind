@@ -875,6 +875,8 @@ RBAC default-deny: 도구 맵에 등록되지 않은 도구를 호출하면 `"Ac
 | async | boolean | - | true 시 파이어앤포겟 비동기 모드. 선검증 후 Redis 큐 적재, {async, accepted, rejected, jobId} 즉시 반환. 기본 false(동기). Redis 비활성 시 동기 폴백. |
 | agentId | string | - | 에이전트 ID |
 
+async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기를 피하려면 `async: true`. 단 즉시 받는 것은 `accepted` 수와 `jobId`뿐이며 per-fragment id는 반환되지 않고, 파편은 워커 처리 후에 recall 가능(즉시 아님, eventual)하다. 재시도 안전이 필요하면 각 항목에 `idempotencyKey`를 넣는다. 소수 저장이나 직후 해당 파편을 곧바로 참조해야 하는 경우는 기본 동기 모드(async 생략)를 쓴다.
+
 ### recall
 
 파편 검색. 키워드/시맨틱/하이브리드 자동 선택.
