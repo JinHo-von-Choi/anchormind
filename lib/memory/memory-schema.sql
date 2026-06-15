@@ -63,7 +63,7 @@ CREATE INDEX IF NOT EXISTS idx_frag_verified
 CREATE INDEX IF NOT EXISTS idx_frag_embedding
     ON agent_memory.fragments
     USING hnsw (embedding vector_cosine_ops)
-    WITH (m = 16, ef_construction = 64)
+    WITH (m = 16, ef_construction = 128)
     WHERE embedding IS NOT NULL;
 
 -- 파편 연결 관계 테이블
