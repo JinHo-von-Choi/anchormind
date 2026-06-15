@@ -2,18 +2,24 @@
 
 ## [Unreleased]
 
-## [4.6.0] - 2026-06-15
+## [4.6.0] - 2026-06-16
 
 ### Added
+- 벡터 검색 HNSW 인덱스 강제 옵션·토글: `ORDER BY embedding <=> v LIMIT` 트랜잭션에 `enable_seqscan=off`·`enable_bitmapscan=off`·`hnsw.iterative_scan` 힌트를 적용해 HNSW 인덱스 경로를 강제.
 - `batch_remember` 비동기(파이어앤포겟) 모드 opt-in: `async: true` 지정 시 선검증 후 Redis 큐 적재, `{async, accepted, rejected, jobId}` 즉시 반환. `BatchRememberWorker`가 본처리. 기본 `async: false`로 기존 동기 동작 불변. Redis 비활성 환경에서는 동기 폴백.
 - 배치 작업 전용 연결 풀(`getBatchPool`, `application_name='memento-mcp:batch'`) 및 배치 풀 통계 메트릭 수집.
 
 ### Changed
+- HNSW 인덱스 정의의 `ef_construction` 정합화, L3 형태소 보강 검색 병렬 실행, RRF 병합 후보에 importance 하한 컷오프 적용.
+- reflect 항목 자기완결성 게이트 및 한글 하한 강화.
 - 키 스코프 조회를 `keyScopeClause` 공용 헬퍼로 통일: `getById`·`findCaseIdBySessionTopic`·`findErrorFragmentsBySessionTopic`·`GraphLinker` 공유. `GraphLinker` 키 필터를 파라미터 바인딩·`text` 타입 정합으로 정리.
 - 피드백 importance 보정 계수를 `feedbackFactor` 순수 함수로 단일화(라이브 계수 0.85/1.1/0.95 유지).
 - `tools/call` 메트릭 중복 집계 제거.
 - 내부 중복 정리: 요청 컨텍스트 추출·키워드 정규화·도구 감사 래퍼·검색 SELECT 상수·affect 조건·Bearer 추출·환경변수 리스트 파싱·공통 파라미터 스키마 각각 단일 위치로 통합.
 - 대형 메서드 분해: `remember`·`handleMcpPost`·`buildAdminPaths`·`dispatchJsonRpc`·`ContextBuilder.build`·검색 RRF·컨솔리데이션/분해/압축.
+
+### Fixed
+- `getUnreflectedSessions`의 Redis SCAN 순회에 상한(최대 20라운드)을 두어 대용량 keyspace에서 context 응답이 지연되던 문제 해결.
 
 ## [4.5.0] - 2026-06-09
 
