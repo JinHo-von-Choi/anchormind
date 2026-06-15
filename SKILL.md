@@ -2,7 +2,9 @@
 
 AI 에이전트가 Memento MCP 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
 
-## 현재 버전: v4.5.0
+## 현재 버전: v4.6.0
+
+v4.6.0은 `batch_remember` 비동기 모드 opt-in·배치 전용 연결 풀·내부 중복 정리 릴리즈다. `async: true` 지정 시 선검증 후 Redis 큐 적재, `{async, accepted, rejected, jobId}`를 즉시 반환하며 `BatchRememberWorker`가 본처리한다. 기본 `async: false`로 기존 동기 동작은 불변이고, Redis 비활성 시 동기 폴백이 작동한다. 배치 작업은 `getBatchPool`(`application_name='memento-mcp:batch'`) 전용 풀로 분리되어 배치 풀 통계 메트릭이 수집된다. 내부적으로 키 스코프 조회가 `keyScopeClause` 헬퍼로 통일되고, 피드백 보정 계수가 `feedbackFactor` 순수 함수로 단일화됐다.
 
 v4.5.0은 `splitLongFragments` stage에 two-phase gate-then-commit·분할 품질 게이트(최소 길이 20자·대체 문자·CJK 혼입·대명사 시작 reject)·실패 backoff(`split_attempt_failed_at`)·분할 전용 provider 체인(`MEMENTO_SPLIT_LLM_*`)을 더하고, `FragmentGC`에 부모 tombstone된 split 자식 정리(branch-2)를 추가한 릴리즈다. 통과 자식이 `fragmentSplit.minItems`(기본 2) 미만이면 DB 커밋 없이 backoff만 기록하며, skip 사유는 `memento_consolidate_split_skipped_total{reason}` 메트릭에 누적된다.
 
@@ -870,6 +872,7 @@ RBAC default-deny: 도구 맵에 등록되지 않은 도구를 호출하면 `"Ac
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | fragments | array | O | [{content, topic, type, importance?, keywords?}] 최대 200건 |
+| async | boolean | - | true 시 파이어앤포겟 비동기 모드. 선검증 후 Redis 큐 적재, {async, accepted, rejected, jobId} 즉시 반환. 기본 false(동기). Redis 비활성 시 동기 폴백. |
 | agentId | string | - | 에이전트 ID |
 
 ### recall
