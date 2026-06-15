@@ -29,15 +29,17 @@ import { MemoryRememberer } from "../../lib/memory/processors/MemoryRememberer.j
 describe("MemoryRememberer.remember — R12 TDZ regression guard", () => {
   const src = MemoryRememberer.prototype.remember.toString();
 
-  it("declares const fragment before referencing it in the atomic branch", () => {
-    const fragDeclIdx = src.indexOf("const fragment = this.factory.create");
+  it("declares const fragment (via _buildFragment) before referencing it in the atomic branch", () => {
+    /** Phase 5-B 분해 후 fragment 생성은 _buildFragment()로 위임됐다.
+     *  TDZ 위험은 _buildFragment 호출이 _rememberAtomic 호출보다 앞에 있으면 제거된다. */
+    const fragDeclIdx = src.indexOf("const fragment = this._buildFragment(");
     const atomicIdx   = src.indexOf("this._rememberAtomic(fragment");
 
-    assert.ok(fragDeclIdx > 0, "const fragment declaration must exist in remember()");
+    assert.ok(fragDeclIdx > 0, "const fragment = this._buildFragment(...) must exist in remember()");
     assert.ok(atomicIdx   > 0, "_rememberAtomic(fragment, ...) call must exist in remember()");
     assert.ok(
       fragDeclIdx < atomicIdx,
-      `fragment must be declared before atomic branch (decl=${fragDeclIdx}, ref=${atomicIdx}) — R12 TDZ regression`
+      `fragment must be assigned before atomic branch (decl=${fragDeclIdx}, ref=${atomicIdx}) — R12 TDZ regression`
     );
   });
 
