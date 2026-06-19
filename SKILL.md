@@ -981,7 +981,11 @@ fragment_ids를 지정하고 ENABLE_RECONSOLIDATION=true인 경우: relevant=fal
 
 ### memory_consolidate
 
-수동 GC 트리거. TTL 전환, 감쇠, 만료 삭제, 중복 병합. master key 전용. 파라미터 없음.
+수동 GC 트리거. TTL 전환, 감쇠, 만료 삭제, 중복 병합. master key 전용. 항상 표준 단일 JSON-RPC 응답을 반환한다.
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| stream | boolean | deprecated. 더 이상 SSE progress 이벤트를 보내지 않는다. 하위 호환성을 위해 파라미터는 유지되지만 동작에 영향 없음. |
 
 ### graph_explore
 
@@ -1100,6 +1104,23 @@ id가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permissio
 
 반환값 예시: `{ "jobId": "...", "state": "completed", "accepted": 42, "processed": 42, "failed": 0 }`
 
+### check_update
+
+현재 버전과 최신 GitHub 태그를 비교하여 업데이트 가용 여부를 확인한다. master key 전용.
+
+| 파라미터 | 타입 | 기본값 | 설명 |
+|---|---|---|---|
+| force | boolean | false | true면 캐시 무시하고 GitHub 재조회 |
+
+### apply_update
+
+지정된 단계의 업데이트를 실행한다. `check_update` 선행 필수. master key 전용.
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| step | string | O | 실행할 단계: `fetch` / `install` / `migrate` |
+| dryRun | boolean | - | true(기본)면 명령어 미리보기만. false면 실제 실행. |
+
 ## 자동 백그라운드 동작
 
 다음 3개 기능은 별도 도구 호출 없이 자동으로 동작한다.
@@ -1128,15 +1149,17 @@ id가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permissio
 
 ## 중요도 기본값
 
-| 타입 | 권장 | 근거 |
-|------|------|------|
-| preference | 0.9 | 사용자 의도 정확 반영 |
-| error | 0.8 | 재발 시 즉시 해결 |
-| procedure | 0.7 | 안정적 회상 필요 |
-| decision | 0.7 | 모순 방지 |
-| episode | 0.6 | 맥락 보존용 |
-| fact | 0.5 | 일반 사실 |
-| relation | 0.5 | 관계 기록 |
+| 타입 | 권장 | 코드 상한(isAnchor=false) | 근거 |
+|------|------|--------------------------|------|
+| preference | 0.9 | 0.9 | 사용자 의도 정확 반영 |
+| error | 0.8 | 0.6 | 재발 시 즉시 해결. 0.6 초과 지정 시 0.6으로 clamp됨. |
+| procedure | 0.8 | 0.6 | 안정적 회상 필요. 0.6 초과 지정 시 0.6으로 clamp됨. |
+| decision | 0.7 | 0.7 | 모순 방지 |
+| fact | 0.6 | 0.7 | 일반 사실. 0.7 이하까지 허용됨. |
+| episode | 0.6 | 없음 | 맥락 보존용 |
+| relation | 0.5 | 0.7 | 관계 기록 |
+
+코드 기준(`lib/memory/write/FragmentWriter.js` `MAX_INITIAL_IMPORTANCE`): `isAnchor=true`이면 상한 제거. content 20자 미만이면 최대 0.2로 추가 제한.
 
 ## 기억 저장 규칙
 
