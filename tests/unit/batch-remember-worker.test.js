@@ -7,11 +7,12 @@ import { test, describe, beforeEach, mock } from "node:test";
 import assert from "node:assert/strict";
 
 const reliable = {
-  pop      : mock.fn(),
-  ack      : mock.fn(async () => true),
-  requeue  : mock.fn(async () => 0),
-  push     : mock.fn(async () => true),
-  pushDead : mock.fn(async () => true),
+  pop            : mock.fn(),
+  ack            : mock.fn(async () => true),
+  requeue        : mock.fn(async () => 0),
+  push           : mock.fn(async () => true),
+  pushDead       : mock.fn(async () => true),
+  setBatchJobStatus: mock.fn(async () => true),
 };
 
 mock.module("../../lib/redis.js", {
@@ -21,6 +22,7 @@ mock.module("../../lib/redis.js", {
     requeueProcessing   : reliable.requeue,
     pushToQueue         : reliable.push,
     pushToQueueDead     : reliable.pushDead,
+    setBatchJobStatus   : reliable.setBatchJobStatus,
     redisClient         : { status: "ready" },
     disconnectRedis     : async () => {},
   }
@@ -52,6 +54,7 @@ describe("BatchRememberWorker reliability", () => {
     reliable.requeue.mock.mockImplementation(async () => 0);
     reliable.push.mock.mockImplementation(async () => true);
     reliable.pushDead.mock.mockImplementation(async () => true);
+    reliable.setBatchJobStatus.mock.mockImplementation(async () => true);
   });
 
   test("성공 job은 ack되고 dead-letter로 가지 않는다", async () => {
@@ -65,6 +68,11 @@ describe("BatchRememberWorker reliability", () => {
     assert.equal(processor.process.mock.callCount(), 1);
     assert.equal(reliable.ack.mock.callCount(), 1);
     assert.equal(reliable.pushDead.mock.callCount(), 0);
+    const completedCall = reliable.setBatchJobStatus.mock.calls.find(
+      c => c.arguments[1]?.state === "completed"
+    );
+    assert.ok(completedCall, "setBatchJobStatus 'completed' 호출 필요");
+    assert.equal(completedCall.arguments[0], "j1");
   });
 
   test("실패 job은 재적재 후 ack된다 (retryCount<limit)", async () => {
