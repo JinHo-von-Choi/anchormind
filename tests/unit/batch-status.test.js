@@ -36,4 +36,14 @@ describe("batch job status", () => {
     mod.__setRedisClientForTest(fake);
     assert.equal(await mod.getBatchJobStatus("nope"), null);
   });
+
+  test("tool_batchStatus는 상태를 그대로 반환", async () => {
+    const redis = await import("../../lib/redis.js");
+    redis.__setRedisClientForTest(makeFakeRedis());
+    await redis.setBatchJobStatus("brw-x", { state: "completed", inserted: 5 });
+    const { tool_batchStatus } = await import("../../lib/tools/memory.js");
+    const r = await tool_batchStatus({ jobId: "brw-x" });
+    assert.equal(r.success, true);
+    assert.equal(r.status.state, "completed");
+  });
 });
