@@ -299,8 +299,8 @@ describe("_resolveMode — 우선순위 재현 검증", () => {
  * 5. isInitializeRequest + 토큰 재사용(getSessionIdByToken + validateStreamableSession)
  *    (Redis 의존; session-linker-token-reuse.test.js에서 deriveTokenKey 층만 커버)
  *
- * 6. SSE 분기(_handleProgressSSE) — batch_remember/memory_consolidate + Accept:text/event-stream
- *    (sse-progress-handler.test.js에서 _handleProgressSSE 내부 동작 커버)
+ * 6. (제거됨) batch_remember/memory_consolidate 는 일반 tools/call 응답 경로로 통합됨
+ *    — 커스텀 SSE progress 스트리밍 분기 삭제
  *
  * 7. Rate Limit 429 응답
  *    (rate-limit-headers.test.js 등에서 별도 커버)
