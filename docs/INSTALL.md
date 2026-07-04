@@ -105,40 +105,40 @@ psql -U $POSTGRES_USER -d $POSTGRES_DB -f lib/memory/memory-schema.sql
 마이그레이션을 순서대로 실행한다.
 
 ```bash
-psql $DATABASE_URL -f lib/memory/migration-001-temporal.sql      # Temporal 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-002-decay.sql         # last_decay_at 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-003-api-keys.sql      # API 키 관리 테이블 추가
-psql $DATABASE_URL -f lib/memory/migration-004-key-isolation.sql # fragments.key_id 격리 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-005-gc-columns.sql    # GC 정책 인덱스 추가
-psql $DATABASE_URL -f lib/memory/migration-006-superseded-by-constraint.sql # fragment_links CHECK에 superseded_by 추가
-psql $DATABASE_URL -f lib/memory/migration-007-link-weight.sql   # fragment_links.weight 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-008-morpheme-dict.sql # 형태소 사전 테이블 추가
-psql $DATABASE_URL -f lib/memory/migration-009-co-retrieved.sql  # co_retrieved 링크 타입 추가
-psql $DATABASE_URL -f lib/memory/migration-010-ema-activation.sql # EMA 활성화 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-011-key-groups.sql      # API 키 그룹
-psql $DATABASE_URL -f lib/memory/migration-012-quality-verified.sql # quality_verified 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-013-search-events.sql   # 검색 이벤트 관측성 테이블 추가
-psql "$DATABASE_URL" -f lib/memory/migration-014-ttl-short.sql
-psql "$DATABASE_URL" -f lib/memory/migration-015-created-at-index.sql
-psql "$DATABASE_URL" -f lib/memory/migration-016-agent-topic-index.sql
-psql "$DATABASE_URL" -f lib/memory/migration-017-episodic.sql
-psql $DATABASE_URL -f lib/memory/migration-021-oauth-clients.sql  # OAuth 클라이언트 등록
-psql $DATABASE_URL -f lib/memory/migration-025-case-id-episode.sql    # fragments narrative reconstruction 컬럼 (case_id, goal, outcome, phase, resolution_status, assertion_status)
-psql $DATABASE_URL -f lib/memory/migration-026-case-events.sql        # case_events + case_event_edges + fragment_evidence 테이블 (Narrative Reconstruction)
-psql $DATABASE_URL -f lib/memory/migration-027-v25-reconsolidation-episode-spreading.sql  # fragment_links 재통합 컬럼 + link_reconsolidations + case_events idempotency_key + keywords GIN 인덱스
-psql $DATABASE_URL -f lib/memory/migration-028-v253-improvements.sql                     # 복합 인덱스 추가, used_rrf 단일화, superseded_by 제거
-psql $DATABASE_URL -f lib/memory/migration-029-search-param-thresholds.sql               # SearchParamAdaptor 검색 파라미터 학습 테이블
-psql $DATABASE_URL -f lib/memory/migration-030-search-param-thresholds-key-text.sql      # search_param_thresholds.key_id INTEGER → TEXT (UUID 호환)
-psql $DATABASE_URL -f lib/memory/migration-031-content-hash-per-key.sql                  # content_hash 전역 UNIQUE → 테넌트별 partial unique index
-psql $DATABASE_URL -f lib/memory/migration-032-fragment-claims.sql                       # fragment_claims 테이블 + tenant 격리 partial unique (Symbolic Memory)
-psql $DATABASE_URL -f lib/memory/migration-033-symbolic-hard-gate.sql                    # api_keys.symbolic_hard_gate 컬럼 (symbolic hard gate opt-in)
-psql $DATABASE_URL -f lib/memory/migration-034-v2.16.0-bundle.sql                        # api_keys.default_mode + fragments.affect + fragments.idempotency_key (단일 번들)
-psql $DATABASE_URL -f lib/memory/migration-035-morpheme-indexed.sql                      # fragments.morpheme_indexed BOOLEAN 추가 + 기존 행 백필 + sparse partial index
-psql $DATABASE_URL -f lib/memory/migration-036-split-attempt-failed-at.sql               # split_attempt_failed_at 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-037-hnsw-index-rename.sql                     # HNSW 인덱스 이름 정합화
+psql $DATABASE_URL -f lib/memory/migrations/migration-001-temporal.sql      # Temporal 컬럼 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-002-decay.sql         # last_decay_at 컬럼 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-003-api-keys.sql      # API 키 관리 테이블 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-004-key-isolation.sql # fragments.key_id 격리 컬럼 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-005-gc-columns.sql    # GC 정책 인덱스 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-006-superseded-by-constraint.sql # fragment_links CHECK에 superseded_by 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-007-link-weight.sql   # fragment_links.weight 컬럼 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-008-morpheme-dict.sql # 형태소 사전 테이블 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-009-co-retrieved.sql  # co_retrieved 링크 타입 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-010-ema-activation.sql # EMA 활성화 컬럼 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-011-key-groups.sql      # API 키 그룹
+psql $DATABASE_URL -f lib/memory/migrations/migration-012-quality-verified.sql # quality_verified 컬럼 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-013-search-events.sql   # 검색 이벤트 관측성 테이블 추가
+psql "$DATABASE_URL" -f lib/memory/migrations/migration-014-ttl-short.sql
+psql "$DATABASE_URL" -f lib/memory/migrations/migration-015-created-at-index.sql
+psql "$DATABASE_URL" -f lib/memory/migrations/migration-016-agent-topic-index.sql
+psql "$DATABASE_URL" -f lib/memory/migrations/migration-017-episodic.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-021-oauth-clients.sql  # OAuth 클라이언트 등록
+psql $DATABASE_URL -f lib/memory/migrations/migration-025-case-id-episode.sql    # fragments narrative reconstruction 컬럼 (case_id, goal, outcome, phase, resolution_status, assertion_status)
+psql $DATABASE_URL -f lib/memory/migrations/migration-026-case-events.sql        # case_events + case_event_edges + fragment_evidence 테이블 (Narrative Reconstruction)
+psql $DATABASE_URL -f lib/memory/migrations/migration-027-v25-reconsolidation-episode-spreading.sql  # fragment_links 재통합 컬럼 + link_reconsolidations + case_events idempotency_key + keywords GIN 인덱스
+psql $DATABASE_URL -f lib/memory/migrations/migration-028-v253-improvements.sql                     # 복합 인덱스 추가, used_rrf 단일화, superseded_by 제거
+psql $DATABASE_URL -f lib/memory/migrations/migration-029-search-param-thresholds.sql               # SearchParamAdaptor 검색 파라미터 학습 테이블
+psql $DATABASE_URL -f lib/memory/migrations/migration-030-search-param-thresholds-key-text.sql      # search_param_thresholds.key_id INTEGER → TEXT (UUID 호환)
+psql $DATABASE_URL -f lib/memory/migrations/migration-031-content-hash-per-key.sql                  # content_hash 전역 UNIQUE → 테넌트별 partial unique index
+psql $DATABASE_URL -f lib/memory/migrations/migration-032-fragment-claims.sql                       # fragment_claims 테이블 + tenant 격리 partial unique (Symbolic Memory)
+psql $DATABASE_URL -f lib/memory/migrations/migration-033-symbolic-hard-gate.sql                    # api_keys.symbolic_hard_gate 컬럼 (symbolic hard gate opt-in)
+psql $DATABASE_URL -f lib/memory/migrations/migration-034-v2.16.0-bundle.sql                        # api_keys.default_mode + fragments.affect + fragments.idempotency_key (단일 번들)
+psql $DATABASE_URL -f lib/memory/migrations/migration-035-morpheme-indexed.sql                      # fragments.morpheme_indexed BOOLEAN 추가 + 기존 행 백필 + sparse partial index
+psql $DATABASE_URL -f lib/memory/migrations/migration-036-split-attempt-failed-at.sql               # split_attempt_failed_at 컬럼 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-037-hnsw-index-rename.sql                     # HNSW 인덱스 이름 정합화
 ```
 
-> **migration-007 재실행**: `EMBEDDING_DIMENSIONS`를 변경하거나 임베딩 제공자를 전환한 경우, `post-migrate-flexible-embedding-dims.js`를 재실행하면 `fragments` 테이블과 `morpheme_dict` 테이블의 벡터 차원이 동시에 갱신된다. 구 경로 `scripts/migration-007-flexible-embedding-dims.js` 심볼릭 링크는 제거됐으므로 `scripts/post-migrate-flexible-embedding-dims.js`를 직접 사용한다.
+> **migration-007 재실행**: `EMBEDDING_DIMENSIONS`를 변경하거나 임베딩 제공자를 전환한 경우, `scripts/post-migrate-flexible-embedding-dims.js`를 재실행하면 `fragments` 테이블과 `morpheme_dict` 테이블의 벡터 차원이 동시에 갱신된다.
 
 > **migration-034-v2.16.0 CONCURRENTLY 옵션**: migration-034-v2.16.0-bundle은 트랜잭션 내에서 실행되므로 `CREATE UNIQUE INDEX`를 사용한다. 수백만 건 이상의 대규모 운영 테이블에서 잠금 최소화가 필요한 경우, `npm run migrate` 실행 전에 아래 두 문을 수동으로 실행하면 IF NOT EXISTS 가드에 의해 자동 실행 시 안전하게 SKIP된다.
 >

@@ -56,7 +56,7 @@ facade와 프로세서 간 공유 프로퍼티(embedder, fragmentStore 등)는 `
 
 ### 신규 unit 테스트 작성 시 lifecycle 가드 필수
 
-unit 테스트가 `lib/sessions.js`, `lib/redis.js`, `lib/memory/ReflectProcessor.js` 등
+unit 테스트가 `lib/sessions.js`, `lib/redis.js`, `lib/memory/processors/ReflectProcessor.js` 등
 timer 또는 socket을 활성화하는 모듈을 import하면 after 훅에서 반드시 정리해야 한다.
 정리 후 `assertCleanShutdown()`을 호출하여 hang 패턴 재유입을 즉시 감지한다.
 

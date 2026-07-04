@@ -113,99 +113,99 @@ Run migrations in order:
 
 ```bash
 # Temporal schema: adds valid_from, valid_to, superseded_by columns and indexes
-psql $DATABASE_URL -f lib/memory/migration-001-temporal.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-001-temporal.sql
 
 # Decay idempotency: adds last_decay_at column
-psql $DATABASE_URL -f lib/memory/migration-002-decay.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-002-decay.sql
 
 # API key management: creates api_keys and api_key_usage tables
-psql $DATABASE_URL -f lib/memory/migration-003-api-keys.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-003-api-keys.sql
 
 # API key isolation: adds key_id column to fragments
-psql $DATABASE_URL -f lib/memory/migration-004-key-isolation.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-004-key-isolation.sql
 
 # GC policy reinforcement: adds auxiliary indexes on utility_score and access_count
-psql $DATABASE_URL -f lib/memory/migration-005-gc-columns.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-005-gc-columns.sql
 
 # fragment_links constraint: adds superseded_by to relation_type CHECK
-psql $DATABASE_URL -f lib/memory/migration-006-superseded-by-constraint.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-006-superseded-by-constraint.sql
 
 # Link weight column for Hebbian co-retrieval strength
-psql $DATABASE_URL -f lib/memory/migration-007-link-weight.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-007-link-weight.sql
 
 # Morpheme dictionary table for Korean tokenization
-psql $DATABASE_URL -f lib/memory/migration-008-morpheme-dict.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-008-morpheme-dict.sql
 
 # fragment_links CHECK: adds co_retrieved relation type
-psql $DATABASE_URL -f lib/memory/migration-009-co-retrieved.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-009-co-retrieved.sql
 
 # EMA activation columns for dynamic decay half-life
-psql $DATABASE_URL -f lib/memory/migration-010-ema-activation.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-010-ema-activation.sql
 
 # API key groups (N:M mapping for cross-agent memory sharing)
-psql $DATABASE_URL -f lib/memory/migration-011-key-groups.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-011-key-groups.sql
 
 # Quality verification column
-psql $DATABASE_URL -f lib/memory/migration-012-quality-verified.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-012-quality-verified.sql
 
 # Search events observability table
-psql $DATABASE_URL -f lib/memory/migration-013-search-events.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-013-search-events.sql
 
 # TTL short-lived fragments
-psql "$DATABASE_URL" -f lib/memory/migration-014-ttl-short.sql
+psql "$DATABASE_URL" -f lib/memory/migrations/migration-014-ttl-short.sql
 
 # created_at index for time-range queries
-psql "$DATABASE_URL" -f lib/memory/migration-015-created-at-index.sql
+psql "$DATABASE_URL" -f lib/memory/migrations/migration-015-created-at-index.sql
 
 # agent_id + topic composite index
-psql "$DATABASE_URL" -f lib/memory/migration-016-agent-topic-index.sql
+psql "$DATABASE_URL" -f lib/memory/migrations/migration-016-agent-topic-index.sql
 
 # Episodic memory table and indexes
-psql "$DATABASE_URL" -f lib/memory/migration-017-episodic.sql
+psql "$DATABASE_URL" -f lib/memory/migrations/migration-017-episodic.sql
 
 # OAuth client registration
-psql $DATABASE_URL -f lib/memory/migration-021-oauth-clients.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-021-oauth-clients.sql
 
 # Narrative Reconstruction columns: case_id + structured episode columns in fragments
-psql $DATABASE_URL -f lib/memory/migration-025-case-id-episode.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-025-case-id-episode.sql
 # Narrative Reconstruction: case_events + case_event_edges + fragment_evidence tables
-psql $DATABASE_URL -f lib/memory/migration-026-case-events.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-026-case-events.sql
 
 # Reconsolidation, Episode Continuity, Spreading Activation: fragment_links consolidated columns + link_reconsolidations + case_events idempotency_key + keywords GIN index
-psql $DATABASE_URL -f lib/memory/migration-027-v25-reconsolidation-episode-spreading.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-027-v25-reconsolidation-episode-spreading.sql
 
 # Composite indexes, used_rrf consolidation, superseded_by removal
-psql $DATABASE_URL -f lib/memory/migration-028-v253-improvements.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-028-v253-improvements.sql
 
 # SearchParamAdaptor learning table
-psql $DATABASE_URL -f lib/memory/migration-029-search-param-thresholds.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-029-search-param-thresholds.sql
 
 # search_param_thresholds.key_id INTEGER → TEXT (UUID compatible)
-psql $DATABASE_URL -f lib/memory/migration-030-search-param-thresholds-key-text.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-030-search-param-thresholds-key-text.sql
 
 # content_hash global UNIQUE → per-tenant partial unique index
-psql $DATABASE_URL -f lib/memory/migration-031-content-hash-per-key.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-031-content-hash-per-key.sql
 
 # Symbolic Memory Layer: fragment_claims table + tenant isolation partial unique
-psql $DATABASE_URL -f lib/memory/migration-032-fragment-claims.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-032-fragment-claims.sql
 
 # api_keys.symbolic_hard_gate column (symbolic hard gate opt-in)
-psql $DATABASE_URL -f lib/memory/migration-033-symbolic-hard-gate.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-033-symbolic-hard-gate.sql
 
 # api_keys.default_mode + fragments.affect + fragments.idempotency_key (single bundle)
-psql $DATABASE_URL -f lib/memory/migration-034-v2.16.0-bundle.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-034-v2.16.0-bundle.sql
 
 # fragments.morpheme_indexed BOOLEAN + backfill + sparse partial index
-psql $DATABASE_URL -f lib/memory/migration-035-morpheme-indexed.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-035-morpheme-indexed.sql
 
 # fragments.split_attempt_failed_at TIMESTAMPTZ column
-psql $DATABASE_URL -f lib/memory/migration-036-split-attempt-failed-at.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-036-split-attempt-failed-at.sql
 
 # HNSW index rename for naming consistency
-psql $DATABASE_URL -f lib/memory/migration-037-hnsw-index-rename.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-037-hnsw-index-rename.sql
 ```
 
-> **Re-running migration-007**: If you change `EMBEDDING_DIMENSIONS` or switch embedding providers, re-run `scripts/post-migrate-flexible-embedding-dims.js` to update the vector column dimensions in both the `fragments` and `morpheme_dict` tables simultaneously. The backward-compatible symlink at `scripts/migration-007-flexible-embedding-dims.js` has been removed; use `scripts/post-migrate-flexible-embedding-dims.js` directly.
+> **Re-running migration-007**: If you change `EMBEDDING_DIMENSIONS` or switch embedding providers, re-run `scripts/post-migrate-flexible-embedding-dims.js` to update the vector column dimensions in both the `fragments` and `morpheme_dict` tables simultaneously.
 
 Since v1.8.0, automatic migration is supported. Instead of running each file manually:
 
@@ -291,7 +291,7 @@ Applied migrations are tracked in `agent_memory.schema_migrations`. Only unappli
 #   node scripts/post-migrate-flexible-embedding-dims.js
 
 # One-time L2 normalization of existing embeddings (safe to re-run; idempotent)
-DATABASE_URL=$DATABASE_URL node lib/memory/normalize-vectors.js
+DATABASE_URL=$DATABASE_URL node scripts/normalize-vectors.js
 
 # Backfill embeddings for existing fragments (requires embedding API key, one-time)
 npm run backfill:embeddings

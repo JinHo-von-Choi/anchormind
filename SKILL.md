@@ -808,7 +808,7 @@ RBAC default-deny: 도구 맵에 등록되지 않은 도구를 호출하면 `"Ac
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| content | string | O | 기억할 내용. 1~3문장, 300자 이내. episode는 1000자. |
+| content | string | O | 기억할 내용. 1~3문장, 300자 이내 작성 권장(저장 시 300자로 절삭, episode는 1000자). 4000자 초과 시 접수 단계에서 즉시 거부된다(-32602). |
 | topic | string | O | 주제 라벨. 프로젝트명 권장. |
 | type | string | O | fact, decision, error, preference, procedure, relation, episode |
 | keywords | string[] | - | 검색용 키워드. 3~5개. 프로젝트명+호스트네임 포함. |
@@ -830,7 +830,7 @@ RBAC default-deny: 도구 맵에 등록되지 않은 도구를 호출하면 `"Ac
 | assertionStatus | string | observed | observed / inferred / verified / rejected |
 | affect | string | - | 감정 태그. neutral / frustration / confidence / surprise / doubt / satisfaction |
 
-품질 게이트: content < 10자, URL만, type+topic null인 경우 거부. importance < 0.3이면 경고 + TTL short 자동 설정.
+품질 게이트: content < 10자, URL만, type+topic null인 경우 거부. content > 4000자면 "content length N exceeds max 4000" 메시지와 함께 -32602로 거부(300자 절삭보다 앞단의 수신 게이트). importance < 0.3이면 경고 + TTL short 자동 설정.
 
 에러: fragment_limit_exceeded 시 forget/memory_consolidate로 정리 안내.
 
@@ -840,7 +840,7 @@ RBAC default-deny: 도구 맵에 등록되지 않은 도구를 호출하면 `"Ac
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| fragments | array | O | [{content, topic, type, importance?, keywords?}] 최대 200건 |
+| fragments | array | O | [{content, topic, type, importance?, keywords?}] 최대 200건. 항목별 content가 4000자를 초과하면 해당 항목만 -32602로 실패 처리되고 나머지 항목은 정상 저장된다. |
 | async | boolean | - | true 시 비동기 모드. 선검증 후 Redis 큐 적재, `{async, accepted, jobId}` 즉시 반환. 워커가 ack·재시도(최대 3회)·dead-letter·기동 복구로 at-least-once 처리. 기본 false(동기). Redis 비활성 시 동기 폴백. |
 | stream | boolean | - | deprecated. 더 이상 SSE progress 이벤트를 보내지 않는다. 무시됨. |
 | agentId | string | - | 에이전트 ID |
@@ -916,7 +916,7 @@ fromId 또는 toId가 타 테넌트 소유 파편인 경우 `"Fragment not found
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | id | string | O | 수정할 파편 ID |
-| content | string | - | 새 내용 |
+| content | string | - | 새 내용. 4000자 초과 시 -32602로 거부. |
 | topic | string | - | 새 주제 |
 | keywords | string[] | - | 새 키워드 |
 | type | string | - | 새 유형 |
@@ -1163,7 +1163,7 @@ id가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permissio
 
 ## 기억 저장 규칙
 
-1. 간결성: 파편 하나에 하나의 개념. 300자 이내 (episode 1000자).
+1. 간결성: 파편 하나에 하나의 개념. 300자 이내 (episode 1000자). 4000자 초과는 -32602로 즉시 거부되므로 사전에 300자 내로 요약해 작성한다.
 2. 범주화: topic에 프로젝트명. 검색 효율에 직결.
 3. 키워드: 3~5개. 프로젝트명 + 호스트네임 + 구체적 용어.
 4. 보안: API 키, 비밀번호, 토큰을 파편에 저장하지 않는다.

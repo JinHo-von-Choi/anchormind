@@ -171,7 +171,7 @@ Content-Type: application/json
 
 ### tools/list 응답 — meta 필드
 
-각 도구의 `tools/list` 응답 항목에 `meta` 필드가 추가되었다.
+각 도구의 `tools/list` 응답 항목은 `meta` 필드를 포함한다.
 
 ```json
 {
@@ -484,7 +484,7 @@ reason code 목록 (최대 3개):
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| content | string | O | 기억할 내용 (1~3문장, 300자 이내 권장) |
+| content | string | O | 기억할 내용 (1~3문장, 300자 이내 권장). 입력 자체는 최대 4000자까지 허용되며 초과 시 `-32602` 오류로 거부된다 |
 | topic | string | O | 주제 (예: database, email, deployment, security) |
 | type | string | O | 파편 유형. fact, decision, error, preference, procedure, relation, episode. episode 외 타입은 300자 초과 시 절삭. |
 | keywords | string[] | - | 검색용 키워드 (미입력 시 자동 추출) |
@@ -571,6 +571,7 @@ violations 있는 경우 (soft gate — 저장됨):
 ### 에러 코드
 
 - `-32003` (SYMBOLIC_POLICY_VIOLATION): Symbolic hard gate가 활성화된 키에서 PolicyRules violations 발생. 저장이 거부됨. MCP 도구 에러(isError: true)가 아닌 JSON-RPC **프로토콜 레벨** 에러다.
+- `-32602` (Invalid params): `content` 길이가 4000자를 초과. JSON-RPC 프로토콜 레벨 에러다.
 
 ```json
 {
@@ -597,7 +598,7 @@ violations 있는 경우 (soft gate — 저장됨):
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| fragments | object[] | O | 저장할 파편 배열 (최대 200건). 각 항목은 content(string, 필수), topic(string, 필수), type(string, 필수), importance(number), keywords(string[]), workspace(string), idempotencyKey(string, 최대 128자) 포함. |
+| fragments | object[] | O | 저장할 파편 배열 (최대 200건). 각 항목은 content(string, 필수, 최대 4000자, 초과 시 해당 항목 `-32602` 거부), topic(string, 필수), type(string, 필수), importance(number), keywords(string[]), workspace(string), idempotencyKey(string, 최대 128자) 포함. |
 | workspace | string | - | 배치 기본 워크스페이스. 개별 파편에 workspace 미지정 시 이 값으로 대체. 미지정 시 키의 default_workspace 적용. |
 | agentId | string | - | 에이전트 ID (RLS 격리용) |
 | stream | boolean | - | deprecated: 더 이상 SSE progress 이벤트를 보내지 않는다. batch_remember는 표준 단일 JSON 응답으로 반환된다. 이 파라미터는 하위 호환성을 위해 유지되지만 동작에 영향을 주지 않는다. |
@@ -623,6 +624,7 @@ violations 있는 경우 (soft gate — 저장됨):
 | 에러 메시지 | 원인 |
 |-|-|
 | `content is required` | `content` 필드가 null 또는 undefined |
+| `content length N exceeds max 4000` | `content` 필드가 4000자 초과 |
 | `type is required` | `type` 필드 누락 |
 | `Content too short: length < 10 and word count < 3` | `FragmentFactory.validateContent` 판정 실패 — 내용이 너무 짧음 |
 | `fragment_limit_exceeded` | API 키 파편 할당량 초과 |
@@ -705,7 +707,7 @@ violations 있는 경우 (soft gate — 저장됨):
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | id | string | O | 갱신 대상 파편 ID |
-| content | string | - | 새 내용 (300자 초과 시 절삭) |
+| content | string | - | 새 내용 (300자 초과 시 절삭). 입력 자체는 최대 4000자까지 허용되며 초과 시 `-32602` 오류로 거부된다 |
 | topic | string | - | 새 주제 |
 | keywords | string[] | - | 새 키워드 목록 |
 | type | string | - | 새 유형 (fact, decision, error, preference, procedure, relation) |
@@ -763,7 +765,7 @@ violations 있는 경우 (soft gate — 저장됨):
 
 | 환경변수 | 기본값 | 설명 |
 |-|-|-|
-| `GEMINI_TIMEOUT_MS` | 30000 | AutoReflect의 Gemini CLI 호출 타임아웃 (ms). `lib/memory/AutoReflect.js` 상수 `GEMINI_TIMEOUT_MS`로 export됨 |
+| `GEMINI_TIMEOUT_MS` | 30000 | AutoReflect의 Gemini CLI 호출 타임아웃 (ms). `lib/memory/processors/AutoReflect.js` 상수 `GEMINI_TIMEOUT_MS`로 export됨 |
 
 ---
 

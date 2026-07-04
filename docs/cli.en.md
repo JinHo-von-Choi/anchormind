@@ -97,7 +97,7 @@ node bin/memento.js serve --help
 
 ### migrate
 
-Run all pending `lib/memory/migration-*.sql` files in order. Already-applied migrations are skipped.
+Run all pending `lib/memory/migrations/migration-*.sql` files in order. Already-applied migrations are skipped.
 
 ```bash
 node bin/memento.js migrate

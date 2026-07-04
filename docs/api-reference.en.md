@@ -476,7 +476,7 @@ Fragment-based memory storage. Store exactly one atomic fact in 1-2 sentences. I
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| content | string | Y | Content to remember (1-3 sentences, 300 characters recommended) |
+| content | string | Y | Content to remember (1-3 sentences, 300 characters recommended). The raw input itself is capped at 4000 characters; exceeding it is rejected with `-32602`. |
 | topic | string | Y | Topic (e.g., database, email, deployment, security) |
 | type | string | Y | Fragment type. fact, decision, error, preference, procedure, relation, episode. Types other than episode are truncated beyond 300 characters. |
 | keywords | string[] | - | Keywords for search (auto-extracted if not provided) |
@@ -558,7 +558,7 @@ Store multiple fragments at once (for bulk memory input). Batch INSERTs up to 20
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| fragments | object[] | Y | Array of fragments to store (max 200). Each item includes content (string, required), topic (string, required), type (string, required), importance (number), keywords (string[]), workspace (string), idempotencyKey (string, max 128 chars). |
+| fragments | object[] | Y | Array of fragments to store (max 200). Each item includes content (string, required, max 4000 characters — an item exceeding it is rejected with `-32602`), topic (string, required), type (string, required), importance (number), keywords (string[]), workspace (string), idempotencyKey (string, max 128 chars). |
 | workspace | string | - | Batch default workspace. Used for individual fragments without a workspace. Key's default_workspace applied if not specified. |
 | agentId | string | - | Agent ID (for RLS isolation) |
 | stream | boolean | - | Deprecated: no longer emits SSE progress events. batch_remember returns a standard single JSON response. This parameter is retained for backward compatibility but has no effect on behavior. |
@@ -655,7 +655,7 @@ Update the content or metadata of an existing fragment. Selectively modifies whi
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | id | string | Y | Target fragment ID to update |
-| content | string | - | New content (truncated beyond 300 characters) |
+| content | string | - | New content (truncated beyond 300 characters). The raw input itself is capped at 4000 characters; exceeding it is rejected with `-32602`. |
 | topic | string | - | New topic |
 | keywords | string[] | - | New keyword list |
 | type | string | - | New type (fact, decision, error, preference, procedure, relation) |

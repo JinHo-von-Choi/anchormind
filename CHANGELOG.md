@@ -1,6 +1,15 @@
 # Changelog
 
-## [Unreleased]
+## [Unreleased] - 2026-07-04
+
+### Added
+- content 입력 길이 상한 4000자 도입: `remember`·`batch_remember` 항목·`amend`의 `content`가 이를 초과하면 JSON-RPC -32602 에러로 거부한다. 파편 유형별 저장 절삭(episode 1000자, 그 외 300자)은 그 이전 단계로 그대로 유지되며, `batch_remember`는 초과 항목만 실패 처리하고 나머지 배치는 계속 진행한다.
+
+### Changed
+- 패턴 기반 캐시 무효화(`invalidateCacheByPattern`)를 `KEYS` 대신 Redis `SCAN` 커서 순회(`COUNT 500`, 순회 상한)로 전환.
+- 로컬 임베딩(transformers provider) 초기화를 모델별 싱글톤으로 단일화해 동시 중복 로딩을 방지하고, 추론을 FIFO 큐로 직렬화. 배치 임베딩(`embedBatch`)은 청크 단위 텍스트 배열을 파이프라인에 1회 추론으로 전달한다.
+- 마이그레이션 SQL 파일을 `lib/memory/migrations/` 디렉토리로 이동. `npm run migrate` 동작은 변경 없음.
+- `lib/memory/` 하위를 `read/`·`write/`·`consolidate/`·`link/`·`signals/`·`processors/`·`embedding/` 서브디렉토리 체계로 재배치.
 
 ## [4.7.0] - 2026-06-20
 

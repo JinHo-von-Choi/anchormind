@@ -98,7 +98,7 @@ node bin/memento.js serve --help
 
 ### migrate
 
-`lib/memory/migration-*.sql` 파일을 순서대로 실행한다. 이미 적용된 마이그레이션은 건너뛴다.
+`lib/memory/migrations/migration-*.sql` 파일을 순서대로 실행한다. 이미 적용된 마이그레이션은 건너뛴다.
 
 ```bash
 node bin/memento.js migrate

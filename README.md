@@ -165,7 +165,7 @@ Claude.ai Web / ChatGPT 연동은 OAuth를 사용한다. 발급한 API 키(`mmcp
 | `recall` | 키워드 + 시맨틱 3계층 검색으로 필요한 기억만 반환. `SearchScope`가 workspace/caseId/affect 등 scope를 L1~L3 전 레이어에 정합 적용. |
 | `context` | 세션 시작 시 핵심 맥락을 자동 복원 |
 | 자동 정리 | 중복 병합, 모순 탐지, 중요도 감쇠, TTL 기반 망각 |
-| storage 어댑터 계층 | `lib/storage/` 신설. `getStorage()` 팩토리가 `MEMENTO_STORAGE` ENV에 따라 `PgVectorStore`(기본) 또는 `SqliteVecStore`(v4.1 예정)를 반환. |
+| storage 어댑터 계층 | `lib/storage/`에 스토리지 추상화 계층이 있다. `getStorage()` 팩토리가 `MEMENTO_STORAGE` ENV에 따라 `PgVectorStore`(기본) 또는 `SqliteVecStore`(스텁, 미구현)를 반환한다. |
 | 링크 재통합 | `tool_feedback` 피드백이 fragment_links의 weight/confidence에 실시간 반영 (ReconsolidationEngine). 모순 링크는 자동 격리(quarantine). |
 | 확산 활성화 | `recall` 시 `contextText`를 전달하면 관련 파편의 activation_score를 선제적으로 부스트하여 맥락 연관성 높은 결과 우선 반환 (SpreadingActivation). |
 | 에피소드 연속성 | `reflect` 후 생성된 episode 파편 간 `preceded_by` 엣지를 자동 생성하여 경험 흐름을 그래프로 보존 (EpisodeContinuityService). |
@@ -222,7 +222,7 @@ memento-mcp remember "내용" --topic 프로젝트명 --idempotency-key k1
 }
 ```
 
-`remember` / `link` / `forget` / `amend`는 `dryRun: true` 파라미터로 부작용 없이 예상 결과만 반환한다. 모든 응답에 `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Resource` 헤더가 포함되며 master key 또는 limit=null 설정 시 헤더를 생략한다. `recall`은 `fields` 배열로 반환 필드를 17개 화이트리스트 범위로 제한할 수 있다. `remember` / `batchRemember`는 `idempotencyKey` 파라미터로 같은 key_id 범위 내 중복 저장을 방지한다(최대 128자).
+`remember` / `link` / `forget` / `amend`는 `dryRun: true` 파라미터로 부작용 없이 예상 결과만 반환한다. 모든 응답에 `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Resource` 헤더가 포함되며 master key 또는 limit=null 설정 시 헤더를 생략한다. `recall`은 `fields` 배열로 반환 필드를 17개 화이트리스트 범위로 제한할 수 있다. `remember` / `batchRemember`는 `idempotencyKey` 파라미터로 같은 key_id 범위 내 중복 저장을 방지한다(최대 128자). `remember` / `batchRemember` 항목 / `amend`의 `content`는 4000자를 초과하면 JSON-RPC -32602 에러로 거부된다. 위 파편 유형별 저장 절삭(1000자/300자)과는 별개로 그보다 앞단에서 적용되는 수신 게이트이며, `batchRemember`는 초과 항목만 실패 처리하고 나머지 배치는 그대로 진행한다.
 
 ## 보안
 
@@ -297,7 +297,7 @@ lib/
     embedding/   # EmbeddingWorker, EmbeddingCache, MorphemeIndex
     signals/     # SpreadingActivation, CaseRewardBackprop 등
     processors/  # facade — MemoryRecaller, MemoryReflector 등
-  storage/       # PgVectorStore(기본), SqliteVecStore(v4.1 예정) 어댑터 계층
+  storage/       # PgVectorStore(기본), SqliteVecStore(스텁, 미구현) 어댑터 계층
   llm/           # dispatchChain, provider 구현체
   symbolic/      # SymbolicVerificationLayer (opt-in)
 docs/

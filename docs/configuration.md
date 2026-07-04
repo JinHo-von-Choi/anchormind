@@ -148,11 +148,11 @@ gemini-cli, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama,
 [{"provider": "qwen-cli", "model": "qwen-max"}]
 ```
 
-**geminiTimeoutMs**: `config/memory.js`의 `morphemeIndex.geminiTimeoutMs` 값이 15000ms에서 **60000ms**로 상향되었다. Gemini CLI 및 Ollama Cloud 환경에서 실측 응답 지연이 20~40s에 달해 반복적인 "all LLM providers failed" 오류가 발생하던 문제를 해소하기 위한 조정이다.
+**geminiTimeoutMs**: `config/memory.js`의 `morphemeIndex.geminiTimeoutMs` 기본값은 **60000ms**이다. Gemini CLI 및 Ollama Cloud 환경에서는 응답 지연이 20~40s에 달할 수 있어 "all LLM providers failed" 오류를 피하기 위해 이 값으로 설정되어 있다.
 
 이 값은 `MEMENTO_MORPHEME_TOKENIZER=llm` 설정 시 `MorphemeIndex._tokenizeViaLLM()` 내부의 `geminiCLIJson(userPrompt, { timeoutMs: cfg.geminiTimeoutMs })` 호출에 전달된다. 기본값(`MEMENTO_MORPHEME_TOKENIZER=local`)에서는 로컬 분석기(MorphemeTokenizer)를 사용하므로 이 값은 참조되지 않는다. LLM 경로에서 tokenize가 실패하면 형태소 추출 결과가 없으므로 L3 morpheme 검색(recall의 전문 검색 경로)이 비활성화된 것과 동일하게 동작한다 (`_fallbackTokenize` 로 graceful degrade).
 
-**GEMINI_TIMEOUT_MS**: `lib/memory/AutoReflect.js`의 LLM chain 호출 timeout은 30,000 ms로 고정된다(`GEMINI_TIMEOUT_MS = 30_000` 코드 상수, `process.env` 참조 없음). 값을 변경하려면 해당 파일의 상수를 직접 수정해야 한다. MorphemeIndex의 `geminiTimeoutMs`(config/memory.js, 기본 60000)와 별개임에 주의한다.
+**GEMINI_TIMEOUT_MS**: `lib/memory/processors/AutoReflect.js`의 LLM chain 호출 timeout은 30,000 ms로 고정된다(`GEMINI_TIMEOUT_MS = 30_000` 코드 상수, `process.env` 참조 없음). 값을 변경하려면 해당 파일의 상수를 직접 수정해야 한다. MorphemeIndex의 `geminiTimeoutMs`(config/memory.js, 기본 60000)와 별개임에 주의한다.
 
 **buildChain 순서 결정 로직** (`lib/llm/index.js:38–68`): `LLM_PRIMARY` → `LLM_FALLBACKS` 선언 순서로 entries 배열을 구성한 뒤, `seen` Set으로 중복 provider를 제거하고, 각 provider의 `isAvailable()` 체크 성공 여부로 chain에 포함 여부를 결정한다. `LLM_PRIMARY`가 `LLM_FALLBACKS` 목록에도 있으면 fallback의 config 객체가 우선 사용된다. `isAvailable()` 실패 시 해당 provider는 체인에서 제외되고 다음 provider로 즉시 넘어간다. 결과적으로 chain 순서는 환경변수 선언 순서와 1:1 대응한다.
 
@@ -786,37 +786,40 @@ EMBEDDING_DIMENSIONS=768
 | 001 | migration-001-temporal.sql | Temporal (valid_from/valid_to, searchAsOf) |
 | 002 | migration-002-decay.sql | 지수 감쇠 (last_decay_at) |
 | 003 | migration-003-api-keys.sql | api_keys + api_key_usage 테이블 |
-| 004 | migration-004-key-id.sql | fragments.key_id 컬럼 + FK |
-| 005 | migration-005-gc-columns.sql | GC 컬럼 |
-| 006 | migration-006-superseded.sql | superseded_by 제약 |
-| 007 | migration-007-link-weight.sql | link weight |
-| 008 | migration-008-morpheme.sql | 형태소 사전 |
-| 009 | migration-009-co-retrieved.sql | co_retrieved |
-| 010 | migration-010-ema.sql | EMA activation score |
+| 004 | migration-004-key-isolation.sql | fragments.key_id 컬럼 (API 키 기반 기억 격리) |
+| 005 | migration-005-gc-columns.sql | GC 정책 인덱스 (utility_score, access_count) |
+| 006 | migration-006-superseded-by-constraint.sql | fragment_links CHECK에 superseded_by 추가 |
+| 007 | migration-007-link-weight.sql | fragment_links.weight 컬럼 |
+| 008 | migration-008-morpheme-dict.sql | 형태소 사전 테이블 (morpheme_dict) |
+| 009 | migration-009-co-retrieved.sql | fragment_links CHECK에 co_retrieved 추가 |
+| 010 | migration-010-ema-activation.sql | fragments.ema_activation/ema_last_updated 컬럼 |
 | 011 | migration-011-key-groups.sql | key groups (그룹별 파편 공유) |
 | 012 | migration-012-quality-verified.sql | quality_verified |
 | 013 | migration-013-search-events.sql | search_events 테이블 |
-| 014 | migration-014-ttl.sql | TTL 단기 계층 |
+| 014 | migration-014-ttl-short.sql | TTL 단기 계층 |
 | 015 | migration-015-created-at-index.sql | created_at 인덱스 |
 | 016 | migration-016-agent-topic-index.sql | agent/topic 인덱스 |
 | 017 | migration-017-episodic.sql | episodic 타입 (1000자, context_summary, session_id) |
 | 018 | migration-018-fragment-quota.sql | fragment quota (기본 5000개) |
-| 019 | migration-019-hnsw.sql | HNSW ef_construction 64→128, ef_search=80 |
-| 020 | migration-020-search-latency.sql | search_events 레이어 레이턴시 컬럼 |
-| 021 | migration-021-oauth.sql | OAuth clients 테이블 |
-| 022 | migration-022-temporal-link-check.sql | temporal 링크 타입 CHECK 제약 |
-| 023 | migration-023-link-weight-real.sql | fragment_links.weight integer→real |
+| 019 | migration-019-hnsw-tuning.sql | HNSW ef_construction 128, ef_search=80 |
+| 020 | migration-020-search-layer-latency.sql | search_events 레이어 레이턴시 컬럼 |
+| 021 | migration-021-oauth-clients.sql | OAuth clients 테이블 |
+| 022 | migration-022-temporal-link-type.sql | temporal 링크 타입 CHECK 제약 |
+| 023 | migration-023-link-weight-float.sql | fragment_links.weight real 타입 (float 가중치) |
 | 024 | migration-024-workspace.sql | fragments.workspace VARCHAR(255) NULL |
-| 025 | migration-025-case-columns.sql | fragments에 case_id + structured episode 컬럼 |
+| 025 | migration-025-case-id-episode.sql | fragments에 case_id + structured episode 컬럼 |
 | 026 | migration-026-case-events.sql | case_events + case_event_edges + fragment_evidence 테이블 |
-| 028 | migration-028-composite-indexes.sql | 복합 인덱스: (agent_id, topic, created_at DESC) topic fallback 검색 최적화, (key_id, agent_id, importance DESC) WHERE valid_to IS NULL API 키 격리 조회 최적화. migration-016의 idx_frag_agent_topic을 대체한다 |
-| 030 | migration-030-search-param-thresholds-key-text.sql | search_param_thresholds.key_id 타입 INTEGER→TEXT 변환. fragments.key_id가 migration-027부터 TEXT(UUID)로 전환되어 SearchParamAdaptor 적응형 학습이 무력화되던 버그 수정. 기존 sentinel -1 → '-1' 문자열 보존 |
-| 031 | migration-031-content-hash-per-key.sql | content_hash 전역 UNIQUE 인덱스(idx_frag_hash) 폐기 후 partial unique index 2개로 전환하여 크로스 테넌트 ON CONFLICT 경로 차단. master(key_id IS NULL) 전용 `uq_frag_hash_master`, API key(key_id IS NOT NULL) 전용 복합 `uq_frag_hash_per_key` |
+| 027 | migration-027-v25-reconsolidation-episode-spreading.sql | search_events/case_events key_id 타입, fragment_links 재통합 컬럼 + link_reconsolidations 테이블, case_events idempotency_key, fragments.keywords GIN 인덱스 |
+| 028 | migration-028-v253-improvements.sql | (agent_id, topic, created_at DESC) 복합 인덱스, (key_id, agent_id, importance DESC) WHERE valid_to IS NULL 부분 인덱스. search_events.rrf_used·fragments.superseded_by 컬럼 제거 |
+| 029 | migration-029-search-param-thresholds.sql | search_param_thresholds 테이블 (SearchParamAdaptor 온라인 학습 저장소) |
+| 030 | migration-030-search-param-thresholds-key-text.sql | search_param_thresholds.key_id 타입을 fragments.key_id와 동일한 TEXT로 통일. sentinel 값은 문자열 '-1'로 저장 |
+| 031 | migration-031-content-hash-per-key.sql | content_hash partial unique index 2개로 크로스 테넌트 ON CONFLICT 경로 차단. master(key_id IS NULL) 전용 `uq_frag_hash_master`, API key(key_id IS NOT NULL) 전용 복합 `uq_frag_hash_per_key` |
 | 032 | migration-032-fragment-claims.sql | Symbolic Memory Layer fragment_claims 테이블 |
 | 033 | migration-033-symbolic-hard-gate.sql | api_keys.symbolic_hard_gate BOOLEAN (symbolic hard gate opt-in) |
-| 034 | migration-034-api-keys-default-mode.sql | api_keys.default_mode TEXT NULL — Mode preset 키 단위 기본값 |
-| 035 | migration-034-v2.16.0-bundle-fragments-affect.sql | fragments.affect TEXT DEFAULT 'neutral' CHECK 6-enum |
-| 036 | migration-036-split-attempt-failed-at.sql | `fragments.split_attempt_failed_at TIMESTAMPTZ NULL` 컬럼 + partial index. splitLongFragments 분할 실패 backoff 구현 |
+| 034 | migration-034-v2.16.0-bundle.sql | api_keys.default_mode TEXT NULL (Mode preset 키 단위 기본값), fragments.affect TEXT DEFAULT 'neutral' CHECK 6-enum, fragments.idempotency_key TEXT NULL + partial UNIQUE 2종 |
+| 035 | migration-035-morpheme-indexed.sql | fragments.morpheme_indexed BOOLEAN NOT NULL DEFAULT false + 부분 인덱스, 기존 파편 백필 |
+| 036 | migration-036-split-attempt-failed-at.sql | `fragments.split_attempt_failed_at TIMESTAMPTZ NULL` 컬럼 + partial index. splitLongFragments 분할 실패 backoff에 사용 |
+| 037 | migration-037-hnsw-index-rename.sql | HNSW 인덱스명 정합화 (idx_frag_embedding), ef_construction=128 적용 |
 
 ---
 

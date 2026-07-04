@@ -153,7 +153,7 @@ gemini-cli, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama,
 [{"provider": "qwen-cli", "model": "qwen-max"}]
 ```
 
-**geminiTimeoutMs**: The `morphemeIndex.geminiTimeoutMs` value in `config/memory.js` has been raised from 15000ms to **60000ms**. In Gemini CLI and Ollama Cloud environments, measured response latency frequently reached 20–40s, causing repeated "all LLM providers failed" errors. This adjustment resolves that pattern.
+**geminiTimeoutMs**: The `morphemeIndex.geminiTimeoutMs` value in `config/memory.js` defaults to **60000ms**. In Gemini CLI and Ollama Cloud environments, response latency can reach 20-40s, so this value is set high enough to avoid "all LLM providers failed" errors.
 
 This value is passed to the `geminiCLIJson(userPrompt, { timeoutMs: cfg.geminiTimeoutMs })` call inside `MorphemeIndex._tokenizeViaLLM()`, which is invoked only when `MEMENTO_MORPHEME_TOKENIZER=llm`. With the default setting (`MEMENTO_MORPHEME_TOKENIZER=local`), the local analyzer (MorphemeTokenizer) is used and this value is not referenced. When the LLM path fails, no morphemes are extracted and the L3 morpheme search path degrades gracefully via `_fallbackTokenize`.
 
@@ -766,36 +766,40 @@ Run `npm run migrate` to execute unapplied migrations in order. History is manag
 | 001 | migration-001-temporal.sql | Temporal (valid_from/valid_to, searchAsOf) |
 | 002 | migration-002-decay.sql | Exponential decay (last_decay_at) |
 | 003 | migration-003-api-keys.sql | api_keys + api_key_usage tables |
-| 004 | migration-004-key-id.sql | fragments.key_id column + FK |
-| 005 | migration-005-gc-columns.sql | GC columns |
-| 006 | migration-006-superseded.sql | superseded_by constraint |
-| 007 | migration-007-link-weight.sql | link weight |
-| 008 | migration-008-morpheme.sql | Morpheme dictionary |
-| 009 | migration-009-co-retrieved.sql | co_retrieved |
-| 010 | migration-010-ema.sql | EMA activation score |
+| 004 | migration-004-key-isolation.sql | fragments.key_id column (API key-based memory isolation) |
+| 005 | migration-005-gc-columns.sql | GC policy indexes (utility_score, access_count) |
+| 006 | migration-006-superseded-by-constraint.sql | fragment_links CHECK adds superseded_by |
+| 007 | migration-007-link-weight.sql | fragment_links.weight column |
+| 008 | migration-008-morpheme-dict.sql | Morpheme dictionary table (morpheme_dict) |
+| 009 | migration-009-co-retrieved.sql | fragment_links CHECK adds co_retrieved |
+| 010 | migration-010-ema-activation.sql | fragments.ema_activation/ema_last_updated columns |
 | 011 | migration-011-key-groups.sql | Key groups (per-group fragment sharing) |
 | 012 | migration-012-quality-verified.sql | quality_verified |
 | 013 | migration-013-search-events.sql | search_events table |
-| 014 | migration-014-ttl.sql | TTL short-lived tier |
+| 014 | migration-014-ttl-short.sql | TTL short-lived tier |
 | 015 | migration-015-created-at-index.sql | created_at index |
 | 016 | migration-016-agent-topic-index.sql | agent/topic index |
 | 017 | migration-017-episodic.sql | episodic type (1000 chars, context_summary, session_id) |
 | 018 | migration-018-fragment-quota.sql | Fragment quota (default 5000) |
-| 019 | migration-019-hnsw.sql | HNSW ef_construction 64->128, ef_search=80 |
-| 020 | migration-020-search-latency.sql | search_events layer latency columns |
-| 021 | migration-021-oauth.sql | OAuth clients table |
-| 022 | migration-022-temporal-link-check.sql | Temporal link type CHECK constraint |
-| 023 | migration-023-link-weight-real.sql | fragment_links.weight integer->real |
+| 019 | migration-019-hnsw-tuning.sql | HNSW ef_construction 128, ef_search=80 |
+| 020 | migration-020-search-layer-latency.sql | search_events layer latency columns |
+| 021 | migration-021-oauth-clients.sql | OAuth clients table |
+| 022 | migration-022-temporal-link-type.sql | Temporal link type CHECK constraint |
+| 023 | migration-023-link-weight-float.sql | fragment_links.weight real type (float weights) |
 | 024 | migration-024-workspace.sql | fragments.workspace VARCHAR(255) NULL |
-| 025 | migration-025-case-columns.sql | fragments case_id + structured episode columns |
+| 025 | migration-025-case-id-episode.sql | fragments case_id + structured episode columns |
 | 026 | migration-026-case-events.sql | case_events + case_event_edges + fragment_evidence tables |
-| 028 | migration-028-composite-indexes.sql | Composite indexes: (agent_id, topic, created_at DESC) for topic fallback search optimization, (key_id, agent_id, importance DESC) WHERE valid_to IS NULL for API key isolation query optimization. Replaces migration-016's idx_frag_agent_topic |
-| 030 | migration-030-search-param-thresholds-key-text.sql | search_param_thresholds.key_id type INTEGER->TEXT conversion. Fixes bug where SearchParamAdaptor adaptive learning was broken after fragments.key_id changed to TEXT(UUID) in migration-027. Preserves existing sentinel -1 as '-1' string |
-| 031 | migration-031-content-hash-per-key.sql | Drops global UNIQUE index (idx_frag_hash) on content_hash, replaces with 2 partial unique indexes to block cross-tenant ON CONFLICT paths. Master-only (key_id IS NULL) `uq_frag_hash_master`, API key (key_id IS NOT NULL) composite `uq_frag_hash_per_key` |
+| 027 | migration-027-v25-reconsolidation-episode-spreading.sql | search_events/case_events key_id type, fragment_links reconsolidation columns + link_reconsolidations table, case_events idempotency_key, fragments.keywords GIN index |
+| 028 | migration-028-v253-improvements.sql | (agent_id, topic, created_at DESC) composite index, (key_id, agent_id, importance DESC) WHERE valid_to IS NULL partial index. Drops search_events.rrf_used and fragments.superseded_by columns |
+| 029 | migration-029-search-param-thresholds.sql | search_param_thresholds table (SearchParamAdaptor online learning store) |
+| 030 | migration-030-search-param-thresholds-key-text.sql | Unifies search_param_thresholds.key_id to the same TEXT type as fragments.key_id. The sentinel value is stored as the string '-1' |
+| 031 | migration-031-content-hash-per-key.sql | 2 partial unique indexes on content_hash block cross-tenant ON CONFLICT paths. Master-only (key_id IS NULL) `uq_frag_hash_master`, API key (key_id IS NOT NULL) composite `uq_frag_hash_per_key` |
 | 032 | migration-032-fragment-claims.sql | Symbolic Memory Layer fragment_claims table |
 | 033 | migration-033-symbolic-hard-gate.sql | api_keys.symbolic_hard_gate BOOLEAN (symbolic hard gate opt-in) |
-| 034 | migration-034-api-keys-default-mode.sql | api_keys.default_mode TEXT NULL — per-key Mode preset default |
-| 035 | migration-034-v2.16.0-bundle-fragments-affect.sql | fragments.affect TEXT DEFAULT 'neutral' CHECK 6-enum |
+| 034 | migration-034-v2.16.0-bundle.sql | api_keys.default_mode TEXT NULL (per-key Mode preset default), fragments.affect TEXT DEFAULT 'neutral' CHECK 6-enum, fragments.idempotency_key TEXT NULL + 2 partial UNIQUE indexes |
+| 035 | migration-035-morpheme-indexed.sql | fragments.morpheme_indexed BOOLEAN NOT NULL DEFAULT false + partial index, backfills existing fragments |
+| 036 | migration-036-split-attempt-failed-at.sql | `fragments.split_attempt_failed_at TIMESTAMPTZ NULL` column + partial index, used for splitLongFragments failure backoff |
+| 037 | migration-037-hnsw-index-rename.sql | Aligns the HNSW index name (idx_frag_embedding), applies ef_construction=128 |
 
 ---
 
