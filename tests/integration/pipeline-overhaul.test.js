@@ -17,7 +17,7 @@ describe("Pipeline Overhaul Integration", () => {
 
   describe("EmbeddingWorker → GraphLinker chain", () => {
     it("EmbeddingWorker is EventEmitter with expected interface", async () => {
-      const { EmbeddingWorker } = await import("../../lib/memory/EmbeddingWorker.js");
+      const { EmbeddingWorker } = await import("../../lib/memory/embedding/EmbeddingWorker.js");
       const proto = EmbeddingWorker.prototype;
       assert.equal(typeof proto.on, "function", "EmbeddingWorker should inherit EventEmitter.on");
       assert.equal(typeof proto.emit, "function", "EmbeddingWorker should inherit EventEmitter.emit");
@@ -35,7 +35,7 @@ describe("Pipeline Overhaul Integration", () => {
 
   describe("Temporal-Semantic Ranking", () => {
     it("_computeRankScore accepts anchorTime parameter", async () => {
-      const { FragmentSearch } = await import("../../lib/memory/FragmentSearch.js");
+      const { FragmentSearch } = await import("../../lib/memory/read/FragmentSearch.js");
       const search = Object.create(FragmentSearch.prototype);
 
       const config = {
@@ -54,7 +54,7 @@ describe("Pipeline Overhaul Integration", () => {
     });
 
     it("past anchorTime ranks nearby fragments higher", async () => {
-      const { FragmentSearch } = await import("../../lib/memory/FragmentSearch.js");
+      const { FragmentSearch } = await import("../../lib/memory/read/FragmentSearch.js");
       const search = Object.create(FragmentSearch.prototype);
 
       const config = {
@@ -80,7 +80,7 @@ describe("Pipeline Overhaul Integration", () => {
     });
 
     it("importance weight dominates when recency is equal", async () => {
-      const { FragmentSearch } = await import("../../lib/memory/FragmentSearch.js");
+      const { FragmentSearch } = await import("../../lib/memory/read/FragmentSearch.js");
       const search = Object.create(FragmentSearch.prototype);
 
       const config = {

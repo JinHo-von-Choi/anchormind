@@ -7,7 +7,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { lexicalMatchScore, deriveImplicitKeywords } from "../../lib/memory/FragmentSearch.js";
+import { lexicalMatchScore, deriveImplicitKeywords } from "../../lib/memory/read/FragmentSearch.js";
 
 describe("lexicalMatchScore", () => {
   it("topic 완전 일치에 가장 높은 점수", () => {

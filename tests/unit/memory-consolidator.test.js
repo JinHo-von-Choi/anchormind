@@ -18,7 +18,7 @@
 import { describe, it, beforeEach }  from "node:test";
 import assert                         from "node:assert/strict";
 
-import { MemoryConsolidator }  from "../../lib/memory/MemoryConsolidator.js";
+import { MemoryConsolidator }  from "../../lib/memory/consolidate/MemoryConsolidator.js";
 import { feedbackFactor }      from "../../lib/memory/consolidate/feedbackFactor.js";
 import { disconnectRedis }     from "../../lib/redis.js";
 

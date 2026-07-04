@@ -85,7 +85,7 @@ mock.module("../../lib/tools/db.js", {
 /*  Import after mocks                                                  */
 /* ------------------------------------------------------------------ */
 
-const { MorphemeIndex } = await import("../../lib/memory/MorphemeIndex.js");
+const { MorphemeIndex } = await import("../../lib/memory/embedding/MorphemeIndex.js");
 const { getPrimaryPool } = await import("../../lib/tools/db.js");
 
 /* ------------------------------------------------------------------ */

@@ -7,7 +7,7 @@
 
 import { test, describe } from "node:test";
 import assert             from "node:assert/strict";
-import { mergeRRF }       from "../../lib/memory/FragmentSearch.js";
+import { mergeRRF }       from "../../lib/memory/read/FragmentSearch.js";
 
 const l1Ids     = ["b"];
 const l2Results = [

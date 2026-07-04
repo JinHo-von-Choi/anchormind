@@ -13,7 +13,7 @@ import { test, describe } from "node:test";
 import assert             from "node:assert/strict";
 
 import { computeConfidence, getUtilityBaseline } from "../../lib/memory/consolidate/UtilityBaseline.js";
-import { mergeRRF }                               from "../../lib/memory/FragmentSearch.js";
+import { mergeRRF }                               from "../../lib/memory/read/FragmentSearch.js";
 
 /** ─── Task 4-1 / 4-3: confidence 계산 ─── */
 

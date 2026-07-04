@@ -9,7 +9,7 @@
 
 import { describe, it }   from "node:test";
 import assert              from "node:assert/strict";
-import { FragmentSearch }  from "../../lib/memory/FragmentSearch.js";
+import { FragmentSearch }  from "../../lib/memory/read/FragmentSearch.js";
 
 const DAY_MS = 86400000;
 

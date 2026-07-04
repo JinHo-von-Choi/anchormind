@@ -6,7 +6,7 @@
  */
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { parseTimeRange } from "../../lib/memory/FragmentSearch.js";
+import { parseTimeRange } from "../../lib/memory/read/FragmentSearch.js";
 
 describe("parseTimeRange", () => {
   test("유효한 from/to 모두 제공 시 Date 객체 반환", () => {

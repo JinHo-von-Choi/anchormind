@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 
 describe("superseded_by valid_to 연동", () => {
   test("MemoryConsolidator._resolveContradiction이 valid_to를 갱신한다", async () => {
-    const { MemoryConsolidator } = await import("../../lib/memory/MemoryConsolidator.js");
+    const { MemoryConsolidator } = await import("../../lib/memory/consolidate/MemoryConsolidator.js");
     const mc = new MemoryConsolidator();
     const src = mc._resolveContradiction.toString();
     assert.ok(src.includes("valid_to"), "_resolveContradiction에 valid_to 갱신 필수");

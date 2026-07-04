@@ -29,7 +29,7 @@ after(async () => {
 // ---------------------------------------------------------------------------
 describe("sanitizeAffect — 허용값 검증", async () => {
 
-  const { sanitizeAffect, VALID_AFFECT_VALUES } = await import("../../lib/memory/FragmentWriter.js");
+  const { sanitizeAffect, VALID_AFFECT_VALUES } = await import("../../lib/memory/write/FragmentWriter.js");
 
   it("허용값 6개는 그대로 반환한다", () => {
     const allowed = ["neutral", "frustration", "confidence", "surprise", "doubt", "satisfaction"];

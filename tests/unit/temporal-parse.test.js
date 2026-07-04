@@ -7,7 +7,7 @@
 
 import { test, describe } from "node:test";
 import assert             from "node:assert/strict";
-import { parseTemporalExpression, parseTimeRange } from "../../lib/memory/FragmentSearch.js";
+import { parseTemporalExpression, parseTimeRange } from "../../lib/memory/read/FragmentSearch.js";
 
 /** 고정 기준 시각: 2026-03-28 토요일 15:30:00 */
 const NOW = new Date(2026, 2, 28, 15, 30, 0);

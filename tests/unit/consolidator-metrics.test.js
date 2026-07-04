@@ -67,7 +67,7 @@ mock.module("../../lib/memory/FragmentIndex.js", {
 });
 
 /** EmbeddingWorker 모킹 */
-mock.module("../../lib/memory/EmbeddingWorker.js", {
+mock.module("../../lib/memory/embedding/EmbeddingWorker.js", {
     exports: {
         EmbeddingWorker: class MockEmbeddingWorker {
             processOrphanFragments() { return Promise.resolve(0); }
@@ -117,7 +117,7 @@ describe("MemoryConsolidator stage 계측", () => {
     let MemoryConsolidator;
 
     before(async () => {
-        const mod        = await import("../../lib/memory/MemoryConsolidator.js");
+        const mod        = await import("../../lib/memory/consolidate/MemoryConsolidator.js");
         MemoryConsolidator = mod.MemoryConsolidator;
     });
 

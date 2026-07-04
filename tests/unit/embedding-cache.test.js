@@ -1,6 +1,6 @@
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
-import { EmbeddingCache } from "../../lib/memory/EmbeddingCache.js";
+import { EmbeddingCache } from "../../lib/memory/embedding/EmbeddingCache.js";
 
 describe("EmbeddingCache", () => {
   const sampleVec = [0.1, 0.2, 0.3, 0.4, 0.5];

@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
  * 테스트는 createEngine()에서 pool을 직접 주입하므로 getPrimaryPool fallback은 호출되지 않는다.
  * logWarn은 실제 호출되어도 테스트 판정에 영향 없으므로 자연 import 그대로 사용한다.
  */
-import { RecallSuggestionEngine } from "../../lib/memory/RecallSuggestionEngine.js";
+import { RecallSuggestionEngine } from "../../lib/memory/read/RecallSuggestionEngine.js";
 
 /**
  * 응답 배열을 순서대로 반환하는 pool mock과 엔진을 생성한다.

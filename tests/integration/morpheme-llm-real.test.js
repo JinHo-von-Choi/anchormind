@@ -27,11 +27,11 @@ const ENABLED = process.env.E2E_MORPHEME === "1";
 
 describe("MorphemeIndex — 실제 LLM 체인 tokenize", { skip: !ENABLED, timeout: 300_000 }, () => {
 
-  /** @type {import("../../lib/memory/MorphemeIndex.js").MorphemeIndex} */
+  /** @type {import("../../lib/memory/embedding/MorphemeIndex.js").MorphemeIndex} */
   let morphemeIndex;
 
   before(async () => {
-    const { MorphemeIndex } = await import("../../lib/memory/MorphemeIndex.js");
+    const { MorphemeIndex } = await import("../../lib/memory/embedding/MorphemeIndex.js");
     morphemeIndex = new MorphemeIndex();
     // MorphemeIndex는 별도 초기화 메서드가 없으므로 인스턴스 생성만으로 준비 완료
   });

@@ -10,9 +10,9 @@
 import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
-import { FragmentGC }                                    from "../../lib/memory/FragmentGC.js";
-import { FragmentSearch }                                from "../../lib/memory/FragmentSearch.js";
-import { sanitizeInsertImportance, FragmentWriter }      from "../../lib/memory/FragmentWriter.js";
+import { FragmentGC }                                    from "../../lib/memory/consolidate/FragmentGC.js";
+import { FragmentSearch }                                from "../../lib/memory/read/FragmentSearch.js";
+import { sanitizeInsertImportance, FragmentWriter }      from "../../lib/memory/write/FragmentWriter.js";
 import { FragmentStore }                                 from "../../lib/memory/write/FragmentStore.js";
 import { computeEmaRankBoost, computeUtilityScore }      from "../../lib/memory/consolidate/decay.js";
 
@@ -142,7 +142,7 @@ describe("utility_score 나이 가중치", () => {
 
 describe("고-EMA 저-importance 재평가", () => {
     it("_requeueHighEmaLowQuality가 MemoryConsolidator에 존재한다", async () => {
-        const { MemoryConsolidator } = await import("../../lib/memory/MemoryConsolidator.js");
+        const { MemoryConsolidator } = await import("../../lib/memory/consolidate/MemoryConsolidator.js");
         const c = new MemoryConsolidator();
         assert.strictEqual(typeof c._requeueHighEmaLowQuality, "function");
     });

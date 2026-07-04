@@ -103,7 +103,7 @@ describe("MemoryConsolidator — enableRiskyStages skip 회귀 가드", () => {
 describe("MemoryConsolidator._runConsolidationCycle — 진행률 정합", () => {
 
   it("onProgress의 total이 단조 증가하는 processed와 함께 일관되며 마지막에 일치한다", async () => {
-    const { MemoryConsolidator } = await import("../../lib/memory/MemoryConsolidator.js");
+    const { MemoryConsolidator } = await import("../../lib/memory/consolidate/MemoryConsolidator.js");
 
     /** 외부 의존(DB·임베딩·LLM)을 전부 무력화한 인스턴스 */
     const c = new MemoryConsolidator();

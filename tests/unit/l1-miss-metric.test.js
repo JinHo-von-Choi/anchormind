@@ -10,7 +10,7 @@
 import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
-import { FragmentSearch } from "../../lib/memory/FragmentSearch.js";
+import { FragmentSearch } from "../../lib/memory/read/FragmentSearch.js";
 
 /**
  * FragmentSearch._searchL1()의 isFallback 결과만 추출한다.

@@ -37,7 +37,7 @@ mock.module("../../../lib/redis.js", {
 });
 
 /** EmbeddingWorker 를 no-op 으로 */
-mock.module("../../../lib/memory/EmbeddingWorker.js", {
+mock.module("../../../lib/memory/embedding/EmbeddingWorker.js", {
   namedExports: {
     EmbeddingWorker: class {
       async processOrphanFragments() { return 0; }

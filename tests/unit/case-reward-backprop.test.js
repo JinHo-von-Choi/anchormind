@@ -20,7 +20,7 @@ mock.module("../../lib/logger.js", {
   namedExports: { logWarn: mock.fn() }
 });
 
-const { CaseRewardBackprop } = await import("../../lib/memory/CaseRewardBackprop.js");
+const { CaseRewardBackprop } = await import("../../lib/memory/signals/CaseRewardBackprop.js");
 
 describe("CaseRewardBackprop", () => {
   beforeEach(() => {
