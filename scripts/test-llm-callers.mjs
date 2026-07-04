@@ -33,7 +33,7 @@ const require   = createRequire(import.meta.url);
 const dotenv    = require("dotenv");
 dotenv.config({ path: resolve(__dirname, "../.env") });
 
-import { _buildReflectPrompts } from "../lib/memory/AutoReflect.js";
+import { _buildReflectPrompts } from "../lib/memory/processors/AutoReflect.js";
 import { llmJson }               from "../lib/llm/index.js";
 import { ContradictionDetector } from "../lib/memory/link/ContradictionDetector.js";
 

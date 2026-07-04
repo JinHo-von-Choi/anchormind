@@ -14,7 +14,7 @@ import {
   _isEmptySession,
   _shouldSkipReflect,
   MIN_SESSION_DURATION_MS
-} from "../../lib/memory/AutoReflect.js";
+} from "../../lib/memory/processors/AutoReflect.js";
 
 /* ------------------------------------------------------------------ */
 /*  _isEmptySession 단위 테스트                                          */

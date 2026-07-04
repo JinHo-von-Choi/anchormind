@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isSelfContainedReflectItem } from "../../lib/memory/ReflectProcessor.js";
+import { isSelfContainedReflectItem } from "../../lib/memory/processors/ReflectProcessor.js";
 
 test("rejects too-short and meta-referential items", () => {
   assert.equal(isSelfContainedReflectItem("ok"), false);                 // 너무 짧음

@@ -1,6 +1,6 @@
 import { describe, it, mock, after } from "node:test";
 import assert from "node:assert/strict";
-import { ReflectProcessor } from "../../lib/memory/ReflectProcessor.js";
+import { ReflectProcessor } from "../../lib/memory/processors/ReflectProcessor.js";
 import { teardownTestResources, assertCleanShutdown } from "../_lifecycle.js";
 
 after(async () => {

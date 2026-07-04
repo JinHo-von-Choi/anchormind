@@ -26,7 +26,7 @@ import {
   MIN_SESSION_DURATION_MS,
   autoReflect,
   GEMINI_TIMEOUT_MS,
-} from "../../lib/memory/AutoReflect.js";
+} from "../../lib/memory/processors/AutoReflect.js";
 
 /* ── Phase 6 회귀: Gemini timeout 30s 검증 ── */
 

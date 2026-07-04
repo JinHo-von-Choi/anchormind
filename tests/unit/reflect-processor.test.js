@@ -21,7 +21,7 @@ mock.module("../../lib/memory/MorphemeIndex.js", {
   },
 });
 
-const { ReflectProcessor }  = await import("../../lib/memory/ReflectProcessor.js");
+const { ReflectProcessor }  = await import("../../lib/memory/processors/ReflectProcessor.js");
 const { teardownTestResources, assertCleanShutdown } = await import("../_lifecycle.js");
 
 /**

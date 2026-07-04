@@ -30,7 +30,7 @@
 
 ### 배경
 
-일부 모듈(`lib/sessions.js`, `lib/memory/ReflectProcessor.js` 등)은 import 시점에
+일부 모듈(`lib/sessions.js`, `lib/memory/processors/ReflectProcessor.js` 등)은 import 시점에
 ioredis 클라이언트나 prom-client `collectDefaultMetrics` timer를 활성화한다.
 after 훅에서 정리하지 않으면 node:test runner가 event loop를 14초 대기 후
 "Promise resolution is still pending" 메시지와 함께 hang한다.

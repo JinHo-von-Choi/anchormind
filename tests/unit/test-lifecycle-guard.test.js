@@ -11,7 +11,7 @@
  * Case 2: setInterval + unref() → unref는 event loop를 block하지 않으므로 clean
  * Case 3: setInterval + unref 없음 → assertCleanShutdown이 누수 감지 (negative case)
  * Case 4: lib/sessions.js import + after 훅 정리 → clean (CP2 MEMENTO_METRICS_DEFAULT=off 의존)
- * Case 5: lib/memory/ReflectProcessor.js import + after 훅 정리 → clean
+ * Case 5: lib/memory/processors/ReflectProcessor.js import + after 훅 정리 → clean
  *
  * 환경: MEMENTO_METRICS_DEFAULT=off (npm test 에서 주입됨)
  */
@@ -95,7 +95,7 @@ describe("Case 4: lib/sessions.js import + cleanup → clean shutdown", () => {
   });
 });
 
-/* ── Case 5: lib/memory/ReflectProcessor.js import + after 훅 정리 ── */
+/* ── Case 5: lib/memory/processors/ReflectProcessor.js import + after 훅 정리 ── */
 describe("Case 5: ReflectProcessor.js import + cleanup → clean shutdown", () => {
   after(async () => {
     await teardownTestResources();
@@ -103,7 +103,7 @@ describe("Case 5: ReflectProcessor.js import + cleanup → clean shutdown", () =
   });
 
   it("ReflectProcessor.js import 후 정리 시 active handle 없음", async () => {
-    const { ReflectProcessor } = await import("../../lib/memory/ReflectProcessor.js");
+    const { ReflectProcessor } = await import("../../lib/memory/processors/ReflectProcessor.js");
 
     assert.ok(typeof ReflectProcessor === "function", "ReflectProcessor export 확인");
   });

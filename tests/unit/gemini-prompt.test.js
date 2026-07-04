@@ -16,7 +16,7 @@ import assert             from "node:assert/strict";
 import {
   _buildReflectPrompts,
   _buildGeminiPrompt
-} from "../../lib/memory/AutoReflect.js";
+} from "../../lib/memory/processors/AutoReflect.js";
 
 const sampleActivity = {
   startedAt:    "2026-04-09T10:00:00Z",

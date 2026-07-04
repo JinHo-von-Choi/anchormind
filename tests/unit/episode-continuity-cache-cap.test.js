@@ -6,7 +6,7 @@
  */
 import { test } from "node:test";
 import assert   from "node:assert";
-import { _rememberLastEventForTest, _lastEventCacheForTest } from "../../lib/memory/EpisodeContinuityService.js";
+import { _rememberLastEventForTest, _lastEventCacheForTest } from "../../lib/memory/processors/EpisodeContinuityService.js";
 
 test("캐시가 상한(1000)을 넘으면 가장 오래된 항목부터 방출한다", () => {
   const cache = _lastEventCacheForTest();
