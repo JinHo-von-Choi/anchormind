@@ -3,7 +3,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildSplitCandidateQuery } from "../../lib/memory/ConsolidatorGC.js";
+import { buildSplitCandidateQuery } from "../../lib/memory/consolidate/ConsolidatorGC.js";
 
 describe("buildSplitCandidateQuery", () => {
   it("excludes split-origin fragments", () => {

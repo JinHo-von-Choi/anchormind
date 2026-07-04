@@ -7,7 +7,7 @@ describe("ConsolidatorGC.compressOldFragments 배치 병렬화", () => {
     const { readFileSync } = await import("fs");
     const { join }         = await import("path");
     const src = readFileSync(
-      join(process.cwd(), "lib", "memory", "ConsolidatorGC.js"), "utf-8"
+      join(process.cwd(), "lib", "memory", "consolidate", "ConsolidatorGC.js"), "utf-8"
     );
     assert.ok(src.includes("BATCH_SIZE"), "BATCH_SIZE 상수 정의 필수");
     assert.match(src, /const\s+BATCH_SIZE\s*=\s*20/, "BATCH_SIZE = 20");
@@ -17,7 +17,7 @@ describe("ConsolidatorGC.compressOldFragments 배치 병렬화", () => {
     const { readFileSync } = await import("fs");
     const { join }         = await import("path");
     const src = readFileSync(
-      join(process.cwd(), "lib", "memory", "ConsolidatorGC.js"), "utf-8"
+      join(process.cwd(), "lib", "memory", "consolidate", "ConsolidatorGC.js"), "utf-8"
     );
 
     assert.ok(
@@ -34,7 +34,7 @@ describe("ConsolidatorGC.compressOldFragments 배치 병렬화", () => {
     const { readFileSync } = await import("fs");
     const { join }         = await import("path");
     const src = readFileSync(
-      join(process.cwd(), "lib", "memory", "ConsolidatorGC.js"), "utf-8"
+      join(process.cwd(), "lib", "memory", "consolidate", "ConsolidatorGC.js"), "utf-8"
     );
 
     const compressMethod = src.slice(
@@ -53,7 +53,7 @@ describe("ConsolidatorGC.compressOldFragments 배치 병렬화", () => {
     const { readFileSync } = await import("fs");
     const { join }         = await import("path");
     const src = readFileSync(
-      join(process.cwd(), "lib", "memory", "ConsolidatorGC.js"), "utf-8"
+      join(process.cwd(), "lib", "memory", "consolidate", "ConsolidatorGC.js"), "utf-8"
     );
 
     assert.ok(
@@ -70,7 +70,7 @@ describe("ConsolidatorGC.compressOldFragments 배치 병렬화", () => {
     const { readFileSync } = await import("fs");
     const { join }         = await import("path");
     const src = readFileSync(
-      join(process.cwd(), "lib", "memory", "ConsolidatorGC.js"), "utf-8"
+      join(process.cwd(), "lib", "memory", "consolidate", "ConsolidatorGC.js"), "utf-8"
     );
 
     const compressMethod = src.slice(
@@ -100,7 +100,7 @@ describe("ConsolidatorGC.compressOldFragments 배치 병렬화", () => {
     const { readFileSync } = await import("fs");
     const { join }         = await import("path");
     const src = readFileSync(
-      join(process.cwd(), "lib", "memory", "ConsolidatorGC.js"), "utf-8"
+      join(process.cwd(), "lib", "memory", "consolidate", "ConsolidatorGC.js"), "utf-8"
     );
 
     assert.ok(
@@ -113,7 +113,7 @@ describe("ConsolidatorGC.compressOldFragments 배치 병렬화", () => {
     const { readFileSync } = await import("fs");
     const { join }         = await import("path");
     const src = readFileSync(
-      join(process.cwd(), "lib", "memory", "ConsolidatorGC.js"), "utf-8"
+      join(process.cwd(), "lib", "memory", "consolidate", "ConsolidatorGC.js"), "utf-8"
     );
 
     assert.ok(

@@ -15,7 +15,7 @@ import {
     computeEmaRankBoost,
     computeDynamicHalfLife,
     HALF_LIFE_DAYS
-} from "../../lib/memory/decay.js";
+} from "../../lib/memory/consolidate/decay.js";
 
 describe("EMA activation", () => {
     it("초기 접근 시 양수 활성화 값을 반환한다", () => {

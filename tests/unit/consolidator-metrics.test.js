@@ -88,7 +88,7 @@ mock.module("../../lib/memory/ContradictionDetector.js", {
 });
 
 /** ConsolidatorGC 모킹 */
-mock.module("../../lib/memory/ConsolidatorGC.js", {
+mock.module("../../lib/memory/consolidate/ConsolidatorGC.js", {
     exports: {
         ConsolidatorGC: class MockConsolidatorGC {
             generateFeedbackReport() { return Promise.resolve(false); }

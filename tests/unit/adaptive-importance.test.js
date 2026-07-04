@@ -7,7 +7,7 @@
 
 import { test, describe } from "node:test";
 import assert             from "node:assert/strict";
-import { computeAdaptiveImportance } from "../../lib/memory/decay.js";
+import { computeAdaptiveImportance } from "../../lib/memory/consolidate/decay.js";
 
 describe("computeAdaptiveImportance", () => {
 

@@ -14,7 +14,7 @@ import {
     computeEmaRankBoost,
     computeDynamicHalfLife,
     HALF_LIFE_DAYS,
-} from "../../lib/memory/decay.js";
+} from "../../lib/memory/consolidate/decay.js";
 
 describe("computeDecayedImportance", () => {
     test("Δt=0이면 초기값 유지", () => {

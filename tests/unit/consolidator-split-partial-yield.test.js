@@ -58,7 +58,7 @@ mock.module("../../config/memory.js", {
   }
 });
 
-const { ConsolidatorGC } = await import("../../lib/memory/ConsolidatorGC.js");
+const { ConsolidatorGC } = await import("../../lib/memory/consolidate/ConsolidatorGC.js");
 
 function makeStubs() {
   const inserted = [];

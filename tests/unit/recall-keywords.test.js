@@ -11,7 +11,7 @@
 import { test, describe } from "node:test";
 import assert             from "node:assert/strict";
 
-import { computeConfidence } from "../../lib/memory/UtilityBaseline.js";
+import { computeConfidence } from "../../lib/memory/consolidate/UtilityBaseline.js";
 
 /**
  * tool_recall의 fragment 매핑 로직을 재현.
