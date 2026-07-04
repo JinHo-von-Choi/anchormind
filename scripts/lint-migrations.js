@@ -1,7 +1,7 @@
 /**
  * 마이그레이션 파일 규약 검사 스크립트.
  *
- * 대상: lib/memory/migration-*.sql
+ * 대상: lib/memory/migrations/migration-*.sql
  * cutoff 미만(기존) 파일은 검사에서 제외한다.
  *
  * 작성자: 최진호
@@ -13,7 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MIGRATION_DIR = path.resolve(__dirname, "../lib/memory");
+const MIGRATION_DIR = path.resolve(__dirname, "../lib/memory/migrations");
 
 /** 파일명에서 3자리 번호를 추출한다. 일치하지 않으면 null을 반환한다. */
 function extractNumber(filename) {

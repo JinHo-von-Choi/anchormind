@@ -21,7 +21,7 @@ docker compose -f docker-compose.test.yml exec postgres-test \
   pg_isready -U memento -d memento_test
 
 echo "[e2e] 마이그레이션 실행..."
-for f in lib/memory/migration-*.sql; do
+for f in lib/memory/migrations/migration-*.sql; do
   psql postgresql://memento:memento_test@localhost:35433/memento_test -f "$f"
 done
 

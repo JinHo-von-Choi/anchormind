@@ -38,7 +38,7 @@ if (!process.env.DATABASE_URL) {
 }
 
 const DB_URL        = process.env.DATABASE_URL;
-const MIGRATION_DIR = path.join(import.meta.dirname, "../lib/memory");
+const MIGRATION_DIR = path.join(import.meta.dirname, "../lib/memory/migrations");
 
 if (!DB_URL) {
   console.error("DATABASE_URL environment variable is required");

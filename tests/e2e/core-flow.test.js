@@ -69,7 +69,8 @@ before(async () => {
 
   const __filename = fileURLToPath(import.meta.url);
   const __dirname  = dirname(__filename);
-  const schemaDir  = join(__dirname, "../../lib/memory");
+  const schemaDir     = join(__dirname, "../../lib/memory");
+  const migrationsDir = join(__dirname, "../../lib/memory/migrations");
 
   const sqlFiles = [
     "memory-schema.sql",
@@ -94,7 +95,8 @@ before(async () => {
 
   for (const file of sqlFiles) {
     try {
-      const sql = readFileSync(join(schemaDir, file), "utf-8");
+      const dir = file.startsWith("migration-") ? migrationsDir : schemaDir;
+      const sql = readFileSync(join(dir, file), "utf-8");
       await pool.query(sql);
     } catch (err) {
       /** 이미 적용된 마이그레이션은 무시 */
