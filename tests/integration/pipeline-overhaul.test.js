@@ -26,7 +26,7 @@ describe("Pipeline Overhaul Integration", () => {
     });
 
     it("GraphLinker exposes linkFragment and retroLink", async () => {
-      const { GraphLinker } = await import("../../lib/memory/GraphLinker.js");
+      const { GraphLinker } = await import("../../lib/memory/link/GraphLinker.js");
       const proto = GraphLinker.prototype;
       assert.equal(typeof proto.linkFragment, "function");
       assert.equal(typeof proto.retroLink, "function");

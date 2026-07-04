@@ -76,7 +76,7 @@ mock.module("../../lib/memory/EmbeddingWorker.js", {
 });
 
 /** ContradictionDetector 모킹 */
-mock.module("../../lib/memory/ContradictionDetector.js", {
+mock.module("../../lib/memory/link/ContradictionDetector.js", {
     exports: {
         ContradictionDetector: class MockContradictionDetector {
             resetCheckedPairs()             {}
@@ -103,7 +103,7 @@ mock.module("../../lib/memory/consolidate/ConsolidatorGC.js", {
 });
 
 /** GraphLinker 모킹 */
-mock.module("../../lib/memory/GraphLinker.js", {
+mock.module("../../lib/memory/link/GraphLinker.js", {
     exports: {
         GraphLinker: class MockGraphLinker {
             retroLink() { return Promise.resolve({ linksCreated: 0 }); }

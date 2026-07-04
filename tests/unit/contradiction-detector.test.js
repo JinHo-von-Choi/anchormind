@@ -22,7 +22,7 @@
 import { describe, it, mock, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
-import { ContradictionDetector, MAX_CONTRADICTION_DEPTH } from "../../lib/memory/ContradictionDetector.js";
+import { ContradictionDetector, MAX_CONTRADICTION_DEPTH } from "../../lib/memory/link/ContradictionDetector.js";
 
 /* ── mock store 헬퍼 ── */
 function createMockStore(overrides = {}) {

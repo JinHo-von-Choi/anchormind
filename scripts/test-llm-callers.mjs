@@ -35,7 +35,7 @@ dotenv.config({ path: resolve(__dirname, "../.env") });
 
 import { _buildReflectPrompts } from "../lib/memory/AutoReflect.js";
 import { llmJson }               from "../lib/llm/index.js";
-import { ContradictionDetector } from "../lib/memory/ContradictionDetector.js";
+import { ContradictionDetector } from "../lib/memory/link/ContradictionDetector.js";
 
 const results = [];
 

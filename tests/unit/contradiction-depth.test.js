@@ -7,7 +7,7 @@
 
 import { test, describe }      from "node:test";
 import assert                   from "node:assert/strict";
-import { ContradictionDetector, MAX_CONTRADICTION_DEPTH } from "../../lib/memory/ContradictionDetector.js";
+import { ContradictionDetector, MAX_CONTRADICTION_DEPTH } from "../../lib/memory/link/ContradictionDetector.js";
 
 /** store 스텁 — 테스트에서 사용하지 않는 메서드는 빈 객체 */
 const stubStore = {};

@@ -18,7 +18,7 @@
 import { describe, it, mock } from "node:test";
 import assert                 from "node:assert/strict";
 
-import { SessionLinker } from "../../lib/memory/SessionLinker.js";
+import { SessionLinker } from "../../lib/memory/link/SessionLinker.js";
 
 /**
  * 테스트용 store mock 빌더.

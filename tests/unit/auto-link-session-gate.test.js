@@ -15,7 +15,7 @@
 import { describe, it } from "node:test";
 import assert             from "node:assert/strict";
 
-import { SessionLinker } from "../../lib/memory/SessionLinker.js";
+import { SessionLinker } from "../../lib/memory/link/SessionLinker.js";
 
 /** store mock: cycle 없음(기본), createLinks/createLink 기록 */
 function makeStore() {

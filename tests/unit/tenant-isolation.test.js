@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { SessionLinker } from "../../lib/memory/SessionLinker.js";
+import { SessionLinker } from "../../lib/memory/link/SessionLinker.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT      = path.resolve(__dirname, "../..");

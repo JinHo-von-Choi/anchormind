@@ -109,7 +109,7 @@ describe("SessionLinker.createLinks — 동시성 deadlock 회귀", () => {
        * 파편 ID가 워커마다 달라 실제 lock contention은 낮지만,
        * 같은 UUID 범위 내에서 교차 삽입 시나리오를 커버한다.
        */
-      const { LinkStore } = await import("../../lib/memory/LinkStore.js");
+      const { LinkStore } = await import("../../lib/memory/link/LinkStore.js");
       const ls            = new LinkStore();
 
       const workers = Array.from({ length: CONCURRENCY }, async (_, i) => {
