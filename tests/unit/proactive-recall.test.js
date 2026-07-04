@@ -69,7 +69,7 @@ const originalPushToQueue = (await import("../../lib/redis.js")).pushToQueue;
 
 describe("RememberPostProcessor -- ProactiveRecall", async () => {
   /* RememberPostProcessor를 로드 */
-  const mod = await import("../../lib/memory/RememberPostProcessor.js");
+  const mod = await import("../../lib/memory/write/RememberPostProcessor.js");
   RememberPostProcessor = mod.RememberPostProcessor;
 
   it("mode=legacy 시 유사 파편 발견 시 related_to 링크 생성", async () => {

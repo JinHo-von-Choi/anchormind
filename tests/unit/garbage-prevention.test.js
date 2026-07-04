@@ -13,7 +13,7 @@ import assert           from "node:assert/strict";
 import { FragmentGC }                                    from "../../lib/memory/FragmentGC.js";
 import { FragmentSearch }                                from "../../lib/memory/FragmentSearch.js";
 import { sanitizeInsertImportance, FragmentWriter }      from "../../lib/memory/FragmentWriter.js";
-import { FragmentStore }                                 from "../../lib/memory/FragmentStore.js";
+import { FragmentStore }                                 from "../../lib/memory/write/FragmentStore.js";
 import { computeEmaRankBoost, computeUtilityScore }      from "../../lib/memory/decay.js";
 
 // ── Task 1: fallback EMA 차단 ──────────────────────────────────────────────

@@ -42,7 +42,7 @@ import {
 import { saveAccessStats } from "./lib/tools/index.js";
 import { shutdownPool, getPrimaryPool } from "./lib/tools/db.js";
 import { getMemoryEvaluator } from "./lib/memory/MemoryEvaluator.js";
-import { getBatchRememberWorker } from "./lib/memory/BatchRememberWorker.js";
+import { getBatchRememberWorker } from "./lib/memory/write/BatchRememberWorker.js";
 
 /** 메트릭 */
 import { recordHttpRequest } from "./lib/metrics.js";

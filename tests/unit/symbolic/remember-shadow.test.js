@@ -141,7 +141,7 @@ mock.module("../../../lib/symbolic/SymbolicMetrics.js", {
 /*  Import after mocks                                                 */
 /* ------------------------------------------------------------------ */
 
-const { RememberPostProcessor } = await import("../../../lib/memory/RememberPostProcessor.js");
+const { RememberPostProcessor } = await import("../../../lib/memory/write/RememberPostProcessor.js");
 
 /* ------------------------------------------------------------------ */
 /*  Test fixtures                                                      */

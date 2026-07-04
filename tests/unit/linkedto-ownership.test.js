@@ -18,7 +18,7 @@ import { teardownTestResources } from "../_lifecycle.js";
 after(async () => { await teardownTestResources(); });
 
 /** RememberPostProcessor 로드 */
-const { RememberPostProcessor } = await import("../../lib/memory/RememberPostProcessor.js");
+const { RememberPostProcessor } = await import("../../lib/memory/write/RememberPostProcessor.js");
 
 /** 공통 mock 생성 헬퍼 */
 function createDeps(getByIdsImpl) {

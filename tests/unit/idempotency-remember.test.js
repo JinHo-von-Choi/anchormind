@@ -183,7 +183,7 @@ describe("idempotencyKey — 중복 호출 시 기존 파편 반환", async () =
 // 2. FragmentFactory — idempotency_key 필드 매핑 검증
 // ---------------------------------------------------------------------------
 describe("FragmentFactory — idempotency_key 필드 생성", async () => {
-  const { FragmentFactory } = await import("../../lib/memory/FragmentFactory.js");
+  const { FragmentFactory } = await import("../../lib/memory/write/FragmentFactory.js");
 
   it("idempotencyKey가 idempotency_key로 매핑된다", () => {
     const factory  = new FragmentFactory();

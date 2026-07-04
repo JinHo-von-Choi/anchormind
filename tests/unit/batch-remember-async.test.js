@@ -14,7 +14,7 @@
 import { describe, it, mock, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 
-import { BatchRememberProcessor } from "../../lib/memory/BatchRememberProcessor.js";
+import { BatchRememberProcessor } from "../../lib/memory/write/BatchRememberProcessor.js";
 import { redisClient, disconnectRedis } from "../../lib/redis.js";
 
 after(async () => { await disconnectRedis().catch(() => {}); });

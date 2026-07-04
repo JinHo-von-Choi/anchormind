@@ -66,7 +66,7 @@ describe("sanitizeAffect — 허용값 검증", async () => {
 // ---------------------------------------------------------------------------
 describe("FragmentFactory.create — affect 필드", async () => {
 
-  const { FragmentFactory } = await import("../../lib/memory/FragmentFactory.js");
+  const { FragmentFactory } = await import("../../lib/memory/write/FragmentFactory.js");
   const factory = new FragmentFactory();
 
   it("affect='frustration' 지정 시 fragment.affect가 'frustration'이어야 한다", () => {

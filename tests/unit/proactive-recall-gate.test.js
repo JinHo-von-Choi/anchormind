@@ -57,7 +57,7 @@ function makeMockDeps({ candidates = [], storeOverrides = {} } = {}) {
 }
 
 /* RememberPostProcessor 로드 */
-const { RememberPostProcessor } = await import("../../lib/memory/RememberPostProcessor.js");
+const { RememberPostProcessor } = await import("../../lib/memory/write/RememberPostProcessor.js");
 const { MEMORY_CONFIG }         = await import("../../config/memory.js");
 
 /** 테스트 대상 processor 생성: 게이트 검증과 무관한 DB update는 차단한다. */

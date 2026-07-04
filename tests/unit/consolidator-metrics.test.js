@@ -45,7 +45,7 @@ mock.module("../../config/memory.js", {
 });
 
 /** FragmentStore 모킹 */
-mock.module("../../lib/memory/FragmentStore.js", {
+mock.module("../../lib/memory/write/FragmentStore.js", {
     exports: {
         FragmentStore: class MockFragmentStore {
             decayImportance()       { return Promise.resolve(undefined); }

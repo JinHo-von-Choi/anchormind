@@ -157,7 +157,7 @@ mock.module("../../lib/logger.js", {
   }
 });
 
-mock.module("../../lib/memory/FragmentFactory.js", {
+mock.module("../../lib/memory/write/FragmentFactory.js", {
   namedExports: {
     FragmentFactory: class {
       extractKeywords() { return []; }

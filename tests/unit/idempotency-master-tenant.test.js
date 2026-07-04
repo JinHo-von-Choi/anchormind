@@ -166,7 +166,7 @@ describe("idempotencyKey 크로스 테넌트 격리 — MemoryRememberer", async
 // FragmentStore 위임 검증 — findByIdempotencyKey 노출 확인
 // ---------------------------------------------------------------------------
 describe("FragmentStore — findByIdempotencyKey 위임 존재 확인", async () => {
-  const { FragmentStore } = await import("../../lib/memory/FragmentStore.js");
+  const { FragmentStore } = await import("../../lib/memory/write/FragmentStore.js");
 
   it("FragmentStore 인스턴스에 findByIdempotencyKey 메서드가 존재한다", () => {
     const store = new FragmentStore();

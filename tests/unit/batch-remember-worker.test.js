@@ -58,7 +58,7 @@ describe("BatchRememberWorker reliability", () => {
   });
 
   test("성공 job은 ack되고 dead-letter로 가지 않는다", async () => {
-    const { BatchRememberWorker } = await import("../../lib/memory/BatchRememberWorker.js");
+    const { BatchRememberWorker } = await import("../../lib/memory/write/BatchRememberWorker.js");
     const processor = { process: mock.fn(async () => ({ inserted: 2, skipped: 0 })) };
     const w = new BatchRememberWorker(processor);
     await w._processJobEnvelope({
@@ -76,7 +76,7 @@ describe("BatchRememberWorker reliability", () => {
   });
 
   test("실패 job은 재적재 후 ack된다 (retryCount<limit)", async () => {
-    const { BatchRememberWorker } = await import("../../lib/memory/BatchRememberWorker.js");
+    const { BatchRememberWorker } = await import("../../lib/memory/write/BatchRememberWorker.js");
     const processor = { process: mock.fn(async () => { throw new Error("db down"); }) };
     const w = new BatchRememberWorker(processor);
     await w._processJobEnvelope({
@@ -90,7 +90,7 @@ describe("BatchRememberWorker reliability", () => {
   });
 
   test("재적재 실패 시 ack하지 않는다(processing 잔류→복구)", async () => {
-    const { BatchRememberWorker } = await import("../../lib/memory/BatchRememberWorker.js");
+    const { BatchRememberWorker } = await import("../../lib/memory/write/BatchRememberWorker.js");
     reliable.push.mock.mockImplementation(async () => false);
     const processor = { process: mock.fn(async () => { throw new Error("db down"); }) };
     const w = new BatchRememberWorker(processor);
@@ -102,7 +102,7 @@ describe("BatchRememberWorker reliability", () => {
   });
 
   test("재시도 한도 초과 job은 dead-letter로 이동 후 ack", async () => {
-    const { BatchRememberWorker } = await import("../../lib/memory/BatchRememberWorker.js");
+    const { BatchRememberWorker } = await import("../../lib/memory/write/BatchRememberWorker.js");
     const processor = { process: mock.fn(async () => { throw new Error("db down"); }) };
     const w = new BatchRememberWorker(processor);
     await w._processJobEnvelope({
@@ -115,7 +115,7 @@ describe("BatchRememberWorker reliability", () => {
   });
 
   test("start() 후 running=true, stop() 후 running=false 로 깨끗하게 drain", async () => {
-    const { BatchRememberWorker } = await import("../../lib/memory/BatchRememberWorker.js");
+    const { BatchRememberWorker } = await import("../../lib/memory/write/BatchRememberWorker.js");
     // pop은 null을 반환해 루프가 idle 대기하도록 설정
     reliable.pop.mock.resetCalls();
     reliable.pop.mock.restore && reliable.pop.mock.restore();
@@ -133,7 +133,7 @@ describe("BatchRememberWorker reliability", () => {
   });
 
   test("실행 중이 아닐 때 stop() 은 즉시 resolve", async () => {
-    const { BatchRememberWorker } = await import("../../lib/memory/BatchRememberWorker.js");
+    const { BatchRememberWorker } = await import("../../lib/memory/write/BatchRememberWorker.js");
     const w = new BatchRememberWorker({ process: mock.fn() });
     await assert.doesNotReject(() => w.stop());
   });

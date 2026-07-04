@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 describe("fragment history", () => {
   test("FragmentStore.getHistory가 함수이다", async () => {
-    const { FragmentStore } = await import("../../lib/memory/FragmentStore.js");
+    const { FragmentStore } = await import("../../lib/memory/write/FragmentStore.js");
     const store = new FragmentStore();
     assert.strictEqual(typeof store.getHistory, "function");
   });
