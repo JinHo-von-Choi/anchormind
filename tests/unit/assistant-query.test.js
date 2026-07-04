@@ -11,7 +11,7 @@ import {
   isAssistantQuery,
   expandAssistantQuery,
   boostAssistantFragments
-} from "../../lib/memory/assistant-query.js";
+} from "../../lib/memory/read/assistant-query.js";
 
 describe("isAssistantQuery", () => {
   test("한국어 패턴 감지: 어시스턴트가", () => {

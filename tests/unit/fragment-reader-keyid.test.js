@@ -23,7 +23,7 @@ describe("FragmentReader.getById — keyId SQL 격리", () => {
   });
 
   it("keyId=null(마스터)이면 SQL에 key_id 조건이 없어야 한다", async () => {
-    const { FragmentReader } = await import("../../lib/memory/FragmentReader.js");
+    const { FragmentReader } = await import("../../lib/memory/read/FragmentReader.js");
     const reader = new FragmentReader();
 
     /** queryWithAgentVector를 인스턴스 메서드로 교체 */

@@ -30,7 +30,7 @@ describe("FragmentReader.findByIdempotencyKey — SQL 파라미터 분기 검증
     let capturedSql    = null;
     let capturedParams = null;
 
-    const { FragmentReader } = await import("../../lib/memory/FragmentReader.js");
+    const { FragmentReader } = await import("../../lib/memory/read/FragmentReader.js");
 
     /** module mock 없이 인스턴스 메서드를 직접 교체 */
     const reader = new FragmentReader();
@@ -60,7 +60,7 @@ describe("FragmentReader.findByIdempotencyKey — SQL 파라미터 분기 검증
     let capturedSql    = null;
     let capturedParams = null;
 
-    const { FragmentReader } = await import("../../lib/memory/FragmentReader.js");
+    const { FragmentReader } = await import("../../lib/memory/read/FragmentReader.js");
 
     const reader = new FragmentReader();
     reader.findByIdempotencyKey = async function(idempotencyKey, keyId) {

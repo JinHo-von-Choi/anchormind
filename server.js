@@ -51,7 +51,7 @@ import { recordHttpRequest } from "./lib/metrics.js";
 import { startSchedulers } from "./lib/scheduler.js";
 
 /** Reranker 사전 로드 */
-import { preloadReranker } from "./lib/memory/Reranker.js";
+import { preloadReranker } from "./lib/memory/read/Reranker.js";
 
 /** 형태소 분석기 워밍업 */
 import { warmup as warmupMorpheme } from "./lib/memory/embedding/MorphemeTokenizer.js";

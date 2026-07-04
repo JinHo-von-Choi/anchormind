@@ -11,7 +11,7 @@
 import { describe, it, mock, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
-import { ContextBuilder, buildContextHint, buildRankedInjection } from "../../lib/memory/ContextBuilder.js";
+import { ContextBuilder, buildContextHint, buildRankedInjection } from "../../lib/memory/read/ContextBuilder.js";
 
 /* ── 헬퍼: 파편 팩토리 ── */
 function frag(id, type, content, extra = {}) {

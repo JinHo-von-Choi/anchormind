@@ -7,7 +7,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { FragmentReader } from "../../lib/memory/FragmentReader.js";
+import { FragmentReader } from "../../lib/memory/read/FragmentReader.js";
 
 describe("recall valid_to filter", () => {
   it("searchByKeywords 메서드에 valid_to 필터가 포함되어 있다", () => {

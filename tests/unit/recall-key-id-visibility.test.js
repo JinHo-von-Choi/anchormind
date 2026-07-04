@@ -19,7 +19,7 @@
 
 import { describe, it } from "node:test";
 import assert            from "node:assert/strict";
-import { FragmentReader } from "../../lib/memory/FragmentReader.js";
+import { FragmentReader } from "../../lib/memory/read/FragmentReader.js";
 
 /**
  * SEARCH_COLS_BASE 상수는 ES 모듈 스코프에서 직접 export 되지 않으므로,
@@ -36,7 +36,7 @@ import { dirname, join }  from "node:path";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = dirname(__filename);
 const readerSrc  = readFileSync(
-  join(__dirname, "../../lib/memory/FragmentReader.js"),
+  join(__dirname, "../../lib/memory/read/FragmentReader.js"),
   "utf8"
 );
 

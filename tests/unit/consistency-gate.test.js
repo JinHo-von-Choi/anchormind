@@ -78,7 +78,7 @@ mock.module("../../config/memory.js", {
 /*  Import after mocks                                                  */
 /* ------------------------------------------------------------------ */
 
-const { FragmentReader } = await import("../../lib/memory/FragmentReader.js");
+const { FragmentReader } = await import("../../lib/memory/read/FragmentReader.js");
 
 /* ------------------------------------------------------------------ */
 /*  Tests                                                               */
