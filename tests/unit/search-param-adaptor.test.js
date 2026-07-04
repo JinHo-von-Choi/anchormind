@@ -25,7 +25,7 @@ mock.module("../../config/memory.js", {
 });
 
 const { SearchParamAdaptor, _resetForTesting } = await import(
-  "../../lib/memory/SearchParamAdaptor.js"
+  "../../lib/memory/signals/SearchParamAdaptor.js"
 );
 
 describe("SearchParamAdaptor", () => {

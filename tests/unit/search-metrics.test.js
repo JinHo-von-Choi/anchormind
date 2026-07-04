@@ -10,7 +10,7 @@
 import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
-import { SearchMetrics } from "../../lib/memory/SearchMetrics.js";
+import { SearchMetrics } from "../../lib/memory/signals/SearchMetrics.js";
 
 describe("SearchMetrics", () => {
     describe("computePercentiles", () => {

@@ -17,7 +17,7 @@ import {
     classifyQueryType,
     extractFilterKeys,
     buildSearchEvent
-} from "../../lib/memory/SearchEventRecorder.js";
+} from "../../lib/memory/signals/SearchEventRecorder.js";
 
 describe("classifyQueryType", () => {
     it("빈 객체는 keywords를 반환한다", () => {

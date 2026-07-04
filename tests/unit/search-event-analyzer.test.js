@@ -13,7 +13,7 @@
 import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
-import { computeL1MissRate, computeFilterDistribution } from "../../lib/memory/SearchEventAnalyzer.js";
+import { computeL1MissRate, computeFilterDistribution } from "../../lib/memory/signals/SearchEventAnalyzer.js";
 
 describe("computeL1MissRate", () => {
     it("빈 배열이면 null을 반환한다", () => {

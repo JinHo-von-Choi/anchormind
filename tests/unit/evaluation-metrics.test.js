@@ -8,7 +8,7 @@
 import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
-import { computePrecisionAt } from "../../lib/memory/EvaluationMetrics.js";
+import { computePrecisionAt } from "../../lib/memory/signals/EvaluationMetrics.js";
 
 describe("computePrecisionAt", () => {
     it("relevant 3개 / 전체 5개 = 0.6", () => {

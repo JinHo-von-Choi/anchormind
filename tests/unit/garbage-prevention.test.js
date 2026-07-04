@@ -85,7 +85,7 @@ describe("quality_verified permanent 장벽", () => {
     });
 
     it("MemoryEvaluator.evaluate가 keep 판정 시 quality_verified=true를 업데이트한다", async () => {
-        const { MemoryEvaluator } = await import("../../lib/memory/MemoryEvaluator.js");
+        const { MemoryEvaluator } = await import("../../lib/memory/signals/MemoryEvaluator.js");
         const src = MemoryEvaluator.toString();
         assert.ok(src.includes("quality_verified"));
         assert.ok(src.includes("true"));

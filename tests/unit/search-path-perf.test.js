@@ -16,7 +16,7 @@ import {
   buildSearchEvent,
   classifyQueryType,
   extractFilterKeys,
-} from "../../lib/memory/SearchEventRecorder.js";
+} from "../../lib/memory/signals/SearchEventRecorder.js";
 
 /* ================================================================== */
 /*  테스트 1: buildSearchEvent — per-layer latency 필드 포함 검증      */

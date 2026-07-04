@@ -36,7 +36,7 @@ beforeEach(() => {
 // DB를 mock한 경로로만 간접 테스트할 수 있으나, 여기서는 동일 파일 소스를
 // 인라인 미러로 검증한다 (단위 레벨 격리).
 //
-// 실 구현 (lib/memory/SearchParamAdaptor.js:33-38):
+// 실 구현 (lib/memory/signals/SearchParamAdaptor.js:33-38):
 //   if (Array.isArray(keyId)) { keyId = keyId[0] ?? null; }
 //   if (keyId == null) return '-1';
 //   return String(keyId);
