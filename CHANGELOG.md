@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] - 2026-07-04
+## [4.8.0] - 2026-07-04
 
 ### Added
 - content 입력 길이 상한 4000자 도입: `remember`·`batch_remember` 항목·`amend`의 `content`가 이를 초과하면 JSON-RPC -32602 에러로 거부한다. 파편 유형별 저장 절삭(episode 1000자, 그 외 300자)은 그 이전 단계로 그대로 유지되며, `batch_remember`는 초과 항목만 실패 처리하고 나머지 배치는 계속 진행한다.

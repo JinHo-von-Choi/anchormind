@@ -704,7 +704,7 @@ const output = await this._pipeline(text, { pooling: "mean", normalize: true });
 | Value | Adapter | Status |
 |-|-|-|
 | `pgvector` (default) | `PgVectorStore` | Production |
-| `sqlite-vec` | `SqliteVecStore` | Implementation planned, currently stub |
+| `sqlite-vec` | `SqliteVecStore` | Unimplemented stub |
 
 All adapters implement a common interface of 5 methods + 2 properties.
 

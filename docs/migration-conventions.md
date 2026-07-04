@@ -90,7 +90,7 @@ CREATE INDEX IF NOT EXISTS idx_fragments_embedding
 1. 현재 가장 높은 번호를 확인한다.
 
    ```sh
-   ls lib/memory/migration-*.sql | sort | tail -1
+   ls lib/memory/migrations/migration-*.sql | sort | tail -1
    ```
 
 2. 다음 번호로 파일을 생성하고 body-only 규약과 멱등성 패턴을 적용한다.

@@ -156,7 +156,7 @@ lib/storage/
 ├── PgVectorStore.js PostgreSQL + pgvector 어댑터. lib/tools/db.js의 getPrimaryPool()과
 │                    queryWithAgentVector()를 StorageAdapter 인터페이스에 맞게 위임
 │                    engine='pgvector', vectorSupport='native'
-└── SqliteVecStore.js SQLite + sqlite-vec 어댑터 stub (구현 예정)
+└── SqliteVecStore.js SQLite + sqlite-vec 어댑터 (미구현 스텁)
                      engine='sqlite-vec', vectorSupport='extension'
 ```
 

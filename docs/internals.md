@@ -783,7 +783,7 @@ const output = await this._pipeline(text, { pooling: "mean", normalize: true });
 | 값 | 어댑터 | 상태 |
 |-|-|-|
 | `pgvector` (기본) | `PgVectorStore` | 운영 |
-| `sqlite-vec` | `SqliteVecStore` | 구현 예정, 현재 stub |
+| `sqlite-vec` | `SqliteVecStore` | 미구현 스텁 |
 
 모든 어댑터는 아래 5개 메서드 + 2개 프로퍼티를 공통 인터페이스로 구현한다.
 

@@ -153,7 +153,7 @@ lib/storage/
 +-- PgVectorStore.js PostgreSQL + pgvector adapter. Wraps lib/tools/db.js getPrimaryPool() and
 |                    queryWithAgentVector() to conform to the StorageAdapter interface
 |                    engine='pgvector', vectorSupport='native'
-+-- SqliteVecStore.js SQLite + sqlite-vec adapter stub (implementation planned)
++-- SqliteVecStore.js SQLite + sqlite-vec adapter (unimplemented stub)
                      engine='sqlite-vec', vectorSupport='extension'
 ```
 
