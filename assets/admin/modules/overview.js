@@ -100,7 +100,7 @@ export function renderHealthPanel(stats) {
   function barFillClass(pct) {
     if (pct > 85) return "bg-error";
     if (pct > 60) return "bg-tertiary/40";
-    return "bg-cyan-500/40";
+    return "bg-primary/40";
   }
 
   [
@@ -195,8 +195,8 @@ export function renderTimeline(activities) {
   const list = document.createElement("div");
   list.className = "divide-y divide-white/5";
 
-  const typeColors = { fact: "bg-cyan-400", error: "bg-tertiary", decision: "bg-secondary", procedure: "bg-slate-500", preference: "bg-cyan-400" };
-  const badgeColors = { fact: "border-cyan-400/30 text-cyan-400", error: "border-tertiary/30 text-tertiary", decision: "border-secondary/30 text-secondary", procedure: "border-slate-400/30 text-slate-400", preference: "border-cyan-400/30 text-cyan-400" };
+  const typeColors = { fact: "bg-primary", error: "bg-tertiary", decision: "bg-secondary", procedure: "bg-slate-500", preference: "bg-primary" };
+  const badgeColors = { fact: "border-primary/30 text-primary", error: "border-tertiary/30 text-tertiary", decision: "border-secondary/30 text-secondary", procedure: "border-slate-400/30 text-slate-400", preference: "border-primary/30 text-primary" };
 
   activities.forEach(a => {
     const row = document.createElement("div");
@@ -311,7 +311,7 @@ export function renderRiskPanel(stats) {
 
 export function renderQuickActions() {
   const panel = document.createElement("section");
-  panel.className = "glass-panel bg-gradient-to-br from-surface-container to-surface-container-high";
+  panel.className = "glass-panel";
 
   /* Header */
   const header = document.createElement("div");

@@ -76,12 +76,12 @@ describe("admin index.html shell structure", () => {
     assert.ok(html.includes("cdn.tailwindcss.com"), "Tailwind CDN not found");
   });
 
-  test("includes Space Grotesk font", () => {
-    assert.ok(html.includes("Space+Grotesk"), "Space Grotesk font not found");
+  test("includes JetBrains Mono font", () => {
+    assert.ok(html.includes("JetBrains+Mono"), "JetBrains Mono font not found");
   });
 
-  test("includes Plus Jakarta Sans font", () => {
-    assert.ok(html.includes("Plus+Jakarta+Sans"), "Plus Jakarta Sans font not found");
+  test("includes Material Symbols icon font", () => {
+    assert.ok(html.includes("Material+Symbols+Outlined"), "Material Symbols font not found");
   });
 
   test("includes Material Symbols Outlined", () => {

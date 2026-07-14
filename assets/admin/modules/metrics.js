@@ -116,12 +116,12 @@ function renderCardGrid(cards, timeseries) {
       renderSparkline(sparkWrap, data, {
         width:  160,
         height: 40,
-        stroke: stateClass === "metrics-card--critical" ? "#ffb4ab"
-              : stateClass === "metrics-card--warn"     ? "#f4b942"
-              : "#4a90e2",
-        fill:   stateClass === "metrics-card--critical" ? "rgba(255,180,171,0.12)"
-              : stateClass === "metrics-card--warn"     ? "rgba(244,185,66,0.12)"
-              : "rgba(74,144,226,0.15)"
+        stroke: stateClass === "metrics-card--critical" ? "#cc7755"
+              : stateClass === "metrics-card--warn"     ? "#c4a06a"
+              : "#aa8855",
+        fill:   stateClass === "metrics-card--critical" ? "rgba(204,119,85,0.12)"
+              : stateClass === "metrics-card--warn"     ? "rgba(196,160,106,0.12)"
+              : "rgba(170,136,85,0.15)"
       });
 
       card.appendChild(sparkWrap);

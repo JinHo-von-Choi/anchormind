@@ -238,9 +238,9 @@ function renderLogViewer(lines) {
     content.appendChild(empty);
   } else {
     const levelColors = {
-      info:  "text-cyan-400",
-      warn:  "text-[#dcb8ff]",
-      error: "text-[#ffb4ab]",
+      info:  "text-secondary",
+      warn:  "text-primary",
+      error: "text-[#cc7755]",
       debug: "text-slate-600"
     };
 

@@ -155,10 +155,10 @@ describe("renderRiskPanel", () => {
 });
 
 describe("renderQuickActions", () => {
-  test("glass-panel + gradient 배경", () => {
+  test("glass-panel 플랫 패널", () => {
     const panel = renderQuickActions();
     assert.ok(panel.className.includes("glass-panel"));
-    assert.ok(panel.className.includes("bg-gradient-to-br"));
+    assert.ok(!panel.className.includes("bg-gradient-to-br"));
   });
 
   test("4개 버튼 렌더링", () => {

@@ -440,6 +440,7 @@ Memento MCP는 MCP(Model Context Protocol) 기반의 장기 기억 서버다. AI
 ```
 context() 호출
 -> core_memory: 앵커 + 고중요도 파편 (preference, error, procedure)
+   (앵커는 중요도순 상위 N개가 항상 포함된다. N은 서버의 MEMENTO_CONTEXT_ANCHOR_LIMIT 설정, 기본 10)
 -> working_memory: 현재 세션의 워킹 메모리
 -> system_hints: 미반영 세션 경고, 시스템 알림
 ```

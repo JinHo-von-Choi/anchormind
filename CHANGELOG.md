@@ -1,5 +1,25 @@
 # Changelog
 
+## [4.9.0] - 2026-07-14
+
+### Added
+- 관리자 API `GET /memory/fragments/:id`: 파편 전문·keywords·메타·1-hop 링크를 반환하는 상세 조회. `key_id`/`group_id` 스코프를 적용하며 스코프 밖 id는 404.
+- 관리자 API `GET /memory/fragments`에 `q` 파라미터: content 본문 부분 일치 검색(ILIKE, 와일드카드 이스케이프).
+- `MEMENTO_CONTEXT_ANCHOR_LIMIT` 환경 변수: context 응답에 포함되는 앵커 파편 개수 설정(기본 10, 1~30 클램프). `config/memory.js contextInjection.maxAnchorFragments`.
+- admin 메모리 뷰: 본문 검색 입력(Enter 실행 지원), 파편 클릭 시 상세 인스펙터(전문·keywords·링크·그래프 뷰 이동), EXPORT JSONL 다운로드 버튼, episode/relation 타입 필터.
+- admin 사이드바 오프캔버스 토글: 768px 이하에서 메뉴 버튼·오버레이·ESC로 여닫는다.
+
+### Changed
+- (Breaking) `GET /export`는 `key_id` 또는 `group_id` 지정이 필요하다. 전체 반출은 `confirm=full`을 명시한 경우에만 수행한다. `group_id`·`type` 파라미터가 추가되고 `topic`은 부분 일치(ILIKE)로 동작한다.
+- `GET /memory/fragments` 목록 응답에 `content`(200자 절삭)·`keywords`·`access_count` 필드가 포함된다.
+- admin 메모리 뷰의 Retrieval Analytics와 Search Activity 패널이 `GET /memory/search-events` 데이터(검색량·zero-result 비율·레이턴시 분위수·경로 분포·상위 키워드)를 표시한다. 값이 없으면 `--`로 표시한다.
+- structured context의 `rankedInjection`이 앵커 파편을 상단 고정으로 반환한다.
+- admin 사이드바 활성 하이라이트가 뷰 전환 시 즉시 갱신된다.
+- admin 콘솔 디자인 시스템 교체: JetBrains Mono 단일 폰트, 플랫 헤어라인 패널, amber 액센트 팔레트, 파편 클릭 시 목록 부분 렌더(스크롤 유지).
+
+### Fixed
+- Docker 이미지에 SKILL.md가 포함되어 컨테이너에서 `get_skill_guide`가 동작한다.
+
 ## [4.8.0] - 2026-07-04
 
 ### Added
