@@ -150,7 +150,7 @@ describe("renderRiskPanel", () => {
   test("normal items with bg-surface-container", () => {
     const panel = renderRiskPanel({});
     const normals = panel.querySelectorAll(".bg-surface-container");
-    assert.ok(normals.length >= 2, "최소 2개 normal item");
+    assert.ok(normals.length >= 1, "최소 1개 normal item (Quality Pending)");
   });
 });
 

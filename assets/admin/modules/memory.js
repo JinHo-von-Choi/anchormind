@@ -348,6 +348,7 @@ export function renderRetrievalAnalytics(searchEvents) {
 
 export function renderAnomalyCards(anomalies) {
   if (!anomalies) return document.createDocumentFragment();
+  anomalies = { ...anomalies, failedSearchCount: (anomalies.failedSearches ?? []).length };
 
   const panel = document.createElement("section");
   panel.className = "glass-panel rounded-sm p-6 border-t border-error/20";
@@ -361,10 +362,10 @@ export function renderAnomalyCards(anomalies) {
   list.className = "space-y-3";
 
   const items = [
-    { label: "Contradiction Queue",   key: "contradictions",     icon: "crisis_alert",         isCritical: true },
-    { label: "Superseded Candidates", key: "superseded",         icon: "auto_awesome_motion",  isCritical: false },
-    { label: "Low Quality Fragments", key: "qualityUnverified",  icon: "low_priority",         isCritical: false },
-    { label: "Embedding Backlog",     key: "embeddingBacklog",   icon: "memory_alt",           isCritical: false }
+    { label: "Failed Searches (7d)",  key: "failedSearchCount",     icon: "crisis_alert",         isCritical: true },
+    { label: "Superseded Candidates", key: "possibleSupersessions", icon: "auto_awesome_motion",  isCritical: false },
+    { label: "Low Quality Fragments", key: "qualityUnverified",     icon: "low_priority",         isCritical: false },
+    { label: "Stale Fragments",       key: "staleFragments",        icon: "history_toggle_off",   isCritical: false }
   ];
 
   items.forEach(a => {

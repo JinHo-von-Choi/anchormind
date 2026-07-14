@@ -145,7 +145,7 @@ export function renderKeyTable(keys) {
     td6.className = "px-6 py-4";
     const usageWrap = document.createElement("div");
     usageWrap.className = "flex items-end gap-0.5 h-6";
-    const usage = k.today_calls ?? 0;
+    const usage = k.usage_today ?? 0;
     const heights = [2, 4, 3, 5, 6];
     heights.forEach((h, i) => {
       const bar = document.createElement("div");
@@ -288,7 +288,7 @@ export function renderKeyInspector(key, container) {
     : fmt(inspFragCount) + " / Unlimited";
 
   [
-    { label: "Total Usage",  value: fmt(key.today_calls ?? 0) + " req" },
+    { label: "Total Usage",  value: fmt(key.usage_today ?? 0) + " req" },
     { label: "Last Active",  value: fmtDate(key.created_at) },
     { label: "Fragments",    value: fragDisplayVal, fragQuota: true }
   ].forEach(f => {

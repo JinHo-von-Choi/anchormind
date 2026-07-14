@@ -107,13 +107,13 @@ function renderSessionTable(sessions) {
     /* Last Active */
     const td5 = document.createElement("td");
     td5.className = "px-6 py-4 font-mono text-xs text-slate-500";
-    td5.textContent = s.lastActiveAt ? relativeTime(s.lastActiveAt) : "-";
+    td5.textContent = s.lastAccessedAt ? relativeTime(s.lastAccessedAt) : "-";
     tr.appendChild(td5);
 
     /* Tools */
     const td6 = document.createElement("td");
     td6.className = "px-6 py-4 text-xs font-mono text-on-surface";
-    const toolCalls = s.toolCalls ?? {};
+    const toolCalls = s.activity?.toolCalls ?? {};
     const totalTools = Object.values(toolCalls).reduce((sum, v) => sum + (Number(v) || 0), 0);
     td6.textContent = totalTools > 0 ? fmt(totalTools) : "-";
     tr.appendChild(td6);
@@ -122,7 +122,7 @@ function renderSessionTable(sessions) {
     const td7 = document.createElement("td");
     td7.className = "px-6 py-4";
     const reflectDot = document.createElement("div");
-    reflectDot.className = "w-2 h-2 rounded-full " + (s.reflected ? "bg-tertiary" : "bg-error");
+    reflectDot.className = "w-2 h-2 rounded-full " + (s.activity?.reflected ? "bg-tertiary" : "bg-error");
     td7.appendChild(reflectDot);
     tr.appendChild(td7);
 
@@ -225,7 +225,7 @@ function renderSessionInspector(data) {
   [
     { label: "Created",     value: fmtDate(session.createdAt) },
     { label: "Expires",     value: fmtDate(session.expiresAt) },
-    { label: "Last Active", value: fmtDate(session.lastActiveAt) },
+    { label: "Last Active", value: fmtDate(session.lastAccessedAt) },
     { label: "Key",         value: session.keyId ?? "master" }
   ].forEach(f => {
     const row = document.createElement("div");
@@ -249,7 +249,7 @@ function renderSessionInspector(data) {
   actLabel.textContent = "TOOL CALLS";
   panel.appendChild(actLabel);
 
-  const toolCalls = session.toolCalls ?? {};
+  const toolCalls = session.activity?.toolCalls ?? {};
   const toolEntries = Object.entries(toolCalls);
   if (toolEntries.length) {
     const toolList = document.createElement("div");

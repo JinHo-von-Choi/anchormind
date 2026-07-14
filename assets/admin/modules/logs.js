@@ -341,7 +341,7 @@ function renderLogSidebar(files, stats) {
 
       const sizeEl = document.createElement("span");
       sizeEl.className = "text-[10px] text-slate-500";
-      sizeEl.textContent = fmtBytes(f.sizeBytes);
+      sizeEl.textContent = fmtBytes(f.size);
       row.appendChild(sizeEl);
 
       fileList.appendChild(row);

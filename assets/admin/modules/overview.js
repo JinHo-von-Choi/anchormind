@@ -289,8 +289,7 @@ export function renderRiskPanel(stats) {
 
   /* Normal items */
   [
-    { label: "Quality Pending", value: fmt(queues.qualityPending ?? 0) },
-    { label: "Decay Queue",     value: fmt(queues.decayQueue ?? 0) }
+    { label: "Quality Pending", value: fmt(queues.qualityPending ?? 0) }
   ].forEach(n => {
     const item = document.createElement("div");
     item.className = "flex items-center justify-between p-2.5 bg-surface-container border border-white/5";
@@ -463,24 +462,27 @@ export function renderTopTopics(stats) {
   const list = document.createElement("div");
   list.className = "space-y-2";
 
-  const topics = stats?.topTopics ?? [
-    { name: "architecture", pct: "32%" },
-    { name: "error-handling", pct: "24%" },
-    { name: "deployment", pct: "18%" },
-    { name: "security", pct: "14%" },
-    { name: "performance", pct: "12%" }
-  ];
+  const topics = stats?.topTopics ?? [];
+  const total  = Number(stats?.fragments) || 0;
+
+  if (topics.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "text-[11px] text-slate-600 font-mono";
+    empty.textContent = "--";
+    list.appendChild(empty);
+  }
 
   topics.forEach(t => {
     const row = document.createElement("div");
     row.className = "flex justify-between items-center text-[10px] font-mono";
     const name = document.createElement("span");
     name.className = "text-slate-300";
-    name.textContent = t.name;
+    name.textContent = t.topic ?? "(무제)";
     row.appendChild(name);
     const pct = document.createElement("span");
     pct.className = "text-slate-500";
-    pct.textContent = t.pct;
+    const cnt = Number(t.count) || 0;
+    pct.textContent = total > 0 ? Math.round((cnt / total) * 100) + "%" : String(cnt);
     row.appendChild(pct);
     list.appendChild(row);
   });
