@@ -3,11 +3,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/JinHo-von-Choi/memento-mcp/releases">
-    <img src="https://img.shields.io/github/v/release/JinHo-von-Choi/memento-mcp?style=flat&label=release&color=4c8bf5" alt="GitHub Release" />
+  <a href="https://github.com/JinHo-von-Choi/anchormind/releases">
+    <img src="https://img.shields.io/github/v/release/JinHo-von-Choi/anchormind?style=flat&label=release&color=4c8bf5" alt="GitHub Release" />
   </a>
-  <a href="https://github.com/JinHo-von-Choi/memento-mcp/stargazers">
-    <img src="https://img.shields.io/github/stars/JinHo-von-Choi/memento-mcp?style=flat&color=f5c542" alt="GitHub Stars" />
+  <a href="https://github.com/JinHo-von-Choi/anchormind/stargazers">
+    <img src="https://img.shields.io/github/stars/JinHo-von-Choi/anchormind?style=flat&color=f5c542" alt="GitHub Stars" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat" alt="License" />

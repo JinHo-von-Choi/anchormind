@@ -11,7 +11,7 @@
 
 **클린 설치 (새 환경에 처음 도입)**
 
-> "memento-mcp 저장소(`https://github.com/JinHo-von-Choi/memento-mcp`)를 내 환경에 클론하고, `docs/INSTALL.md`와 `SKILL.md`를 읽어 다음을 수행해 줘:
+> "anchormind 저장소(`https://github.com/JinHo-von-Choi/anchormind`)를 내 환경에 클론하고, `docs/INSTALL.md`와 `SKILL.md`를 읽어 다음을 수행해 줘:
 >
 > 1. 시스템 요구사항 확인 (Node.js, PostgreSQL, Redis 가용성)
 > 2. `npm install` 및 `bash setup.sh`로 의존성·.env 생성
