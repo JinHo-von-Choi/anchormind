@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.0] - 2026-07-14
+
+### Added
+- `recall`에 `includePeerAgents` 파라미터: true 시 같은 API 키/workspace 스코프 내 다른 agentId의 파편도 검색에 포함한다(기본 false, 키·workspace 경계는 유지). L1 키워드·topic·L2 시맨틱·형태소 hydrate·시간 범위 경로에 일괄 적용.
+- recall 응답 `_meta.hints`에 `contradiction_pending` 신호: 반환 파편에 미해결 contradicts 링크가 있으면 amend 정리를 권고한다. 힌트 우선순위는 no_results > contradiction_pending > stale_results > consider_context.
+- `reconstruct_history` 타임라인 항목과 관리자 `/memory/graph` 노드에 `agent_id` 필드 포함 — 멀티에이전트 케이스의 기여 에이전트 식별.
+- SKILL.md에 "멀티에이전트 협업" 섹션 신설(`get_skill_guide(section="collaboration")`).
+
 ## [4.9.0] - 2026-07-14
 
 ### Added
