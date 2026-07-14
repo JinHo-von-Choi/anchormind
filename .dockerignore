@@ -23,6 +23,7 @@ test-results/
 docs/
 tests/
 *.md
+!SKILL.md
 
 # 에이전트 / IDE / 분석 도구 설정
 .claude/
