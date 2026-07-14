@@ -200,18 +200,23 @@ export function renderCommandBar() {
 
   const envBadge = document.createElement("span");
   envBadge.className = "px-2 py-0.5 bg-primary/10 text-primary border border-primary/20 text-[10px] font-mono tracking-widest font-bold rounded-sm";
-  envBadge.textContent = "PRODUCTION";
+  envBadge.textContent = "MASTER KEY";
   left.appendChild(envBadge);
 
+  /** /stats healthFlags 실측 기반 상태 표시. stats 미로드 시 -- */
+  const flags   = state.stats?.healthFlags ?? null;
+  const healthy = Array.isArray(flags) && flags.length === 0;
   const healthDot = document.createElement("div");
   healthDot.className = "flex items-center gap-2";
   const dot = document.createElement("div");
-  dot.className = "w-1.5 h-1.5 bg-tertiary rounded-full pulsing-glow";
-  dot.style.color = "#669944";
+  dot.className = "w-1.5 h-1.5 rounded-full " + (flags == null ? "bg-slate-600" : healthy ? "bg-tertiary" : "bg-error");
   healthDot.appendChild(dot);
   const healthText = document.createElement("span");
   healthText.className = "text-xs font-mono text-slate-400 uppercase tracking-tighter";
-  healthText.textContent = "HEALTH: ONLINE";
+  healthText.textContent = flags == null
+    ? "HEALTH: --"
+    : healthy ? "HEALTH: OK" : `HEALTH: ${flags.length} FLAG${flags.length > 1 ? "S" : ""}`;
+  if (!healthy && Array.isArray(flags) && flags.length > 0) healthText.title = flags.join(", ");
   healthDot.appendChild(healthText);
   left.appendChild(healthDot);
 
@@ -236,33 +241,26 @@ export function renderCommandBar() {
   refreshIcon.className = "material-symbols-outlined";
   refreshIcon.textContent = "refresh";
   refreshBtn.appendChild(refreshIcon);
-  refreshBtn.addEventListener("click", () => renderView());
+  refreshBtn.addEventListener("click", async () => {
+    renderView();
+    const { api } = await import("./api.js");
+    const res = await api("/stats");
+    if (res.ok) {
+      state.stats = res.data;
+      state.lastUpdated = Date.now();
+      renderCommandBar();
+    }
+  });
   right.appendChild(refreshBtn);
 
   const divider = document.createElement("div");
   divider.className = "h-8 w-px bg-white/10";
   right.appendChild(divider);
 
-  const userInfo = document.createElement("div");
-  userInfo.className = "flex items-center gap-3";
-  const userText = document.createElement("div");
-  userText.className = "text-right";
-  const userName = document.createElement("div");
-  userName.className = "text-xs font-bold text-slate-200 font-headline";
-  userName.textContent = "ADMIN_ROOT";
-  userText.appendChild(userName);
-  const userLevel = document.createElement("div");
-  userLevel.className = "text-[8px] font-mono text-slate-500";
-  userLevel.textContent = "LVL 4 ACCESS";
-  userText.appendChild(userLevel);
-  userInfo.appendChild(userText);
-
   const userIcon = document.createElement("span");
   userIcon.className = "material-symbols-outlined text-slate-400 text-3xl";
   userIcon.textContent = "account_circle";
-  userInfo.appendChild(userIcon);
-
-  right.appendChild(userInfo);
+  right.appendChild(userIcon);
 
   el.appendChild(right);
 }

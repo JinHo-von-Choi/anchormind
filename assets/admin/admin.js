@@ -58,6 +58,14 @@ function init() {
           renderSidebar();
           renderCommandBar();
           renderView();
+          /** healthFlags 실측 표시: stats 로드 후 커맨드바 갱신 */
+          api("/stats").then(statsRes => {
+            if (statsRes.ok) {
+              state.stats = statsRes.data;
+              state.lastUpdated = Date.now();
+              renderCommandBar();
+            }
+          });
         } else {
           state.masterKey = "";
           sessionStorage.removeItem("adminKey");

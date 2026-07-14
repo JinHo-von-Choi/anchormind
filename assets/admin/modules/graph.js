@@ -1,6 +1,20 @@
 import { api }       from "./api.js";
 import { showToast } from "./ui.js";
 
+/** 노드 색상 모드: "type"(기본) | "agent" — 토글 버튼으로 전환 */
+let colorMode       = "type";
+let applyColorModeFn = null;
+
+const AGENT_PALETTE = ["#aa8855", "#557799", "#669944", "#cc7755", "#8878d0", "#50a8a0", "#c4a06a", "#a05580"];
+
+/** agent_id 문자열을 팔레트 색으로 결정적 매핑한다. */
+function agentColor(agentId) {
+  const str = String(agentId ?? "default");
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  return AGENT_PALETTE[hash % AGENT_PALETTE.length];
+}
+
 async function renderGraph(container) {
   container.textContent = "";
 
@@ -137,7 +151,19 @@ async function renderGraph(container) {
     procedure: "#22c55e", preference: "#f59e0b", relation: "#6b7280",
     episode: "#ec4899"
   };
+  const colorToggle = document.createElement("button");
+  colorToggle.id = "graph-color-mode";
+  colorToggle.className = "flex items-center gap-2 bg-transparent border border-outline-variant px-3 py-1 text-[10px] font-bold text-slate-400 hover:text-primary";
+  colorToggle.textContent = "COLOR: TYPE";
+  colorToggle.addEventListener("click", () => {
+    colorMode = colorMode === "type" ? "agent" : "type";
+    colorToggle.textContent = colorMode === "type" ? "COLOR: TYPE" : "COLOR: AGENT";
+    if (applyColorModeFn) applyColorModeFn();
+  });
+  controls.appendChild(colorToggle);
+
   const legend = document.createElement("div");
+  legend.id = "graph-legend";
   legend.className = "flex items-center gap-3 ml-auto";
   for (const [t, c] of Object.entries(TYPE_COLORS)) {
     const chip = document.createElement("span");
@@ -572,6 +598,45 @@ async function loadGraph() {
     return el;
   };
 
+  /** 색상 모드 적용: type(그라데이션) ↔ agent(agent_id 해시 색) */
+  applyColorModeFn = () => {
+    if (colorMode === "agent") {
+      node
+        .attr("fill", d => agentColor(d.agent_id))
+        .attr("stroke", d => agentColor(d.agent_id));
+      halo.attr("stroke", d => agentColor(d.agent_id));
+    } else {
+      node
+        .attr("fill", d => `url(#grad-${d.type in TYPE_COLORS ? d.type : "relation"})`)
+        .attr("stroke", d => (TYPE_COLORS[d.type] || FALLBACK).light);
+      halo.attr("stroke", d => (TYPE_COLORS[d.type] || FALLBACK).base);
+    }
+
+    /** 범례 갱신: agent 모드면 노드에 존재하는 agent_id 상위 8개 */
+    const legendEl = document.getElementById("graph-legend");
+    if (legendEl) {
+      legendEl.textContent = "";
+      const entries = colorMode === "agent"
+        ? [...new Set(data.nodes.map(n => n.agent_id ?? "default"))].slice(0, 8).map(a => [a, agentColor(a)])
+        : Object.entries({
+            fact: "#5b8ef0", decision: "#8b5cf6", error: "#ef4444",
+            procedure: "#22c55e", preference: "#f59e0b", relation: "#6b7280",
+            episode: "#ec4899"
+          });
+      for (const [t, c] of entries) {
+        const chip = document.createElement("span");
+        chip.className = "flex items-center gap-1 text-xs text-slate-400";
+        const dot = document.createElement("span");
+        dot.className = "inline-block w-2.5 h-2.5 rounded-full";
+        dot.style.backgroundColor = c;
+        chip.appendChild(dot);
+        chip.appendChild(document.createTextNode(String(t)));
+        legendEl.appendChild(chip);
+      }
+    }
+  };
+  applyColorModeFn();
+
   const showTooltipFor = (d, event) => {
     if (!tooltip) return;
     while (tooltip.firstChild) tooltip.removeChild(tooltip.firstChild);
@@ -590,6 +655,11 @@ async function loadGraph() {
     /* 토픽 */
     if (d.topic) tooltip.appendChild(
       mk("div", { color: "#7090b0", fontSize: "11px", marginTop: "3px" }, d.topic)
+    );
+
+    /* 기여 에이전트 */
+    if (d.agent_id) tooltip.appendChild(
+      mk("div", { color: agentColor(d.agent_id), fontSize: "10px", marginTop: "2px" }, `agent: ${d.agent_id}`)
     );
 
     /* 내용 */
