@@ -6,6 +6,15 @@
  * 수정일: 2026-05-22 (morphemeIndex kanaMinChars, enableKuromoji 추가)
  */
 
+/**
+ * 환경 변수를 정수로 파싱한다. 파싱 실패 시 기본값, 성공 시 min~max 클램프.
+ */
+function envInt(name, def, min, max) {
+  const raw = Number.parseInt(process.env[name] ?? "", 10);
+  if (Number.isNaN(raw)) return def;
+  return Math.min(max, Math.max(min, raw));
+}
+
 export const MEMORY_CONFIG = {
   /** 복합 랭킹 가중치 (합계 1.0) */
   ranking: {
@@ -80,6 +89,7 @@ export const MEMORY_CONFIG = {
   },
   /** 컨텍스트 주입 설정 */
   contextInjection: {
+    maxAnchorFragments : envInt("MEMENTO_CONTEXT_ANCHOR_LIMIT", 10, 1, 30),
     maxCoreFragments   : 15,
     maxWmFragments     : 10,
     typeSlots          : {
