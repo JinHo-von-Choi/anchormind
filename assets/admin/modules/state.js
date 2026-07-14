@@ -4,10 +4,8 @@
  * 작성자: 최진호
  * 작성일: 2026-04-07
  *
- * 순환 의존을 방지하기 위해 뷰 렌더러는 registerView()로 등록한다.
- * navigate()와 renderView()는 renderSidebar/renderCommandBar 호출을
- * 콜백 방식으로 처리하도록 설계되어 있으나, 해당 함수들은 아직 admin.js에
- * 있으므로 외부 주입 패턴(setSidebarRenderer 등)은 다음 단계에서 처리한다.
+ * 순환 의존을 방지하기 위해 뷰 렌더러는 registerView()로,
+ * 사이드바 리렌더러는 setSidebarRenderer()로 외부에서 주입한다.
  * 이 모듈은 state와 뷰 레지스트리만 담당한다.
  */
 
@@ -48,6 +46,17 @@ export const state = {
 /** 뷰 이름 → 렌더러 함수 매핑 레지스트리 */
 const viewRenderers = {};
 
+/** 사이드바 리렌더 콜백 (admin.js에서 주입 — layout.js 직접 import 시 순환 의존 발생) */
+let sidebarRenderer = null;
+
+/**
+ * 사이드바 리렌더러를 주입한다.
+ * @param {Function} fn - 사이드바를 다시 그리는 함수
+ */
+export function setSidebarRenderer(fn) {
+  sidebarRenderer = fn;
+}
+
 /**
  * 뷰 렌더러를 등록한다.
  * @param {string}   name     - 뷰 이름 ("overview", "keys" 등)
@@ -71,10 +80,11 @@ export function renderView() {
 
 /**
  * 지정 뷰로 전환하고 화면을 갱신한다.
- * sidebar/commandBar 갱신은 외부 콜백으로 위임한다.
+ * 주입된 sidebarRenderer로 사이드바 활성 하이라이트를 함께 갱신한다.
  * @param {string} view - 전환할 뷰 이름
  */
 export function navigate(view) {
   state.currentView = view;
+  if (sidebarRenderer) sidebarRenderer();
   renderView();
 }

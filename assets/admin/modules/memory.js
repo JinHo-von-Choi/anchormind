@@ -5,12 +5,13 @@
  * 작성일: 2026-04-07
  */
 
-import { state }                                         from "./state.js";
-import { api }                                           from "./api.js";
+import { state, navigate }                               from "./state.js";
+import { api, API_BASE }                                 from "./api.js";
+import { showToast }                                     from "./ui.js";
 import { fmt, fmtDate, fmtPct, truncate, loadingHtml }  from "./format.js";
 
 export function renderMemoryFilters() {
-  const types = ["", "fact", "error", "decision", "procedure", "preference"];
+  const types = ["", "fact", "error", "decision", "procedure", "preference", "episode", "relation"];
 
   const bar = document.createElement("div");
   bar.className = "flex items-center justify-between gap-4 glass-panel p-2 rounded-sm border-l-2 border-primary/40";
@@ -18,7 +19,22 @@ export function renderMemoryFilters() {
 
   /* Left chips */
   const leftChips = document.createElement("div");
-  leftChips.className = "flex gap-2";
+  leftChips.className = "flex gap-2 flex-wrap";
+
+  /* Content search chip */
+  const qChip = document.createElement("div");
+  qChip.className = "px-3 py-1 bg-surface-variant text-[10px] font-bold flex items-center gap-2 rounded-sm text-primary border border-primary/10";
+  const qIcon = document.createElement("span");
+  qIcon.className = "material-symbols-outlined text-[14px]";
+  qIcon.textContent = "manage_search";
+  qChip.appendChild(qIcon);
+  const qInput = document.createElement("input");
+  qInput.className = "bg-transparent border-none outline-none text-[10px] font-bold text-primary placeholder:text-slate-500 w-36";
+  qInput.id = "filter-q";
+  qInput.placeholder = "CONTENT SEARCH";
+  qInput.value = state.memoryFilter.q ?? "";
+  qChip.appendChild(qInput);
+  leftChips.appendChild(qChip);
 
   /* Topic chip */
   const topicChip = document.createElement("div");
@@ -29,10 +45,6 @@ export function renderMemoryFilters() {
   topicInput.placeholder = "TOPIC: ALL";
   topicInput.value = state.memoryFilter.topic;
   topicChip.appendChild(topicInput);
-  const topicExpand = document.createElement("span");
-  topicExpand.className = "material-symbols-outlined text-[14px]";
-  topicExpand.textContent = "expand_more";
-  topicChip.appendChild(topicExpand);
   leftChips.appendChild(topicChip);
 
   /* Type chip */
@@ -49,10 +61,6 @@ export function renderMemoryFilters() {
     typeSelect.appendChild(opt);
   });
   typeChip.appendChild(typeSelect);
-  const typeExpand = document.createElement("span");
-  typeExpand.className = "material-symbols-outlined text-[14px]";
-  typeExpand.textContent = "expand_more";
-  typeChip.appendChild(typeExpand);
   leftChips.appendChild(typeChip);
 
   /* Key chip */
@@ -64,10 +72,6 @@ export function renderMemoryFilters() {
   keyInput.placeholder = "KEY: *";
   keyInput.value = state.memoryFilter.key_id;
   keyChip.appendChild(keyInput);
-  const keyExpand = document.createElement("span");
-  keyExpand.className = "material-symbols-outlined text-[14px]";
-  keyExpand.textContent = "expand_more";
-  keyChip.appendChild(keyExpand);
   leftChips.appendChild(keyChip);
 
   /* Group chip */
@@ -88,31 +92,32 @@ export function renderMemoryFilters() {
     groupSelect.appendChild(opt);
   });
   groupChip.appendChild(groupSelect);
-  const groupExpand = document.createElement("span");
-  groupExpand.className = "material-symbols-outlined text-[14px]";
-  groupExpand.textContent = "expand_more";
-  groupChip.appendChild(groupExpand);
   leftChips.appendChild(groupChip);
 
   bar.appendChild(leftChips);
 
   /* Right side */
   const rightSide = document.createElement("div");
-  rightSide.className = "flex items-center gap-4";
+  rightSide.className = "flex items-center gap-2";
 
-  const rangeText = document.createElement("span");
-  rangeText.className = "text-[10px] text-slate-500 font-mono tracking-tighter uppercase";
-  rangeText.textContent = "RANGE: LAST 30 DAYS";
-  rightSide.appendChild(rangeText);
-
-  const exportBtn = document.createElement("button");
-  exportBtn.className = "flex items-center gap-2 bg-transparent border border-outline-variant px-4 py-1.5 text-[10px] font-bold text-primary";
-  exportBtn.id = "filter-search";
+  const searchBtn = document.createElement("button");
+  searchBtn.className = "flex items-center gap-2 bg-transparent border border-outline-variant px-4 py-1.5 text-[10px] font-bold text-primary";
+  searchBtn.id = "filter-search";
   const searchIcon = document.createElement("span");
   searchIcon.className = "material-symbols-outlined text-[14px]";
   searchIcon.textContent = "search";
-  exportBtn.appendChild(searchIcon);
-  exportBtn.appendChild(document.createTextNode("SEARCH"));
+  searchBtn.appendChild(searchIcon);
+  searchBtn.appendChild(document.createTextNode("SEARCH"));
+  rightSide.appendChild(searchBtn);
+
+  const exportBtn = document.createElement("button");
+  exportBtn.className = "flex items-center gap-2 bg-transparent border border-outline-variant px-4 py-1.5 text-[10px] font-bold text-slate-400 hover:text-primary";
+  exportBtn.id = "export-jsonl";
+  const exportIcon = document.createElement("span");
+  exportIcon.className = "material-symbols-outlined text-[14px]";
+  exportIcon.textContent = "download";
+  exportBtn.appendChild(exportIcon);
+  exportBtn.appendChild(document.createTextNode("EXPORT JSONL"));
   rightSide.appendChild(exportBtn);
 
   bar.appendChild(rightSide);
@@ -142,9 +147,9 @@ export function renderFragmentList(fragments) {
 
   /* Title */
   const title = document.createElement("h2");
-  title.className = "font-headline text-lg font-bold text-cyan-100 flex items-center gap-3 mb-6 uppercase tracking-widest";
+  title.className = "font-headline text-lg font-bold text-on-surface flex items-center gap-3 mb-6 uppercase tracking-widest";
   const titleBar = document.createElement("span");
-  titleBar.className = "w-1 h-4 bg-cyan-400";
+  titleBar.className = "w-1 h-4 bg-primary";
   title.appendChild(titleBar);
   title.appendChild(document.createTextNode("Search Explorer"));
   panel.appendChild(title);
@@ -164,7 +169,7 @@ export function renderFragmentList(fragments) {
   queryTop.appendChild(resultCount);
   queryBox.appendChild(queryTop);
   const queryText = document.createElement("div");
-  queryText.className = "text-sm font-mono text-cyan-100 py-2 border-b border-white/5";
+  queryText.className = "text-sm font-mono text-on-surface py-2 border-b border-white/5";
   queryText.textContent = state.memoryFilter.topic || state.memoryFilter.type || "*";
   queryBox.appendChild(queryText);
   panel.appendChild(queryBox);
@@ -176,7 +181,7 @@ export function renderFragmentList(fragments) {
 
   fragments.forEach(f => {
     const item = document.createElement("div");
-    item.className = "bg-surface-container-low p-4 hover:bg-surface-container-high border-l border-transparent hover:border-cyan-400/50 cursor-pointer" + (f.id === state.selectedFragment?.id ? " border-cyan-400/50 bg-surface-container-high" : "");
+    item.className = "bg-surface-container-low p-4 hover:bg-surface-container-high border-l border-transparent hover:border-primary/50 cursor-pointer" + (f.id === state.selectedFragment?.id ? " border-primary/50 bg-surface-container-high" : "");
     item.dataset.fragId = f.id;
 
     /* Top row */
@@ -256,87 +261,87 @@ export function renderFragmentList(fragments) {
   return panel;
 }
 
-export function renderRetrievalAnalytics(stats) {
+export function renderRetrievalAnalytics(searchEvents) {
   const panel = document.createElement("section");
   panel.className = "glass-panel rounded-sm p-6 border-t border-primary/20";
 
   const title = document.createElement("h2");
-  title.className = "font-headline text-sm font-bold text-cyan-100 uppercase tracking-widest mb-4";
-  title.textContent = "Retrieval Analytics";
+  title.className = "font-headline text-sm font-bold text-on-surface uppercase tracking-widest mb-4";
+  title.textContent = "Retrieval Analytics (7d)";
   panel.appendChild(title);
 
-  /* Latency bars */
-  const latencyBars = document.createElement("div");
-  latencyBars.className = "flex h-1.5 gap-1 mb-4";
-  const l1 = document.createElement("div");
-  l1.className = "w-[15%] bg-primary shadow";
-  latencyBars.appendChild(l1);
-  const l2 = document.createElement("div");
-  l2.className = "w-[45%] bg-primary/40";
-  latencyBars.appendChild(l2);
-  const l3 = document.createElement("div");
-  l3.className = "w-[40%] bg-white/10";
-  latencyBars.appendChild(l3);
-  panel.appendChild(latencyBars);
+  const se = searchEvents ?? null;
 
-  /* Grid: Hit Rate + Rerank Usage */
+  /* Grid: Searches + Zero-result rate */
   const grid = document.createElement("div");
   grid.className = "grid grid-cols-2 gap-3 mb-4";
 
-  /* Hit Rate */
-  const hitBox = document.createElement("div");
-  hitBox.className = "bg-surface-container-high p-3 text-center";
-  const hitLabel = document.createElement("div");
-  hitLabel.className = "text-[9px] font-mono text-slate-500 uppercase";
-  hitLabel.textContent = "HIT RATE";
-  hitBox.appendChild(hitLabel);
-  const hitVal = document.createElement("div");
-  hitVal.className = "text-2xl font-headline font-bold text-tertiary";
-  hitVal.textContent = stats?.searchMetrics?.hitRate ? fmtPct(stats.searchMetrics.hitRate) : "87%";
-  hitBox.appendChild(hitVal);
-  const hitBar = document.createElement("div");
-  hitBar.className = "w-full bg-white/5 h-1 mt-2";
-  const hitFill = document.createElement("div");
-  hitFill.className = "h-full bg-tertiary";
-  hitFill.style.width = "87%";
-  hitBar.appendChild(hitFill);
-  hitBox.appendChild(hitBar);
-  grid.appendChild(hitBox);
+  const statBox = (label, value) => {
+    const box = document.createElement("div");
+    box.className = "bg-surface-container-high p-3 text-center";
+    const lbl = document.createElement("div");
+    lbl.className = "text-[9px] font-mono text-slate-500 uppercase";
+    lbl.textContent = label;
+    box.appendChild(lbl);
+    const val = document.createElement("div");
+    val.className = "text-2xl font-headline font-bold text-tertiary";
+    val.textContent = value;
+    box.appendChild(val);
+    return box;
+  };
 
-  /* Rerank Usage */
-  const rerankBox = document.createElement("div");
-  rerankBox.className = "bg-surface-container-high p-3 text-center";
-  const rerankLabel = document.createElement("div");
-  rerankLabel.className = "text-[9px] font-mono text-slate-500 uppercase";
-  rerankLabel.textContent = "RERANK USAGE";
-  rerankBox.appendChild(rerankLabel);
-  const rerankVal = document.createElement("div");
-  rerankVal.className = "text-2xl font-headline font-bold text-secondary";
-  rerankVal.textContent = "42%";
-  rerankBox.appendChild(rerankVal);
-  const rerankBar = document.createElement("div");
-  rerankBar.className = "w-full bg-white/5 h-1 mt-2";
-  const rerankFill = document.createElement("div");
-  rerankFill.className = "h-full bg-secondary";
-  rerankFill.style.width = "42%";
-  rerankBar.appendChild(rerankFill);
-  rerankBox.appendChild(rerankBar);
-  grid.appendChild(rerankBox);
-
+  grid.appendChild(statBox("SEARCHES", se?.totalSearches != null ? fmt(se.totalSearches) : "--"));
+  grid.appendChild(statBox(
+    "ZERO-RESULT",
+    se?.zeroResultRate != null ? fmtPct(se.zeroResultRate) : "--"
+  ));
   panel.appendChild(grid);
 
-  /* Semantic Threshold */
-  const threshLabel = document.createElement("div");
-  threshLabel.className = "text-[9px] font-mono text-slate-500 uppercase mb-1";
-  threshLabel.textContent = "SEMANTIC THRESHOLD";
-  panel.appendChild(threshLabel);
-  const rangeInput = document.createElement("input");
-  rangeInput.type = "range";
-  rangeInput.min = "0";
-  rangeInput.max = "100";
-  rangeInput.value = "70";
-  rangeInput.className = "w-full accent-primary";
-  panel.appendChild(rangeInput);
+  /* Latency percentiles */
+  const latLabel = document.createElement("div");
+  latLabel.className = "text-[9px] font-mono text-slate-500 uppercase mb-1";
+  latLabel.textContent = "SEARCH LATENCY (MS)";
+  panel.appendChild(latLabel);
+
+  const latRows = document.createElement("div");
+  latRows.className = "space-y-1 mb-4";
+  const lat = se?.latency ?? null;
+  [["p50", lat?.p50], ["p90", lat?.p90], ["p99", lat?.p99], ["avg", lat?.avg_ms]].forEach(([k, v]) => {
+    const row = document.createElement("div");
+    row.className = "flex justify-between text-[11px] font-mono";
+    const l = document.createElement("span");
+    l.className = "text-slate-500 uppercase";
+    l.textContent = k;
+    row.appendChild(l);
+    const val = document.createElement("span");
+    val.className = "text-slate-300";
+    val.textContent = v != null ? String(Math.round(Number(v))) : "--";
+    row.appendChild(val);
+    latRows.appendChild(row);
+  });
+  panel.appendChild(latRows);
+
+  /* Feedback quality */
+  const fbLabel = document.createElement("div");
+  fbLabel.className = "text-[9px] font-mono text-slate-500 uppercase mb-1";
+  fbLabel.textContent = "FEEDBACK QUALITY";
+  panel.appendChild(fbLabel);
+  const fbRows = document.createElement("div");
+  fbRows.className = "space-y-1";
+  [["relevance", se?.avgRelevance], ["sufficiency", se?.avgSufficiency]].forEach(([k, v]) => {
+    const row = document.createElement("div");
+    row.className = "flex justify-between text-[11px] font-mono";
+    const l = document.createElement("span");
+    l.className = "text-slate-500 uppercase";
+    l.textContent = k;
+    row.appendChild(l);
+    const val = document.createElement("span");
+    val.className = "text-slate-300";
+    val.textContent = v != null ? fmtPct(Number(v)) : "--";
+    row.appendChild(val);
+    fbRows.appendChild(row);
+  });
+  panel.appendChild(fbRows);
 
   return panel;
 }
@@ -393,111 +398,142 @@ export function renderAnomalyCards(anomalies) {
   return panel;
 }
 
-export function renderRecentEventsChart() {
+export function renderRecentEventsChart(searchEvents) {
   const panel = document.createElement("section");
   panel.className = "glass-panel rounded-sm p-6";
 
-  /* Header */
   const header = document.createElement("div");
   header.className = "flex justify-between items-center mb-6";
   const title = document.createElement("h2");
-  title.className = "font-headline text-sm font-bold text-cyan-100 uppercase tracking-widest";
-  title.textContent = "Recent Events";
+  title.className = "font-headline text-sm font-bold text-on-surface uppercase tracking-widest";
+  title.textContent = "Search Activity (7d)";
   header.appendChild(title);
-
-  const legend = document.createElement("div");
-  legend.className = "flex items-center gap-4";
-  const leg1 = document.createElement("div");
-  leg1.className = "flex items-center gap-1";
-  const leg1Dot = document.createElement("div");
-  leg1Dot.className = "w-2 h-2 bg-primary";
-  leg1.appendChild(leg1Dot);
-  const leg1Text = document.createElement("span");
-  leg1Text.className = "text-[9px] font-mono text-slate-500 uppercase";
-  leg1Text.textContent = "RECALL_EVENTS";
-  leg1.appendChild(leg1Text);
-  legend.appendChild(leg1);
-
-  const leg2 = document.createElement("div");
-  leg2.className = "flex items-center gap-1";
-  const leg2Dot = document.createElement("div");
-  leg2Dot.className = "w-2 h-2 bg-secondary";
-  leg2.appendChild(leg2Dot);
-  const leg2Text = document.createElement("span");
-  leg2Text.className = "text-[9px] font-mono text-slate-500 uppercase";
-  leg2Text.textContent = "QUERY_LOAD";
-  leg2.appendChild(leg2Text);
-  legend.appendChild(leg2);
-  header.appendChild(legend);
   panel.appendChild(header);
 
-  /* Chart area */
-  const chart = document.createElement("div");
-  chart.className = "w-full h-48 bg-surface-container-lowest border border-white/5 relative flex items-end px-2 pb-4";
+  const se   = searchEvents ?? null;
+  const grid = document.createElement("div");
+  grid.className = "grid grid-cols-1 md:grid-cols-2 gap-6";
 
-  /* Grid lines */
-  const gridLines = document.createElement("div");
-  gridLines.className = "absolute inset-0 grid grid-rows-4";
-  for (let i = 0; i < 4; i++) {
-    const line = document.createElement("div");
-    line.className = "border-b border-white/5";
-    gridLines.appendChild(line);
+  /* Path distribution */
+  const pathCol = document.createElement("div");
+  const pathLabel = document.createElement("div");
+  pathLabel.className = "text-[9px] font-mono text-slate-500 uppercase mb-2";
+  pathLabel.textContent = "SEARCH PATH DISTRIBUTION";
+  pathCol.appendChild(pathLabel);
+
+  const paths = se?.pathDistribution ?? [];
+  if (paths.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "text-[11px] text-slate-600 font-mono";
+    empty.textContent = "--";
+    pathCol.appendChild(empty);
+  } else {
+    const maxCnt = Math.max(...paths.map(r => Number(r.cnt) || 0), 1);
+    paths.forEach(r => {
+      const row = document.createElement("div");
+      row.className = "mb-2";
+      const top = document.createElement("div");
+      top.className = "flex justify-between text-[11px] font-mono mb-0.5";
+      const l = document.createElement("span");
+      l.className = "text-slate-400";
+      l.textContent = r.search_path ?? "(unknown)";
+      top.appendChild(l);
+      const v = document.createElement("span");
+      v.className = "text-slate-300";
+      v.textContent = fmt(Number(r.cnt) || 0);
+      top.appendChild(v);
+      row.appendChild(top);
+      const barBg = document.createElement("div");
+      barBg.className = "w-full bg-white/5 h-1";
+      const barFill = document.createElement("div");
+      barFill.className = "h-full bg-primary/60";
+      barFill.style.width = Math.round(((Number(r.cnt) || 0) / maxCnt) * 100) + "%";
+      barBg.appendChild(barFill);
+      row.appendChild(barBg);
+      pathCol.appendChild(row);
+    });
   }
-  chart.appendChild(gridLines);
+  grid.appendChild(pathCol);
 
-  /* Bars */
-  const barsWrap = document.createElement("div");
-  barsWrap.className = "flex-1 flex items-end justify-around h-full gap-1 relative";
-  const heights = [20, 35, 50, 30, 65, 45, 80, 55, 40, 70, 25, 60];
-  heights.forEach(h => {
-    const bar = document.createElement("div");
-    bar.className = "w-full bg-primary/20 hover:bg-primary";
-    bar.style.height = h + "%";
-    barsWrap.appendChild(bar);
-  });
-  chart.appendChild(barsWrap);
-  panel.appendChild(chart);
+  /* Top keywords */
+  const kwCol = document.createElement("div");
+  const kwLabel = document.createElement("div");
+  kwLabel.className = "text-[9px] font-mono text-slate-500 uppercase mb-2";
+  kwLabel.textContent = "TOP KEYWORDS";
+  kwCol.appendChild(kwLabel);
 
-  /* Time axis */
-  const timeAxis = document.createElement("div");
-  timeAxis.className = "flex justify-between mt-3 text-[8px] font-mono text-slate-600 uppercase tracking-[0.2em]";
-  ["00:00", "04:00", "08:00", "12:00", "16:00", "20:00"].forEach(t => {
-    const span = document.createElement("span");
-    span.textContent = t;
-    timeAxis.appendChild(span);
-  });
-  panel.appendChild(timeAxis);
+  const kws = se?.topKeywords ?? [];
+  if (kws.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "text-[11px] text-slate-600 font-mono";
+    empty.textContent = "--";
+    kwCol.appendChild(empty);
+  } else {
+    kws.forEach(r => {
+      const row = document.createElement("div");
+      row.className = "flex justify-between text-[11px] font-mono py-0.5 border-b border-white/5";
+      const l = document.createElement("span");
+      l.className = "text-slate-400";
+      l.textContent = r.kw;
+      row.appendChild(l);
+      const v = document.createElement("span");
+      v.className = "text-slate-300";
+      v.textContent = fmt(Number(r.cnt) || 0);
+      row.appendChild(v);
+      kwCol.appendChild(row);
+    });
+  }
+  grid.appendChild(kwCol);
 
+  panel.appendChild(grid);
   return panel;
 }
 
-export function renderFragmentInspector(fragment) {
-  if (!fragment) return document.createDocumentFragment();
+export function renderFragmentInspector(detail) {
+  if (!detail?.fragment) return document.createDocumentFragment();
+  const fragment = detail.fragment;
+  const links    = detail.links ?? [];
 
   const panel = document.createElement("section");
   panel.className = "glass-panel rounded-sm p-6 border-t border-primary/20";
   panel.id = "fragment-inspector";
 
   const title = document.createElement("h2");
-  title.className = "font-headline text-sm font-bold text-cyan-100 flex items-center gap-3 mb-6 uppercase tracking-widest";
+  title.className = "font-headline text-sm font-bold text-on-surface flex items-center gap-3 mb-6 uppercase tracking-widest";
   title.textContent = "Fragment Detail";
   panel.appendChild(title);
 
   const content = document.createElement("div");
   content.className = "bg-surface-container-highest p-4 mb-4 text-[11px] text-slate-300 leading-relaxed whitespace-pre-wrap border border-white/5";
-  content.textContent = fragment.content ?? "";
+  content.textContent = fragment.content ?? "--";
   panel.appendChild(content);
 
+  /* Keywords chips */
+  const kwWrap = document.createElement("div");
+  kwWrap.className = "flex flex-wrap gap-1 mb-4";
+  (fragment.keywords ?? []).forEach(kw => {
+    const chip = document.createElement("span");
+    chip.className = "text-[9px] font-mono text-slate-400 bg-white/5 px-2 py-0.5";
+    chip.textContent = kw;
+    kwWrap.appendChild(chip);
+  });
+  panel.appendChild(kwWrap);
+
   const meta = document.createElement("div");
-  meta.className = "space-y-2";
+  meta.className = "space-y-2 mb-4";
   [
-    { label: "ID",       value: fragment.id },
-    { label: "Type",     value: fragment.type ?? "" },
-    { label: "Importance", value: String(fragment.importance ?? "-") },
-    { label: "Agent",    value: fragment.agent_id ?? "-" },
-    { label: "Key",      value: fragment.key_id ?? "master" },
-    { label: "Created",  value: fmtDate(fragment.created_at) },
-    { label: "Keywords", value: JSON.stringify(fragment.keywords ?? []) }
+    { label: "ID",         value: fragment.id },
+    { label: "Type",       value: fragment.type ?? "--" },
+    { label: "Topic",      value: fragment.topic ?? "--" },
+    { label: "Importance", value: String(fragment.importance ?? "--") },
+    { label: "Anchor",     value: fragment.is_anchor ? "yes" : "no" },
+    { label: "Assertion",  value: fragment.assertion_status ?? "--" },
+    { label: "Case",       value: fragment.case_id ?? "--" },
+    { label: "Agent",      value: fragment.agent_id ?? "--" },
+    { label: "Key",        value: fragment.key_id ?? "master" },
+    { label: "Access",     value: String(fragment.access_count ?? 0) },
+    { label: "Created",    value: fmtDate(fragment.created_at) },
+    { label: "Verified",   value: fragment.verified_at ? fmtDate(fragment.verified_at) : "--" }
   ].forEach(f => {
     const row = document.createElement("div");
     row.className = "flex justify-between text-[10px]";
@@ -506,13 +542,57 @@ export function renderFragmentInspector(fragment) {
     lbl.textContent = f.label;
     row.appendChild(lbl);
     const val = document.createElement("span");
-    val.className = "text-slate-300 font-mono";
+    val.className = "text-slate-300 font-mono break-all text-right";
     val.textContent = f.value;
     row.appendChild(val);
     meta.appendChild(row);
   });
-
   panel.appendChild(meta);
+
+  /* 1-hop links */
+  const linkLabel = document.createElement("div");
+  linkLabel.className = "text-[9px] font-mono text-slate-500 uppercase mb-1";
+  linkLabel.textContent = "LINKS (1-HOP)";
+  panel.appendChild(linkLabel);
+
+  if (links.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "text-[11px] text-slate-600 font-mono mb-3";
+    empty.textContent = "--";
+    panel.appendChild(empty);
+  } else {
+    const linkList = document.createElement("div");
+    linkList.className = "space-y-2 mb-3";
+    links.forEach(l => {
+      const row = document.createElement("div");
+      row.className = "text-[10px] border-l border-white/10 pl-2";
+      const head = document.createElement("div");
+      head.className = "font-mono text-slate-400";
+      head.textContent = `${l.direction === "out" ? "→" : "←"} ${l.relation_type} · ${l.type ?? ""} · ${l.id}`;
+      row.appendChild(head);
+      const prev = document.createElement("div");
+      prev.className = "text-slate-500 line-clamp-2";
+      prev.textContent = l.preview ?? "";
+      row.appendChild(prev);
+      linkList.appendChild(row);
+    });
+    panel.appendChild(linkList);
+  }
+
+  /* Graph view link */
+  const graphBtn = document.createElement("button");
+  graphBtn.className = "flex items-center gap-2 text-[10px] font-bold text-primary border border-outline-variant px-3 py-1";
+  const graphIcon = document.createElement("span");
+  graphIcon.className = "material-symbols-outlined text-[14px]";
+  graphIcon.textContent = "hub";
+  graphBtn.appendChild(graphIcon);
+  graphBtn.appendChild(document.createTextNode("VIEW IN GRAPH"));
+  graphBtn.addEventListener("click", () => {
+    state.memoryFilter.topic = fragment.topic ?? "";
+    navigate("graph");
+  });
+  panel.appendChild(graphBtn);
+
   return panel;
 }
 
@@ -593,21 +673,93 @@ export function renderPagination() {
   return wrap;
 }
 
+/**
+ * 파편 상세를 조회하여 우측 인스펙터 슬롯에 부분 렌더링한다.
+ * 전체 뷰 재렌더 없이 행 하이라이트와 인스펙터만 갱신한다.
+ */
+async function showFragmentDetail(fragId) {
+  const slot = document.getElementById("inspector-slot");
+  if (!slot) return;
+
+  document.querySelectorAll("[data-frag-id]").forEach(el => {
+    el.classList.toggle("frag-selected", el.dataset.fragId === fragId);
+  });
+
+  slot.textContent = "";
+  slot.appendChild(loadingHtml());
+
+  const params = new URLSearchParams();
+  if (state.memoryFilter.key_id)   params.set("key_id",   state.memoryFilter.key_id);
+  if (state.memoryFilter.group_id) params.set("group_id", state.memoryFilter.group_id);
+  const qs  = params.toString();
+  const res = await api(`/memory/fragments/${encodeURIComponent(fragId)}${qs ? "?" + qs : ""}`);
+
+  slot.textContent = "";
+  if (!res.ok) {
+    showToast("파편 상세 조회 실패", "error");
+    return;
+  }
+  state.selectedFragment = res.data?.fragment ?? null;
+  slot.appendChild(renderFragmentInspector(res.data));
+}
+
+/** 현재 필터를 쿼리로 변환해 /export JSONL을 다운로드한다 (Bearer 헤더 필요). */
+async function downloadExport() {
+  const btn = document.getElementById("export-jsonl");
+  if (btn) btn.disabled = true;
+  try {
+    const params = new URLSearchParams();
+    if (state.memoryFilter.key_id)   params.set("key_id",   state.memoryFilter.key_id);
+    if (state.memoryFilter.group_id) params.set("group_id", state.memoryFilter.group_id);
+    if (state.memoryFilter.topic)    params.set("topic",    state.memoryFilter.topic);
+    if (state.memoryFilter.type)     params.set("type",     state.memoryFilter.type);
+
+    if (!params.has("key_id") && !params.has("group_id")) {
+      showToast("EXPORT는 KEY 또는 GROUP 필터가 필요합니다", "error");
+      return;
+    }
+
+    const resp = await fetch(`${API_BASE}/export?${params}`, {
+      headers: { "Authorization": `Bearer ${state.masterKey}` }
+    });
+    if (!resp.ok) {
+      showToast(`EXPORT 실패 (${resp.status})`, "error");
+      return;
+    }
+    const blob = await resp.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = "fragments.jsonl";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast("EXPORT 완료", "info");
+  } catch (err) {
+    showToast(`EXPORT 실패: ${err.message}`, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 export async function renderMemory(container) {
   container.textContent = "";
   container.appendChild(loadingHtml());
 
   const params = new URLSearchParams();
+  if (state.memoryFilter.q)        params.set("q",        state.memoryFilter.q);
   if (state.memoryFilter.topic)    params.set("topic",    state.memoryFilter.topic);
   if (state.memoryFilter.type)     params.set("type",     state.memoryFilter.type);
   if (state.memoryFilter.key_id)   params.set("key_id",   state.memoryFilter.key_id);
   if (state.memoryFilter.group_id) params.set("group_id", state.memoryFilter.group_id);
   params.set("page", state.memoryPage);
 
-  const [fragRes, anomalyRes, groupsRes] = await Promise.all([
+  const [fragRes, anomalyRes, groupsRes, seRes] = await Promise.all([
     api("/memory/fragments?" + params),
     api("/memory/anomalies"),
-    api("/groups")
+    api("/groups"),
+    api("/memory/search-events?days=7")
   ]);
   if (groupsRes.ok) state.groups = groupsRes.data ?? [];
 
@@ -624,7 +776,8 @@ export async function renderMemory(container) {
     state.fragments = [];
   }
 
-  state.anomalies = anomalyRes.ok ? anomalyRes.data : null;
+  state.anomalies    = anomalyRes.ok ? anomalyRes.data : null;
+  state.searchEvents = seRes.ok ? seRes.data : null;
 
   container.textContent = "";
 
@@ -642,32 +795,51 @@ export async function renderMemory(container) {
   centerCol.appendChild(renderPagination());
   grid.appendChild(centerCol);
 
-  /* Right: analytics + anomalies */
+  /* Right: inspector slot + analytics + anomalies */
   const rightCol = document.createElement("div");
   rightCol.className = "col-span-12 lg:col-span-4 space-y-6";
-  rightCol.appendChild(renderRetrievalAnalytics(state.stats));
+  const inspectorSlot = document.createElement("div");
+  inspectorSlot.id = "inspector-slot";
+  rightCol.appendChild(inspectorSlot);
+  rightCol.appendChild(renderRetrievalAnalytics(state.searchEvents));
   rightCol.appendChild(renderAnomalyCards(state.anomalies));
   grid.appendChild(rightCol);
 
   container.appendChild(grid);
 
-  /* Bottom: Recent Events Chart */
+  /* Bottom: Search Activity */
   const bottomGrid = document.createElement("div");
   bottomGrid.className = "grid grid-cols-12 gap-6 mt-6";
   const bottomCol = document.createElement("div");
   bottomCol.className = "col-span-12";
-  bottomCol.appendChild(renderRecentEventsChart());
+  bottomCol.appendChild(renderRecentEventsChart(state.searchEvents));
   bottomGrid.appendChild(bottomCol);
   container.appendChild(bottomGrid);
 
-  /* Event: search */
-  document.getElementById("filter-search")?.addEventListener("click", () => {
+  /* Event: search (버튼 + 입력 Enter 공용) */
+  const applyFilters = () => {
+    state.memoryFilter.q        = document.getElementById("filter-q")?.value ?? "";
     state.memoryFilter.topic    = document.getElementById("filter-topic")?.value ?? "";
     state.memoryFilter.type     = document.getElementById("filter-type")?.value ?? "";
     state.memoryFilter.key_id   = document.getElementById("filter-key-id")?.value ?? "";
     state.memoryFilter.group_id = document.getElementById("filter-group")?.value ?? "";
     state.memoryPage = 1;
     renderMemory(container);
+  };
+  document.getElementById("filter-search")?.addEventListener("click", applyFilters);
+  ["filter-q", "filter-topic", "filter-key-id"].forEach(id => {
+    document.getElementById(id)?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") applyFilters();
+    });
+  });
+
+  /* Event: export */
+  document.getElementById("export-jsonl")?.addEventListener("click", () => {
+    state.memoryFilter.key_id   = document.getElementById("filter-key-id")?.value ?? "";
+    state.memoryFilter.group_id = document.getElementById("filter-group")?.value ?? "";
+    state.memoryFilter.topic    = document.getElementById("filter-topic")?.value ?? "";
+    state.memoryFilter.type     = document.getElementById("filter-type")?.value ?? "";
+    downloadExport();
   });
 
   /* Event: pagination */
@@ -678,11 +850,8 @@ export async function renderMemory(container) {
     });
   });
 
-  /* Event: fragment click */
+  /* Event: fragment click — 부분 렌더 (전체 재렌더·재호출 없음) */
   container.querySelectorAll("[data-frag-id]").forEach(el => {
-    el.addEventListener("click", () => {
-      state.selectedFragment = state.fragments.find(f => f.id === el.dataset.fragId) ?? null;
-      renderMemory(container);
-    });
+    el.addEventListener("click", () => showFragmentDetail(el.dataset.fragId));
   });
 }
