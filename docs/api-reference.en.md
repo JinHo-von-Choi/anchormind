@@ -292,7 +292,7 @@ Pre-defined guidelines that help AI use the memory system efficiently.
 |------|-------------|-------------|
 | `analyze-session` | Session activity analysis | Guides automatic extraction of decisions, errors, and procedures worth saving from the current conversation |
 | `retrieve-relevant-memory` | Relevant memory retrieval guide | Assists in finding optimal context by combining keyword and semantic search for a given topic |
-| `onboarding` | System usage guide | Helps AI self-learn when and how to use Memento MCP tools |
+| `onboarding` | System usage guide | Helps AI self-learn when and how to use AnchorMind tools |
 
 ---
 
@@ -324,6 +324,7 @@ MCP resources for real-time queries on the current state of the memory system.
 | linkRelationType | string | - | Link relation type filter (related, caused_by, resolved_by, part_of, contradicts) |
 | threshold | number | - | Similarity threshold (0-1) |
 | includeSuperseded | boolean | - | Include expired (superseded) fragments. Default false. |
+| includePeerAgents | boolean | - | When true, includes fragments from other agentIds within the same key/workspace scope (for multi-agent collaboration). Key and workspace boundaries are preserved. Default false. |
 | asOf | string | - | ISO 8601. Return only fragments valid at the specified point in time. |
 | excludeSeen | boolean | - | Exclude fragments already injected by context(). Default true. |
 | includeKeywords | boolean | - | Include each fragment's keywords array in the response |
@@ -372,7 +373,7 @@ Each returned fragment includes a `key_id` field. When called with a master key,
 | Field | Description |
 |-------|-------------|
 | `_meta.searchEventId` | FK value to pass as `search_event_id` when calling tool_feedback. The search event ID persisted by `commitSearchSideEffects`. |
-| `_meta.hints` | Array of search improvement hints from the system |
+| `_meta.hints` | Array of search signal hints (`no_results`, `contradiction_pending`, `stale_results`, etc.). `contradiction_pending` fires when returned fragments have unresolved contradicts links and recommends cleanup via amend |
 | `_meta.suggestion` | RecallSuggestionEngine hint object (null when no issue detected) |
 | `_meta.serverTime` | Server time of the response, mitigating LLM clients' training-time fixation. Included consistently in all recall/context responses. `iso` (UTC ISO 8601), `epoch_ms` (Unix ms), `display_kst` (Asia/Seoul formatted), `timezone`. |
 
@@ -772,7 +773,7 @@ Query the complete change history of a fragment. Returns previous versions modif
 
 ## MCP Tool — get_skill_guide
 
-Returns the Memento MCP best practices guide. Comprehensive skill reference covering memory tool usage, session lifecycle, keyword rules, search strategies, experiential memory usage, and more.
+Returns the AnchorMind best practices guide. Comprehensive skill reference covering memory tool usage, session lifecycle, keyword rules, search strategies, experiential memory usage, and more.
 
 ### Parameters
 
@@ -796,6 +797,11 @@ Reconstruct work history chronologically based on case_id or entity. Restores na
 | query | string | - | Additional keyword filter |
 | limit | number | - | Default 100, max 500 |
 | workspace | string | - | Workspace filter. When specified, only fragments from the given workspace + global (NULL) fragments are targeted. |
+
+### Returns
+
+- `ordered_timeline`: fragments in chronological order; each item includes agent_id to identify the contributing agent in multi-agent cases.
+- `causal_chains`, `unresolved_branches`.
 
 ---
 
@@ -829,7 +835,7 @@ Search fragments by exact matching (unlike recall's semantic search, uses conten
 Return only id, content, importance to reduce token usage:
 
 ```bash
-curl -X POST https://memento.example.com/mcp \
+curl -X POST https://anchormind.example.com/mcp \
   -H "Authorization: Bearer $MEMENTO_KEY" \
   -H "Mcp-Session-Id: $SESSION" \
   -H "Content-Type: application/json" \

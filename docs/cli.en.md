@@ -2,7 +2,7 @@
 
 ## Overview
 
-`bin/memento.js` is the CLI entry point for operating and querying the memory server directly from the terminal, without a running server instance (for most commands).
+`bin/memento.js` is the CLI entry point for operating and querying the memory server directly from the terminal, without a running server instance (for most commands). When installed globally, run it as `anchormind`; the `memento-mcp` command works identically.
 
 ```bash
 node bin/memento.js <command> [options]

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/images/memento_mcp_logo_transparent.png" width="400" alt="Memento MCP Logo">
+  <img src="assets/images/anchormind_logo.png" width="400" alt="AnchorMind Logo">
 </p>
 
 <p align="center">
@@ -21,20 +21,22 @@
   <a href="README.md">📖 한국어 문서</a>
 </p>
 
-# Memento MCP
+# AnchorMind
 
 > Give your AI a memory. Then let it use that memory as a foundation to grow.
 
-Imagine a new employee whose memory resets every morning. Everything you taught yesterday, every problem you solved together last week, every preference -- all forgotten. Memento MCP gives this new hire a memory.
+Imagine a new employee whose memory resets every morning. Everything you taught yesterday, every problem you solved together last week, every preference -- all forgotten. AnchorMind gives this new hire a memory.
 
-Memento MCP is a long-term memory server for AI agents, built on MCP (Model Context Protocol). It persists important facts, decisions, error patterns, and procedures across sessions and restores them in the next.
+AnchorMind is a long-term memory server for AI agents, built on MCP (Model Context Protocol). It persists important facts, decisions, error patterns, and procedures across sessions and restores them in the next.
+
+> This project started out as memento-mcp — a name that still fits a memory system well, but one shared by too many similar projects. It is now AnchorMind: memories worth keeping are anchored in place so they don't drift away with the session, echoing the anchor fragments at the core of this system.
 
 This is not a library of memories. As feedback accumulates, connections strengthen. As experiences repeat, patterns abstract. As sessions continue, context becomes narrative. The goal is not an AI that remembers — it is an AI that grows from experience.
 
 > [!TIP]
 > If installing and configuring the server yourself feels daunting, hand a single sentence to an AI assistant (Claude Code, Cursor, Codex):
 >
-> > "Install the memento-mcp repository in my environment, read `docs/INSTALL.en.md` and `SKILL.md`, apply the recommended settings, then verify it works."
+> > "Install the anchormind repository in my environment, read `docs/INSTALL.en.md` and `SKILL.md`, apply the recommended settings, then verify it works."
 >
 > The assistant will walk you through dependency setup, `.env` configuration, MCP registration, and the health check. Detailed delegation flow lives in [`docs/INSTALL.en.md`](docs/INSTALL.en.md#delegate-to-an-ai-assistant).
 
@@ -125,7 +127,7 @@ Some MCP clients such as Codex Desktop use deferred/lazy tool discovery. tool_se
 
 ## Compatible Platforms
 
-Memento is a standard MCP (Model Context Protocol) server. It works with any AI platform that supports MCP — not just Claude Code.
+AnchorMind is a standard MCP (Model Context Protocol) server. It works with any AI platform that supports MCP — not just Claude Code.
 
 | Platform | Config Location | Transport |
 |----------|----------------|-----------|
@@ -141,7 +143,7 @@ Memento is a standard MCP (Model Context Protocol) server. It works with any AI 
 
 Common setup: Server URL `http://localhost:57332/mcp`, Authorization header `Bearer YOUR_ACCESS_KEY`.
 
-For Claude.ai Web and ChatGPT, Memento uses OAuth. Enter your API key (`mmcp_xxx`) as the `client_id` -- no Dynamic Client Registration (RFC 7591) flow required. Redirect URIs from trusted domains (claude.ai, chatgpt.com) are auto-approved.
+For Claude.ai Web and ChatGPT, AnchorMind uses OAuth. Enter your API key (`mmcp_xxx`) as the `client_id` -- no Dynamic Client Registration (RFC 7591) flow required. Redirect URIs from trusted domains (claude.ai, chatgpt.com) are auto-approved.
 
 See [integration guides](docs/getting-started/) for platform-specific setup.
 
@@ -254,7 +256,7 @@ The `/metrics` endpoint exposes Prometheus-compatible metrics. Collection and vi
 
 ## Memory vs Rules
 
-Memory fragments injected by Memento have lower priority than the system prompt. Factual memories like "we use PostgreSQL 15" work well, but behavioral rules like "always use Given-When-Then pattern in tests" may be ignored when they conflict with the system prompt.
+Memory fragments injected by AnchorMind have lower priority than the system prompt. Factual memories like "we use PostgreSQL 15" work well, but behavioral rules like "always use Given-When-Then pattern in tests" may be ignored when they conflict with the system prompt.
 
 For behavioral rules, use higher-priority channels such as CLAUDE.md, AGENTS.md, hooks, or skills.
 
@@ -274,11 +276,11 @@ See [Benchmark Report](docs/benchmark.en.md) for the full analysis.
 
 ## Usage Patterns
 
-Memento is optimized for fact caching. When narrative context matters:
+AnchorMind is optimized for fact caching. When narrative context matters:
 
 - Use the `episode` type to store narratives that preserve "why" behind decisions
 - Add `contextSummary` when storing facts to get context alongside recall results
-- A dual-memory setup works well: fact retrieval via Memento, context restoration via your main memory system (e.g., MEMORY.md)
+- A dual-memory setup works well: fact retrieval via AnchorMind, context restoration via your main memory system (e.g., MEMORY.md)
 
 ## Who Is This For
 
@@ -348,7 +350,7 @@ Working with AI in production, I kept wasting time re-explaining the same contex
 
 The biggest problem was the endless repetition. Having to re-state things I had already explained, re-confirm settings that were already in place. I would painstakingly correct the AI, get it working perfectly -- only to start a new session and face the exact same issues all over again. It felt like being the training supervisor for a brilliant new hire who graduated top of their class but has their memory wiped clean every morning.
 
-"Do you remember Mijeong?" -- without a cue, nothing comes to mind. But say "your desk mate from first grade" and suddenly you remember her lending you an eraser. AI works the same way. The bug you fixed yesterday, the decision you made last week, your preferred coding style. Instead of resetting every session, Memento remembers for you.
+"Do you remember Mijeong?" -- without a cue, nothing comes to mind. But say "your desk mate from first grade" and suddenly you remember her lending you an eraser. AI works the same way. The bug you fixed yesterday, the decision you made last week, your preferred coding style. Instead of resetting every session, AnchorMind remembers for you.
 
 To solve this pain, I designed a system that decomposes memories into atomic units, searches them hierarchically, and lets them decay naturally over time. Just as humans are creatures of forgetting, this system embraces "appropriate forgetting" as a feature.
 

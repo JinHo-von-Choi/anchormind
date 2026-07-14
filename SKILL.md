@@ -1,10 +1,10 @@
-# Memento MCP Skill Reference
+# AnchorMind Skill Reference
 
-AI 에이전트가 Memento MCP 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
+AI 에이전트가 AnchorMind 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
 
-## 현재 버전: v4.9.0
+## 현재 버전: v5.0.0
 
-Memento MCP 서버는 AI 에이전트의 세션 간 장기 기억을 파편(Fragment) 단위로 영속화하고, 20개 도구를 통해 저장·검색·연결·반성 기능을 제공한다.
+AnchorMind 서버는 AI 에이전트의 세션 간 장기 기억을 파편(Fragment) 단위로 영속화하고, 20개 도구를 통해 저장·검색·연결·반성 기능을 제공한다.
 
 주요 현재 기능:
 
@@ -60,7 +60,7 @@ recall / context 응답 메타데이터는 `_meta.searchEventId` / `_meta.hints`
 선제적 컨텍스트 사냥 예시:
 
 ```
-사용자: "Memento MCP에 새 기능 하나 추가하려고 해"
+사용자: "AnchorMind에 새 기능 하나 추가하려고 해"
 ↓
 1. recall(topic="memento-mcp", contextText="새 기능 추가 계획")
 2. recall(type="decision", topic="memento-mcp")
@@ -196,7 +196,7 @@ recall 호출
 
 #### 원격 CLI
 
-로컬 Memento 서버 없이 원격 서버에 직접 연결한다.
+로컬 AnchorMind 서버 없이 원격 서버에 직접 연결한다.
 
 ```bash
 # 환경변수 방식 (영구 설정에 적합)
@@ -420,7 +420,7 @@ Symbolic Verification Layer는 확률론적 검색 파이프라인 위에 추가
 
 ## 서버 개요
 
-Memento MCP는 MCP(Model Context Protocol) 기반의 장기 기억 서버다. AI 에이전트의 세션 간 지식을 파편(Fragment) 단위로 영속화하고, 3계층 검색(키워드 L1 -> 시맨틱 L2 -> 하이브리드 RRF L3)으로 맥락에 맞는 기억을 회상한다.
+AnchorMind는 MCP(Model Context Protocol) 기반의 장기 기억 서버다. AI 에이전트의 세션 간 지식을 파편(Fragment) 단위로 영속화하고, 3계층 검색(키워드 L1 -> 시맨틱 L2 -> 하이브리드 RRF L3)으로 맥락에 맞는 기억을 회상한다.
 
 ### 핵심 개념
 
@@ -1607,7 +1607,7 @@ reason code 6종 (`code` 필드값):
 
 ## 안티패턴
 
-다음 행동은 Memento를 무력화한다. 반드시 피할 것.
+다음 행동은 AnchorMind를 무력화한다. 반드시 피할 것.
 
 | 안티패턴 | 왜 나쁜가 | 올바른 행동 |
 |---------|----------|------------|

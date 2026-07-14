@@ -435,7 +435,7 @@ For external access, expose the service through a reverse proxy (TLS termination
 
 ## Hook-Based Context Loading
 
-Memento's `instructions` field encourages the AI to use memory tools actively, but this alone doesn't automatically inject past memories at session start. With Claude Code hooks, you can ensure the AI loads relevant context at the beginning of every session.
+AnchorMind's `instructions` field encourages the AI to use memory tools actively, but this alone doesn't automatically inject past memories at session start. With Claude Code hooks, you can ensure the AI loads relevant context at the beginning of every session.
 
 **Auto-load Core Memory on session start** (`~/.claude/settings.json`):
 

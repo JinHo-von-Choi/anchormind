@@ -2,7 +2,7 @@
 
 ## 개요
 
-`bin/memento.js`는 서버 없이 터미널에서 메모리 서버를 운영·조회할 수 있는 CLI 진입점이다.
+`bin/memento.js`는 서버 없이 터미널에서 메모리 서버를 운영·조회할 수 있는 CLI 진입점이다. 전역 설치 시 `anchormind` 명령으로 실행하며, `memento-mcp` 명령도 동일하게 동작한다.
 
 ```bash
 node bin/memento.js <command> [options]

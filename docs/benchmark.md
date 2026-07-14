@@ -72,9 +72,9 @@ L1과 L2가 0%인 이유는 round_direct 수집 방식이 세션 ID와 날짜를
 
 ### 검색 강점
 
-memento-mcp의 pgvector 시맨틱 검색은 전체 질문 유형에 걸쳐 88.3%의 recall_any@5를 달성한다. 이는 LongMemEval 논문에 보고된 dense retriever(Stella 1.5B: 유사 K 값에서 ~0.7-0.8 범위)와 경쟁력 있는 수준이다. OpenAI 임베딩을 사용한 파편 기반 원자적 저장이 강력한 시맨틱 매칭을 제공한다.
+AnchorMind의 pgvector 시맨틱 검색은 전체 질문 유형에 걸쳐 88.3%의 recall_any@5를 달성한다. 이는 LongMemEval 논문에 보고된 dense retriever(Stella 1.5B: 유사 K 값에서 ~0.7-0.8 범위)와 경쟁력 있는 수준이다. OpenAI 임베딩을 사용한 파편 기반 원자적 저장이 강력한 시맨틱 매칭을 제공한다.
 
-multi-session(98.3%)과 knowledge-update(97.2%) 검색은 거의 완벽하며, memento-mcp가 검색 수준에서 세션 간 정보 분산과 시간적 업데이트를 잘 처리함을 보여준다.
+multi-session(98.3%)과 knowledge-update(97.2%) 검색은 거의 완벽하며, AnchorMind가 검색 수준에서 세션 간 정보 분산과 시간적 업데이트를 잘 처리함을 보여준다.
 
 ### 검색 약점
 

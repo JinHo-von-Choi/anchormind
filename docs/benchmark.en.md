@@ -72,9 +72,9 @@ Gap = retrieval recall - QA accuracy. Large gaps indicate the reader fails to ex
 
 ### Retrieval Strengths
 
-memento-mcp's pgvector semantic search achieves 88.3% recall_any@5 across all question types. This is competitive with dense retrievers reported in the LongMemEval paper (Stella 1.5B: ~0.7-0.8 range at similar K values). The fragment-based atomic storage with OpenAI embeddings provides strong semantic matching.
+AnchorMind's pgvector semantic search achieves 88.3% recall_any@5 across all question types. This is competitive with dense retrievers reported in the LongMemEval paper (Stella 1.5B: ~0.7-0.8 range at similar K values). The fragment-based atomic storage with OpenAI embeddings provides strong semantic matching.
 
-Multi-session (98.3%) and knowledge-update (97.2%) retrieval is near-perfect, indicating that memento-mcp handles cross-session information distribution and temporal updates well at the retrieval level.
+Multi-session (98.3%) and knowledge-update (97.2%) retrieval is near-perfect, indicating that AnchorMind handles cross-session information distribution and temporal updates well at the retrieval level.
 
 ### Retrieval Weaknesses
 
