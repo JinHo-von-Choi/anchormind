@@ -813,3 +813,12 @@ export async function dispatchChain(chain, prompt, options = {}, deps = {})
 체인은 provider 설정 배열이며, 첫 번째 provider부터 순서대로 시도하여 성공 시 결과를 반환한다. 실패(429, semaphore timeout, 오류) 시 다음 fallback provider로 이동한다.
 
 **동시성 제어:** `getSemaphore(chainKey, limit, waitMs)`로 provider별 독립 semaphore를 획득한다. chainKey는 `provider|baseUrl|model|apiKeyHash` 조합. `LLM_CONCURRENCY_WAIT_MS`(기본 30000ms) 초과 시 해당 provider 실패 처리. chain deadline은 `deps.startedAt`과 `LLM_CHAIN_TIMEOUT_MS`로 계산하며, 잔여 시간이 0 이하이면 즉시 chain 종료.
+
+## 프로세스 에러 가드
+
+`lib/process-guards.js`의 `installProcessGuards({ proc, logError, onFatal })`가 서버 기동 시(server.js) 프로세스 전역 리스너를 설치한다.
+
+- `unhandledRejection`: `logError`로 reason(message/stack)을 기록하고 프로세스는 유지한다. 장수 데몬에서 산발적 rejection이 전면 다운으로 번지는 것을 방지한다.
+- `uncaughtException`: 기록 후 `onFatal`을 최초 1회만 호출한다. shutdown 도중 2차 예외가 발생해도 onFatal은 재호출되지 않는다(재진입 가드).
+
+server.js의 onFatal은 `gracefulShutdown("uncaughtException", { exitCode: 1 })`을 호출하고, drain이 행에 걸릴 경우를 대비해 35초 후 강제 `process.exit(1)` 타이머(unref)를 건다. `gracefulShutdown(signal, { exitCode })`는 SIGTERM/SIGINT 경로에서 exit 0, uncaught 경로에서 exit 1로 종료하여 systemd `Restart=on-failure`가 크래시에만 재시작하도록 구분한다.
