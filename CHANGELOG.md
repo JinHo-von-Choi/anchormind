@@ -1,5 +1,14 @@
 # Changelog
 
+## [5.0.0] - 2026-07-14
+
+### Changed
+- 프로젝트명을 AnchorMind로 변경 (패키지명 anchormind-mcp). memento-mcp라는 이름이 다수의 동명·유사 프로젝트와 겹쳐 개명했으며, 도구명·환경 변수(MEMENTO_*)·DB 스키마·API 경로·키 형식(mmcp_) 등 런타임 계약은 모두 그대로다 (Breaking 없음).
+- CLI bin에 `anchormind` 명령 추가. 기존 `memento-mcp` 명령은 별칭으로 유지.
+- MCP initialize 응답의 serverInfo.name을 `anchormind-server`로 변경 (표시 메타데이터).
+- admin 콘솔·로그인 화면 브랜딩과 README 로고를 AnchorMind로 교체.
+- README·SKILL.md·docs 전반의 표기를 현행 코드 기준으로 정비.
+
 ## [4.10.0] - 2026-07-14
 
 ### Added

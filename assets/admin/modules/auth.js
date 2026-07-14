@@ -26,7 +26,7 @@ export function renderLogin() {
 
   const titleEl = document.createElement("div");
   titleEl.className = "login-title";
-  titleEl.textContent = "MEMENTO MCP";
+  titleEl.textContent = "ANCHORMIND";
   card.appendChild(titleEl);
 
   const sub = document.createElement("div");

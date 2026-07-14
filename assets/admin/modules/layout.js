@@ -110,7 +110,7 @@ export function renderSidebar() {
 
   const brandTitle = document.createElement("div");
   brandTitle.className = "text-xl font-bold tracking-tighter text-primary font-headline";
-  brandTitle.textContent = "MEMENTO MCP";
+  brandTitle.textContent = "ANCHORMIND";
   brand.appendChild(brandTitle);
 
   const brandSub = document.createElement("div");
