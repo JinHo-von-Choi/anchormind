@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.0.1] - 2026-07-15
+
+### Added
+- 프로세스 전역 에러 가드(`lib/process-guards.js`): `unhandledRejection`은 로깅 후 프로세스를 유지하고, `uncaughtException`은 로깅 후 graceful shutdown을 exit code 1로 수행한다(onFatal 1회 보장, 35초 강제 종료 타이머). SIGTERM/SIGINT 경로는 기존과 동일하게 exit 0으로 종료한다.
+
+### Changed
+- 전이 의존성 lockfile 갱신 (hono 4.12.30, protobufjs 7.6.5, tar 7.5.20).
+
 ## [5.0.0] - 2026-07-14
 
 ### Changed
