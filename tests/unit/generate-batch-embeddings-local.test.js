@@ -30,8 +30,12 @@ mock.module("../../lib/config.js", {
     EMBEDDING_PROVIDER             : "transformers",
     EMBEDDING_MODEL                : "test-model",
     EMBEDDING_DIMENSIONS           : 3,
-    EMBEDDING_SUPPORTS_DIMS_PARAM  : false
-    /** embedding.js:13-22의 import 목록과 1:1로 맞출 것 — 누락 시 undefined 에러로 즉시 드러남 */
+    EMBEDDING_SUPPORTS_DIMS_PARAM  : false,
+    EMBEDDING_TIMEOUT_MS           : 8000,
+    EMBEDDING_MAX_RETRIES          : 0,
+    EMBEDDING_CONCURRENCY          : 6,
+    EMBEDDING_SEM_WAIT_MS          : 3000
+    /** embedding.js의 import 목록과 1:1로 맞출 것 — 누락 시 undefined 에러로 즉시 드러남 */
   }
 });
 
