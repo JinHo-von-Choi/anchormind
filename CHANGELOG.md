@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- 외부 reranker의 TEI(text-embeddings-inference) 호환: 요청에 `texts` 필드를 `documents`와 함께 전송하고, `[{ index, score }]` 배열 응답을 매핑하며, 빈 바디 `/health`를 허용한다 (#22, @itismyfield 기여).
+- 외부 rerank 배열 응답 처리: 빈 배열은 실패로 간주해 폴백 경로를 타고, `index` 범위와 `score` 타입이 유효한 항목만 반영한다.
+
 ## [5.0.1] - 2026-07-15
 
 ### Added
