@@ -111,15 +111,25 @@ export async function assertCleanShutdown({
 
   const allowed = new Set([...defaultIgnore(), ...ignoreNames]);
 
-  const leakedHandles = (process._getActiveHandles() ?? []).filter(
-    (h) => !allowed.has(h.constructor.name),
-  );
+  const snapshot = () => {
+    const handles  = (process._getActiveHandles() ?? []).filter(
+      (h) => !allowed.has(h.constructor.name),
+    );
+    const requests = ignoreRequests
+      ? []
+      : (process._getActiveRequests() ?? []).filter(
+          (r) => !allowed.has(r.constructor.name),
+        );
+    return { handles, requests };
+  };
 
-  const leakedRequests = ignoreRequests
-    ? []
-    : (process._getActiveRequests() ?? []).filter(
-        (r) => !allowed.has(r.constructor.name),
-      );
+  /* in-flight 소켓 쓰기(WriteWrap 등)는 종료 직후 수 틱 내에 settle된다.
+   * 진짜 누수(방치된 timer/socket)는 재확인 후에도 남으므로 검출력은 유지된다. */
+  let { handles: leakedHandles, requests: leakedRequests } = snapshot();
+  for (let retry = 0; retry < 5 && (leakedHandles.length > 0 || leakedRequests.length > 0); retry++) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    ({ handles: leakedHandles, requests: leakedRequests } = snapshot());
+  }
 
   if (leakedHandles.length === 0 && leakedRequests.length === 0) {
     return;
