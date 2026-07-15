@@ -91,8 +91,13 @@ async function routeAdminApi(req, res, {
   getSessionCountsFn = () => ({ total: 0 }),
   readJsonBodyFn  = async () => ({}), // eslint-disable-line no-unused-vars
   redisClient     = null,
+  allowedOrigins  = new Set(),
 } = {}) {
-  res.setHeader("access-control-allow-origin", req.headers.origin || "*");
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.has(String(origin))) {
+    res.setHeader("access-control-allow-origin", origin);
+    res.setHeader("vary", "Origin");
+  }
   res.setHeader("content-type", "application/json; charset=utf-8");
 
   const url            = new URL(req.url || "/", "http://localhost");
@@ -676,7 +681,7 @@ describe("safeErrorMessage — safe error filtering", () => {
 describe("CORS — Access-Control-Allow-Origin header", () => {
   const MASTER_KEY = "test-key";
 
-  it("Origin 헤더가 있으면 해당 Origin을 반환", async () => {
+  it("화이트리스트에 등록된 Origin만 반사한다", async () => {
     const req = fakeReq({
       method:   "POST",
       pathname: `${ADMIN_BASE}/auth`,
@@ -687,12 +692,34 @@ describe("CORS — Access-Control-Allow-Origin header", () => {
     });
     const res = fakeRes();
 
-    await routeAdminApi(req, res, { accessKey: MASTER_KEY });
+    await routeAdminApi(req, res, {
+      accessKey:      MASTER_KEY,
+      allowedOrigins: new Set(["https://admin.example.com"]),
+    });
 
     assert.strictEqual(res._headers["access-control-allow-origin"], "https://admin.example.com");
   });
 
-  it("Origin 헤더가 없으면 '*' 반환", async () => {
+  it("미등록 Origin은 반사하지 않는다", async () => {
+    const req = fakeReq({
+      method:   "POST",
+      pathname: `${ADMIN_BASE}/auth`,
+      headers:  {
+        authorization: `Bearer ${MASTER_KEY}`,
+        origin:        "https://evil.example.com"
+      }
+    });
+    const res = fakeRes();
+
+    await routeAdminApi(req, res, {
+      accessKey:      MASTER_KEY,
+      allowedOrigins: new Set(["https://admin.example.com"]),
+    });
+
+    assert.strictEqual(res._headers["access-control-allow-origin"], undefined);
+  });
+
+  it("Origin 헤더가 없으면 ACAO를 설정하지 않는다(서버 호출)", async () => {
     const req = fakeReq({
       method:   "POST",
       pathname: `${ADMIN_BASE}/auth`,
@@ -702,7 +729,7 @@ describe("CORS — Access-Control-Allow-Origin header", () => {
 
     await routeAdminApi(req, res, { accessKey: MASTER_KEY });
 
-    assert.strictEqual(res._headers["access-control-allow-origin"], "*");
+    assert.strictEqual(res._headers["access-control-allow-origin"], undefined);
   });
 });
 
