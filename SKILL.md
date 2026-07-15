@@ -852,7 +852,7 @@ RBAC default-deny: 도구 맵에 등록되지 않은 도구를 호출하면 `"Ac
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| fragments | array | O | [{content, topic, type, importance?, keywords?}] 최대 200건. 항목별 content가 4000자를 초과하면 해당 항목만 -32602로 실패 처리되고 나머지 항목은 정상 저장된다. |
+| fragments | array | O | [{content, topic, type, importance?, keywords?}] 최대 200건. 항목별 content가 4000자를 초과하면 해당 항목만 -32602로 실패 처리되고 나머지 항목은 정상 저장된다. 배열 전체의 content 총 문자수가 상한(기본 200,000자, `BATCH_REMEMBER_MAX_TOTAL_CHARS`)을 초과하면 sync/async 분기 이전에 요청 전체가 거부된다(항목별 4000자 게이트와 별개). |
 | async | boolean | - | true 시 비동기 모드. 선검증 후 Redis 큐 적재, `{async, accepted, jobId}` 즉시 반환. 워커가 ack·재시도(최대 3회)·dead-letter·기동 복구로 at-least-once 처리. 기본 false(동기). Redis 비활성 시 동기 폴백. |
 | stream | boolean | - | deprecated. 더 이상 SSE progress 이벤트를 보내지 않는다. 무시됨. |
 | agentId | string | - | 에이전트 ID |

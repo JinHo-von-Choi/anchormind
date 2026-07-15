@@ -97,7 +97,7 @@ recall(query)
         이 단계에서 별도 보정 없이 searchEventId만 반환한다.
 ```
 
-`pickFields`는 17개 화이트리스트(`id, content, type, importance, topic, ...`) 외 필드를 제거한다. 캐시 단계(L1 warm hit, RRF 병합 중간 객체)에는 적용하지 않아 캐시 효율을 보존한다.
+`pickFields`는 19개 화이트리스트(`id, content, type, importance, topic, ..., key_id, key_name`) 외 필드를 제거한다. 캐시 단계(L1 warm hit, RRF 병합 중간 객체)에는 적용하지 않아 캐시 효율을 보존한다.
 
 **SearchScope 계약:** `SearchScope.fromQuery(sq)` 정적 팩토리가 `_buildSearchQuery()` 반환 sq에서 scope 인스턴스를 생성한다. `scope.applyTo(fragment)` 메서드는 workspace, caseId, resolutionStatus, phase, affect 5개 필드를 동시 검사하여 false를 반환하는 경우 해당 파편을 결과에서 제외한다. HotCache·L3·Graph 호출 사이트가 모두 동일 인스턴스를 참조하므로 레이어별 파편 결과의 정합성이 보장된다. `_executeSearch()`는 별도의 후처리 보정을 수행하지 않는다.
 
@@ -270,6 +270,12 @@ API 키 원문을 client_id로 등록한 기존 Redis 토큰은 `bound_key_id=nu
 
 `SESSION_TTL` 환경변수의 기본값은 43200분(30일)이다. 슬라이딩 윈도우 방식으로 도구 사용 시마다 TTL이 갱신되므로, 30일 비활동 후에만 만료된다. 활발히 사용 중인 세션은 사실상 만료되지 않는다.
 
+### initialize 요청 IP rate limit 선차단
+
+`handleMcpPost`는 무세션(`!sessionId`) `initialize` 요청에 한해 `_createInitializeSession()` 호출(및 그 내부의 인증·`api_keys` 조회)보다 먼저 IP 기반 rate limit을 적용한다. `rateLimiter.allow(clientIp, null)`이 false를 반환하면 즉시 429(`Retry-After` 헤더 포함)를 반환하고 `recordInitializeIpRateLimited()`로 `mcp_initialize_ip_rate_limited_total` 카운터를 증가시킨다. 미인증 initialize 폭주가 DB 조회 단계까지 도달하는 경로를 차단하는 것이 목적이다.
+
+이 선차단은 `keyId=null`인 IP 버킷을 사용하며, `DualRateLimiter`의 IP 버킷과 key 버킷은 서로 독립적이다(같은 IP라도 인증된 key 버킷은 별도로 소진). 선차단을 통과한 initialize 요청은 이후 일반 rate limit 분기(`!isInitializeRequest(msg) && !rateLimiter.allow(clientIp, sessionKeyId)`)에서 제외되어 동일 IP 버킷을 이중으로 소비하지 않는다.
+
 ---
 
 ## EmbeddingCache (쿼리 임베딩 캐시)
@@ -283,6 +289,18 @@ API 키 원문을 client_id로 등록한 기존 Redis 토큰은 `bound_key_id=nu
 **TTL:** 기본 3600초(1시간). 생성자 `ttlSeconds` 옵션으로 조정 가능.
 
 **장애 격리:** 모든 Redis 호출은 try-catch로 감싸고, 실패 시 null/무시 반환. 캐시 장애가 검색 흐름을 차단하지 않는다. Redis 미설정(status === "stub") 시 항상 cache miss로 동작.
+
+---
+
+## Embedding 호출 하드닝 (`lib/tools/embedding.js`)
+
+`generateEmbedding`/`generateBatchEmbeddings` 두 경로 모두 다음 두 계층으로 외부 임베딩 API 호출을 감싼다.
+
+**per-call 절대 타임아웃:** `client.embeddings.create()` 호출에 `AbortSignal.timeout(EMBEDDING_TIMEOUT_MS)`(기본 8000ms)를 전달한다. OpenAI 호환 클라이언트 자체 재시도(`EMBEDDING_MAX_RETRIES`, 기본 0)는 이 타임아웃과 중첩되지 않도록 기본값을 0으로 둔다 — 재시도를 켜면 세마포어 점유 시간이 timeout × 재시도 횟수로 누적되기 때문이다.
+
+**프로세스 전역 동시성 세마포어:** `getSemaphore("embedding", EMBEDDING_CONCURRENCY, EMBEDDING_SEM_WAIT_MS)`(`lib/llm/util/semaphore.js`)로 동시 호출 수를 제한한다(기본 6슬롯, FIFO 대기). 슬롯 획득 대기가 `EMBEDDING_SEM_WAIT_MS`(기본 3000ms)를 초과하면 reject되고 `recordEmbeddingSemaphoreWaitExceeded()`가 `mcp_embedding_semaphore_wait_exceeded_total` 카운터를 증가시킨다. 임베딩 서비스 지연이 프로세스 전체 요청 큐로 전파되는 것을 차단한다.
+
+호출 순서는 `acquire() → embeddings.create(timeout 포함) → release()`이며 `release()`는 `finally` 블록에서 보장된다.
 
 ---
 
@@ -303,9 +321,24 @@ RRF 병합 이후 상위 30건을 cross-encoder로 정밀 재정렬하여 검색
 
 > **비영어권 사용자는 `RERANKER_MODEL=bge-m3` 사용을 권장한다.** ms-marco-MiniLM-L-6-v2는 영어 MS MARCO 데이터셋으로만 학습되어 한국어 등 비영어 쿼리-문서 쌍의 관련성 판단 능력이 없다. bge-m3는 동일한 ONNX in-process 방식으로 동작하며, 첫 실행 시 HuggingFace Hub에서 자동 다운로드된다.
 
-**외부 서비스 장애 자동 전환:** 연속 3회 실패 시 inprocess 모드로 자동 전환. 외부 서비스가 복구되어도 재시작 전까지 inprocess 유지. 어느 모드든 scores 반환 실패 시 RRF 결과 그대로 반환(graceful degradation).
+**외부 서비스 장애 시 정책 (`RERANKER_EXTERNAL_FALLBACK`):** 연속 3회 실패 시 두 가지 정책 중 하나가 적용된다.
+- `skip` (기본): in-process로 전환하지 않고 `RERANKER_EXTERNAL_COOLDOWN_MS`(기본 60초) 동안 external 호출 자체를 생략하며, `rerank()`는 RRF 원순서(candidates)를 그대로 반환한다. CPU 부하가 큰 in-process 모델로의 전환이 트래픽 폭주 상황에서 오히려 병목을 전이시키는 것을 방지한다. 쿨다운 만료 후 다음 recall이 external을 1건 재시도하여 성공 시 정상 복귀, 실패 시 다시 쿨다운에 진입한다.
+- `inprocess` (opt-in, 이전 기본 동작): ONNX in-process 모드로 전환. 외부 서비스가 복구되어도 재시작 전까지 inprocess 유지.
+
+어느 모드든 scores 반환 실패 시 RRF 결과 그대로 반환(graceful degradation).
 
 **최종 스코어:** `sigmoid(logit) * recency_boost`. recency_boost는 생성일 기준 365일 선형 감쇠 [0.9, 1.1] 범위.
+
+---
+
+## QuotaChecker (파편 할당량 검사) 캐시 우선 판정
+
+`QuotaChecker.check(keyId)`는 remember() 진입 시 두 단계로 판정한다.
+
+1. **1차 — 캐시 판정 (락 없음):** `getUsage(keyId)`(10초 TTL 인메모리 캐시)로 현재 사용량을 조회한다. `limit === null`(무제한)이면 즉시 통과. `remaining`이 `QUOTA_NEAR_LIMIT_MARGIN`(기본 10)보다 크면 `recordQuotaCachePass()`로 `mcp_quota_cache_pass_total` 카운터를 증가시키고 트랜잭션 없이 통과한다.
+2. **2차 — 정밀 검사 (한도 임박 시에만):** `remaining`이 마진 이하이면 `SELECT … FOR UPDATE`로 행을 잠그고 COUNT를 재확인하는 기존 트랜잭션 경로로 진입한다. 초과 시 ROLLBACK 후 `fragment_limit_exceeded` 에러를 throw한다. 통과 시 COMMIT 직후 `invalidateUsageCache(keyId)`를 호출해 캐시를 무효화한다 — 곧이어 삽입될 파편 1건으로 인한 stale count 재사용을 방지하고, 다음 호출이 최신 COUNT를 재조회하도록 강제한다.
+
+한도에서 먼 대다수 요청은 FOR UPDATE 잠금 없이 처리되어 remember() 경합을 줄이고, 한도 임박 구간에서만 정확성을 위해 락을 건다.
 
 ---
 

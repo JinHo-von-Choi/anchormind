@@ -35,6 +35,9 @@
 | COMPRESS_AGE_DAYS | 30 | Memory compression target inactive days |
 | COMPRESS_MIN_GROUP | 3 | Minimum compression group size. Groups below this threshold are not compressed |
 | RERANKER_MODEL | minilm | ONNX model for in-process reranking. `minilm` (default, ~80MB, English-only) or `bge-m3` (~280MB, multilingual). **Non-English users should use `bge-m3`** -- minilm is trained on English MS MARCO dataset only, resulting in degraded re-ranking quality for non-English fragments. `RERANKER_ENABLED` does not exist as a separate environment variable; the reranker activates automatically based on ONNX model preload success or `RERANKER_URL` being set |
+| RERANKER_EXTERNAL_FALLBACK | skip | Policy applied after 3 consecutive external reranker failures. `skip` (default): no switch to in-process — external calls are simply skipped for `RERANKER_EXTERNAL_COOLDOWN_MS`, and original scores (RRF order) are returned as-is. `inprocess`: switches to the ONNX in-process model (opt-in, the previous behavior) |
+| RERANKER_EXTERNAL_COOLDOWN_MS | 60000 | Cooldown duration (ms) when `RERANKER_EXTERNAL_FALLBACK=skip`. After the window expires, the next recall retries the external call once; success resumes normal operation, failure re-enters cooldown |
+| QUOTA_NEAR_LIMIT_MARGIN | 10 | Remaining-quota threshold at which `QuotaChecker.check()` switches to the precise FOR UPDATE check. The transaction lock is only acquired when `remaining` is at or below this value; above it, the check passes using the 10-second TTL cache (getUsage) without locking |
 | FRAGMENT_DEFAULT_LIMIT | 5000 | Default fragment quota for new API keys (default: 5000, NULL=unlimited) |
 | ENABLE_RECONSOLIDATION | false | Enable ReconsolidationEngine. When true, tool_feedback and contradicts detection dynamically update fragment_links weight/confidence |
 | ENABLE_SPREADING_ACTIVATION | false | Enable SpreadingActivation. When true, the contextText parameter in recall proactively activates related fragments. Recommended to measure latency impact before enabling |
@@ -212,6 +215,12 @@ POSTGRES_* prefixes take precedence over DB_* prefixes. Both formats can be mixe
 
 This feature operates asynchronously only when `REDIS_ENABLED=true`. When `REDIS_ENABLED=false`, passing `async=true` still processes synchronously.
 
+**Total character gate**: If the total content character count across the `fragments` array exceeds `BATCH_REMEMBER_MAX_TOTAL_CHARS` (default 200,000), the entire batch request is rejected immediately, before the sync/async branch is taken. This is a separate cap from the per-item 4000-character limit (which fails only the offending item); it bounds the processing cost of large batches upfront.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| BATCH_REMEMBER_MAX_TOTAL_CHARS | 200000 | Total content character cap across the `batch_remember` fragments array |
+
 ### Redis
 
 | Variable | Default | Description |
@@ -247,6 +256,10 @@ This feature operates asynchronously only when `REDIS_ENABLED=true`. When `REDIS
 | GEMINI_API_KEY | (none) | Google Gemini API key. Used when `EMBEDDING_PROVIDER=gemini` |
 | CF_ACCOUNT_ID | (none) | Cloudflare account ID. Required when `EMBEDDING_PROVIDER=cloudflare` |
 | CF_API_TOKEN | (none) | Cloudflare API token. Required when `EMBEDDING_PROVIDER=cloudflare` |
+| EMBEDDING_TIMEOUT_MS | 8000 | Absolute per-call timeout (ms) for embedding API requests. Applied via `AbortSignal.timeout()` and acts as the overall deadline |
+| EMBEDDING_MAX_RETRIES | 0 | Retry count for the OpenAI-compatible client's own retry logic. Defaults to 0 because the per-call timeout already acts as the absolute deadline; stacking retries on top would let semaphore hold time accumulate as timeout × retries |
+| EMBEDDING_CONCURRENCY | 6 | Process-wide concurrency cap for embedding calls. The semaphore slot count that prevents embedding service latency from propagating into the overall request queue |
+| EMBEDDING_SEM_WAIT_MS | 3000 | Wait timeout (ms) for an embedding semaphore slot. Calls that exceed this are rejected and increment the `mcp_embedding_semaphore_wait_exceeded_total` counter |
 
 ---
 

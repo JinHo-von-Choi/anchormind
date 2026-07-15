@@ -98,7 +98,7 @@ recall(query)
         post-processing correction is needed here; only searchEventId is returned.
 ```
 
-`pickFields` removes fields outside the 17-item whitelist (`id, content, type, importance, topic, ...`). It is not applied to cache stages (L1 warm hits, RRF intermediate objects) to preserve cache efficiency.
+`pickFields` removes fields outside the 19-item whitelist (`id, content, type, importance, topic, ..., key_id, key_name`). It is not applied to cache stages (L1 warm hits, RRF intermediate objects) to preserve cache efficiency.
 
 **SearchScope contract:** The `SearchScope.fromQuery(sq)` static factory creates a scope instance from the normalized sq returned by `_buildSearchQuery()`. The `scope.applyTo(fragment)` method checks workspace, caseId, resolutionStatus, phase, and affect simultaneously and returns false to exclude a fragment from results. HotCache, L3, and graph call sites all reference the same instance, ensuring consistent filtering across layers. `_executeSearch()` performs no separate post-processing correction step.
 
@@ -240,6 +240,12 @@ When refreshing a token via `POST /token` with `grant_type=refresh_token`, the `
 
 The `SESSION_TTL` environment variable defaults to 43200 minutes (30 days). Sessions use a sliding window — the TTL is extended on every tool use, so sessions expire only after 30 days of inactivity. Actively used sessions effectively never expire.
 
+### initialize request pre-auth IP rate limit
+
+`handleMcpPost` applies an IP-based rate limit to session-less (`!sessionId`) `initialize` requests before calling `_createInitializeSession()` (and the authentication / `api_keys` lookup inside it). When `rateLimiter.allow(clientIp, null)` returns false, the handler immediately returns 429 (with a `Retry-After` header) and increments the `mcp_initialize_ip_rate_limited_total` counter via `recordInitializeIpRateLimited()`. The goal is to stop a burst of unauthenticated initialize requests from reaching the DB lookup stage.
+
+This pre-check uses the IP bucket with `keyId=null`; `DualRateLimiter`'s IP bucket and key bucket are independent (an authenticated key bucket for the same IP is consumed separately). Initialize requests that pass the pre-check are excluded from the later general rate-limit branch (`!isInitializeRequest(msg) && !rateLimiter.allow(clientIp, sessionKeyId)`), so the same IP bucket is not double-consumed.
+
 ---
 
 ## EmbeddingCache (Query Embedding Cache)
@@ -253,6 +259,18 @@ Caches query text embedding vectors in Redis within `FragmentSearch._searchL3()`
 **TTL:** Default 3600 seconds (1 hour). Adjustable via the constructor's `ttlSeconds` option.
 
 **Fault isolation:** All Redis calls are wrapped in try-catch, returning null/ignored on failure. Cache failures do not block the search flow. When Redis is not configured (status === "stub"), it always operates as a cache miss.
+
+---
+
+## Embedding Call Hardening (`lib/tools/embedding.js`)
+
+Both `generateEmbedding` and `generateBatchEmbeddings` wrap external embedding API calls with two layers.
+
+**Per-call absolute timeout:** `client.embeddings.create()` is called with `AbortSignal.timeout(EMBEDDING_TIMEOUT_MS)` (default 8000ms). The OpenAI-compatible client's own retry logic (`EMBEDDING_MAX_RETRIES`, default 0) defaults to 0 so it does not stack with this timeout — enabling retries would let semaphore hold time accumulate as timeout × retry count.
+
+**Process-wide concurrency semaphore:** `getSemaphore("embedding", EMBEDDING_CONCURRENCY, EMBEDDING_SEM_WAIT_MS)` (`lib/llm/util/semaphore.js`) caps concurrent calls (6 slots by default, FIFO wait queue). When acquiring a slot exceeds `EMBEDDING_SEM_WAIT_MS` (default 3000ms), the call is rejected and `recordEmbeddingSemaphoreWaitExceeded()` increments the `mcp_embedding_semaphore_wait_exceeded_total` counter. This prevents embedding service latency from propagating into the process-wide request queue.
+
+Call order is `acquire() → embeddings.create(with timeout) → release()`, with `release()` guaranteed in a `finally` block.
 
 ---
 
@@ -273,9 +291,24 @@ After RRF merging, the top 30 candidates are reranked by a cross-encoder for hig
 
 > **Non-English users are strongly recommended to use `RERANKER_MODEL=bge-m3`.** ms-marco-MiniLM-L-6-v2 was fine-tuned exclusively on the English MS MARCO dataset and cannot reliably rank non-English query-document pairs. bge-m3 operates via the same ONNX in-process mechanism and downloads automatically from HuggingFace Hub on first run.
 
-**Automatic external-to-inprocess fallback:** After 3 consecutive failures, switches to in-process mode permanently until server restart. In either mode, if scores cannot be retrieved, the original RRF result is returned unchanged (graceful degradation).
+**Policy after external failures (`RERANKER_EXTERNAL_FALLBACK`):** After 3 consecutive failures, one of two policies applies.
+- `skip` (default): does not switch to in-process; external calls are simply skipped for `RERANKER_EXTERNAL_COOLDOWN_MS` (default 60s), and `rerank()` returns the RRF original order (candidates) unchanged. This avoids shifting the bottleneck onto the CPU-heavy in-process model during a traffic burst. After the cooldown expires, the next recall retries the external call once; success resumes normal operation, failure re-enters cooldown.
+- `inprocess` (opt-in, the previous default behavior): switches to in-process ONNX mode. Stays in-process until server restart even after the external service recovers.
+
+In either mode, if scores cannot be retrieved, the original RRF result is returned unchanged (graceful degradation).
 
 **Final score:** `sigmoid(logit) * recency_boost`. recency_boost uses 365-day linear decay in the [0.9, 1.1] range.
+
+---
+
+## QuotaChecker (Fragment Quota Check) Cache-First Path
+
+`QuotaChecker.check(keyId)` judges in two tiers on remember() entry.
+
+1. **Tier 1 — cache judgment (no lock):** looks up current usage via `getUsage(keyId)` (10-second TTL in-memory cache). If `limit === null` (unlimited), passes immediately. If `remaining` is greater than `QUOTA_NEAR_LIMIT_MARGIN` (default 10), it increments the `mcp_quota_cache_pass_total` counter via `recordQuotaCachePass()` and passes with no transaction.
+2. **Tier 2 — precise check (only near the limit):** if `remaining` is at or below the margin, falls through to the existing transaction path that locks the row with `SELECT … FOR UPDATE` and re-verifies the COUNT. On overflow, it rolls back and throws `fragment_limit_exceeded`. On success, it calls `invalidateUsageCache(keyId)` right after COMMIT — this prevents the next check from reusing a stale count now that one more fragment is about to be inserted, forcing the next call to re-fetch the latest COUNT.
+
+Most requests, being far from their limit, are processed without a FOR UPDATE lock, reducing remember() contention; the lock is taken only in the near-limit range where accuracy matters.
 
 ---
 
