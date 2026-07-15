@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- `recall`·`context`에 `includeKeyName` 파라미터: true 시 각 파편에 `key_id`·`key_name`(액세스 키 라벨)을 포함한다. 같은 키 그룹 스코프의 정보만 노출되며 기본 false. `recall`의 `fields` sparse 목록에도 `key_id`/`key_name`을 지정할 수 있다.
+
 ### Fixed
 - 외부 reranker의 TEI(text-embeddings-inference) 호환: 요청에 `texts` 필드를 `documents`와 함께 전송하고, `[{ index, score }]` 배열 응답을 매핑하며, 빈 바디 `/health`를 허용한다 (#22, @itismyfield 기여).
 - 외부 rerank 배열 응답 처리: 빈 배열은 실패로 간주해 폴백 경로를 타고, `index` 범위와 `score` 타입이 유효한 항목만 반영한다.
