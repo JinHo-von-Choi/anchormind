@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.2.1] - 2026-07-16
+
+### Fixed
+- `recall`의 `fields` sparse 목록이 응답에 적용되지 않던 문제 수정. 필드 선택이 응답 프로젝션에서 최종 적용되며, 파생 키(`confidence`, `age_days`)와 `keywords`(이 경우 `includeKeywords` 없이도 포함)·`valid_to`·`affect`·`ema_activation`도 요청 시 반환된다.
+- `key_id`가 `includeKeyName` 미지정 시에도 recall 응답에 포함되던 문제 수정. `key_id`·`key_name` 모두 `includeKeyName=true`일 때만 포함된다.
+
 ## [5.2.0] - 2026-07-16
 
 ### Added
