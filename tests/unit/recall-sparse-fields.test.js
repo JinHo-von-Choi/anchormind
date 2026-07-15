@@ -24,7 +24,8 @@ import assert            from "node:assert/strict";
 const ALLOWED_FIELDS = new Set([
   "id", "content", "type", "topic", "keywords", "importance", "created_at",
   "access_count", "confidence", "linked", "explanations", "workspace",
-  "context_summary", "case_id", "valid_to", "affect", "ema_activation"
+  "context_summary", "case_id", "valid_to", "affect", "ema_activation",
+  "key_id", "key_name"
 ]);
 
 function pickFields(fragment, fields) {
