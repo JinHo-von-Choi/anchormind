@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- 관리 콘솔 메모리 뷰: 1024px 미만 화면에서 Fragment Detail이 하단 고정 시트로 표시된다. 닫기 버튼과 ESC로 닫을 수 있으며 데스크톱 레이아웃은 동일하다.
+
 ### Added
 - `recall`·`context`에 `includeKeyName` 파라미터: true 시 각 파편에 `key_id`·`key_name`(액세스 키 라벨)을 포함한다. 같은 키 그룹 스코프의 정보만 노출되며 기본 false. `recall`의 `fields` sparse 목록에도 `key_id`/`key_name`을 지정할 수 있다.
 
