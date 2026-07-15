@@ -1,9 +1,6 @@
 # Changelog
 
-## [Unreleased]
-
-### Changed
-- 관리 콘솔 메모리 뷰: 1024px 미만 화면에서 Fragment Detail이 하단 고정 시트로 표시된다. 닫기 버튼과 ESC로 닫을 수 있으며 데스크톱 레이아웃은 동일하다.
+## [5.2.0] - 2026-07-16
 
 ### Added
 - `recall`·`context`에 `includeKeyName` 파라미터: true 시 각 파편에 `key_id`·`key_name`(액세스 키 라벨)을 포함한다. 같은 키 그룹 스코프의 정보만 노출되며 기본 false. `recall`의 `fields` sparse 목록에도 `key_id`/`key_name`을 지정할 수 있다.
@@ -12,9 +9,12 @@
 - `batch_remember`에 배열 전체 content 총 문자수 게이트(`BATCH_REMEMBER_MAX_TOTAL_CHARS`, 기본 200,000자) 추가. 항목별 4000자 상한과 별개로 요청 전체를 사전에 거부한다.
 - `QuotaChecker.check()`에 캐시 우선 판정 경로 추가: 잔여 할당량이 `QUOTA_NEAR_LIMIT_MARGIN`(기본 10)보다 크면 FOR UPDATE 트랜잭션 없이 통과하며, 이 경로는 `mcp_quota_cache_pass_total`로 관측된다. 한도 임박 시에만 기존 정밀 검사로 전환된다.
 - `EmbeddingWorker`가 remember() 동기 경로에서 이미 생성된 임베딩 벡터를 캐시로 재사용하여 동일 파편에 대한 중복 임베딩 API 호출을 제거.
+- 관리자 REST에 키 스코프 파편 조회·검색·통계·내보내기 엔드포인트 추가(`key_id`/`group_id` 스코프 적용).
 
 ### Changed
 - 외부 reranker 3연속 실패 시 기본 정책을 in-process 전환에서 쿨다운 스킵으로 변경(`RERANKER_EXTERNAL_FALLBACK=skip`, 기본값). 쿨다운(`RERANKER_EXTERNAL_COOLDOWN_MS`, 기본 60초) 동안 external 호출을 생략하고 원점수(RRF 순서)를 유지하며, 만료 후 1건 재시도한다. `RERANKER_EXTERNAL_FALLBACK=inprocess`로 이전 동작(ONNX in-process 전환) 유지 가능.
+- 관리 콘솔 메모리 뷰: 1024px 미만 화면에서 Fragment Detail이 하단 고정 시트로 표시된다. 닫기 버튼과 ESC로 닫을 수 있으며 데스크톱 레이아웃은 동일하다.
+- admin API의 CORS 허용 origin을 화이트리스트 반사 방식으로 처리하고 인증 실패를 로깅한다(`ADMIN_ALLOWED_ORIGINS`).
 
 ### Fixed
 - 외부 reranker의 TEI(text-embeddings-inference) 호환: 요청에 `texts` 필드를 `documents`와 함께 전송하고, `[{ index, score }]` 배열 응답을 매핑하며, 빈 바디 `/health`를 허용한다 (#22, @itismyfield 기여).
