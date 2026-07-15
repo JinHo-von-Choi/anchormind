@@ -261,7 +261,7 @@ Caches query text embedding vectors in Redis within `FragmentSearch._searchL3()`
 After RRF merging, the top 30 candidates are reranked by a cross-encoder for higher precision. `preloadReranker()` is called asynchronously at server startup to prepare the model before the first recall request.
 
 **Dual mode:**
-- `RERANKER_URL` set: external HTTP service (`POST /rerank { query, documents[] } → { scores[] }`)
+- `RERANKER_URL` set: external HTTP service. Requests are sent as `POST /rerank { query, texts[], documents[] }` with both fields included; responses may be either `{ scores[] }` or the TEI (text-embeddings-inference) style `[{ index, score }]` array. `/health` only checks the status code, so an empty body (TEI) is accepted.
 - Not set: `@huggingface/transformers` + ONNX in-process
 
 **In-Process Model Selection (`RERANKER_MODEL`):**

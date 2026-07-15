@@ -291,7 +291,7 @@ API 키 원문을 client_id로 등록한 기존 Redis 토큰은 `bound_key_id=nu
 RRF 병합 이후 상위 30건을 cross-encoder로 정밀 재정렬하여 검색 정확도를 높인다. 서버 시작 시 `preloadReranker()`를 비동기로 호출하여 첫 recall 요청 전에 모델을 준비한다.
 
 **듀얼 모드:**
-- `RERANKER_URL` 설정 시: 외부 HTTP 서비스 (`POST /rerank { query, documents[] } → { scores[] }`)
+- `RERANKER_URL` 설정 시: 외부 HTTP 서비스. 요청은 `POST /rerank { query, texts[], documents[] }`로 두 필드를 함께 전송하며, 응답은 `{ scores[] }`와 TEI(text-embeddings-inference) 규격의 `[{ index, score }]` 배열을 모두 지원한다. `/health`는 상태 코드만 검사하므로 빈 바디(TEI)도 허용된다.
 - 미설정 시: `@huggingface/transformers` + ONNX in-process
 
 **In-Process 모델 선택 (`RERANKER_MODEL`):**
