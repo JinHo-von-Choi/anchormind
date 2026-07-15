@@ -614,3 +614,23 @@ body {
   border-left-color: rgba(170, 136, 85, 0.7);
   background: rgba(255, 255, 255, 0.06);
 }
+
+/* Fragment inspector — 좁은 화면 바텀시트 (lg 미만) */
+@media (max-width: 1023.98px) {
+  #inspector-slot {
+    display: none;
+  }
+  #inspector-slot.open {
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 55; /* #sidebar.open(60)보다 아래, #sidebar-overlay(50)보다 위 */
+    max-height: 72vh;
+    overflow-y: auto;
+    background: #141414;
+    border-top: 1px solid rgba(170, 136, 85, 0.35);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
+  }
+}

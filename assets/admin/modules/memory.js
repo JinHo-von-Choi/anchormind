@@ -499,10 +499,23 @@ export function renderFragmentInspector(detail) {
   panel.className = "glass-panel rounded-sm p-6 border-t border-primary/20";
   panel.id = "fragment-inspector";
 
+  const titleRow = document.createElement("div");
+  titleRow.className = "flex items-center justify-between mb-6";
+
   const title = document.createElement("h2");
-  title.className = "font-headline text-sm font-bold text-on-surface flex items-center gap-3 mb-6 uppercase tracking-widest";
+  title.className = "font-headline text-sm font-bold text-on-surface flex items-center gap-3 uppercase tracking-widest";
   title.textContent = "Fragment Detail";
-  panel.appendChild(title);
+  titleRow.appendChild(title);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type      = "button";
+  closeBtn.className = "lg:hidden text-slate-400 hover:text-on-surface text-lg leading-none px-2";
+  closeBtn.setAttribute("aria-label", "닫기");
+  closeBtn.textContent = "✕";
+  closeBtn.addEventListener("click", closeFragmentInspector);
+  titleRow.appendChild(closeBtn);
+
+  panel.appendChild(titleRow);
 
   const content = document.createElement("div");
   content.className = "bg-surface-container-highest p-4 mb-4 text-[11px] text-slate-300 leading-relaxed whitespace-pre-wrap border border-white/5";
@@ -675,6 +688,24 @@ export function renderPagination() {
 }
 
 /**
+ * 인스펙터를 닫는다. 좁은 화면 바텀시트(.open)와 선택 하이라이트를 함께 해제한다.
+ */
+function closeFragmentInspector() {
+  const slot = document.getElementById("inspector-slot");
+  if (!slot) return;
+  slot.classList.remove("open");
+  slot.textContent = "";
+  state.selectedFragment = null;
+  document.querySelectorAll("[data-frag-id]").forEach(el => el.classList.remove("frag-selected"));
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && document.getElementById("inspector-slot")?.classList.contains("open")) {
+    closeFragmentInspector();
+  }
+});
+
+/**
  * 파편 상세를 조회하여 우측 인스펙터 슬롯에 부분 렌더링한다.
  * 전체 뷰 재렌더 없이 행 하이라이트와 인스펙터만 갱신한다.
  */
@@ -688,6 +719,7 @@ async function showFragmentDetail(fragId) {
 
   slot.textContent = "";
   slot.appendChild(loadingHtml());
+  slot.classList.add("open");
 
   const params = new URLSearchParams();
   if (state.memoryFilter.key_id)   params.set("key_id",   state.memoryFilter.key_id);
@@ -697,6 +729,7 @@ async function showFragmentDetail(fragId) {
 
   slot.textContent = "";
   if (!res.ok) {
+    slot.classList.remove("open");
     showToast("파편 상세 조회 실패", "error");
     return;
   }
