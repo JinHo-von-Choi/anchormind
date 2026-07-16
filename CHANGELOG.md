@@ -1,5 +1,19 @@
 # Changelog
 
+## [5.2.2] - 2026-07-16
+
+### Fixed
+- text/mixed recall의 RRF importance 컷오프가 기준값 미지정 시 모든 후보를 탈락시키던 문제 수정. 기준 미지정 시 no-op으로 동작하며, `rrfSearch.candidateMinImportance`(기본 0.1)를 정책값으로 명시한다.
+- `extractKeywords`가 한글 토큰의 조사 접미를 제거하고, 카멜/스네이크 케이스 코드 식별자를 소문자화 없이 원형 보존한다.
+
+### Added
+- morpheme_indexed 백필 잡: 5분 주기로 미인덱싱 파편을 배치(기본 500) 처리해 형태소 L3 커버리지를 회복한다. embedding-consistency 경고에 백필 잡 상태가 병기된다.
+- 마이그레이션 스크립트 3종(dryRun 기본): reflect 파편 keywords 재추출(`scripts/reextract-reflect-keywords.js`), reflect permanent TTL 강등, SearchParamAdaptor min_similarity 리셋.
+- recall 품질 검증 지표 SQL과 스모크 절차 문서(`docs/operations/recall-quality-verification.md`, `scripts/recall-quality-metrics.sql`).
+
+### Changed
+- reflect decision 파편 importance 0.8→0.7, `reflectionPolicy.maxImportance` 0.3→0.55 — reflect 파편의 permanent 승격을 차단하고 정리 주기가 실제로 동작하게 한다.
+
 ## [5.2.1] - 2026-07-16
 
 ### Fixed
