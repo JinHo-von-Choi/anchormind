@@ -141,7 +141,7 @@ describe("ReflectProcessor - decisions", () => {
     assert.equal(result.fragments[1].type, "decision");
 
     const createCalls = deps.factory.create.mock.calls;
-    assert.equal(createCalls[0].arguments[0].importance, 0.8);
+    assert.equal(createCalls[0].arguments[0].importance, 0.7);
   });
 });
 

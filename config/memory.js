@@ -123,7 +123,7 @@ export const MEMORY_CONFIG = {
   /** session_reflect 파편 정리 정책 */
   reflectionPolicy: {
     maxAgeDays       : 30,
-    maxImportance    : 0.3,
+    maxImportance    : 0.55,
     keepPerType      : 5,
     maxDeletePerCycle: 30
   },
