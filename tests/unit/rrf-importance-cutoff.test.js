@@ -20,3 +20,20 @@ test("explicit minImportance overrides default cutoff", () => {
   const out = applyImportanceCutoff(frags, 0.15, 0.5);  // 명시 0.5 우선
   assert.deepEqual(out.map(f => f.id), []);
 });
+
+test("floor가 undefined면 컷오프를 적용하지 않는다 (P1 회귀 방지)", () => {
+  const frags = [
+    { id: "a", importance: 0.05, is_anchor: false },
+    { id: "b", importance: 0.80, is_anchor: false },
+    { id: "c", is_anchor: false },                  // importance undefined
+  ];
+  // defaultFloor=undefined(=config 미정의 시 과거 상태), explicitMin=undefined
+  const out = applyImportanceCutoff(frags, undefined, undefined);
+  assert.deepEqual(out.map(f => f.id), ["a", "b", "c"]);
+});
+
+test("floor가 null이어도 no-op", () => {
+  const frags = [{ id: "a", importance: 0.05, is_anchor: false }];
+  const out   = applyImportanceCutoff(frags, null, null);
+  assert.deepEqual(out.map(f => f.id), ["a"]);
+});

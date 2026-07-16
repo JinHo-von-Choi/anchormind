@@ -56,9 +56,10 @@ export const MEMORY_CONFIG = {
   },
   /** Reciprocal Rank Fusion 검색 설정 */
   rrfSearch: {
-    k                : 60,    // RRF 상수 (높을수록 상위 랭크 부스트 감소)
-    l1WeightFactor   : 2.0,   // L1(Redis) 결과 가중치 배수
-    graphWeightFactor: 1.5    // L2.5 그래프 이웃 가중치 배수
+    k                     : 60,    // RRF 상수 (높을수록 상위 랭크 부스트 감소)
+    l1WeightFactor        : 2.0,   // L1(Redis) 결과 가중치 배수
+    graphWeightFactor     : 1.5,   // L2.5 그래프 이웃 가중치 배수
+    candidateMinImportance: 0.1    // RRF 후보 저중요도 컷오프 하한 (비-앵커)
   },
   /** L2.5 그래프 이웃 검색 설정 */
   graph: {
