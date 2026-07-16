@@ -1,6 +1,6 @@
 {
   "name": "anchormind-mcp",
-  "version": "5.2.2",
+  "version": "5.2.3",
   "license": "Apache-2.0",
   "description": "Fragment-Based Memory MCP Server",
   "main": "server.js",
