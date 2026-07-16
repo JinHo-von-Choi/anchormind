@@ -15,6 +15,7 @@
 
 import { getPrimaryPool }                                     from "../lib/tools/db.js";
 import { EMBEDDING_DIMENSIONS, EMBEDDING_PROVIDER, EMBEDDING_MODEL } from "../lib/config.js";
+import { getSchedulerRegistry } from "../lib/scheduler-registry.js";
 
 const TABLES = ["fragments", "morpheme_dict"];
 
@@ -59,6 +60,14 @@ export async function checkEmbeddingConsistency() {
     `);
     if (rows.length > 0 && rows[0].cnt > 0) {
       console.warn(`[embedding-consistency] morpheme_indexed=false 파편 ${rows[0].cnt}개 (형태소 미인덱싱)`);
+      const reg  = getSchedulerRegistry();
+      const snap = reg.getAll?.() || {};
+      const job  = snap.morphemeBackfill;
+      if (job && job.lastSuccess) {
+        console.warn(`[embedding-consistency] MorphemeBackfill 최근 성공: ${job.lastSuccess} (processed=${job.lastSummary?.processed ?? "?"})`);
+      } else {
+        console.warn("[embedding-consistency] MorphemeBackfill 미실행/기록 없음 — 서버 스케줄러 가동 여부를 확인하세요 (5분 주기, batch 500).");
+      }
     }
   } catch {
     /** migration-035 미적용 환경에서는 컬럼 미존재 → 무시 */
