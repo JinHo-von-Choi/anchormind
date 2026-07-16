@@ -127,9 +127,10 @@ export const MEMORY_CONFIG = {
     keepPerType      : 5,
     maxDeletePerCycle: 30
   },
-  /** 시맨틱 검색 설정. minSimilarity는 SearchParamAdaptor가 적응형으로 조정한다. */
+  /** 시맨틱 검색 설정. minSimilarity는 SearchParamAdaptor가 적응형으로 조정한다.
+   *  0.40: 12쿼리 골드셋 실측에서 상위5 유용건 최대(0.5는 자유 회상 질의 침묵, 0.35는 노이즈가 이득 상쇄). */
   semanticSearch: {
-    minSimilarity: 0.5,
+    minSimilarity: 0.4,
     limit        : 30
   },
   /** 파편 GC 정책 */
