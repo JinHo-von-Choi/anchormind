@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.3.0] - 2026-07-26
+
+### Added
+- text 없는 keywords-only recall에 L3 시맨틱 보조 경로. keywords(+contextText) 합성 텍스트 임베딩이 L2와 병렬 수행되어 저장 keywords 배열에 없는 용어도 content 기반으로 회수된다. searchPath에 `L3kw:N` 세그먼트가 남으며 `semanticSearch.keywordFallback`(env `MEMENTO_KEYWORD_SEMANTIC_FALLBACK=false`)로 비활성화할 수 있다.
+- `reflect`에 `workspace` 파라미터 노출. 생성되는 모든 reflect 파편에 적용되며, 미지정 시 API 키의 default_workspace → 전역(NULL) 순으로 폴백한다.
+- 세션 protocol version 불일치 응답(-32000)에 `negotiatedVersion`/`receivedVersion`/`action: "reinitialize"` data와 상세 message 추가. 장수 세션 클라이언트가 재초기화 필요성을 판별할 수 있다.
+
+### Changed
+- `batch_remember`의 fragments가 JSON 인코딩 문자열로 전달된 경우 원인을 명시하는 별도 오류 메시지를 반환한다.
+- JSON body 파싱 실패(-32700) 응답 message에 파서 위치 정보를 보존한다. 대량 배열 요청에서 손상 지점을 특정할 수 있다.
+- search_events의 `l3_count`가 keywords 폴백 보조 세그먼트(`L3kw:N`)도 집계한다.
+
 ## [5.2.3] - 2026-07-16
 
 ### Changed
