@@ -5,7 +5,8 @@
 ### Added
 - text 없는 keywords-only recall에 L3 시맨틱 보조 경로. keywords(+contextText) 합성 텍스트 임베딩이 L2와 병렬 수행되어 저장 keywords 배열에 없는 용어도 content 기반으로 회수된다. searchPath에 `L3kw:N` 세그먼트가 남으며 `semanticSearch.keywordFallback`(env `MEMENTO_KEYWORD_SEMANTIC_FALLBACK=false`)로 비활성화할 수 있다.
 - `reflect`에 `workspace` 파라미터 노출. 생성되는 모든 reflect 파편에 적용되며, 미지정 시 API 키의 default_workspace → 전역(NULL) 순으로 폴백한다.
-- 세션 protocol version 불일치 응답(-32000)에 `negotiatedVersion`/`receivedVersion`/`action: "reinitialize"` data와 상세 message 추가. 장수 세션 클라이언트가 재초기화 필요성을 판별할 수 있다.
+### Fixed
+- 서버 재기동 후 Redis에서 복원된 세션이 이전 협상값(negotiatedVersion)을 그대로 되살려 이후 모든 요청이 400으로 거부되던 문제 수정. 협상값과 헤더가 달라도 지원 목록에 있는 값이면 헤더 값으로 재앵커링해 통과시키며(`mcp_protocol_version_reanchored_total` 카운터로 관측), 미지원 버전에 대한 400 거부는 유지된다. initialize 시 협상값을 Redis에 즉시 영속한다. (#26)
 
 ### Changed
 - `batch_remember`의 fragments가 JSON 인코딩 문자열로 전달된 경우 원인을 명시하는 별도 오류 메시지를 반환한다.
