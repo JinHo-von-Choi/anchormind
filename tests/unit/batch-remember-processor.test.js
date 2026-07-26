@@ -145,9 +145,16 @@ describe("BatchRememberProcessor", () => {
     );
   });
 
-  it("빈 배열 거부: fragments가 배열이 아니면 에러", async () => {
+  it("빈 배열 거부: fragments가 문자열이면 문자열화 진단 에러", async () => {
     await assert.rejects(
       () => processor.process({ fragments: "not-array" }),
+      (err) => err.message.includes("JSON-encoded string")
+    );
+  });
+
+  it("빈 배열 거부: fragments가 배열도 문자열도 아니면 에러", async () => {
+    await assert.rejects(
+      () => processor.process({ fragments: 42 }),
       (err) => err.message.includes("must not be empty")
     );
   });

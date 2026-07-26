@@ -48,7 +48,12 @@ function checkProtocolVersion({ method, protoHeader, sessionNegotiated }) {
   }
 
   if (protoHeader && sessionNegotiated && sessionNegotiated !== protoHeader) {
-    return { status: 400, message: "Protocol version mismatch", effectiveVersion };
+    return {
+      status : 400,
+      message: `Protocol version mismatch: session negotiated ${sessionNegotiated} but request sent ${protoHeader}. Re-initialize the session.`,
+      data   : { negotiatedVersion: sessionNegotiated, receivedVersion: protoHeader, action: "reinitialize" },
+      effectiveVersion
+    };
   }
 
   return { status: 200, message: null, effectiveVersion };
@@ -117,8 +122,11 @@ describe("MCP-Protocol-Version 헤더 검증 (Phase 2c-3)", () => {
       protoHeader      : "2025-03-26",
       sessionNegotiated: "2025-06-18"
     });
-    assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.message, "Protocol version mismatch");
+    assert.equal(result.status, 400);
+    assert.match(result.message, /Re-initialize the session/);
+    assert.equal(result.data.action, "reinitialize");
+    assert.equal(result.data.negotiatedVersion, "2025-06-18");
+    assert.equal(result.data.receivedVersion, "2025-03-26");
   });
 
   it("TC6: initialize 요청은 헤더 검증 생략 (항상 통과)", () => {
