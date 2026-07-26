@@ -7,7 +7,7 @@
  * batch_remember / memory_consolidate 가 커스텀 SSE 경로가 아니라
  * 일반 _dispatchAndRespond(sendJSON) 경로로 처리되는지 검증.
  */
-import { test, describe, beforeEach, mock } from "node:test";
+import { test, describe, beforeEach, it, mock } from "node:test";
 import assert from "node:assert/strict";
 
 const sendJSONFn        = mock.fn(async () => {});
@@ -52,5 +52,22 @@ describe("mcp-handler batch_remember routing", () => {
 
     assert.equal(sendJSONFn.mock.callCount(), 1, "표준 JSON 응답 경로 사용");
     assert.equal(writeSSEEventFn.mock.callCount(), 0, "커스텀 SSE 프레임 미사용");
+  });
+});
+
+describe("JSON parse 오류 message 위치 정보", () => {
+  it("SyntaxError 메시지가 -32700 message에 포함된다", async () => {
+    const { buildParseErrorMessage } = await import("../../lib/handlers/mcp-handler.js");
+    let parseErr = null;
+    try {
+      JSON.parse('{"fragments":[{"content":"\\ud5cx"}]}');
+    } catch (e) {
+      parseErr = e;
+    }
+    assert.ok(parseErr instanceof SyntaxError);
+
+    const message = buildParseErrorMessage(parseErr);
+    assert.match(message, /^Parse error: /);
+    assert.match(message, /position|Unexpected|Bad/i);
   });
 });
