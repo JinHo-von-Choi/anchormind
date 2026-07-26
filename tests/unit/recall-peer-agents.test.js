@@ -28,6 +28,7 @@ mock.module("../../lib/tools/db.js", {
 });
 
 const { FragmentReader } = await import("../../lib/memory/read/FragmentReader.js");
+const { FragmentStore }  = await import("../../lib/memory/write/FragmentStore.js");
 
 const AGENT_COND = /agent_id = \$\d+ OR (f\.)?agent_id = 'default'/;
 const PEER_COND  = /\$\d+::text IS NOT NULL/;
@@ -80,6 +81,23 @@ describe("FragmentReader includePeerAgents", () => {
   it("searchByTimeRange includePeerAgents=true면 격리 완화", async () => {
     await reader.searchByTimeRange("2026-01-01", "2026-02-01", { agentId: "a1", includePeerAgents: true });
     assert.doesNotMatch(lastSql(), AGENT_COND);
+  });
+
+  it("FragmentStore.getByIds가 includePeerAgents 옵션을 전달", async () => {
+    const store = new FragmentStore();
+    await store.getByIds(["f1"], "a1", null, [], { includePeerAgents: true });
+    assert.doesNotMatch(lastSql(), AGENT_COND);
+    assert.match(lastSql(), PEER_COND);
+  });
+
+  it("FragmentStore.searchBySemantic이 includePeerAgents 옵션을 전달", async () => {
+    const store = new FragmentStore();
+    const vec = new Array(4).fill(0.1);
+    await store.searchBySemantic(
+      vec, 5, 0.3, "a1", null, false, null, null, null, false, true
+    );
+    assert.doesNotMatch(lastSql(), AGENT_COND);
+    assert.match(lastSql(), PEER_COND);
   });
 
   it("includePeerAgents=true여도 keyId 테넌트 필터는 유지", async () => {

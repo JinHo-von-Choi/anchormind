@@ -95,6 +95,50 @@ describe("ContextBuilder 앵커 주입", () => {
     );
   });
 
+  it("workspace 지정 시 동일 workspace와 전역(NULL) 앵커만 조회한다", async () => {
+    let captured = null;
+    const builder = makeBuilder(async (sql, params) => {
+      captured = { sql, params };
+      return { rows: [] };
+    });
+
+    await builder.build({ workspace: "mcps" });
+
+    assert.match(captured.sql, /AND \(workspace = \$\d+ OR workspace IS NULL\)/);
+    assert.deepEqual(captured.params, [
+      "mcps",
+      MEMORY_CONFIG.contextInjection.maxAnchorFragments
+    ]);
+  });
+
+  it("키의 default workspace도 앵커 조회에 적용한다", async () => {
+    let captured = null;
+    const builder = makeBuilder(async (sql, params) => {
+      captured = { sql, params };
+      return { rows: [] };
+    });
+
+    await builder.build({ _defaultWorkspace: "team-default" });
+
+    assert.match(captured.sql, /AND \(workspace = \$\d+ OR workspace IS NULL\)/);
+    assert.deepEqual(captured.params, [
+      "team-default",
+      MEMORY_CONFIG.contextInjection.maxAnchorFragments
+    ]);
+  });
+
+  it("workspace가 없으면 기존처럼 앵커 workspace 필터를 추가하지 않는다", async () => {
+    let captured = null;
+    const builder = makeBuilder(async (sql, params) => {
+      captured = { sql, params };
+      return { rows: [] };
+    });
+
+    await builder.build({});
+
+    assert.doesNotMatch(captured.sql, /workspace = \$\d+/);
+  });
+
   it("structured=true에서 앵커 파편(원래 type 유지)이 rankedInjection 상단에 고정된다", async () => {
     const anchorRows = [
       { id: "anc-1", type: "preference", topic: "t", content: "anchor pref", importance: 1.0 },
