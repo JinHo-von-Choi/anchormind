@@ -315,7 +315,7 @@ MCP resources for real-time queries on the current state of the memory system.
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| keywords | string[] | - | Keyword search (L1->L2) |
+| keywords | string[] | - | Keyword search (L1->L2). Without text, an L3 semantic supplement runs in parallel using the synthesized keywords(+contextText) text, recovering fragments whose stored keywords lack the query terms (controlled by `semanticSearch.keywordFallback`, adds an `L3kw:N` searchPath segment). |
 | text | string | - | Natural language query (L3 semantic) |
 | topic | string | - | Topic filter |
 | type | string | - | Type filter (fact, decision, error, preference, procedure, relation, episode) |
@@ -685,6 +685,7 @@ Persist session learnings as atomic fragments at session end. Each array item is
 | open_questions | string[] | - | Unresolved question list. 1 item = 1 question. |
 | narrative_summary | string | - | Summarize the entire session as a 3-5 sentence narrative. Stored as an episode fragment contributing to cross-session context continuity. Auto-generated from summary if omitted. |
 | agentId | string | - | Agent ID |
+| workspace | string | - | Workspace applied to all fragments created by this reflect call. Falls back to the API key's default_workspace, then global (NULL). Recommended in multi-project setups to prevent cross-project session summary injection. |
 | task_effectiveness | object | - | Overall session tool usage effectiveness assessment. Includes overall_success (boolean), tool_highlights (string[]), tool_pain_points (string[]). |
 
 ---

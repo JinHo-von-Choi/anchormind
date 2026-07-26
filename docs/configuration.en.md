@@ -45,6 +45,7 @@
 | MEMENTO_REMEMBER_ATOMIC | false | When true, atomizes the quota check + INSERT in remember() into a single transaction. Sequence: BEGIN → api_keys FOR UPDATE (quota re-validation) → INSERT → COMMIT, fully eliminating TOCTOU. false (default) performs only a pre-check and is appropriate for environments with low concurrent request volume |
 | MEMENTO_CASE_BACKPROP_ENABLED | false | When true, enables CaseRewardBackprop, which back-propagates tool_feedback reward signals along case_id fragment chains. Adjust importance scores of cause fragments based on outcome quality |
 | MEMENTO_STORAGE | pgvector | Storage adapter selection. `pgvector` (default, PostgreSQL + pgvector). Additional adapters can be registered in `lib/storage/`. Changing this value requires all fragments to be re-indexed in the target backend |
+| MEMENTO_KEYWORD_SEMANTIC_FALLBACK | true | Set `false` to disable the L3 semantic supplement for keywords-only recall queries without text. When active, one embedding of the synthesized keywords(+contextText) text runs in parallel with L2, recovering fragments whose stored keywords lack the query terms via content matching |
 | MEMENTO_CONTEXT_ANCHOR_LIMIT | 10 | Maximum number of anchor (isAnchor) fragments always included in context responses. Clamped to 1-30; falls back to 10 on parse failure. Anchors are not trimmed by tokenBudget, so this count cap is the only injection limit |
 | MEMENTO_RECALL_MIN_SIM_FLOOR | (unset) | Opt-in floor for the adaptive similarity threshold returned by `SearchParamAdaptor.getMinSimilarity`. Example: when set to `0.45`, the returned value is clamped to at least 0.45 even if the learned value is lower. Unset preserves the existing behavior |
 | MEMENTO_MORPHEME_TOKENIZER | local | Morpheme tokenizer path. `local` (default): routes to per-language CPU analyzers — garu-ko (Korean), natural PorterStemmer (English), @node-rs/jieba (Chinese), kuromoji (Japanese). `llm`: falls back to the LLM subprocess path (`MorphemeIndex._tokenizeViaLLM()`). |
@@ -347,8 +348,9 @@ export const MEMORY_CONFIG = {
     maxDeletePerCycle: 30        // Max deletions per cycle
   },
   semanticSearch: {
-    minSimilarity: 0.2,          // L3 pgvector search minimum similarity (default 0.2)
-    limit        : 10            // L3 max return count
+    minSimilarity  : 0.4,        // L3 pgvector search minimum similarity (default 0.4)
+    limit          : 30,         // L3 max return count
+    keywordFallback: true        // Run L3 semantic supplement for keywords-only queries without text (disable with MEMENTO_KEYWORD_SEMANTIC_FALLBACK=false)
   },
   temperatureBoost: {
     warmWindowDays     : 7,      // Apply warmBoost to fragments accessed within this window

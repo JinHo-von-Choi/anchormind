@@ -319,7 +319,7 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| keywords | string[] | - | 키워드 검색 (L1→L2) |
+| keywords | string[] | - | 키워드 검색 (L1→L2). text 미지정 시 keywords(+contextText) 합성 텍스트로 L3 시맨틱 보조 검색이 병렬 수행되어 저장 keywords에 없는 용어도 content 기반 회수된다 (`semanticSearch.keywordFallback`으로 제어, searchPath에 `L3kw:N` 세그먼트). |
 | text | string | - | 자연어 쿼리 (L3 시맨틱) |
 | topic | string | - | 주제 필터 |
 | type | string | - | 타입 필터 (fact, decision, error, preference, procedure, relation, episode) |
@@ -737,6 +737,7 @@ violations 있는 경우 (soft gate — 저장됨):
 | open_questions | string[] | - | 미해결 질문 목록. 항목 1개 = 질문 1건. |
 | narrative_summary | string | - | 세션 전체를 3~5문장의 서사(narrative)로 요약. episode 파편으로 저장되어 세션 간 맥락 연속성에 기여. 생략 시 summary에서 자동 생성. |
 | agentId | string | - | 에이전트 ID |
+| workspace | string | - | 생성되는 모든 reflect 파편에 적용할 워크스페이스. 미지정 시 API 키의 default_workspace, 그것도 없으면 전역(NULL). 멀티 프로젝트 환경에서 세션 요약의 교차 주입 방지에 권장. |
 | task_effectiveness | object | - | 세션 도구 사용 효과성 종합 평가. overall_success(boolean), tool_highlights(string[]), tool_pain_points(string[]) 포함. |
 
 ### 응답 구조

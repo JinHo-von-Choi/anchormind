@@ -508,7 +508,8 @@ reflect(
   decisions=["결정1"],
   errors_resolved=["원인: X -> 해결: Y"],
   new_procedures=["절차1"],
-  open_questions=["미해결1"]
+  open_questions=["미해결1"],
+  workspace="프로젝트명"
 )
 ```
 
@@ -540,6 +541,7 @@ reflect 규칙:
 - workspace: 프로젝트·직종·클라이언트 단위로 기억을 분리하려면 workspace 파라미터를 지정한다.
   예: `workspace: "memento-mcp"`, `workspace: "client-acme"`, `workspace: "personal"`
 - 미지정 시 키의 default_workspace가 자동 적용된다.
+- reflect도 workspace를 받는다. 멀티 프로젝트 환경에서는 reflect에 workspace를 지정해 세션 요약이 다른 프로젝트 context에 주입되는 것을 방지한다.
 - 전역 기억(모든 workspace에서 조회)으로 저장하려면 workspace를 지정하지 않고 키에 default_workspace도 없으면 된다.
 - 검색 시 workspace를 지정하면 해당 workspace 파편과 workspace=NULL(전역) 파편이 함께 반환된다.
 
