@@ -12,7 +12,7 @@
  *  1. initialize 응답 후 negotiatedVersion이 세션에 저장됨
  *  2. 헤더 없음 → 2025-03-26 fallback (통과)
  *  3. 헤더=세션 version 일치 → 통과
- *  4. 헤더=미지원 version → 400 ("Unsupported protocol version")
+ *  4. 헤더=미지원 version → 400, "Unsupported protocol version" 부분문자열 포함
  *  5. 헤더=지원 version이지만 세션 version과 다름 → 200 + 재앵커링 (구 400 계약 폐기, R1)
  *  6. initialize 요청은 헤더 검증 생략
  *
@@ -36,8 +36,7 @@ const FALLBACK_VERSION = "2025-03-26";
 
 /**
  * handleMcpPost의 Protocol-Version 검증 분기 로직 순수 함수 재현
- * (mcp-handler.js `_validateProtocolVersion`, 계약 R1 반영. 메시지 확장/data
- * 봉투는 R4 — 별도 브랜치 agent/mcp-error-recovery-contract 범위).
+ * (mcp-handler.js `_validateProtocolVersion`, 계약 R1/R4 반영).
  *
  * @param {object} params
  * @param {string}           params.method            - JSON-RPC 메서드
@@ -56,7 +55,9 @@ function checkProtocolVersion({ method, protoHeader, sessionNegotiated }) {
   const effectiveVersion = protoHeader || FALLBACK_VERSION;
 
   if (!SUPPORTED_PROTOCOL_VERSIONS.includes(effectiveVersion)) {
-    return { status: 400, message: "Unsupported protocol version", effectiveVersion, reanchored: false, negotiatedVersionAfter: sessionNegotiated ?? null };
+    const message = `Bad Request: Unsupported protocol version: ${effectiveVersion} ` +
+      `(supported versions: ${SUPPORTED_PROTOCOL_VERSIONS.join(", ")})`;
+    return { status: 400, message, effectiveVersion, reanchored: false, negotiatedVersionAfter: sessionNegotiated ?? null };
   }
 
   if (!protoHeader) {
@@ -89,7 +90,7 @@ function simulateInitializeVersionStore(responseProtocolVersion) {
 /*  테스트 케이스                                                       */
 /* ================================================================== */
 
-describe("MCP-Protocol-Version 헤더 검증 (Phase 2c-3 + 계약 R1)", () => {
+describe("MCP-Protocol-Version 헤더 검증 (Phase 2c-3 + 계약 R1/R4)", () => {
 
   it("TC1: initialize 응답 후 negotiatedVersion이 세션에 저장됨", () => {
     const session = simulateInitializeVersionStore("2025-06-18");
@@ -123,14 +124,18 @@ describe("MCP-Protocol-Version 헤더 검증 (Phase 2c-3 + 계약 R1)", () => {
     assert.strictEqual(result.reanchored, false);
   });
 
-  it("TC4: 헤더=미지원 version → 400", () => {
+  it("TC4: 헤더=미지원 version → 400, 'Unsupported protocol version' 부분문자열 포함", () => {
     const result = checkProtocolVersion({
       method           : "tools/call",
       protoHeader      : "2099-01-01",
       sessionNegotiated: "2025-06-18"
     });
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.message, "Unsupported protocol version");
+    assert.ok(
+      result.message.includes("Unsupported protocol version"),
+      `A2 회귀 가드: 메시지에 'Unsupported protocol version' 부분문자열이 있어야 한다 (실제: ${result.message})`
+    );
+    assert.ok(result.message.includes("2099-01-01"), "받은 버전 값이 메시지에 포함되어야 한다");
   });
 
   it("TC5: 헤더=지원 version이지만 세션 version과 다름 → 200 + 재앵커링 (계약 R1, 구 400 폐기)", () => {
