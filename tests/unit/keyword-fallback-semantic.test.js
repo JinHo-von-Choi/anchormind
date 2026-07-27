@@ -115,18 +115,18 @@ describe("keywords-only L3 시맨틱 보조", () => {
     assert.ok(semanticCalls.some(c => c.kind === "embed"), "임베딩 미호출");
   });
 
-  it("합성 텍스트는 keywords와 contextText를 모두 포함한다", async () => {
+  it("합성 텍스트는 정규화된 keywords만 포함하고 contextText는 제외한다", async () => {
     const search = makeSearch({ l2Rows: [], l3Rows: [] });
     await search.search({
-      keywords   : ["alpha", "beta"],
+      keywords   : ["Beta", "alpha", "ALPHA", " beta "],
       contextText: "gamma delta",
       agentId    : "default",
       tokenBudget: 1000
     });
     const embed = semanticCalls.find(c => c.kind === "embed");
     assert.ok(embed, "임베딩 미호출");
-    assert.match(embed.text, /alpha/);
-    assert.match(embed.text, /gamma/);
+    assert.equal(embed.text, "alpha beta", "소문자·중복 제거·정렬된 keywords만 기대");
+    assert.doesNotMatch(embed.text, /gamma/, "contextText는 합성 텍스트에서 제외되어야 함");
   });
 
   it("중복 ID는 L2 결과가 우선한다", async () => {

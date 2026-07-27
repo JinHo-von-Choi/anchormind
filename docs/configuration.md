@@ -45,7 +45,8 @@
 | MEMENTO_REMEMBER_ATOMIC | false | true 시 remember()의 quota check + INSERT를 단일 트랜잭션으로 원자화. BEGIN → api_keys FOR UPDATE(quota 재검증) → INSERT → COMMIT 순서로 TOCTOU를 완전 차단. false(기본)는 선제 quota check만 수행하며 동시 요청이 드문 환경에 적합 |
 | MEMENTO_CASE_BACKPROP_ENABLED | false | true 시 CaseRewardBackprop 활성화. case verification 이벤트마다 증거 파편 importance를 자동 역전파. 비활성 시 호출 자체가 no-op(DB·메트릭 영향 0). DAG 일관성 베이스라인 확보 후 활성화 권장 |
 | MEMENTO_STORAGE | pgvector | storage 어댑터 선택. `pgvector`(기본, PgVectorStore) 또는 `sqlite-vec`(SqliteVecStore). 변경 시 서버 재시작 필요 |
-| MEMENTO_KEYWORD_SEMANTIC_FALLBACK | true | `false` 설정 시 text 없는 keywords-only recall의 L3 시맨틱 보조 경로를 비활성화. 활성 시 keywords(+contextText) 합성 텍스트 임베딩 1회가 L2와 병렬 수행되어 저장 keywords에 없는 용어도 content 기반으로 회수된다 |
+| MEMENTO_KEYWORD_SEMANTIC_FALLBACK | true | `false` 설정 시 text 없는 keywords-only recall의 L3 시맨틱 보조 경로를 비활성화. 활성 시 정규화된 keywords 합성 텍스트 임베딩 1회가 L2와 병렬 수행되어 저장 keywords에 없는 용어도 content 기반으로 회수된다 |
+| MEMENTO_KEYWORD_FALLBACK_TIMEOUT_MS | 1500 | keywords 보조 L3 실행 상한(ms, 100~60000 클램프). 초과 시 빈 결과로 대체하고 searchPath에 `L3kw:timeout`을 남긴다 |
 | MEMENTO_CONTEXT_ANCHOR_LIMIT | 10 | context 응답에 항상 포함되는 앵커(isAnchor) 파편의 최대 개수. 1~30 범위로 클램프되며 파싱 실패 시 10. 앵커는 tokenBudget 절삭 대상이 아니므로 이 개수 상한이 유일한 주입량 제한이다 |
 | MEMENTO_RECALL_MIN_SIM_FLOOR | (없음) | `SearchParamAdaptor.getMinSimilarity`가 반환하는 적응형 임계값에 옵트인 하한을 강제. 예: `0.45` 설정 시 학습값이 0.45 미만이어도 0.45 반환. 미설정 시 기존 동작 그대로 |
 | MIGRATION_LINT_FROM | (없음) | `npm run lint:migrations` 검사 cutoff override. 지정 마이그레이션 번호 이후분만 검사. 미설정 시 전체 검사 |
@@ -381,7 +382,8 @@ export const MEMORY_CONFIG = {
   semanticSearch: {
     minSimilarity  : 0.4,        // L3 pgvector 검색 최소 유사도 (기본 0.4)
     limit          : 30,         // L3 반환 최대 건수
-    keywordFallback: true        // text 없는 keywords-only 쿼리에서 L3 시맨틱 보조 실행 (env MEMENTO_KEYWORD_SEMANTIC_FALLBACK=false로 비활성)
+    keywordFallback: true,       // text 없는 keywords-only 쿼리에서 L3 시맨틱 보조 실행 (env MEMENTO_KEYWORD_SEMANTIC_FALLBACK=false로 비활성)
+    keywordFallbackTimeoutMs: 1500 // keywords 보조 L3 실행 상한 (env MEMENTO_KEYWORD_FALLBACK_TIMEOUT_MS)
   },
   temperatureBoost: {
     warmWindowDays     : 7,      // 이 기간 내 접근 파편에 warmBoost 적용

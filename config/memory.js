@@ -141,7 +141,9 @@ export const MEMORY_CONFIG = {
     limit          : 30,
     /** text 없는 keywords-only 쿼리에서 L3 시맨틱 보조 실행 여부.
      *  L1/L2는 저장 keywords 배열만 보므로 content 매칭은 이 경로가 유일하다. */
-    keywordFallback: process.env.MEMENTO_KEYWORD_SEMANTIC_FALLBACK !== "false"
+    keywordFallback: process.env.MEMENTO_KEYWORD_SEMANTIC_FALLBACK !== "false",
+    /** keywords 보조 L3 실행 상한(ms). 초과 시 빈 배열로 대체해 응답 지연을 차단한다. */
+    keywordFallbackTimeoutMs: envInt("MEMENTO_KEYWORD_FALLBACK_TIMEOUT_MS", 1500, 100, 60000)
   },
   /** 파편 GC 정책 */
   gc: {
