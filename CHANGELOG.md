@@ -1,5 +1,15 @@
 # Changelog
 
+## [5.3.1] - 2026-07-27
+
+### Fixed
+- keywords-only recall에서 시맨틱 보조(L3kw) 결과가 정확 키워드 일치 파편을 랭킹에서 밀어내거나 tokenBudget 절단으로 소실시킬 수 있던 문제 수정 (#30). 정확 일치 파편에 절단 이전 랭킹 가산(`ranking.exactKeywordBoost`, 기본 0.35)을 적용하고, 절단을 슬롯 보장 방식(정확 일치 예산 50% 선점, 시맨틱 보조 25% 몫 보장, 잔여 경쟁)으로 확장했다. text/mixed 쿼리의 절단 동작은 변경 없다.
+- explanations의 `semantic_similarity` 사유가 `L3kw` 세그먼트 회수 파편에도 부여된다.
+
+### Changed
+- L3kw 보조 질의를 정규화(소문자·중복 제거·정렬, contextText 제외)해 임베딩 캐시 적중률을 높이고, 이 경로의 형태소 보조 검색을 생략한다. 실측 기준 L3kw 발동 지연 p50이 약 2.5초에서 0.5~1.1초로 감소.
+- L3kw 실행 상한 도입: `MEMENTO_KEYWORD_FALLBACK_TIMEOUT_MS`(기본 1500ms, 100~60000 클램프). 초과 시 보조 없이 즉시 반환하며 searchPath에 `L3kw:timeout`을 남긴다.
+
 ## [5.3.0] - 2026-07-26
 
 ### Added
