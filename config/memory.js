@@ -30,6 +30,9 @@ export const MEMORY_CONFIG = {
     lexicalLinkedMultiplier  : 0.5,  // includeLinks 파편의 lexical 가중치 감쇠
     lexicalSaturation        : 8,    // lexicalMatchScore log 정규화 분모
     unrerankedBaseDiscount   : 0.85, // rerankerScore 미보유 파편 base에 적용하는 페널티 (reranking 미검증 신호)
+    /** keywords-only 정확 일치 가산. semantic 최대 기여(semanticWeight)보다 크게 잡아
+     *  유사도 분포가 극단적인 임베딩 환경에서도 정확 히트의 우위를 보장한다. */
+    exactKeywordBoost: 0.35,
   },
   /** stale 검증 주기 (일) */
   staleThresholds: {
