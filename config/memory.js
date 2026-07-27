@@ -30,6 +30,13 @@ export const MEMORY_CONFIG = {
     lexicalLinkedMultiplier  : 0.5,  // includeLinks 파편의 lexical 가중치 감쇠
     lexicalSaturation        : 8,    // lexicalMatchScore log 정규화 분모
     unrerankedBaseDiscount   : 0.85, // rerankerScore 미보유 파편 base에 적용하는 페널티 (reranking 미검증 신호)
+    /** keywords-only 정확 일치 가산. semantic 최대 기여(semanticWeight)보다 크게 잡아
+     *  유사도 분포가 극단적인 임베딩 환경에서도 정확 히트의 우위를 보장한다. */
+    exactKeywordBoost: 0.35,
+    /** 절단 슬롯 보장: exact 히트는 budget의 exactSlotShare까지, L3kw supplement는
+     *  semanticSlotShare까지 우선 확보한다(둘 다 무제한 아님 — 일반 키워드 독점 방지). */
+    exactSlotShare: 0.5,
+    semanticSlotShare: 0.25,
   },
   /** stale 검증 주기 (일) */
   staleThresholds: {
@@ -134,7 +141,9 @@ export const MEMORY_CONFIG = {
     limit          : 30,
     /** text 없는 keywords-only 쿼리에서 L3 시맨틱 보조 실행 여부.
      *  L1/L2는 저장 keywords 배열만 보므로 content 매칭은 이 경로가 유일하다. */
-    keywordFallback: process.env.MEMENTO_KEYWORD_SEMANTIC_FALLBACK !== "false"
+    keywordFallback: process.env.MEMENTO_KEYWORD_SEMANTIC_FALLBACK !== "false",
+    /** keywords 보조 L3 실행 상한(ms). 초과 시 빈 배열로 대체해 응답 지연을 차단한다. */
+    keywordFallbackTimeoutMs: envInt("MEMENTO_KEYWORD_FALLBACK_TIMEOUT_MS", 1500, 100, 60000)
   },
   /** 파편 GC 정책 */
   gc: {
