@@ -48,6 +48,7 @@ export default [
         Node:                  "readonly",
         location:              "readonly",
         history:               "readonly",
+        Element:               "readonly",
         HTMLElement:            "readonly",
         customElements:        "readonly",
         Event:                 "readonly",
