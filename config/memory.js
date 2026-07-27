@@ -33,6 +33,10 @@ export const MEMORY_CONFIG = {
     /** keywords-only 정확 일치 가산. semantic 최대 기여(semanticWeight)보다 크게 잡아
      *  유사도 분포가 극단적인 임베딩 환경에서도 정확 히트의 우위를 보장한다. */
     exactKeywordBoost: 0.35,
+    /** 절단 슬롯 보장: exact 히트는 budget의 exactSlotShare까지, L3kw supplement는
+     *  semanticSlotShare까지 우선 확보한다(둘 다 무제한 아님 — 일반 키워드 독점 방지). */
+    exactSlotShare: 0.5,
+    semanticSlotShare: 0.25,
   },
   /** stale 검증 주기 (일) */
   staleThresholds: {
