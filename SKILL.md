@@ -348,7 +348,7 @@ tools/list 응답의 각 도구에 `meta` 필드가 포함된다.
 
 #### LLM Provider 체인 확장
 
-`LLM_PRIMARY` 및 `LLM_FALLBACKS`에 `codex-cli`, `copilot-cli`, `qwen-cli` 추가 지원.
+`LLM_PRIMARY` 및 `LLM_FALLBACKS`에 `agy-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`, `opencode-cli` 추가 지원.
 
 예시 `.env`:
 ```
@@ -356,7 +356,7 @@ LLM_PRIMARY=gemini-cli
 LLM_FALLBACKS='[{"provider":"codex-cli"},{"provider":"copilot-cli"},{"provider":"ollama","baseUrl":"https://ollama.com","apiKey":"...","model":"glm-5.1:cloud"}]'
 ```
 
-CLI provider는 API 키 불필요. 로컬 바이너리(`gemini`/`codex`/`copilot`) 설치 + 로그인만 필요.
+CLI provider는 API 키 불필요. 로컬 바이너리(`gemini`/`agy`/`codex`/`copilot`/`opencode`) 설치 + 로그인만 필요.
 
 #### 로컬 임베딩 Provider
 
@@ -1563,7 +1563,7 @@ recall 또는 context 응답의 `_meta.hints` 필드를 읽는다:
 
 ## LLM Provider Fallback
 
-Gemini CLI 외 `codex-cli`, `copilot-cli`, `qwen-cli` 포함 15개 이상의 외부 provider로 자동 fallback 가능. 설정: `LLM_PRIMARY=gemini-cli` (기본) + `LLM_FALLBACKS` JSON 배열. env 미설정 시 기존 Gemini CLI 단독 동작 유지. 형태소 분석은 기본적으로 로컬 CPU 분석기(MorphemeTokenizer)가 담당하며 LLM provider 체인을 사용하지 않는다(`MEMENTO_MORPHEME_TOKENIZER=llm` 설정 시에만 LLM 경로 활성화). 자세한 운영은 `docs/operations/llm-providers.md` 참조.
+Gemini CLI 외 `agy-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`를 포함한 18개 provider로 자동 fallback 가능. 설정: `LLM_PRIMARY=gemini-cli` (기본) + `LLM_FALLBACKS` JSON 배열. env 미설정 시 기존 Gemini CLI 단독 동작 유지. 형태소 분석은 기본적으로 로컬 CPU 분석기(MorphemeTokenizer)가 담당하며 LLM provider 체인을 사용하지 않는다(`MEMENTO_MORPHEME_TOKENIZER=llm` 설정 시에만 LLM 경로 활성화). 자세한 운영은 `docs/operations/llm-providers.md` 참조.
 
 ## Symbolic Memory 활용 (opt-in)
 

@@ -1079,7 +1079,7 @@ llmJson(prompt, options)
 LLM_PRIMARY=gemini-cli
     │
     ▼
-[gemini-cli] → 실패 → [anthropic] → 실패 → [codex-cli] → 실패 → [copilot-cli] → 실패 → [qwen-cli] → ...
+[gemini-cli] → 실패 → [agy-cli] → 실패 → [anthropic] → 실패 → [codex-cli] → 실패 → [copilot-cli] → 실패 → [qwen-cli] → ...
 ```
 
 **codex-cli provider** (`lib/llm/providers/CodexCliProvider.js`):
@@ -1103,7 +1103,7 @@ LLM_PRIMARY=gemini-cli
 - circuit breaker 실패 임계(LLM_CB_FAILURE_THRESHOLD=5), OPEN 지속(LLM_CB_OPEN_DURATION_MS=60000)은 기존과 동일
 
 **LLM_PRIMARY 허용값 전체 목록**:
-`gemini-cli`, `anthropic`, `openai`, `google-gemini-api`, `groq`, `openrouter`, `xai`, `ollama`, `vllm`, `deepseek`, `mistral`, `cohere`, `zai`, `codex-cli`, `copilot-cli`, `qwen-cli`
+`gemini-cli`, `agy-cli`, `anthropic`, `openai`, `google-gemini-api`, `groq`, `openrouter`, `xai`, `ollama`, `vllm`, `deepseek`, `mistral`, `cohere`, `zai`, `codex-cli`, `copilot-cli`, `qwen-cli`, `opencode-cli`
 
 ### 검색 파이프라인 — _suggestion 후처리
 

@@ -136,7 +136,14 @@ REDIS_ENABLED=true면 Redis에 상태 저장, 아니면 in-memory.
 
 ##### 지원 Provider 목록
 
-gemini-cli, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai, **codex-cli**, **copilot-cli**, **qwen-cli**
+gemini-cli, **agy-cli**, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai, **codex-cli**, **copilot-cli**, **qwen-cli**, **opencode-cli**
+
+**agy-cli**: Google Antigravity CLI(`agy`)를 `--print --output-format text --mode plan --sandbox` 제약으로 실행한다. AnchorMind의 LLM 변환은 JSON 응답만 사용하므로, provider는 파일 수정과 도구 승인을 하지 않는 plan/sandbox 경로만 사용한다. Antigravity 로그인과 `agy` 바이너리가 필요하며, `model`, `timeoutMs` 설정은 실제 CLI 호출에 전달된다:
+```json
+[{"provider": "agy-cli", "model": "<agy models에서 확인한 모델명>", "timeoutMs": 40000}]
+```
+
+macOS launchd로 서버를 실행하는 경우 셸 프로필을 읽지 않으므로, plist의 `PATH`에 `~/.local/bin`을 명시해 `agy`를 찾을 수 있게 해야 한다.
 
 **codex-cli**: `codex exec --skip-git-repo-check --sandbox read-only --output-last-message FILE` 명령을 실행한다. `OPENAI_API_KEY` 또는 Codex CLI 설정 파일로 인증한다. `LLM_FALLBACKS`의 `model`, `timeoutMs` 설정이 provider config를 통해 실제 CLI 호출까지 전달된다:
 ```json
