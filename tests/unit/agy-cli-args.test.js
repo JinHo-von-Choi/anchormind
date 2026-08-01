@@ -8,11 +8,11 @@ describe("buildAgyArgs", () => {
     assert.deepEqual(
       buildAgyArgs("return json", { model: "gemini-3.1-pro" }),
       [
-        "--print",
         "--output-format", "text",
         "--mode", "plan",
         "--sandbox",
         "--model", "gemini-3.1-pro",
+        "--print",
         "return json"
       ]
     );
@@ -21,7 +21,7 @@ describe("buildAgyArgs", () => {
   it("model이 없으면 Antigravity CLI 기본 모델을 사용한다", () => {
     assert.deepEqual(
       buildAgyArgs("return json"),
-      ["--print", "--output-format", "text", "--mode", "plan", "--sandbox", "return json"]
+      ["--output-format", "text", "--mode", "plan", "--sandbox", "--print", "return json"]
     );
   });
 });

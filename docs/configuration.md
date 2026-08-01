@@ -143,6 +143,8 @@ gemini-cli, **agy-cli**, anthropic, openai, google-gemini-api, groq, openrouter,
 [{"provider": "agy-cli", "model": "<agy models에서 확인한 모델명>", "timeoutMs": 40000}]
 ```
 
+실제 CLI는 `--print` 뒤의 모든 인자를 프롬프트로 처리하므로, AnchorMind는 `--output-format text --mode plan --sandbox [--model MODEL] --print PROMPT` 순서로 실행한다.
+
 macOS launchd로 서버를 실행하는 경우 셸 프로필을 읽지 않으므로, plist의 `PATH`에 `~/.local/bin`을 명시해 `agy`를 찾을 수 있게 해야 한다.
 
 **codex-cli**: `codex exec --skip-git-repo-check --sandbox read-only --output-last-message FILE` 명령을 실행한다. `OPENAI_API_KEY` 또는 Codex CLI 설정 파일로 인증한다. `LLM_FALLBACKS`의 `model`, `timeoutMs` 설정이 provider config를 통해 실제 CLI 호출까지 전달된다:

@@ -148,6 +148,8 @@ gemini-cli, **agy-cli**, anthropic, openai, google-gemini-api, groq, openrouter,
 [{"provider": "agy-cli", "model": "<model listed by agy models>", "timeoutMs": 40000}]
 ```
 
+Because `agy` treats tokens after `--print` as the prompt, AnchorMind invokes it as `--output-format text --mode plan --sandbox [--model MODEL] --print PROMPT`.
+
 On macOS launchd deployments, shell profiles are not loaded. Add `~/.local/bin` explicitly to the plist `PATH` so the service can find `agy`.
 
 **codex-cli**: Executes `codex exec --skip-git-repo-check --sandbox read-only --output-last-message FILE`. Authenticates via `OPENAI_API_KEY` or the Codex CLI config file. `model` and `timeoutMs` in `LLM_FALLBACKS` are passed through to the actual CLI invocation:
