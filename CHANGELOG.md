@@ -1,5 +1,21 @@
 # Changelog
 
+## [5.4.0] - 2026-08-02
+
+### Fixed
+- `splitLongFragments`가 생성한 자식 파편이 `keywords`를 빈 배열로 저장해 키워드 배열 교집합(`keywords && $1`)을 사용하는 검색 경로에서 조회되지 않던 문제 수정 (#32). 자식 본문에서 `FragmentFactory.extractKeywords` 결과를 추출해 저장한다. 기존 파편은 `scripts/backfill-split-keywords.js`로 소급 처리한다(dryRun 기본, `--execute`로 반영).
+- 분할된 원본 파편이 물리 삭제될 수 있던 문제 수정 (#33). `deleteExpired`의 utility 분기에는 `valid_to` 조건도 링크 보호도 없는데 분할은 원본을 `valid_to` 설정과 함께 importance 하향·`cold` 강등 처리하므로 anchor/permanent 보호가 적용되지 않았다. 자식이 남아 있는 원본을 삭제 후보에서 제외한다.
+- E2E `group-key-isolation` 스위트가 `api_keys`에 없는 key_id로 파편을 저장해 외래키 위반으로 실패하던 문제 수정. 시드 키를 선삽입하고 teardown에서 시드 파편을 물리 삭제해 재실행 가능성을 확보했다.
+- `lib/memory/memory-schema.sql`이 `content_hash` 전역 UNIQUE 인덱스를 생성해, migration-031이 도입한 키별 partial unique index(`uq_frag_hash_master`, `uq_frag_hash_per_key`)와 상충하던 문제 수정. 스키마 파일을 재적용할 때 키별 유일성이 전역 유일성으로 되돌아갔다.
+
+### Added
+- 분할 앵커 커버리지 게이트. 분할은 원문을 자르지 않고 LLM이 다시 쓰므로 명제 하나가 통째로 누락될 수 있는데, 기존에는 자식 수가 `minItems`만 넘으면 원본을 대체했다. 자식 저장 직전에 원문의 수치 앵커(날짜·금액·비율·측정값)가 자식 합집합에 남아 있는지 대조하고, 빠진 것이 있으면 원본을 유지한 채 중단한다. 날짜 `2026-07-15`는 `2026`/`07`/`15`로, 범위 `75~85`는 `75`/`85`로 분해 비교하므로 표기 변형은 통과한다.
+- `memento_consolidate_split_skipped_total`에 `anchor_loss` reason 라벨 추가.
+- `scripts/backfill-split-keywords.js`.
+
+### Changed
+- Antigravity CLI provider(`agy-cli`) 추가. `LLM_PRIMARY`/`LLM_FALLBACKS`에서 선택 가능하며 `--print --mode plan --sandbox`로 실행되어 파일 수정과 도구 승인을 하지 않는다.
+
 ## [5.3.1] - 2026-07-27
 
 ### Fixed

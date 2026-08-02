@@ -415,6 +415,10 @@ Individual activation flags for the 3 stages that involve LLM rewriting and can 
 
 A stage with its flag set to `false` emits `status: "skipped"` and proceeds to the next stage. `compressOldFragments` defaults to `false` because it modifies original fragment content.
 
+Split children receive their `keywords` from their own body via `FragmentFactory.extractKeywords`, the same path `remember` uses. The parent's keywords are not copied.
+
+Anchor coverage check for `splitLongFragments`: the split rewrites the source through an LLM rather than cutting it, so an entire proposition can go missing. Right before the children are stored, the numeric anchors of the source (dates, amounts, ratios, measurements) are matched against the union of the children. If any anchor is absent, no child is stored, the original is left intact, `split_attempt_failed_at` is refreshed, and `memento_consolidate_split_skipped_total{reason="anchor_loss"}` is incremented. A date such as `2026-07-15` is compared as `2026`/`07`/`15` and a range such as `75~85` as `75`/`85`, so rephrasing passes as long as the component digits survive. Digit group separators are ignored; single digits and sources without any numeric token are excluded from the check.
+
 ### SearchParamAdaptor (Automatic Search Parameter Learning)
 
 SearchParamAdaptor operates automatically without any separate environment variables. It uses the `semanticSearch.minSimilarity` value from `config/memory.js` as the default. After 50 or more searches, the learned value per key_id x query_type x hour combination replaces the default.

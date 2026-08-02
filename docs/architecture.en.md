@@ -803,6 +803,8 @@ Fragments stored with `scope: "session"` serve as session working memory. They a
 
 Fragments marked `isAnchor: true` are permanently excluded from MemoryConsolidator's decay and deletion regardless of their tier. Even with importance as low as 0.1, they will not be deleted. Use this for knowledge that must never be lost.
 
+A source fragment split by `splitLongFragments` is excluded from expiry deletion while at least one child with `source = 'split:{source id}'` remains. The split marks the source with `valid_to` and lowers its importance and tier to `cold`, so without this protection the source would be physically deleted on utility grounds and only the children would survive. Once every child is gone, the normal GC rules apply again.
+
 Stale thresholds (days): procedure=30, fact=60, decision=90, default=60. Adjust in `config/memory.js` under `MEMORY_CONFIG.staleThresholds`.
 
 ---
