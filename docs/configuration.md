@@ -465,6 +465,8 @@ LLM 재작성이 수반되어 파편 내용을 변경할 수 있는 3개 stage�
 
 Phase 1(gate-only)에서 통과 자식 수 < `minItems`이면 DB insert 없이 해당 파편의 `split_attempt_failed_at`을 갱신하고 `memento_consolidate_split_skipped_total{reason="low_yield"}`를 증가시킨다. 분할 성공 시 원본은 `valid_to = NOW()`, `ttl_tier = 'cold'`, `importance = GREATEST(0.2, importance × 0.3)` 처리된다.
 
+앵커 커버리지 검사: 분할은 원문을 자르지 않고 LLM이 다시 쓰므로 명제 하나가 통째로 누락될 수 있다. 자식 저장 직전에 원문의 수치 앵커(날짜·금액·비율·측정값)가 자식 합집합에 모두 남아 있는지 대조하고, 하나라도 빠지면 자식을 저장하지 않고 원본을 그대로 둔다. 이때 `split_attempt_failed_at`을 갱신하고 `memento_consolidate_split_skipped_total{reason="anchor_loss"}`를 증가시킨다. 날짜 `2026-07-15`는 `2026`/`07`/`15`로, 범위 `75~85`는 `75`/`85`로 분해 비교하므로 표기가 바뀌어도 구성 숫자가 남으면 보존으로 판정한다. 자릿수 구분자는 무시하며, 한 자리 숫자와 수치가 전혀 없는 원문은 판정 대상에서 제외한다.
+
 ### SearchParamAdaptor (자동 검색 파라미터 학습)
 
 SearchParamAdaptor는 별도 환경변수 없이 자동으로 동작한다. `config/memory.js`의 `semanticSearch.minSimilarity` 값을 기본값으로 사용하며, 50회 이상 검색 후 key_id x query_type x hour 조합별로 학습된 값으로 대체된다.
