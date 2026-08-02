@@ -200,7 +200,7 @@ Admin module tests are planned to migrate to directly importing `assets/admin/mo
 
 ### Workspace Filter Propagation
 
-`FragmentSearch._buildSearchQuery()` normalizes the `workspace` value into `sq.workspace`. `_executeSearch()` passes it to L2 (keyword/topic) search options and as the 8th argument to L3 `searchBySemantic`.
+`FragmentSearch._buildSearchQuery()` normalizes the `workspace` value into `sq.workspace`. `_executeSearch()` passes it to L2 (keyword/topic) search options and as the `workspace` field of the L3 `searchBySemantic` options object. `searchBySemantic` takes `(queryEmbedding, opts)` rather than positional filters, and `opts` also carries the explicit `type` / `topic` scope.
 
 All six `FragmentReader` methods — `searchByKeywords`, `searchByTopic`, `searchBySemantic`, `searchByTimeRange`, `searchAsOf`, and `searchBySource` — support the `(workspace = $N OR workspace IS NULL)` condition. `_searchTemporal` also passes `workspace: sq.workspace` to `searchByTimeRange`.
 

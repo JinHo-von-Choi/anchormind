@@ -17,7 +17,7 @@ AnchorMind 서버는 AI 에이전트의 세션 간 장기 기억을 파편(Fragm
 - recall/context 응답에서 `_meta.serverTime.display_kst` 또는 `_meta.serverTime.iso`로 현재 시점을 재확인하고 파편의 `created_at`·`age_days`와 대조하여 stale 여부를 판단한다. 응답 메타에 명시된 서버 시각이 자체 추정 시각과 다르면 서버 시각이 정답이다.
 - 긴 파편 자동 분할(`splitLongFragments`)은 자식 파편에 본문 기반 keywords를 부여하므로 분할된 내용도 키워드 검색으로 회수된다. 자식 합집합이 원문의 수치 앵커(날짜·금액·비율)를 모두 담지 못하면 분할을 중단하고 원문을 그대로 유지하며, 자식이 남아 있는 원문은 GC 물리 삭제 대상에서 제외된다.
 - `lib/storage/` 어댑터 계층이 `getStorage()` 팩토리 형태로 존재하며, `MEMENTO_STORAGE` 환경변수로 storage 백엔드를 선택한다.
-- 검색 레이어는 `lib/memory/read/SearchScope.js`를 통해 `(workspace, caseId, resolutionStatus, phase, affect, keyId)` scope를 처음부터 정합 적용한다.
+- 검색 레이어는 `lib/memory/read/SearchScope.js`를 통해 `(workspace, caseId, resolutionStatus, phase, affect, type, topic, keyId)` scope를 처음부터 정합 적용한다.
 - 실제 로직은 `lib/memory/processors/` 4개 클래스(MemoryRememberer·MemoryRecaller·MemoryReflector·MemoryLinker)와 `lib/memory/` 하위 6개 서브디렉토리(`read/`, `write/`, `link/`, `consolidate/`, `embedding/`, `signals/`)로 구성된다.
 
 ### LLM 동시성 제어

@@ -28,7 +28,7 @@ MemoryManager는 thin facade다. 비즈니스 로직은 `lib/memory/processors/`
 | 모듈 | 역할 |
 |------|------|
 | `FragmentSearch` (`lib/memory/read/FragmentSearch.js`) | L1~L4 검색 파이프라인 조율 |
-| `SearchScope` (`lib/memory/read/SearchScope.js`) | workspace·caseId·resolutionStatus·phase·affect 5개 필드를 모든 검색 레이어에 일관 전달하는 정합 필터 계약 객체 |
+| `SearchScope` (`lib/memory/read/SearchScope.js`) | workspace·caseId·resolutionStatus·phase·affect·type·topic 7개 필드를 모든 검색 레이어에 일관 전달하는 정합 필터 계약 객체 |
 | `SearchSideEffects` (`lib/memory/read/SearchSideEffects.js`) | 검색 결과 확정 후 부작용(검색 이벤트 영속화, SearchParamAdaptor 학습 신호)을 단일 모듈로 격리 |
 
 검색 관련 모듈은 `lib/memory/read/`에 위치하며, 임포트 경로는 실제 파일 위치를 그대로 따른다.
@@ -81,7 +81,7 @@ recall(query)
   ├── L3 PostgreSQL 전문 검색 (형태소; MorphemeTokenizer 로컬 CPU 분석기 → morpheme_dict → tsquery)
   ├── L4 Cross-Encoder Reranker (RRF 상위 30건)
   ├── RRF 병합 (k=60)
-  ├── SearchScope.applyTo() 필터 — workspace·caseId·resolutionStatus·phase·affect 정합
+  ├── SearchScope.applyTo() 필터 — workspace·caseId·resolutionStatus·phase·affect·type·topic 정합
   │     _executeSearch() 내 각 레이어가 SearchScope 인스턴스를 공유하여 후처리 보정 불필요
   ├── 토큰 예산 절단 (tokenBudget)
   ├── valid_to 필터
@@ -99,7 +99,7 @@ recall(query)
 
 `pickFields`는 19개 화이트리스트(`id, content, type, importance, topic, ..., key_id, key_name`) 외 필드를 제거한다. 캐시 단계(L1 warm hit, RRF 병합 중간 객체)에는 적용하지 않아 캐시 효율을 보존한다.
 
-**SearchScope 계약:** `SearchScope.fromQuery(sq)` 정적 팩토리가 `_buildSearchQuery()` 반환 sq에서 scope 인스턴스를 생성한다. `scope.applyTo(fragment)` 메서드는 workspace, caseId, resolutionStatus, phase, affect 5개 필드를 동시 검사하여 false를 반환하는 경우 해당 파편을 결과에서 제외한다. HotCache·L3·Graph 호출 사이트가 모두 동일 인스턴스를 참조하므로 레이어별 파편 결과의 정합성이 보장된다. `_executeSearch()`는 별도의 후처리 보정을 수행하지 않는다.
+**SearchScope 계약:** `SearchScope.fromQuery(sq)` 정적 팩토리가 `_buildSearchQuery()` 반환 sq에서 scope 인스턴스를 생성한다. `scope.applyTo(fragment)` 메서드는 workspace, caseId, resolutionStatus, phase, affect, type, topic 7개 필드를 동시 검사하여 false를 반환하는 경우 해당 파편을 결과에서 제외한다. HotCache·L3·Graph 호출 사이트가 모두 동일 인스턴스를 참조하므로 레이어별 파편 결과의 정합성이 보장된다. `_executeSearch()`는 별도의 후처리 보정을 수행하지 않는다.
 
 ---
 
