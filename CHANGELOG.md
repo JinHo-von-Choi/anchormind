@@ -1,5 +1,21 @@
 # Changelog
 
+## [5.4.1] - 2026-08-02
+
+### Security
+- 의존성 취약점 9건 해소. `npm audit` 기준 잔여 0건.
+  - `fast-uri` 3.1.2 → 3.1.5 (host confusion 2건: GHSA-v2hh-gcrm-f6hx, GHSA-4c8g-83qw-93j6). `@modelcontextprotocol/sdk` → `ajv` 경유 전이 의존성이다.
+  - `sharp` 0.34.5 → 0.35.3 (libvips 상속 취약점 4건: GHSA-f88m-g3jw-g9cj). `@huggingface/transformers`의 선언 범위(`^0.34.1`) 밖이라 override로 강제하며, 로컬 임베딩 통합 테스트로 호환을 확인했다.
+  - `brace-expansion` 1.1.14 → 1.1.18 (DoS 2건: GHSA-3jxr-9vmj-r5cp, GHSA-mh99-v99m-4gvg).
+  - `@hono/node-server` 1.19.14 → 2.0.12 (Windows 경로 순회: GHSA-frvp-7c67-39w9).
+  - `mongoose` 9.6.2 → 9.9.1 (프로토타입 오염: GHSA-664h-wqgq-64gw).
+  - `tar` 7.5.20 → 7.5.22 (스택 오버플로 DoS: GHSA-r292-9mhp-454m).
+  - `body-parser` 2.2.2 → 2.3.0 (limit 무력화 DoS: GHSA-v422-hmwv-36x6).
+
+### Changed
+- `@modelcontextprotocol/sdk` `^1.27.1` → `^1.30.0`. 1.30.0이 `@hono/node-server` 2.x를 지원 범위에 포함한다.
+- `docs/INSTALL.md`의 `CONSOLIDATE_INTERVAL_MS` 기본값 표기를 실제 값(21600000 = 6시간)으로 정정.
+
 ## [5.4.0] - 2026-08-02
 
 ### Fixed
