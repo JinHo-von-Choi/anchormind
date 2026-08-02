@@ -279,7 +279,7 @@ DEDUP_BATCH_SIZE              - 시맨틱 dedup 배치 크기 (기본: 100)
 DEDUP_MIN_FRAGMENTS           - topic 내 최소 파편 수 (기본: 5)
 COMPRESS_AGE_DAYS             - 압축 대상 비활성 일수 (기본: 30)
 COMPRESS_MIN_GROUP            - 압축 그룹 최소 크기 (기본: 3)
-CONSOLIDATE_INTERVAL_MS       - consolidate 주기 (기본: 3600000 = 1시간)
+CONSOLIDATE_INTERVAL_MS       - consolidate 주기 (기본: 21600000 = 6시간)
 ALLOWED_ORIGINS               - CORS 허용 Origin 목록 (쉼표 구분)
 RERANKER_MODEL                - in-process ONNX 모델 선택: minilm (기본, 영어 전용) 또는 bge-m3 (다국어, 비영어권 권장)
 LLM_PRIMARY                   - 주 LLM provider (기본: gemini-cli). gemini-cli, agy-cli, codex-cli, opencode-cli, anthropic 등
