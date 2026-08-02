@@ -89,12 +89,9 @@ describe("Consistency Gate — morpheme_indexed SQL 조건 검증", () => {
   test("morphemeOnly=false → SQL에 morpheme_indexed 조건 없음", async () => {
     capturedSql = "";
     const reader = new FragmentReader();
-    await reader.searchBySemantic(
-      [0.1, 0.2, 0.3],
-      10, 0.3, "default", null,
-      false, null, null, null,
-      false  /* morphemeOnly */
-    ).catch(() => {});
+    await reader.searchBySemantic([0.1, 0.2, 0.3], {
+      limit: 10, minSimilarity: 0.3, agentId: "default", morphemeOnly: false
+    }).catch(() => {});
 
     assert.ok(capturedSql.length > 0, "SQL이 캡처되어야 함");
     assert.ok(!capturedSql.includes("morpheme_indexed"),
@@ -104,12 +101,9 @@ describe("Consistency Gate — morpheme_indexed SQL 조건 검증", () => {
   test("morphemeOnly=true → SQL에 morpheme_indexed = true 조건 포함", async () => {
     capturedSql = "";
     const reader = new FragmentReader();
-    await reader.searchBySemantic(
-      [0.1, 0.2, 0.3],
-      10, 0.3, "default", null,
-      false, null, null, null,
-      true   /* morphemeOnly */
-    ).catch(() => {});
+    await reader.searchBySemantic([0.1, 0.2, 0.3], {
+      limit: 10, minSimilarity: 0.3, agentId: "default", morphemeOnly: true
+    }).catch(() => {});
 
     assert.ok(capturedSql.length > 0, "SQL이 캡처되어야 함");
     assert.ok(
@@ -121,12 +115,9 @@ describe("Consistency Gate — morpheme_indexed SQL 조건 검증", () => {
   test("morphemeOnly=true + keyId → 두 조건 모두 포함", async () => {
     capturedSql = "";
     const reader = new FragmentReader();
-    await reader.searchBySemantic(
-      [0.1, 0.2, 0.3],
-      5, 0.4, "default", "key-abc",
-      false, null, null, null,
-      true   /* morphemeOnly */
-    ).catch(() => {});
+    await reader.searchBySemantic([0.1, 0.2, 0.3], {
+      limit: 5, minSimilarity: 0.4, agentId: "default", keyId: "key-abc", morphemeOnly: true
+    }).catch(() => {});
 
     assert.ok(capturedSql.includes("morpheme_indexed = true"), "morpheme_indexed 조건 포함");
     assert.ok(capturedSql.includes("key_id"), "keyId 격리 조건 포함");

@@ -60,16 +60,18 @@ describe("FragmentReader includePeerAgents", () => {
     assert.doesNotMatch(lastSql(), AGENT_COND);
   });
 
-  it("searchBySemantic 11번째 인자 true면 f.agent_id 격리 완화", async () => {
+  it("searchBySemantic includePeerAgents=true면 f.agent_id 격리 완화", async () => {
     const vec = new Array(4).fill(0.1);
-    await reader.searchBySemantic(vec, 5, 0.3, "a1", null, false, null, null, null, false, true);
+    await reader.searchBySemantic(vec, {
+      limit: 5, minSimilarity: 0.3, agentId: "a1", includePeerAgents: true
+    });
     assert.doesNotMatch(lastSql(), AGENT_COND);
     assert.match(lastSql(), PEER_COND);
   });
 
   it("searchBySemantic 기본은 격리 유지", async () => {
     const vec = new Array(4).fill(0.1);
-    await reader.searchBySemantic(vec, 5, 0.3, "a1");
+    await reader.searchBySemantic(vec, { limit: 5, minSimilarity: 0.3, agentId: "a1" });
     assert.match(lastSql(), AGENT_COND);
   });
 
@@ -93,9 +95,9 @@ describe("FragmentReader includePeerAgents", () => {
   it("FragmentStore.searchBySemantic이 includePeerAgents 옵션을 전달", async () => {
     const store = new FragmentStore();
     const vec = new Array(4).fill(0.1);
-    await store.searchBySemantic(
-      vec, 5, 0.3, "a1", null, false, null, null, null, false, true
-    );
+    await store.searchBySemantic(vec, {
+      limit: 5, minSimilarity: 0.3, agentId: "a1", includePeerAgents: true
+    });
     assert.doesNotMatch(lastSql(), AGENT_COND);
     assert.match(lastSql(), PEER_COND);
   });
