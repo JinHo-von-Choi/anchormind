@@ -32,8 +32,14 @@ mock.module("../../lib/config.js", {
   namedExports: {
     resolveSplitChainConfig: () => [{ provider: "xai" }],
     LLM_PRIMARY            : "gemini-cli",
-    LLM_FALLBACKS          : []
+    LLM_FALLBACKS          : [],
+    /** ConsolidatorGC가 키워드 추출을 위해 write 계층을 로드하므로 필요 */
+    buildSearchPath        : () => "agent_memory, public"
   }
+});
+
+mock.module("../../lib/tools/embedding.js", {
+  namedExports: { computeContentHash: (text) => `hash-${String(text).length}` }
 });
 
 mock.module("../../lib/logger.js", {
