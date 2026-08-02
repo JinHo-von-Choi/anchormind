@@ -32,18 +32,63 @@ before(async () => {
     await getPrimaryPool().query("SELECT 1");
     /** fragments 테이블 존재 여부도 확인 */
     await getPrimaryPool().query("SELECT 1 FROM agent_memory.fragments LIMIT 1");
+    await seedTestApiKeys();
   } catch {
     dbOk = false;
     console.warn("[e2e/group-key-isolation] DB unreachable or schema missing — all tests skipped");
   }
 });
 
+/**
+ * 테스트용 API 키 3건을 api_keys에 선삽입한다.
+ *
+ * fragments.key_id는 api_keys(id)를 참조하므로(fragments_key_id_fkey),
+ * 존재하지 않는 key_id로 파편을 저장하면 외래키 위반으로 실패한다.
+ * 재실행 시 중복 삽입되지 않도록 id 충돌은 무시한다.
+ *
+ * @returns {Promise<void>}
+ */
+async function seedTestApiKeys() {
+  await getPrimaryPool().query(
+    `INSERT INTO agent_memory.api_keys (id, name, key_hash, key_prefix)
+     SELECT k.id, k.name, k.key_hash, k.key_prefix
+       FROM unnest($1::text[], $2::text[], $3::text[], $4::text[])
+            AS k(id, name, key_hash, key_prefix)
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      [KEY_A, KEY_B, KEY_C],
+      ["keyiso-test-a", "keyiso-test-b", "keyiso-test-c"],
+      ["keyiso-test-hash-a", "keyiso-test-hash-b", "keyiso-test-hash-c"],
+      ["keyiso-a", "keyiso-b", "keyiso-c"]
+    ]
+  );
+}
+
 after(async () => {
   if (!dbOk) return;
   try {
+    /**
+     * 시드 파편을 만료(valid_to)만 시키면 remember의 동일 content 재사용 경로가
+     * 다음 실행에서 만료된 파편 id를 그대로 반환하여 테스트가 실패한다.
+     * 재실행 가능성을 보장하려면 물리 삭제해야 한다.
+     * fragment_links / fragment_versions / fragment_claims / fragment_evidence는
+     * ON DELETE CASCADE이므로 함께 정리된다.
+     */
     await getPrimaryPool().query(
-      "UPDATE agent_memory.fragments SET valid_to = now() WHERE topic = $1 OR key_id = ANY($2::text[])",
+      `UPDATE agent_memory.fragments SET superseded_by = NULL
+        WHERE superseded_by IN (
+          SELECT id FROM agent_memory.fragments
+           WHERE topic = $1 OR key_id = ANY($2::text[])
+        )`,
       [TOPIC, [KEY_A, KEY_B, KEY_C]]
+    );
+    await getPrimaryPool().query(
+      "DELETE FROM agent_memory.fragments WHERE topic = $1 OR key_id = ANY($2::text[])",
+      [TOPIC, [KEY_A, KEY_B, KEY_C]]
+    );
+    await getPrimaryPool().query(
+      "DELETE FROM agent_memory.api_keys WHERE id = ANY($1::text[])",
+      [[KEY_A, KEY_B, KEY_C]]
     );
   } catch (err) {
     console.warn("[e2e/group-key-isolation] teardown 실패:", err.message);
