@@ -488,7 +488,7 @@ reason code 목록 (최대 3개):
 | content | string | O | 기억할 내용 (1~3문장, 300자 이내 권장). 입력 자체는 최대 4000자까지 허용되며 초과 시 `-32602` 오류로 거부된다 |
 | topic | string | O | 주제 (예: database, email, deployment, security) |
 | type | string | O | 파편 유형. fact, decision, error, preference, procedure, relation, episode. episode 외 타입은 300자 초과 시 절삭. |
-| keywords | string[] | - | 검색용 키워드 (미입력 시 자동 추출) |
+| keywords | string[] | - | 검색용 키워드. 지정해도 본문에서 추출한 키워드가 뒤에 병합되며(중복 제거, 최대 10개) 지정 키워드가 우선한다. 미입력 시 본문 추출만 사용 |
 | importance | number | - | 중요도 0~1 (미입력 시 type별 기본값) |
 | source | string | - | 출처 (세션 ID, 도구명 등) |
 | linkedTo | string[] | - | 연결할 기존 파편 ID 목록 |

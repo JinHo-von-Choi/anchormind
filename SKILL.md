@@ -1625,7 +1625,7 @@ reason code 6종 (`code` 필드값):
 | 모든 내용을 하나의 파편에 저장 | 검색 정밀도 저하, 중요도 희석 | 원자적 분해 (1 사실 = 1 파편) |
 | 불필요한 remember 남발 | fragment_limit 쿼터 소진, 노이즈 증가로 검색 품질 저하 | 저장 전 "다음 세션에서 필요한가?" 자문, 일시적 정보는 저장하지 않음 |
 | importance 미지정 (모든 파편 0.5) | recall 시 중요/비중요 파편 구분 불가, 핵심 정보가 노이즈에 묻힘 | 상황별 중요도 기본값 표 참조, 최소 0.6 이상 명시 |
-| keywords 미지정 | 자동 추출에 의존하면 프로젝트명/호스트명 등 핵심 키워드 누락 | 프로젝트명 + 토픽 + 고유 식별자를 keywords에 명시적으로 포함 |
+| keywords 미지정 | 자동 추출에 의존하면 프로젝트명/호스트명 등 핵심 키워드 누락 | 프로젝트명 + 토픽 + 고유 식별자를 keywords에 명시적으로 포함. 지정해도 본문 추출 결과가 병합되므로 본문의 코드 식별자는 별도로 적지 않아도 색인된다 |
 | validation_warnings 무시 후 반복 remember | 동일 경고 파편이 누적되면 symbolic_hard_gate 활성화 시 전면 차단됨 | 경고 내용에 따라 content/linkedTo/resolutionStatus를 보강 후 재저장 |
 | recall 결과의 explanations reasonCodes를 fragment content에 복사 저장 | 검색 품질 메타데이터는 저장하면 안 됨. 노이즈로 검색 정밀도 저하 | reasonCodes는 UI 표시나 컨텍스트 힌트용으로만 사용, 저장 금지 |
 | Shadow mode 없이 Phase 2+ 직행 | 기존 데이터의 claim 백필 없이 explain/policy 활성화 시 경고 오탐 증가 | `MEMENTO_SYMBOLIC_SHADOW=true` + `scripts/backfill-claims.js --dry-run` 선행 후 단계적 활성화 |
