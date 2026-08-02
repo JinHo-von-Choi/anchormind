@@ -36,8 +36,11 @@ CREATE TABLE IF NOT EXISTS agent_memory.fragments (
     embedding        vector(1536)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_frag_hash
-    ON agent_memory.fragments(content_hash);
+-- content_hash 유일성은 migration-031이 정의한다.
+-- key_id(migration-004)에 의존하는 partial unique index 2종
+-- (uq_frag_hash_master / uq_frag_hash_per_key)이므로 이 파일에서는 만들지 않는다.
+-- 여기서 전역 unique index를 만들면 migration-031 적용 이후 이 파일을 다시 실행할 때
+-- 키별 유일성이 전역 유일성으로 되돌아간다.
 CREATE INDEX IF NOT EXISTS idx_frag_topic
     ON agent_memory.fragments(topic);
 CREATE INDEX IF NOT EXISTS idx_frag_type
