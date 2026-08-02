@@ -2,19 +2,20 @@
 
 AI 에이전트가 AnchorMind 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
 
-## 현재 버전: v5.0.1
+## 현재 버전: v5.4.0
 
-AnchorMind 서버는 AI 에이전트의 세션 간 장기 기억을 파편(Fragment) 단위로 영속화하고, 20개 도구를 통해 저장·검색·연결·반성 기능을 제공한다.
+AnchorMind 서버는 AI 에이전트의 세션 간 장기 기억을 파편(Fragment) 단위로 영속화하고, 18개 도구를 통해 저장·검색·연결·반성 기능을 제공한다.
 
 주요 현재 기능:
 
 - `batch_remember`는 동기(기본)와 비동기(`async: true`) 두 모드를 지원한다. 비동기 모드에서는 선검증 후 Redis 큐에 적재하고 `{async, accepted, jobId}`를 즉시 반환하며, 워커가 ack·재시도(최대 3회)·dead-letter·기동 복구(RPOPLPUSH reliable queue)로 at-least-once 처리를 보장한다. `batch_status(jobId)`로 처리 상태(queued/processing/completed/dead)를 조회한다. Redis 비활성 환경에서는 자동으로 동기 모드로 폴백한다. `batch_remember`와 `memory_consolidate`는 표준 단일 JSON-RPC 응답으로 반환되며 `stream` 파라미터는 동작하지 않는다(하위 호환 유지).
-- 검색은 3계층(L1 키워드 → L2 pgvector 시맨틱 → L3 RRF 하이브리드)으로 자동 라우팅되며, `computeRecallScore` 함수가 cross-encoder reranker 결과에 topic/keyword 직접 일치 신호를 log 정규화된 가산항으로 반영한다. 시맨틱 임계값 기본값은 0.5이고, `SearchParamAdaptor`가 50회 이상 샘플 축적 후 키별·시간대별로 임계값을 자동 조정한다.
+- 검색은 3계층(L1 키워드 → L2 pgvector 시맨틱 → L3 RRF 하이브리드)으로 자동 라우팅되며, `computeRecallScore` 함수가 cross-encoder reranker 결과에 topic/keyword 직접 일치 신호를 log 정규화된 가산항으로 반영한다. 시맨틱 임계값 기본값은 0.4이고, `SearchParamAdaptor`가 50회 이상 샘플 축적 후 키별·시간대별로 임계값을 자동 조정한다.
 - 형태소 분석은 로컬 CPU 분석기(`MorphemeTokenizer`)가 담당한다. 한글 garu-ko·영어 PorterStemmer·중국어 @node-rs/jieba·일본어 kuromoji로 라우팅하며, 벤치마크 기준 1.06ms/call 수준이다. `MEMENTO_MORPHEME_TOKENIZER=llm` 설정 시에만 LLM 경로가 활성화된다.
 - 코어 도구는 MCP `title` + `annotations`(readOnlyHint/idempotentHint/openWorldHint) 메타데이터를 포함한다. Codex Desktop 등 deferred/lazy 로딩 클라이언트를 위한 재검색 가이드가 서버 initialize instructions에 포함된다.
 - recall/context/reflect 응답 `_meta`에 `serverTime { iso, epoch_ms, display_kst, timezone }` 필드가 포함되어 LLM 클라이언트가 매 응답마다 서버 현재 시각을 재확인할 수 있다.
 - `tool_reflect` 응답에 `_meta.link_suggestions[]`가 포함된다. 이 목록은 schema-fit gate를 통과하지 못해 자동 링크되지 않은 인과 관계 후보다. LLM은 후보를 검토하여 정당한 인과로 판단되는 항목만 `link(fromId, toId, relationType=...)` 도구로 명시 호출한다.
 - recall/context 응답에서 `_meta.serverTime.display_kst` 또는 `_meta.serverTime.iso`로 현재 시점을 재확인하고 파편의 `created_at`·`age_days`와 대조하여 stale 여부를 판단한다. 응답 메타에 명시된 서버 시각이 자체 추정 시각과 다르면 서버 시각이 정답이다.
+- 긴 파편 자동 분할(`splitLongFragments`)은 자식 파편에 본문 기반 keywords를 부여하므로 분할된 내용도 키워드 검색으로 회수된다. 자식 합집합이 원문의 수치 앵커(날짜·금액·비율)를 모두 담지 못하면 분할을 중단하고 원문을 그대로 유지하며, 자식이 남아 있는 원문은 GC 물리 삭제 대상에서 제외된다.
 - `lib/storage/` 어댑터 계층이 `getStorage()` 팩토리 형태로 존재하며, `MEMENTO_STORAGE` 환경변수로 storage 백엔드를 선택한다.
 - 검색 레이어는 `lib/memory/read/SearchScope.js`를 통해 `(workspace, caseId, resolutionStatus, phase, affect, keyId)` scope를 처음부터 정합 적용한다.
 - 실제 로직은 `lib/memory/processors/` 4개 클래스(MemoryRememberer·MemoryRecaller·MemoryReflector·MemoryLinker)와 `lib/memory/` 하위 6개 서브디렉토리(`read/`, `write/`, `link/`, `consolidate/`, `embedding/`, `signals/`)로 구성된다.
