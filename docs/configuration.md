@@ -167,6 +167,8 @@ macOS launchd로 서버를 실행하는 경우 셸 프로필을 읽지 않으므
 
 이 값은 `MEMENTO_MORPHEME_TOKENIZER=llm` 설정 시 `MorphemeIndex._tokenizeViaLLM()` 내부의 `geminiCLIJson(userPrompt, { timeoutMs: cfg.geminiTimeoutMs })` 호출에 전달된다. 기본값(`MEMENTO_MORPHEME_TOKENIZER=local`)에서는 로컬 분석기(MorphemeTokenizer)를 사용하므로 이 값은 참조되지 않는다. LLM 경로에서 tokenize가 실패하면 형태소 추출 결과가 없으므로 L3 morpheme 검색(recall의 전문 검색 경로)이 비활성화된 것과 동일하게 동작한다 (`_fallbackTokenize` 로 graceful degrade).
 
+**형태소 보조 검색(morphemeIndex.minSimilarity / fallbackThreshold / fallbackLimit)**: L3 시맨틱 검색과 병렬로 형태소 평균 벡터 기반 보조 검색을 수행한다. 형태소 평균 벡터는 문장 임베딩보다 코사인 유사도가 체계적으로 낮으므로 전용 임계값 `morphemeIndex.minSimilarity`(기본 0.15)를 사용하며, `semanticSearch.minSimilarity`(기본 0.4)를 재사용하지 않는다. 기본 L3 결과 수가 `fallbackThreshold`(기본 5) 이하일 때만 보조 결과를 채택하고, 채택 시 `fallbackLimit`(기본 5)개까지 병합한다. 프로브 자체는 병렬 실행되므로 채택 여부가 응답 지연에 영향을 주지 않는다.
+
 **GEMINI_TIMEOUT_MS**: `lib/memory/processors/AutoReflect.js`의 LLM chain 호출 timeout은 30,000 ms로 고정된다(`GEMINI_TIMEOUT_MS = 30_000` 코드 상수, `process.env` 참조 없음). 값을 변경하려면 해당 파일의 상수를 직접 수정해야 한다. MorphemeIndex의 `geminiTimeoutMs`(config/memory.js, 기본 60000)와 별개임에 주의한다.
 
 **buildChain 순서 결정 로직** (`lib/llm/index.js:38–68`): `LLM_PRIMARY` → `LLM_FALLBACKS` 선언 순서로 entries 배열을 구성한 뒤, `seen` Set으로 중복 provider를 제거하고, 각 provider의 `isAvailable()` 체크 성공 여부로 chain에 포함 여부를 결정한다. `LLM_PRIMARY`가 `LLM_FALLBACKS` 목록에도 있으면 fallback의 config 객체가 우선 사용된다. `isAvailable()` 실패 시 해당 provider는 체인에서 제외되고 다음 provider로 즉시 넘어간다. 결과적으로 chain 순서는 환경변수 선언 순서와 1:1 대응한다.
