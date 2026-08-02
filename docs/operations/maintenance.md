@@ -193,6 +193,7 @@ Grafana 알림 권장 임계값: `memento_quota_used_total / memento_quota_limit
 | `scripts/cleanup-noise.js` | 초단문·빈 세션 요약·NLI 재귀 쓰레기 파편 탐지·삭제 | recall 품질 저하 또는 context 토큰 예산 오염 시 | 조건부, 필요 시 월 1회 |
 | `scripts/post-migrate-flexible-embedding-dims.js` | fragments + morpheme_dict 임베딩 컬럼 차원 동시 조정 | EMBEDDING_DIMENSIONS 변경 또는 provider 전환 시 | 조건부 1회 |
 | `scripts/backfill-claims.js` | 기존 코퍼스에 ClaimExtractor 소급 실행 | Shadow mode(MEMENTO_SYMBOLIC_SHADOW=true) 활성화 전 | 일회성 |
+| `scripts/backfill-split-keywords.js` | keywords가 빈 split 자식 파편에 키워드 소급 생성 | 5.3.1 이하에서 생성된 split 자식이 키워드 검색에 잡히지 않을 때 | 일회성 |
 | `scripts/benchmark-hot-path.js` | remember/recall/link/reflect 4개 hot path p50/p95/p99 측정 | Symbolic Memory feature flag 전환 전후 회귀 기준선 확보 | 조건부 |
 | `scripts/run-e2e-tests.sh` | Docker 기반 E2E 테스트 실행 | CI/CD 파이프라인 또는 대규모 리팩터링 후 회귀 검증 | CI마다 또는 릴리즈 전 |
 | `scripts/smoke-test-symbolic.sh` | Symbolic Memory end-to-end smoke 검증 | MEMENTO_SYMBOLIC_* 플래그 전환 후 | 조건부 |
@@ -227,6 +228,35 @@ DATABASE_URL=postgresql://... node scripts/backfill-embeddings.js
 ### 권장 빈도
 
 `EMBEDDING_PROVIDER` 변경 시 1회. 임베딩 API 장애 복구 후 누락 파편이 있을 경우 조건부 실행.
+
+---
+
+## backfill-split-keywords
+
+### 목적
+
+`source LIKE 'split:%'`이면서 `keywords`가 비어 있는 파편에 본문 기반 키워드를 소급 생성한다. 키워드가 빈 파편은 배열 교집합(`keywords && $1`)을 사용하는 검색 경로에서 조회되지 않는다.
+
+추출은 정상 저장 경로와 동일하게 `FragmentFactory.extractKeywords(content)`를 사용한다. 추출 결과가 비면 해당 파편은 건너뛰며 빈 배열로 덮어쓰지 않는다.
+
+### 선행 조건
+
+- `DATABASE_URL` 환경변수 설정
+- 기본 실행은 dryRun이며 대상 건수와 샘플만 출력한다. 실제 반영은 `--execute` 필수
+
+### 실행 명령
+
+```
+node scripts/backfill-split-keywords.js            # 미리보기
+node scripts/backfill-split-keywords.js --execute  # 실제 반영
+```
+
+### 대상 확인 질의
+
+```sql
+SELECT count(*) FROM agent_memory.fragments
+ WHERE source LIKE 'split:%' AND coalesce(cardinality(keywords), 0) = 0;
+```
 
 ---
 
