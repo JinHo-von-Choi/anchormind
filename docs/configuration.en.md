@@ -141,7 +141,16 @@ The default slot limit for providers not listed is 10. When `LLM_CONCURRENCY` is
 
 ##### Supported Providers
 
-gemini-cli, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai, **codex-cli**, **copilot-cli**, **qwen-cli**
+gemini-cli, **agy-cli**, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai, **codex-cli**, **copilot-cli**, **qwen-cli**, **opencode-cli**
+
+**agy-cli**: Runs Google Antigravity CLI (`agy`) with `--print --output-format text --mode plan --sandbox`. AnchorMind uses the provider only for JSON transformations, so the CLI is constrained from editing files or approving tool calls. Antigravity authentication and the `agy` binary are required; `model` and `timeoutMs` are passed to the CLI invocation:
+```json
+[{"provider": "agy-cli", "model": "<model listed by agy models>", "timeoutMs": 40000}]
+```
+
+Because `agy` treats tokens after `--print` as the prompt, AnchorMind invokes it as `--output-format text --mode plan --sandbox [--model MODEL] --print PROMPT`.
+
+On macOS launchd deployments, shell profiles are not loaded. Add `~/.local/bin` explicitly to the plist `PATH` so the service can find `agy`.
 
 **codex-cli**: Executes `codex exec --skip-git-repo-check --sandbox read-only --output-last-message FILE`. Authenticates via `OPENAI_API_KEY` or the Codex CLI config file. `model` and `timeoutMs` in `LLM_FALLBACKS` are passed through to the actual CLI invocation:
 ```json

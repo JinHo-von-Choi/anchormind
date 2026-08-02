@@ -44,10 +44,11 @@
 | CLI | 설치 명령 | 용도 |
 |-----|---------|------|
 | gemini | `npm install -g @google/gemini-cli` | 기본 LLM provider (`LLM_PRIMARY=gemini-cli`) |
+| agy | Google Antigravity 공식 installer | Google Antigravity CLI provider (`LLM_PRIMARY=agy-cli`) |
 | codex | `npm install -g @openai/codex` | OpenAI Codex CLI fallback |
 | copilot | `npm install -g @githubnext/github-copilot-cli` | GitHub Copilot CLI fallback |
 
-각 CLI는 설치 후 별도 로그인이 필요하다(`gemini auth login`, `codex auth login`, `github-copilot-cli auth`). 미설치 시 해당 provider는 자동으로 건너뛰고 다음 fallback으로 전환된다.
+각 CLI는 설치 후 별도 로그인이 필요하다(`gemini auth login`, `agy`, `codex auth login`, `github-copilot-cli auth`). 미설치 또는 인증 실패 시 해당 provider는 다음 fallback으로 전환된다.
 
 ---
 

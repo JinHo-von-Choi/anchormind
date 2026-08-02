@@ -5,7 +5,7 @@
 
 ## 개요
 
-memento-mcp는 내부 LLM 호출(AutoReflect, MorphemeIndex, ConsolidatorGC, ContradictionDetector, MemoryEvaluator)에 16개 provider fallback chain을 지원한다. 기본값은 Gemini CLI 단독 사용으로 기존 동작 완전 보존.
+memento-mcp는 내부 LLM 호출(AutoReflect, MorphemeIndex, ConsolidatorGC, ContradictionDetector, MemoryEvaluator)에 18개 provider fallback chain을 지원한다. 기본값은 Gemini CLI 단독 사용으로 기존 동작 완전 보존.
 
 ## 활성화
 
@@ -30,13 +30,14 @@ LLM_FALLBACKS='[
 ```
 
 Gemini CLI 실패 시 codex-cli → anthropic → openai 순차 시도.
-CLI provider(`gemini-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`)도 `LLM_FALLBACKS`의 `model`, `timeoutMs`를 provider config로 전달받는다.
+CLI provider(`gemini-cli`, `agy-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`, `opencode-cli`)도 `LLM_FALLBACKS`의 `model`, `timeoutMs`를 provider config로 전달받는다.
 
 ## Provider별 필수 필드
 
 | Provider | apiKey | model | baseUrl | 기본 baseUrl |
 |----------|--------|-------|---------|-------------|
 | gemini-cli | - | - | - | (CLI 바이너리) |
+| agy-cli | - | 선택 | - | Antigravity CLI(`agy`) + 로그인 |
 | codex-cli | - | 선택 | - | (CLI 바이너리 + Codex 인증) |
 | copilot-cli | - | - | - | (CLI 바이너리 + GitHub Copilot 인증) |
 | qwen-cli | - | 선택 | - | (CLI 바이너리 + Qwen 인증) |
@@ -62,6 +63,7 @@ CLI provider(`gemini-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`)도 `LLM_FALLB
 | chainKey / provider | 기본 슬롯 수 |
 |-|-|
 | gemini-cli | 1 |
+| agy-cli | 1 |
 | codex-cli | 1 |
 | copilot-cli | 1 |
 | qwen-cli | 1 |
@@ -183,7 +185,7 @@ LLM provider 관련 E2E 통합 테스트는 [tests/integration/README.md](../../
   - Google Gemini API: POST /v1beta/models/{model}:generateContent, API 키 URL 파라미터
   - Cohere: POST /v1/chat, preamble 필드, 최상위 text 응답
 - HTTP를 사용하지 않는 stdio / CLI 실행 경로일 때
-  - GeminiCliProvider, CodexCliProvider, CopilotCliProvider
+  - GeminiCliProvider, AgyCliProvider, CodexCliProvider, CopilotCliProvider
 
 이 경우 callText 또는 callJson을 직접 구현하고 circuit breaker 호출을 수동으로 포함해야 한다.
 
@@ -201,6 +203,7 @@ OpenAICompatibleProvider를 상속하면 callText 구현이 자동으로 제공�
 | Provider | 상속 클래스 | 경로 |
 |-|-|-|
 | GeminiCliProvider | LlmProvider | stdio, gemini CLI 바이너리 |
+| AgyCliProvider | LlmProvider | stdio, constrained Antigravity CLI |
 | CodexCliProvider | LlmProvider | stdio, codex CLI 바이너리 |
 | CopilotCliProvider | LlmProvider | stdio, gh copilot CLI 바이너리 |
 | AnthropicProvider | LlmProvider | POST /v1/messages, 고유 스키마 |
@@ -306,9 +309,10 @@ export class MyCustomProvider extends LlmProvider {
 
 ### 사용 가능한 provider 이름
 
-`listProviderNames()` 출력: `openai, anthropic, gemini, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai, gemini-cli, codex-cli, copilot-cli, qwen-cli, opencode-cli`
+`listProviderNames()` 출력: `openai, anthropic, gemini, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai, gemini-cli, agy-cli, codex-cli, copilot-cli, qwen-cli, opencode-cli`
 
 - `xai` = Grok (xAI API, `https://api.x.ai/v1`)
+- `agy-cli` = Google Antigravity CLI. `--print --mode plan --sandbox`로 실행되어 파일 수정과 도구 승인을 하지 않는다.
 - `opencode-cli` = OpenCode CLI (provider/model은 `model` 필드로 선택, 예: `"xiaomi/mimo-v2.5-pro"`)
 
 ### provider별 필수 의존성
@@ -318,6 +322,7 @@ export class MyCustomProvider extends LlmProvider {
 | `xai` (Grok) | `XAI_API_KEY` (또는 엔트리의 `apiKey`); `https://api.x.ai/v1` 접근 가능 | `isAvailable()` 실패 → 체인에서 제외 |
 | `opencode-cli` | `opencode` 바이너리가 `PATH`에 존재; 허용된 `model` (예: `xiaomi/*`) | 바이너리 없음 → 체인에서 제외 |
 | `gemini-cli` | `gemini` 바이너리가 `PATH`에 존재 | 바이너리 없음 → 체인에서 제외 |
+| `agy-cli` | `agy` 바이너리가 `PATH`에 존재하고 Antigravity 로그인 완료 | 바이너리 없음 → 체인에서 제외, 인증 실패 → 다음 fallback 시도 |
 | `codex-cli` / `copilot-cli` / `qwen-cli` | 해당 CLI 바이너리가 `PATH`에 존재 | 바이너리 없음 → 체인에서 제외 |
 | API providers (`anthropic`, `openai`, …) | 엔트리에 provider API 키 | 키 없음 → 체인에서 제외 |
 

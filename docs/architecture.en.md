@@ -1076,7 +1076,7 @@ The `codex-cli` provider carries `model` / `timeoutMs` settings through to the a
 LLM_PRIMARY=gemini-cli
     |
     v
-[gemini-cli] -> fail -> [anthropic] -> fail -> [codex-cli] -> fail -> [copilot-cli] -> fail -> [qwen-cli] -> ...
+[gemini-cli] -> fail -> [agy-cli] -> fail -> [anthropic] -> fail -> [codex-cli] -> fail -> [copilot-cli] -> fail -> [qwen-cli] -> ...
 ```
 
 **codex-cli provider** (`lib/llm/providers/CodexCliProvider.js`):
@@ -1100,7 +1100,7 @@ LLM_PRIMARY=gemini-cli
 - Circuit breaker failure threshold (LLM_CB_FAILURE_THRESHOLD=5) and OPEN duration (LLM_CB_OPEN_DURATION_MS=60000) remain unchanged
 
 **Complete LLM_PRIMARY allowed values**:
-`gemini-cli`, `anthropic`, `openai`, `google-gemini-api`, `groq`, `openrouter`, `xai`, `ollama`, `vllm`, `deepseek`, `mistral`, `cohere`, `zai`, `codex-cli`, `copilot-cli`, `qwen-cli`
+`gemini-cli`, `agy-cli`, `anthropic`, `openai`, `google-gemini-api`, `groq`, `openrouter`, `xai`, `ollama`, `vllm`, `deepseek`, `mistral`, `cohere`, `zai`, `codex-cli`, `copilot-cli`, `qwen-cli`, `opencode-cli`
 
 ### Search Pipeline -- _suggestion Post-Processing
 

@@ -315,7 +315,7 @@ cp .env.example .env
 Additional environment variables:
 
 ```
-LLM_PRIMARY                   - Primary LLM provider (default: gemini-cli). Options: gemini-cli, codex, copilot, anthropic, etc.
+LLM_PRIMARY                   - Primary LLM provider (default: gemini-cli). Options: gemini-cli, agy-cli, codex-cli, opencode-cli, anthropic, etc.
 LLM_FALLBACKS                 - JSON array of fallback providers: [{"provider":"anthropic","apiKey":"...","model":"claude-opus-4-6"}]
 MEMENTO_REMEMBER_ATOMIC       - When true, atomizes quota check + INSERT in remember() into a single transaction to eliminate TOCTOU (default: false)
 MEMENTO_CASE_BACKPROP_ENABLED - When true, enables CaseRewardBackprop — reward back-propagation per case_id (default: false)

@@ -282,7 +282,7 @@ COMPRESS_MIN_GROUP            - 압축 그룹 최소 크기 (기본: 3)
 CONSOLIDATE_INTERVAL_MS       - consolidate 주기 (기본: 3600000 = 1시간)
 ALLOWED_ORIGINS               - CORS 허용 Origin 목록 (쉼표 구분)
 RERANKER_MODEL                - in-process ONNX 모델 선택: minilm (기본, 영어 전용) 또는 bge-m3 (다국어, 비영어권 권장)
-LLM_PRIMARY                   - 주 LLM provider (기본: gemini-cli). gemini-cli, codex, copilot, anthropic 등
+LLM_PRIMARY                   - 주 LLM provider (기본: gemini-cli). gemini-cli, agy-cli, codex-cli, opencode-cli, anthropic 등
 LLM_FALLBACKS                 - JSON 배열. 각 원소: {"provider":"anthropic","apiKey":"...","model":"claude-opus-4-6"}
 MEMENTO_REMEMBER_ATOMIC       - true로 설정 시 remember() quota 체크+INSERT를 단일 트랜잭션으로 원자화 (기본: false)
 MEMENTO_CASE_BACKPROP_ENABLED - true로 설정 시 CaseRewardBackprop 활성화 — case_id 단위 reward 역전파 (기본: false)
