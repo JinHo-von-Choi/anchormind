@@ -346,3 +346,4 @@ split skip 건수를 `reason` 라벨별로 측정한다.
 | `llm_error` | LLM 호출/파싱 기타 실패 |
 | `low_yield` | 게이트 통과 자식 수 < `minItems` |
 | `insert_shortfall` | insert 후 자식 수 < `minItems` (롤백됨) |
+| `anchor_loss` | 자식 합집합에 원문의 수치 앵커가 남지 않아 원본 대체 중단 |
