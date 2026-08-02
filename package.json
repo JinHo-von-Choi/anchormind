@@ -42,5 +42,8 @@
   },
   "devDependencies": {
     "eslint": "^9.0.0"
+  },
+  "overrides": {
+    "fast-uri": "3.1.3"
   }
 }
