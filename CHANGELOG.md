@@ -1,5 +1,21 @@
 # Changelog
 
+## [5.5.0] - 2026-08-02
+
+운영 인스턴스의 최근 15일 피드백을 분석해 도출한 결함 4건을 수정한다. 모두 격리 DB에서 실제 코드 경로로 재현을 확인한 뒤 조치했다.
+
+### Fixed
+- `amend`가 `resolutionStatus`/`outcome`/`phase`를 받아도 반영하지 않고 `updated: true`를 반환하던 문제 수정 (#43). 세 필드가 도구 스키마와 `FragmentWriter`의 갱신 허용 필드에 모두 없어 조용히 버려졌고, `SKILL.md`와 `lib/jsonrpc.js`가 안내하는 케이스 종결 절차가 수행되지 않았다. 변경 전 상태는 `fragment_versions`에 UPDATE와 동일 트랜잭션으로 기록하며(migration-038), `resolved` 전환 시 `case_closed` 이벤트를 남긴다.
+- 반영 가능한 필드가 하나도 없는 `amend` 호출이 성공으로 보고되던 문제 수정 (#43). `updated: false`와 `unsupportedFields`를 반환한다.
+- 만료(`valid_to` 설정) 파편 `amend`가 미존재 id와 동일한 오류를 반환하던 문제 수정 (#43). 만료 파편은 이력이므로 수정 불가 정책을 유지하되 `validTo`와 함께 구분되는 오류를 반환한다.
+- `type`/`topic` 필터가 L1/L2에만 적용되어, `timeRange` 지정 시 시간창 레이어가 타입 무관 파편을 수집하고 RRF에서 2배 가중을 받아 상위를 점령하던 문제 수정 (#44). `SearchScope`에 두 필드를 추가하고 `searchByTimeRange`·`searchBySemantic`에 전달한다. 격리 DB 실측 기준 `type=decision` 지정 시 반환 8건(불일치 6건)에서 2건(불일치 0건)으로 변경.
+- 사용자가 `keywords`를 지정하면 본문 추출이 수행되지 않아 본문에만 등장하는 코드 식별자가 색인되지 않던 문제 수정 (#45). 지정 키워드를 앞에 두고 중복 제거 후 최대 10개까지 추출 결과를 병합한다. 운영 데이터 기준 본문에 식별자가 있는 파편 3,032건 중 1,265건이 대상이었다.
+- `morphemeIndex`의 `minSimilarity`·`fallbackThreshold`·`fallbackLimit`이 검색 경로에서 소비되지 않던 문제 수정 (#46). 형태소 프로브가 `semanticSearch.minSimilarity`(0.4)를 재사용해, 문장 임베딩보다 코사인이 낮은 형태소 평균 벡터가 사실상 전량 탈락했다. 전용 임계값 0.15를 적용하고 기본 결과가 `fallbackThreshold` 이하일 때만 `fallbackLimit`까지 채택한다.
+
+### Changed
+- `FragmentReader.searchBySemantic`이 위치 인자 대신 옵션 객체를 받는다 (#44). 필터가 12종을 넘어 순서 오류 위험이 커졌다.
+- `scripts/backfill-split-keywords.js`, `scripts/backfill-body-keywords.js`로 기존 파편을 소급 처리할 수 있다. 둘 다 dryRun 기본.
+
 ## [5.4.1] - 2026-08-02
 
 ### Security
