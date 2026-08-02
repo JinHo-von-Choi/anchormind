@@ -1,6 +1,6 @@
 {
   "name": "anchormind-mcp",
-  "version": "5.4.0",
+  "version": "5.4.1",
   "license": "Apache-2.0",
   "description": "Fragment-Based Memory MCP Server",
   "main": "server.js",
@@ -25,7 +25,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
-    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@node-rs/jieba": "^2.0.1",
     "dotenv": "^16.0.0",
     "garu-ko": "^0.9.1",
@@ -42,5 +42,14 @@
   },
   "devDependencies": {
     "eslint": "^9.0.0"
+  },
+  "overrides": {
+    "fast-uri": "^3.1.5",
+    "brace-expansion": "^1.1.18",
+    "@hono/node-server": "^2.0.5",
+    "mongoose": "^9.9.1",
+    "tar": "^7.5.22",
+    "body-parser": "^2.3.0",
+    "sharp": "^0.35.3"
   }
 }
