@@ -806,6 +806,8 @@ recall에 `includeLinks: true`(기본값)가 설정되어 있으면 결과 파�
 
 `isAnchor: true`로 표시된 파편은 어느 계층에 있든 MemoryConsolidator의 감쇠 및 삭제 대상에서 영구적으로 제외된다. 중요도가 0.1이더라도 삭제되지 않는다. 절대 잃어서는 안 되는 지식에 사용한다.
 
+`splitLongFragments`로 분할된 원본은 `source = 'split:{원본 id}'`인 자식이 하나라도 남아 있는 동안 만료 삭제 대상에서 제외된다. 분할은 원본을 `valid_to` 설정과 함께 importance 하향·`cold` 강등 처리하므로, 이 보호가 없으면 원본이 utility 기준으로 물리 삭제되어 자식만 남는다. 자식이 모두 정리된 뒤에는 일반 GC 규칙이 그대로 적용된다.
+
 stale 기준(일): procedure=30, fact=60, decision=90, default=60. `config/memory.js`의 `MEMORY_CONFIG.staleThresholds`에서 조정한다.
 
 ---
