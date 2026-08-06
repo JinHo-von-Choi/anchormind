@@ -1546,6 +1546,7 @@ recall 또는 context 응답의 `_meta.hints` 필드를 읽는다:
 | signal | 의미 | 권장 행동 |
 |--------|------|----------|
 | no_results | 관련 기억 없음 | 작업 완료 후 remember |
+| topic_mismatch | 지정한 topic 파편 없음, 유사 topic 존재 | 제안된 유사 topic으로 재검색 |
 | contradiction_pending | 반환 파편에 미해결 contradicts 링크 | 상충 파편 확인 후 amend 정리 또는 잘못된 쪽 forget |
 | stale_results | 30일+ 경과 파편 | amend로 갱신 또는 forget |
 | consider_context | 파편 5개 이상 | includeContext=true 재검색 |

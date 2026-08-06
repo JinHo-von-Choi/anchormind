@@ -359,7 +359,7 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 `_meta`: recall/context 응답 최상위의 메타데이터 래퍼.
 
 - `searchEventId`: 검색 이벤트 식별자. 후속 `tool_feedback` 호출 시 FK로 사용.
-- `hints`: 검색 결과 신호 배열(`no_results`, `contradiction_pending`, `stale_results`, `active_errors` 등). `contradiction_pending`은 반환 파편에 미해결 contradicts 링크가 있을 때 발화하며 amend 정리를 권고한다.
+- `hints`: 검색 결과 신호 배열(`no_results`, `topic_mismatch`, `contradiction_pending`, `stale_results`, `active_errors` 등). `topic_mismatch`는 지정한 topic으로 0건이면서 키 스코프 내에 유사 topic이 존재할 때 발화하며 제안된 topic으로의 재검색을 권고한다. `contradiction_pending`은 반환 파편에 미해결 contradicts 링크가 있을 때 발화하며 amend 정리를 권고한다.
 - `suggestion`: 사용 패턴 기반 도구 제안.
 - `serverTime`: 응답 생성 시점의 서버 시각. LLM 클라이언트의 학습 시점 시간 고착을 방지하기 위해 모든 recall/context 응답에 일관되게 포함된다. `iso`(UTC ISO 8601), `epoch_ms`(Unix ms), `display_kst`(Asia/Seoul 한국어 표기), `timezone` 4필드 구성.
 

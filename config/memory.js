@@ -243,7 +243,29 @@ export const MEMORY_CONFIG = {
     timeoutMs        : 30_000, // 파편당 LLM 타임아웃
     minChildLength     : 20,   // 이 길이 미만 자식 단편은 폐기
     excludeMetaTopics  : ["session_reflect", "consolidation", "reflection"], // 분할 제외 메타 토픽
-    failureBackoffHours: 24    // 분할 실패 후 이 시간 동안 재선정 제외 (무한 재분할 차단)
+    failureBackoffHours: 24,   // 분할 실패 후 이 시간 동안 재선정 제외 (무한 재분할 차단)
+    /** 부모의 주어 앵커를 하나도 담지 못한 자식을 폐기 */
+    requireSubjectAnchor    : (process.env.MEMENTO_SPLIT_SUBJECT_GATE  ?? "true") === "true",
+    /** 부모에 없던 양상(예정·추측·의무·의도)을 도입한 자식을 폐기 */
+    rejectIntroducedModality: (process.env.MEMENTO_SPLIT_MODALITY_GATE ?? "true") === "true",
+    subjectAnchorMax        : 12  // 부모 원문에서 뽑을 주어 앵커 상한
+  },
+  /** 피드백 계측 설정 */
+  feedback: {
+    /**
+     * 쓰기 계열 도구 응답에 tool_feedback 요청 힌트를 확률적으로 동봉한다.
+     * recall은 자체 힌트 경로를 이미 갖고 있어 rates에서 제외한다.
+     */
+    sampling: {
+      enabled           : (process.env.MEMENTO_FEEDBACK_SAMPLING ?? "true") === "true",
+      rates             : {
+        remember: 0.10,
+        amend   : 0.25,
+        forget  : 0.25
+      },
+      maxHintsPerSession: 2,    // 세션당 힌트 상한. 초과 시 무음
+      cooldownSeconds   : 900   // 직전 힌트 이후 이 시간 동안 재발행 금지
+    }
   },
   /** 형태소 사전 및 L3 fallback 설정 */
   morphemeIndex: {

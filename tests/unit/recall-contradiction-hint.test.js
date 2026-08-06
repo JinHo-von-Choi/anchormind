@@ -49,6 +49,35 @@ describe("buildRecallHint 우선순위", () => {
     assert.equal(hint.signal, "no_results");
   });
 
+  it("빈 결과 + topic 후보는 no_results보다 topic_mismatch가 우선한다", () => {
+    const hint = buildRecallHint(
+      [],
+      { topic: "anchormind-mcp" },
+      { contradictionPending: true },
+      [{ topic: "anchormind-mcp-v3", count: 12 }, { topic: "anchormind-recall", count: 4 }]
+    );
+    assert.equal(hint.signal, "topic_mismatch");
+    assert.equal(hint.trigger, "recall");
+    assert.match(hint.suggestion, /topic 'anchormind-mcp'/);
+    assert.match(hint.suggestion, /anchormind-mcp-v3\(12건\), anchormind-recall\(4건\)/);
+    assert.match(hint.suggestion, /topic=anchormind-mcp-v3으로 재검색/);
+  });
+
+  it("topic 후보가 비어 있으면 기존 no_results를 유지한다", () => {
+    const hint = buildRecallHint([], { topic: "anchormind-mcp" }, {}, []);
+    assert.equal(hint.signal, "no_results");
+  });
+
+  it("결과가 있으면 topic 후보가 있어도 topic_mismatch를 내지 않는다", () => {
+    const hint = buildRecallHint(
+      [frag("f1", 90)],
+      { topic: "anchormind-mcp" },
+      {},
+      [{ topic: "anchormind-mcp-v3", count: 12 }]
+    );
+    assert.equal(hint.signal, "stale_results");
+  });
+
   it("contradictionPending이 stale_results보다 우선한다", () => {
     const hint = buildRecallHint([frag("f1", 90)], {}, { contradictionPending: true });
     assert.equal(hint.signal, "contradiction_pending");

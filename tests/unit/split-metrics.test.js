@@ -15,4 +15,15 @@ describe("recordSplitSkip", () => {
     assert.ok(lowYield && lowYield.value >= 1);
     assert.ok(provErr && provErr.value >= 1);
   });
+
+  it("tracks the child-level subject/modality reasons separately", async () => {
+    recordSplitSkip("subject_loss");
+    recordSplitSkip("modality_drift");
+    recordSplitSkip("modality_drift");
+    const metrics  = await splitSkippedTotal.get();
+    const subject  = metrics.values.find(v => v.labels.reason === "subject_loss");
+    const modality = metrics.values.find(v => v.labels.reason === "modality_drift");
+    assert.ok(subject && subject.value >= 1);
+    assert.ok(modality && modality.value >= 2, "자식 단위 라벨은 한 부모에서 여러 번 누적된다");
+  });
 });

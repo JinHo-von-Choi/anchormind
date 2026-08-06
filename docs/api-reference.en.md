@@ -373,7 +373,7 @@ Each returned fragment includes a `key_id` field. When called with a master key,
 | Field | Description |
 |-------|-------------|
 | `_meta.searchEventId` | FK value to pass as `search_event_id` when calling tool_feedback. The search event ID persisted by `commitSearchSideEffects`. |
-| `_meta.hints` | Array of search signal hints (`no_results`, `contradiction_pending`, `stale_results`, etc.). `contradiction_pending` fires when returned fragments have unresolved contradicts links and recommends cleanup via amend |
+| `_meta.hints` | Array of search signal hints (`no_results`, `topic_mismatch`, `contradiction_pending`, `stale_results`, etc.). `topic_mismatch` fires when the requested topic yields zero fragments while similar topics exist in key scope, and recommends re-running recall with a suggested topic. `contradiction_pending` fires when returned fragments have unresolved contradicts links and recommends cleanup via amend |
 | `_meta.suggestion` | RecallSuggestionEngine hint object (null when no issue detected) |
 | `_meta.serverTime` | Server time of the response, mitigating LLM clients' training-time fixation. Included consistently in all recall/context responses. `iso` (UTC ISO 8601), `epoch_ms` (Unix ms), `display_kst` (Asia/Seoul formatted), `timezone`. |
 

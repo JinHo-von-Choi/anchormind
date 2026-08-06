@@ -1,5 +1,23 @@
 # Changelog
 
+## [5.6.0] - 2026-08-06
+
+운영 인스턴스의 최근 7일 검색 텔레메트리(무결과 mixed 검색 60건 중 51건이 topic 필터 조합)와 열린 이슈 2건(#48, #33)을 반영한다.
+
+### Added
+- recall이 topic 지정 검색에서 0건일 때 키 스코프의 유사 토픽 후보를 `_meta.hints`의 `topic_mismatch` 신호로 반환한다. 후보는 topic별 파편 수 집계를 형태소 벡터 코사인으로 랭킹해 상위 3개까지 제시하며, topic 필터 자체는 정확일치 그대로다. 후보가 없으면 기존 `no_results`로 떨어진다.
+- `task_feedback`에 `outcome`(completed/partial/blocked/abandoned/unknown), `evaluator`(agent/automatic/human), `evidence`, `unmet_requirements` 필드 추가 (#48, migration-039). `overall_success`만으로는 "완수했으나 도구가 방해했다"를 표현할 수 없어 성공률 지표가 변별하지 못했다. `overall_success`는 호환을 위해 유지하고, 기존 행은 NULL(미보고)로 남겨 신규 표본과 분리한다.
+- `tool_feedback`에 `irrelevance_reason`(not_stored/search_miss/scope_leak/topic_mismatch/other) 추가 (#48). 저장된 적 없는 내용을 찾은 호출과 검색이 실패한 호출을 분리 집계한다. ConsolidatorGC 피드백 리포트에 원인 분포·outcome 분포 블록이 추가되고, `memory_stats`의 evaluation에 `completed_rate`·`irrelevance` 키가 늘어난다(기존 키 불변).
+- 쓰기 도구(remember/amend/forget) 성공 응답의 `_meta.hints`에 확률적 피드백 유도(`feedback_sampled`) 추가 (#48). 표본이 recall에 편중되는 문제의 완화책으로, 세션당 최대 2건·쿨다운 15분·도구별 확률(remember 0.10, amend/forget 0.25)로 제한하며 `MEMENTO_FEEDBACK_SAMPLING=false`로 끌 수 있다. 유도된 피드백은 `trigger_type='sampled'`로 저장되어 자발 표본과 분리 관측된다.
+- 분할 자식 품질 게이트 2종 (#33). 부모 원문의 주어 앵커(고유명사·코드 식별자·라틴+한글 혼합 토큰)가 자식 본문에 하나도 남지 않으면 reject(`subject_loss`), 부모에 없는 시제·서법 표지(예정/의도/추정/당위 4패밀리)를 자식이 새로 도입하면 reject(`modality_drift`). 완료 사실이 미래 계획으로 바뀌거나 주어를 잃은 조각이 독립 파편이 되는 경로를 차단한다. `MEMENTO_SPLIT_SUBJECT_GATE`/`MEMENTO_SPLIT_MODALITY_GATE`(기본 활성)로 토글하며, 앵커 미추출 시 게이트를 적용하지 않는다. `memento_consolidate_split_skipped_total`에 두 reason 라벨이 추가된다(자식 단위 집계).
+
+### Changed
+- topic 정확일치 필터가 0건을 반환한 검색을 SearchParamAdaptor의 minSimilarity 학습 표본에서 제외한다. topic 오기가 반복되면 원인과 무관한 시맨틱 임계값이 하향 학습되던 경로를 차단한다.
+- remember·recall의 topic 값에 trim을 적용한다. 소문자화는 기존 저장 topic과의 불일치를 만들므로 도입하지 않는다.
+
+### 배포 주의
+- migration-039를 적용하지 않은 DB에서 `tool_feedback` 저장이 실패한다. 서비스 재시작 전 마이그레이션을 선행한다.
+
 ## [5.5.0] - 2026-08-02
 
 운영 인스턴스의 최근 15일 피드백을 분석해 도출한 결함 4건을 수정한다. 모두 격리 DB에서 실제 코드 경로로 재현을 확인한 뒤 조치했다.

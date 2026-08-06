@@ -52,6 +52,11 @@ mock.module("../../lib/memory/consolidate/split-metrics.js", {
   }
 });
 
+/** 주체 앵커 게이트 무력화 — 이 테스트의 관심사가 아니며 형태소 분석기 로드도 피한다. */
+mock.module("../../lib/memory/consolidate/proper-nouns.js", {
+  namedExports: { extractSubjectAnchors: async () => [] }
+});
+
 mock.module("../../config/memory.js", {
   exports: {
     MEMORY_CONFIG: {
