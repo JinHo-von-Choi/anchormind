@@ -46,7 +46,7 @@ Flags available for all subcommands.
 
 ### Local-only (remote access not supported)
 
-`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update` access the DB or process directly and return an error when used with `--remote`.
+`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, and `import` access the DB or process directly and return an error when used with `--remote`.
 
 ### Remote-capable
 

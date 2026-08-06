@@ -139,7 +139,7 @@ memory_consolidate 도구가 실행되거나 서버 내부 스케줄러(6시간 
 14. `detect_contradictions` — 3단계 하이브리드 모순 탐지. pgvector cosine > 0.85 후보 추출 → mDeBERTa NLI → Gemini CLI 에스컬레이션. 결과는 `nliResolvedDirectly`, `nliSkippedAsNonContra`로 분리 반환
 15. `detect_supersessions` — 임베딩 유사도 0.7~0.85 구간 파편 쌍에 대해 Gemini CLI로 대체 관계 판단. GraphLinker의 0.85 이상 구간과 상보적으로 동작
 16. `process_pending_contradictions` — Gemini CLI 가용 시 Redis pending 큐에서 최대 10건 꺼내 재판정
-17. `feedback_report` — tool_feedback/task_feedback 집계 리포트 생성
+17. `feedback_report` — tool_feedback/task_feedback 집계 리포트 생성. 무관 판정이 1건 이상이면 원인(not_stored/search_miss/scope_leak/topic_mismatch/other/미보고) 분포 표를 덧붙이고, 작업 레벨 통계에는 outcome 분포·outcome 보고 세션 수·human 판정 세션 수·미충족 요구사항 보유 세션 수를 포함한다. outcome 미보고가 있으면 과대 해석 경고를, 성공 비율 100%인데 미보고가 보고보다 많으면 자기보고 편향 주의 문구를 남긴다
 18. `feedback_calibration` — 최근 7일 tool_feedback을 세션별로 집계한 뒤 `feedbackFactor(allRelevant, allSufficient)` 순수함수(lib/memory/consolidate/feedbackFactor.js)로 importance 보정 계수를 결정한다. POSITIVE(allRelevant=true AND allSufficient=true): ×1.1, MIXED(allRelevant=true AND allSufficient=false): ×0.95, NEGATIVE(allRelevant=false): ×0.85. `is_anchor=true` 제외, 클리핑 [0.05, 1.0]
 19. `prune_keyword_indexes` — Redis 고아 키워드 인덱스 제거
 20. `collect_stale_fragments` — 검증 주기 초과 파편 목록 수집, results.stale_fragments에 기록

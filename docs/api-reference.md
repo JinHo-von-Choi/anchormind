@@ -329,6 +329,7 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 | threshold | number | - | similarity 임계값 (0~1) |
 | includeSuperseded | boolean | - | 만료(superseded) 파편 포함. 기본 false. |
 | includePeerAgents | boolean | - | true 시 같은 키/workspace 스코프 내 다른 agentId 파편 포함(멀티에이전트 협업용). 키·workspace 경계는 유지. 기본 false. |
+| includeKeyName | boolean | - | true 시 각 파편에 key_id와 key_name(액세스 키 라벨)을 포함한다. 같은 키 그룹 스코프의 정보만 노출된다. 기본 false. |
 | asOf | string | - | ISO 8601. 특정 시점 기준 유효 파편만. |
 | excludeSeen | boolean | - | context()에서 이미 주입된 파편 제외. 기본 true. |
 | includeKeywords | boolean | - | 각 파편의 keywords 배열을 응답에 포함 |
@@ -359,15 +360,23 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 `_meta`: recall/context 응답 최상위의 메타데이터 래퍼.
 
 - `searchEventId`: 검색 이벤트 식별자. 후속 `tool_feedback` 호출 시 FK로 사용.
-- `hints`: 검색 결과 신호 배열(`no_results`, `contradiction_pending`, `stale_results`, `active_errors` 등). `contradiction_pending`은 반환 파편에 미해결 contradicts 링크가 있을 때 발화하며 amend 정리를 권고한다.
+- `hints`: 검색 결과 신호 배열(`no_results`, `topic_mismatch`, `contradiction_pending`, `stale_results`, `active_errors` 등). `topic_mismatch`는 지정한 topic으로 0건이면서 키 스코프 내에 유사 topic이 존재할 때 발화하며 제안된 topic으로의 재검색을 권고한다. `contradiction_pending`은 반환 파편에 미해결 contradicts 링크가 있을 때 발화하며 amend 정리를 권고한다.
 - `suggestion`: 사용 패턴 기반 도구 제안.
 - `serverTime`: 응답 생성 시점의 서버 시각. LLM 클라이언트의 학습 시점 시간 고착을 방지하기 위해 모든 recall/context 응답에 일관되게 포함된다. `iso`(UTC ISO 8601), `epoch_ms`(Unix ms), `display_kst`(Asia/Seoul 한국어 표기), `timezone` 4필드 구성.
+
+쓰기 도구(remember/amend/forget)의 성공 응답에도 `_meta` 블록이 실릴 수 있다. 이 경우 `hints`에는 `feedback_sampled` 신호 1건과 `serverTime`만 포함되며, `searchEventId`·`suggestion`은 없다. 상세는 [피드백 샘플링 힌트](#피드백-샘플링-힌트)를 참조한다.
 
 ```json
 {
   "_meta": {
     "searchEventId": 1234,
-    "hints": ["contextText 파라미터 추가로 SpreadingActivation 활성화 권장"],
+    "hints": [
+      {
+        "signal"    : "no_results",
+        "suggestion": "이 주제에 대한 기억이 없습니다. 중요한 내용이라면 remember로 저장하세요.",
+        "trigger"   : "remember"
+      }
+    ],
     "suggestion": { "code": "empty_result_no_context", "recommendedTool": "recall" },
     "serverTime": {
       "iso"        : "2026-05-15T06:32:11.000Z",
@@ -402,10 +411,12 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 
 | code | 트리거 조건 | 권유 |
 |------|------------|------|
-| `repeat_query` | 동일 키워드/텍스트 쿼리를 30분 이내 3회 이상 반복 | depth 또는 type 필터 추가 |
-| `empty_result_no_context` | 결과 0건이고 contextText가 없는 경우 | contextText 추가 또는 keywords 확장 |
-| `large_limit_no_budget` | pageSize=50 요청이고 tokenBudget 미지정인 경우 | tokenBudget 명시로 응답 크기 제어 |
-| `no_type_filter_noisy` | type 필터 없이 10건 이상 반환되었고 depth도 미지정인 경우 | type 또는 depth 필터 추가 |
+| `repeat_query` | keywords 쿼리가 5분 이내 3회 이상 반복 (query_type이 keywords 또는 mixed인 search_events 기준) | 케이스 타임라인 조회 — `reconstruct_history`(상위 case_id 존재 시) 또는 `graph_explore` |
+| `empty_result_no_context` | 결과 0건이고 contextText가 없는 경우 | contextText 추가 |
+| `large_limit_no_budget` | `limit` 파라미터가 50 이상이고 tokenBudget 미지정인 경우. recall 스키마의 페이지 크기 파라미터는 `pageSize`이므로 현재 이 규칙은 발화하지 않는다 | tokenBudget 명시로 응답 크기 제어 |
+| `no_type_filter_noisy` | type 필터 없이 호출했고 해당 키 스코프의 총 파편 수가 100건을 초과하는 경우 (이번 호출의 반환 건수·depth는 판정에 쓰이지 않는다) | type 필터 추가 |
+
+규칙은 위 순서대로 평가되어 최초 1건만 `_meta.suggestion`에 실린다. 조건에 해당하지 않으면 필드는 생략된다.
 
 `explanation` (`MEMENTO_SYMBOLIC_EXPLAIN=true` 시에만 포함): 해당 파편이 검색 결과에 포함된 이유를 최대 3개 reason code로 설명한다.
 
@@ -569,6 +580,32 @@ violations 있는 경우 (soft gate — 저장됨):
 
 경고는 soft gate이므로 저장을 차단하지 않는다. `api_keys.symbolic_hard_gate=true` 설정 시 경고 발생 파편은 저장 거부된다. 이 경우 아래 에러 코드가 반환된다.
 
+### 피드백 샘플링 힌트
+
+`remember`·`amend`·`forget`의 성공 응답에는 일정 확률로 `tool_feedback` 요청 힌트가 동봉된다. 표집되지 않으면 응답 형태는 이전과 동일하며 `_meta` 자체가 붙지 않는다.
+
+```json
+{
+  "success": true,
+  "id": "frag-...",
+  "_meta": {
+    "hints": [
+      {
+        "signal": "feedback_sampled",
+        "suggestion": "방금 remember 결과가 의도한 대로 유용했는지 tool_feedback으로 평가해 주세요. relevant=false인 경우 irrelevance_reason도 함께 보내면 원인별 개선에 반영됩니다.",
+        "trigger": "tool_feedback",
+        "args": { "tool_name": "remember", "trigger_type": "sampled" }
+      }
+    ],
+    "serverTime": { "iso": "..." }
+  }
+}
+```
+
+힌트를 받은 클라이언트는 `hints[0].args`를 그대로 `tool_feedback` 인자로 사용해 평가를 보내는 것이 권장된다(`trigger_type="sampled"`). 무관 판정 시에는 `irrelevance_reason`을 함께 보낸다.
+
+표집 규칙은 `config/memory.js`의 `feedback.sampling`을 따른다. 도구별 확률은 remember 0.10, amend 0.25, forget 0.25이며, 세션당 최대 2건·직전 힌트 이후 900초 쿨다운이 적용된다(Redis 미가용 시 상한과 쿨다운은 적용되지 않는다). `MEMENTO_FEEDBACK_SAMPLING=false`로 전체 비활성화할 수 있다. `remember(dryRun=true)`·`dryRun=true` 호출(remember·forget)과 실제 갱신이 없었던 `amend`(`updated=false`)는 표집 대상에서 제외된다. recall은 자체 힌트 경로를 이미 갖고 있어 표집 대상이 아니다.
+
 ### 에러 코드
 
 - `-32003` (SYMBOLIC_POLICY_VIOLATION): Symbolic hard gate가 활성화된 키에서 PolicyRules violations 발생. 저장이 거부됨. MCP 도구 에러(isError: true)가 아닌 JSON-RPC **프로토콜 레벨** 에러다.
@@ -716,6 +753,9 @@ violations 있는 경우 (soft gate — 저장됨):
 | isAnchor | boolean | - | 고정 파편 여부 설정 |
 | supersedes | boolean | - | true 시 기존 파편을 명시적으로 대체 (superseded_by 링크 생성 및 중요도 하향) |
 | assertionStatus | string | - | 파편의 확인 상태 변경 (observed, inferred, verified, rejected). case_id가 있는 파편은 변경 시 verification_passed/verification_failed 이벤트가 자동 기록된다. |
+| resolutionStatus | string | - | 케이스 해결 상태 변경 (open, resolved, abandoned). case_id가 있는 파편은 resolved 전환 시 case_closed 이벤트가 자동 기록된다. |
+| outcome | string | - | 케이스 종결 결과 요약. resolutionStatus='resolved'와 함께 기록한다. |
+| phase | string | - | 작업 단계 변경 (planning, debugging, implementation, verification 등). |
 | agentId | string | - | 에이전트 ID |
 | dryRun | boolean | - | true 설정 시 실제 변경 없이 패치 적용 후의 예상 파편 상태를 반환. |
 
@@ -738,7 +778,21 @@ violations 있는 경우 (soft gate — 저장됨):
 | narrative_summary | string | - | 세션 전체를 3~5문장의 서사(narrative)로 요약. episode 파편으로 저장되어 세션 간 맥락 연속성에 기여. 생략 시 summary에서 자동 생성. |
 | agentId | string | - | 에이전트 ID |
 | workspace | string | - | 생성되는 모든 reflect 파편에 적용할 워크스페이스. 미지정 시 API 키의 default_workspace, 그것도 없으면 전역(NULL). 멀티 프로젝트 환경에서 세션 요약의 교차 주입 방지에 권장. |
-| task_effectiveness | object | - | 세션 도구 사용 효과성 종합 평가. overall_success(boolean), tool_highlights(string[]), tool_pain_points(string[]) 포함. |
+| task_effectiveness | object | - | 세션 작업 결과와 도구 사용 효과성 평가. outcome, evaluator, evidence, unmet_requirements, overall_success, tool_highlights, tool_pain_points로 구성된다. 아래 표 참조. |
+
+#### task_effectiveness 하위 필드
+
+| 이름 | 타입 | 설명 |
+|------|------|------|
+| outcome | string | 작업 종료 상태. `completed`(요구사항 전부 충족), `partial`(일부만 충족), `blocked`(외부 요인으로 진행 불가), `abandoned`(중단), `unknown`(판정 불가). 확신이 없으면 추정하지 말고 `unknown`을 쓴다. 열거값 밖의 값은 저장 시 폐기되어 미보고(NULL)로 기록된다. |
+| evaluator | string | outcome 판정 주체. `agent`(에이전트 자기보고), `automatic`(테스트·빌드 등 자동 판정), `human`(사용자 확인). outcome이 기록될 때만 함께 저장되며 생략 시 `agent`. |
+| evidence | string | outcome 판정 근거. 1000자 초과분은 절삭된다. |
+| unmet_requirements | string[] | 충족하지 못한 요구사항 목록. 최대 20건, 각 항목 200자로 절삭된다. partial/blocked/abandoned일 때 남은 작업을 명시한다. |
+| overall_success | boolean | 호환 유지 필드. 명시하면 그 값이 그대로 저장되고, 생략하면 outcome이 `completed`일 때 true, 그 외에는 false로 파생된다. |
+| tool_highlights | string[] | 유용했던 도구 목록 |
+| tool_pain_points | string[] | 불편했던 도구 목록 |
+
+`task_effectiveness`는 `agent_memory.task_feedback` 테이블에 기록되며 `outcome`·`evaluator`·`evidence`·`unmet_requirements` 컬럼은 migration-039에서 추가됐다. 집계 결과는 `memory_stats`의 `evaluation` 블록에 반영된다.
 
 ### 응답 구조
 
@@ -785,6 +839,7 @@ Core Memory + Working Memory + session_reflect를 분리 로드한다. 세션 �
 | agentId | string | - | 에이전트 ID |
 | workspace | string | - | 워크스페이스 필터. 지정 시 해당 workspace 파편 + 전역(NULL) 파편만 반환. 미지정 시 키의 default_workspace 적용. |
 | structured | boolean | - | true 시 계층적 트리 구조 반환, false/미지정 시 기존 flat list (기본값: false) |
+| includeKeyName | boolean | - | true 시 fragments 각 항목에 key_id와 key_name(액세스 키 라벨)을 포함한다. 같은 키 그룹 스코프의 정보만 노출되며, structured=true 트리 응답에는 적용되지 않는다. 기본 false. |
 
 ---
 
@@ -802,7 +857,8 @@ Core Memory + Working Memory + session_reflect를 분리 로드한다. 세션 �
 | suggestion | string | - | 개선 제안 (100자 이내) |
 | context | string | - | 사용 맥락 요약 (50자 이내) |
 | session_id | string | - | 세션 ID |
-| trigger_type | string | - | 트리거 유형. sampled=훅 샘플링, voluntary=AI 자발적 (기본 voluntary) |
+| trigger_type | string | - | 트리거 유형. sampled=훅 샘플링 또는 쓰기 도구의 `feedback_sampled` 힌트 응답, voluntary=AI 자발적 (기본 voluntary) |
+| irrelevance_reason | string | - | 무관 판정 원인. `not_stored`(저장된 적 없음), `search_miss`(저장됐으나 미검색), `scope_leak`(타 스코프 유입), `topic_mismatch`(주제 불일치), `other`(그 외). `relevant=false`일 때만 의미를 가지며, 그 외의 호출이나 열거값 밖의 값은 폐기되어 NULL로 기록된다. 원인별 분포는 `memory_stats`의 `irrelevance_breakdown`으로 집계된다. |
 | search_event_id | integer | - | 직전 recall이 반환한 _meta.searchEventId. 검색 품질 분석에 사용. |
 | fragment_ids | string[] | - | 피드백 대상 파편 ID 목록. 제공 시 해당 파편의 활성화 점수가 피드백에 따라 조정된다. |
 
@@ -816,6 +872,24 @@ Core Memory + Working Memory + session_reflect를 분리 로드한다. 세션 �
 
 파라미터 없음.
 
+### 응답 — `stats.evaluation`
+
+검색 품질과 downstream 작업 결과 지표를 함께 반환한다. DB 미가용이거나 표본이 없으면 비율 필드는 null이다.
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| rolling_precision_at_5 | number \| null | 최근 100세션 기준 rolling Precision@5 |
+| sufficient_rate | number \| null | tool_feedback의 sufficient=true 비율 |
+| sample_sessions | number | precision 산출에 사용된 세션 수 |
+| task_success_rate | number \| null | 최근 30일 `overall_success=true` 비율. 분모는 전체 task_feedback 행 |
+| task_sessions | number | 최근 30일 task_feedback 행 수 |
+| task_completed_rate | number \| null | 최근 30일 `outcome='completed'` 비율. 분모는 outcome을 실제로 보고한 세션만이다(미보고를 실패로 계산하지 않는다) |
+| task_outcome_reported | number | outcome을 보고한 세션 수 |
+| task_outcome_counts | object \| null | outcome 분포. `completed`·`partial`·`blocked`·`abandoned`·`unknown`·`unreported`(미보고) |
+| irrelevance_breakdown | object \| null | `relevant=false` 피드백의 원인 분포. `total_irrelevant`(무관 판정 총건), `reported`(원인이 기록된 건), `counts`(`not_stored`·`search_miss`·`scope_leak`·`topic_mismatch`·`other`·`unreported`) |
+
+`irrelevance_breakdown.counts`에서 `not_stored` 우세는 저장 습관, `search_miss` 우세는 검색 리콜, `scope_leak` 우세는 스코프 격리 문제를 가리킨다.
+
 ---
 
 ## MCP 도구 — memory_consolidate
@@ -824,7 +898,21 @@ Core Memory + Working Memory + session_reflect를 분리 로드한다. 세션 �
 
 ### 파라미터
 
-파라미터 없음.
+| 이름 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| stream | boolean | - | deprecated. SSE progress 이벤트를 더 이상 보내지 않는다. 하위 호환을 위해 스키마에 남아 있으며 동작에 영향을 주지 않는다. |
+
+---
+
+## MCP 도구 — session_rotate
+
+현재 세션을 종료하고 새 `sessionId`를 발급한다. 토큰 탈취 의심 시 또는 주기적 로테이션에 사용한다. 동일 `bound_key_id` / `workspace` / `permissions`가 새 세션으로 이관된다.
+
+### 파라미터
+
+| 이름 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| reason | string | - | 회전 사유 (감사 로그 기록, 최대 256자). 예: `scheduled_rotation`, `suspected_leak`, `user_request` |
 
 ---
 
@@ -850,6 +938,8 @@ Core Memory + Working Memory + session_reflect를 분리 로드한다. 세션 �
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | id | string | O | 조회할 파편 ID |
+| agentId | string | - | 에이전트 ID |
+| includePeerAgents | boolean | - | true 시 같은 API 키 스코프 내 다른 agentId의 파편 이력도 조회한다. 테넌트(키) 경계는 완화되지 않는다. 기본 false. |
 
 ---
 
@@ -861,7 +951,7 @@ AnchorMind 최적 활용 가이드를 반환한다. 기억 도구 사용법, 세
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| section | string | - | 특정 섹션만 조회. 미지정 시 전체 가이드 반환. 가능한 값: overview, lifecycle, keywords, search, episode, multiplatform, tools, importance, experiential, triggers, antipatterns |
+| section | string | - | 특정 섹션만 조회. 미지정 시 전체 가이드 반환. 가능한 값: overview, lifecycle, keywords, search, episode, multiplatform, codex, tools, importance, experiential, cbr, triggers, antipatterns |
 
 ---
 
@@ -1031,6 +1121,7 @@ curl -si -X POST https://anchormind.example.com/mcp \
 | `MEMENTO_CASE_BACKPROP_ENABLED` | `false` | `true` 시 case_id를 가진 파편의 amend(resolutionStatus 변경) 시점에 동일 caseId 파편들의 importance를 역전파 조정. `lib/config.js`의 `CASE_BACKPROP_ENABLED` 상수로 export. case 해결 완료 시 관련 파편의 활성화 점수가 상향되어 이후 recall 정밀도를 높인다. |
 | `MEMENTO_STORAGE` | `pgvector` | 스토리지 어댑터 선택. `pgvector`(기본, 프로덕션용 PgVectorStore) 또는 `sqlite-vec`(SqliteVecStore). 어댑터 교체 시 `transaction(fn)` 인터페이스가 유지되므로 write 경로 동시성 시맨틱은 동일하게 보존됨. |
 | `MEMENTO_SYMBOLIC_POLICY_RULES` | `false` | `true` 시 `_runPolicyGate`가 PolicyRules soft gate를 평가하여 위반 rule 이름을 `validation_warnings`에 누적. |
+| `MEMENTO_FEEDBACK_SAMPLING` | `true` | remember·amend·forget 성공 응답에 `feedback_sampled` 힌트를 확률적으로 동봉. `false` 시 힌트를 전혀 붙이지 않으며 응답 형태는 이전과 동일하다. |
 
 ---
 

@@ -27,7 +27,9 @@ AnchorMind의 주요 모듈을 한 페이지로 정리한 ledger. 새 모듈 추
 |`dispatchChain` (`lib/llm/index.js`)|provider chain + prompt + options + deps|첫 성공 provider 응답|429 cooldown, semaphore timeout, chain deadline|`LLM_PRIMARY`, `LLM_FALLBACKS`, `LLM_CHAIN_TIMEOUT_MS`, `LLM_CONCURRENCY_*`|`llm_provider_calls_total`, `llm_provider_latency_ms`, `llm_provider_concurrency_*`, `llm_provider_429_total`, `llm_fallback_triggered_total`|—|
 |`SessionLinker` (`lib/memory/link/SessionLinker.js`)|session_id + 시간 인접 파편|temporal 링크|deadlock 회피 위해 sortedKey 정렬|`SESSION_LINKER_ENABLED`|`memento_session_link_total`|—|
 |`SearchScope` (`lib/memory/read/SearchScope.js`)|sq (검색 쿼리 파라미터 객체)|검색 레이어별 scope 정합 객체 `(workspace, caseId, resolutionStatus, phase, affect, keyId)`|없음 (순수 변환)|—|—|—|
-|`SearchSideEffects` (`lib/memory/read/SearchSideEffects.js`)|검색 결과 배열 + ctx|searchEventId, co_retrieved 업데이트, EMA 갱신|DB 장애 시 soft fail|—|`memento_search_event_total`|migration-027|
+|`SearchSideEffects` (`lib/memory/read/SearchSideEffects.js`)|검색 결과 배열 + ctx|searchEventId, co_retrieved 업데이트, EMA 갱신|DB 장애 시 soft fail. topic 정확일치로 0건인 검색은 SearchParamAdaptor 학습에서 제외(search_events 기록은 유지)|—|`memento_search_event_total`|migration-027|
+|`TopicResolver` (`lib/memory/read/TopicResolver.js`)|store + 키 스코프 + 요청 topic|근접 topic 후보 `[{topic, count}]`. recall `_meta.hints`의 `topic_mismatch` 재료|후보 없으면 빈 배열 → 힌트 미발행|—|—|—|
+|`FeedbackSampler` (`lib/memory/signals/FeedbackSampler.js`)|도구명 + sessionId|`feedback_sampled` 힌트 객체 또는 null|Redis 미가용 시 세션 상한·쿨다운 미적용(fail-open)|`MEMENTO_FEEDBACK_SAMPLING`|—|migration-039 (irrelevance_reason 수집처)|
 |`PgVectorStore` / `SqliteVecStore` (`lib/storage/`)|SQL 문 + 파라미터|rows 배열|연결 오류 시 throw; SqliteVecStore는 미구현 스텁|`MEMENTO_STORAGE`|—|—|
 
 ## 실험적 기능 플래그

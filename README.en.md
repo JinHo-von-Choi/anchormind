@@ -212,9 +212,11 @@ memento-mcp remember "content" --topic project --idempotency-key k1
 {
   "fragments": [...],
   "_meta": {
-    "searchEventId": "evt-abc123",
-    "hints": { "signal": "consider_context" },
-    "suggestion": { "code": "large_limit_no_budget", "message": "..." },
+    "searchEventId": 1234,
+    "hints": [
+      { "signal": "consider_context", "suggestion": "...", "trigger": "recall" }
+    ],
+    "suggestion": { "code": "empty_result_no_context", "message": "..." },
     "serverTime": {
       "iso"        : "2026-05-15T06:32:11.000Z",
       "epoch_ms"   : 1747291931000,
@@ -224,6 +226,8 @@ memento-mcp remember "content" --topic project --idempotency-key k1
   }
 }
 ```
+
+Successful `remember` / `amend` / `forget` responses carry a `feedback_sampled` signal in `_meta.hints` with a fixed probability. Pass the hint's `args` straight into `tool_feedback` to rate the result (disable with `MEMENTO_FEEDBACK_SAMPLING=false`).
 
 `remember` / `link` / `forget` / `amend` accept a `dryRun: true` parameter that returns the expected result with no side effects. All responses carry `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Resource` headers, omitted for the master key or when limit is null. `recall` accepts a `fields` array that restricts the returned fields to a whitelist of 17. `remember` / `batchRemember` accept an `idempotencyKey` parameter (max 128 chars) that prevents duplicate storage within the same key_id scope. `content` on `remember`, `batchRemember` items, and `amend` is rejected with a JSON-RPC -32602 error once it exceeds 4000 characters — a reception-side gate ahead of the per-type storage truncation (1000/300 chars) described above; `batchRemember` fails only the offending item and continues processing the rest of the batch.
 

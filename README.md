@@ -211,9 +211,11 @@ memento-mcp remember "내용" --topic 프로젝트명 --idempotency-key k1
 {
   "fragments": [...],
   "_meta": {
-    "searchEventId": "evt-abc123",
-    "hints": { "signal": "consider_context" },
-    "suggestion": { "code": "large_limit_no_budget", "message": "..." },
+    "searchEventId": 1234,
+    "hints": [
+      { "signal": "consider_context", "suggestion": "...", "trigger": "recall" }
+    ],
+    "suggestion": { "code": "empty_result_no_context", "message": "..." },
     "serverTime": {
       "iso"        : "2026-05-15T06:32:11.000Z",
       "epoch_ms"   : 1747291931000,
@@ -223,6 +225,8 @@ memento-mcp remember "내용" --topic 프로젝트명 --idempotency-key k1
   }
 }
 ```
+
+`remember` / `amend` / `forget`의 성공 응답에는 일정 확률로 `_meta.hints`에 `feedback_sampled` 신호가 실린다. 힌트의 `args`를 그대로 `tool_feedback`에 전달해 결과를 평가하면 된다(`MEMENTO_FEEDBACK_SAMPLING=false`로 비활성화).
 
 `remember` / `link` / `forget` / `amend`는 `dryRun: true` 파라미터로 부작용 없이 예상 결과만 반환한다. 모든 응답에 `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Resource` 헤더가 포함되며 master key 또는 limit=null 설정 시 헤더를 생략한다. `recall`은 `fields` 배열로 반환 필드를 17개 화이트리스트 범위로 제한할 수 있다. `remember` / `batchRemember`는 `idempotencyKey` 파라미터로 같은 key_id 범위 내 중복 저장을 방지한다(최대 128자). `remember` / `batchRemember` 항목 / `amend`의 `content`는 4000자를 초과하면 JSON-RPC -32602 에러로 거부된다. 위 파편 유형별 저장 절삭(1000자/300자)과는 별개로 그보다 앞단에서 적용되는 수신 게이트이며, `batchRemember`는 초과 항목만 실패 처리하고 나머지 배치는 그대로 진행한다.
 

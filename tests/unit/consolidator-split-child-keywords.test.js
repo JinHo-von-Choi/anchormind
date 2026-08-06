@@ -35,7 +35,10 @@ mock.module("../../lib/config.js", {
 
 /** FragmentFactory → FragmentWriter → embedding.js 경로가 실제 config를 요구하므로 최소 대체 */
 mock.module("../../lib/tools/embedding.js", {
-  namedExports: { computeContentHash: (text) => `hash-${String(text).length}` }
+  namedExports: {
+    computeContentHash: (text) => `hash-${String(text).length}`,
+    cosineSimilarity  : () => 0
+  }
 });
 
 mock.module("../../lib/logger.js", {
@@ -54,6 +57,11 @@ mock.module("../../lib/memory/consolidate/split-metrics.js", {
     recordSplitSkip  : () => {},
     splitSkippedTotal: { inc: () => {} }
   }
+});
+
+/** 주체 앵커 게이트 무력화 — 이 테스트의 관심사가 아니며 형태소 분석기 로드도 피한다. */
+mock.module("../../lib/memory/consolidate/proper-nouns.js", {
+  namedExports: { extractSubjectAnchors: async () => [] }
 });
 
 mock.module("../../config/memory.js", {

@@ -351,7 +351,7 @@ erDiagram
         text goal "Case goal"
         text outcome "Case outcome"
         text phase "Case phase"
-        text resolution_status "open / resolved / wont_fix"
+        text resolution_status "open / resolved / abandoned"
         text assertion_status "observed / inferred / verified / rejected"
         text affect "neutral / frustration / confidence / surprise / doubt / satisfaction"
     }
@@ -373,11 +373,14 @@ erDiagram
         boolean relevant
         boolean sufficient
         text session_id
+        text irrelevance_reason "not_stored / search_miss / scope_leak / topic_mismatch / other"
     }
     task_feedback {
         bigserial id PK
         text session_id
         boolean overall_success
+        text outcome "completed / partial / blocked / abandoned / unknown"
+        text evaluator "agent / automatic / human"
     }
     case_events {
         text event_id PK
@@ -414,16 +417,16 @@ The store for all fragments. This is the core table of the system.
 | content | TEXT | NOT NULL | Memory content body (300 characters recommended, atomic 1-3 sentences) |
 | topic | TEXT | NOT NULL | Topic label (e.g., database, deployment, security) |
 | keywords | TEXT[] | NOT NULL DEFAULT '{}' | Search keyword array (GIN indexed) |
-| type | TEXT | NOT NULL, CHECK | fact / decision / error / preference / procedure / relation |
+| type | TEXT | NOT NULL, CHECK | fact / decision / error / preference / procedure / relation / episode |
 | importance | REAL | 0.0~1.0 CHECK | Importance. Defaults per type, decayed by MemoryConsolidator |
-| content_hash | TEXT | UNIQUE | SHA hash-based duplicate prevention |
+| content_hash | TEXT | NOT NULL | SHA hash-based duplicate prevention. Not a global UNIQUE — enforced by two per-tenant partial unique indexes (`uq_frag_hash_master`, `uq_frag_hash_per_key`, migration-031) |
 | source | TEXT | | Source identifier (session ID, tool name, etc.) |
 | linked_to | TEXT[] | DEFAULT '{}' | Connected fragment ID list (GIN indexed) |
 | agent_id | TEXT | NOT NULL DEFAULT 'default' | RLS isolation agent ID |
 | access_count | INTEGER | DEFAULT 0 | Recall count -- factored into utility_score |
 | accessed_at | TIMESTAMPTZ | | Last recall timestamp |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | Creation timestamp |
-| ttl_tier | TEXT | CHECK | hot / warm (default) / cold / permanent |
+| ttl_tier | TEXT | CHECK | short / hot / warm (default) / cold / permanent |
 | estimated_tokens | INTEGER | DEFAULT 0 | cl100k_base token count -- used for tokenBudget calculation |
 | utility_score | REAL | DEFAULT 1.0 | Usefulness score updated by MemoryEvaluator/MemoryConsolidator |
 | verified_at | TIMESTAMPTZ | DEFAULT NOW() | Last quality verification timestamp |
@@ -431,7 +434,6 @@ The store for all fragments. This is the core table of the system.
 | is_anchor | BOOLEAN | DEFAULT FALSE | When true, exempt from decay, TTL demotion, and expiration deletion |
 | valid_from | TIMESTAMPTZ | DEFAULT NOW() | Temporal validity start. Lower bound for `asOf` queries |
 | valid_to | TIMESTAMPTZ | | Temporal validity end. NULL means currently valid |
-| superseded_by | TEXT | | ID of the fragment that supersedes this one |
 | last_decay_at | TIMESTAMPTZ | | Last decay application timestamp. When NULL, falls back to accessed_at/created_at |
 | key_id | TEXT | FK -> api_keys.id, ON DELETE SET NULL | API key-based memory isolation. NULL means stored via master key (MEMENTO_ACCESS_KEY). When set, only that API key can query the fragment |
 | ema_activation | FLOAT | DEFAULT 0.0 | ACT-R base-level activation EMA approximation. Updated on `incrementAccess()` via `alpha * (dt_sec)^{-0.5} + (1-alpha) * prev` (alpha=0.3). Not updated on L1 fallback path (noEma=true). Used as importance boost in `_computeRankScore()` |
@@ -444,11 +446,14 @@ The store for all fragments. This is the core table of the system.
 | goal | TEXT | | Case goal description |
 | outcome | TEXT | | Case actual outcome description |
 | phase | TEXT | | Case current phase label |
-| resolution_status | TEXT | CHECK | Case resolution status: open (in progress) / resolved (completed) / wont_fix (closed without resolution) |
+| resolution_status | TEXT | CHECK | Case resolution status: open (in progress) / resolved (completed) / abandoned (dropped) |
 | assertion_status | TEXT | CHECK | Fragment assertion confidence: observed (default, directly witnessed) / inferred (derived) / verified (confirmed) / rejected (dismissed) |
 | affect | TEXT | CHECK, DEFAULT 'neutral' | Emotional state tag at memory storage time. neutral / frustration / confidence / surprise / doubt / satisfaction |
+| validation_warnings | JSONB | | PolicyRules soft gate violation rule names. NULL when there are no violations (migration-032) |
+| morpheme_indexed | BOOLEAN | NOT NULL DEFAULT false | Whether MorphemeIndex registration completed. Fragments with false are excluded from morpheme search (migration-035) |
+| split_attempt_failed_at | TIMESTAMPTZ | | Timestamp of the last failed splitLongFragments attempt. Excluded from re-selection for `failureBackoffHours` (migration-036) |
 
-Index list: content_hash (UNIQUE), topic (B-tree), type (B-tree), keywords (GIN), importance DESC (B-tree), created_at DESC (B-tree), agent_id (B-tree), linked_to (GIN), (ttl_tier, created_at) (B-tree), source (B-tree), verified_at (B-tree), is_anchor WHERE TRUE (partial index), valid_from (B-tree), (topic, type) WHERE valid_to IS NULL (partial index), id WHERE valid_to IS NULL (partial UNIQUE). `idx_fragments_key_workspace` (key_id, workspace) WHERE valid_to IS NULL (composite partial index — optimizes simultaneous key + workspace filtering), `idx_fragments_workspace` (workspace) WHERE workspace IS NOT NULL AND valid_to IS NULL (partial index for workspace-only full scans).
+Index list: two per-tenant partial UNIQUE indexes on content_hash (`uq_frag_hash_master`, `uq_frag_hash_per_key`), topic (B-tree), type (B-tree), keywords (GIN), importance DESC (B-tree), created_at DESC (B-tree), agent_id (B-tree), linked_to (GIN), (ttl_tier, created_at) (B-tree), source (B-tree), verified_at (B-tree), is_anchor WHERE TRUE (partial index), valid_from (B-tree), (topic, type) WHERE valid_to IS NULL (partial index), id WHERE valid_to IS NULL (partial UNIQUE). `idx_fragments_key_workspace` (key_id, workspace) WHERE valid_to IS NULL (composite partial index — optimizes simultaneous key + workspace filtering), `idx_fragments_workspace` (workspace) WHERE workspace IS NOT NULL AND valid_to IS NULL (partial index for workspace-only full scans).
 
 The HNSW vector index is created as a conditional index on `embedding IS NOT NULL`. Parameters: m=16 (neighbor connections), ef_construction=128 (index build search depth), distance function vector_cosine_ops. ef_search=80 (applied via session-level SET LOCAL). Before each vector search, `SET LOCAL enable_seqscan = off`, `SET LOCAL enable_bitmapscan = off`, and `SET LOCAL hnsw.iterative_scan = relaxed_order` are applied at the session level to guarantee the HNSW index path (`lib/tools/db.js` queryWithAgentVector).
 
@@ -487,7 +492,8 @@ Tool usefulness feedback. Records whether recall returned results matching the i
 | suggestion | TEXT | Improvement suggestion (100 characters recommended) |
 | context | TEXT | Usage context summary (50 characters recommended) |
 | session_id | TEXT | Session identifier |
-| trigger_type | TEXT | sampled (hook sampling) / voluntary (AI voluntary call) |
+| trigger_type | TEXT | sampled (hook sampling or a reply to a write tool's feedback_sampled hint) / voluntary (AI voluntary call) |
+| irrelevance_reason | TEXT | Why the result was judged irrelevant. not_stored / search_miss / scope_leak / topic_mismatch / other. Recorded only when relevant=false, otherwise NULL (migration-039). The partial index `idx_tf_irrelevance` keeps the cause breakdown from scanning the whole table |
 | created_at | TIMESTAMPTZ | |
 
 ### task_feedback
@@ -498,7 +504,11 @@ Per-session task effectiveness. Recorded via the reflect tool's task_effectivene
 |--------|------|-------------|
 | id | BIGSERIAL PK | |
 | session_id | TEXT | Session identifier |
-| overall_success | BOOLEAN | Whether the session's primary task completed successfully |
+| overall_success | BOOLEAN | Compatibility column. Derived from outcome='completed' when not supplied explicitly |
+| outcome | TEXT | Task end state. completed / partial / blocked / abandoned / unknown (CHECK constraint, migration-039). NULL means unreported |
+| evaluator | TEXT | Who judged the outcome. agent / automatic / human. Stored only alongside an outcome; defaults to agent |
+| evidence | TEXT | Rationale for the outcome judgement (truncated at 1000 characters) |
+| unmet_requirements | TEXT[] | Requirements left unmet (up to 20 items, each truncated to 200 characters) |
 | tool_highlights | TEXT[] | Especially useful tools and reasons |
 | tool_pain_points | TEXT[] | Tools needing improvement and reasons |
 | created_at | TIMESTAMPTZ | |
@@ -516,6 +526,9 @@ Each time a fragment is modified via the amend tool, the previous version is pre
 | keywords | TEXT[] | Pre-edit keywords |
 | type | TEXT | Pre-edit type |
 | importance | REAL | Pre-edit importance |
+| resolution_status | TEXT | Pre-edit case resolution status (migration-038) |
+| outcome | TEXT | Pre-edit case outcome summary (migration-038) |
+| phase | TEXT | Pre-edit work phase (migration-038) |
 | amended_at | TIMESTAMPTZ | Edit timestamp |
 | amended_by | TEXT | Editing agent_id |
 

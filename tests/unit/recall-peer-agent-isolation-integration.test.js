@@ -147,6 +147,7 @@ mock.module("../../lib/tools/embedding.js", {
   namedExports: {
     EMBEDDING_ENABLED      : false,
     computeContentHash     : () => "hash",
+    cosineSimilarity       : () => 0,
     generateBatchEmbeddings: async () => [],
     generateEmbedding      : async () => [],
     prepareTextForEmbedding: text => String(text ?? ""),

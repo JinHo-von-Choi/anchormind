@@ -37,7 +37,7 @@
 위 프롬프트를 받은 AI가 정상적으로 처리했다면 다음이 모두 충족되어야 한다.
 
 - `.env` 파일이 생성되고 `MEMENTO_ACCESS_KEY`·`POSTGRES_*`·`REDIS_*` 키가 모두 채워져 있다
-- `npm run migrate`가 `migration-037`까지 통과한다
+- `npm run migrate`가 `migration-039`까지 통과한다
 - `node bin/memento.js health`가 DB/Redis/임베딩 제공자 모두 OK를 반환한다
 - AI 클라이언트 도구 목록에 `mcp__*__remember`·`recall`·`reflect`가 노출된다
 - `memory_stats` 호출이 0건이라도 정상 응답을 반환한다
@@ -122,7 +122,13 @@ psql "$DATABASE_URL" -f lib/memory/migrations/migration-014-ttl-short.sql
 psql "$DATABASE_URL" -f lib/memory/migrations/migration-015-created-at-index.sql
 psql "$DATABASE_URL" -f lib/memory/migrations/migration-016-agent-topic-index.sql
 psql "$DATABASE_URL" -f lib/memory/migrations/migration-017-episodic.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-018-fragment-quota.sql   # api_keys.fragment_limit 컬럼 추가 (NULL=무제한)
+psql $DATABASE_URL -f lib/memory/migrations/migration-019-hnsw-tuning.sql      # HNSW ef_construction 64 → 128 재구축
+psql $DATABASE_URL -f lib/memory/migrations/migration-020-search-layer-latency.sql # search_events 레이어별 레이턴시 컬럼 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-021-oauth-clients.sql  # OAuth 클라이언트 등록
+psql $DATABASE_URL -f lib/memory/migrations/migration-022-temporal-link-type.sql # fragment_links CHECK에 temporal 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-023-link-weight-float.sql  # fragment_links.weight integer → real
+psql $DATABASE_URL -f lib/memory/migrations/migration-024-workspace.sql          # fragments.workspace + api_keys.default_workspace 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-025-case-id-episode.sql    # fragments narrative reconstruction 컬럼 (case_id, goal, outcome, phase, resolution_status, assertion_status)
 psql $DATABASE_URL -f lib/memory/migrations/migration-026-case-events.sql        # case_events + case_event_edges + fragment_evidence 테이블 (Narrative Reconstruction)
 psql $DATABASE_URL -f lib/memory/migrations/migration-027-v25-reconsolidation-episode-spreading.sql  # fragment_links 재통합 컬럼 + link_reconsolidations + case_events idempotency_key + keywords GIN 인덱스
@@ -136,6 +142,8 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-034-v2.16.0-bundle.sql    
 psql $DATABASE_URL -f lib/memory/migrations/migration-035-morpheme-indexed.sql                      # fragments.morpheme_indexed BOOLEAN 추가 + 기존 행 백필 + sparse partial index
 psql $DATABASE_URL -f lib/memory/migrations/migration-036-split-attempt-failed-at.sql               # split_attempt_failed_at 컬럼 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-037-hnsw-index-rename.sql                     # HNSW 인덱스 이름 정합화
+psql $DATABASE_URL -f lib/memory/migrations/migration-038-fragment-versions-case-fields.sql         # fragment_versions에 resolution_status·outcome·phase 컬럼 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-039-feedback-instrumentation.sql              # task_feedback outcome/evaluator/evidence/unmet_requirements + tool_feedback irrelevance_reason
 ```
 
 > **migration-007 재실행**: `EMBEDDING_DIMENSIONS`를 변경하거나 임베딩 제공자를 전환한 경우, `scripts/post-migrate-flexible-embedding-dims.js`를 재실행하면 `fragments` 테이블과 `morpheme_dict` 테이블의 벡터 차원이 동시에 갱신된다.
@@ -157,6 +165,10 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-037-hnsw-index-rename.sql 
 > **migration-036 split_attempt_failed_at**: `fragments.split_attempt_failed_at TIMESTAMPTZ` 컬럼을 추가한다. 분할 시도 실패 타임스탬프를 기록하여 재처리 스케줄러가 실패 이력을 추적한다.
 
 > **migration-037 hnsw-index-rename**: HNSW 인덱스 명칭을 정합화한다. 기존 인덱스를 삭제하고 표준 네이밍 규칙에 맞게 재생성한다.
+
+> **migration-038 fragment-versions-case-fields**: `fragment_versions`에 `resolution_status`·`outcome`·`phase` 컬럼을 추가한다. amend가 케이스 상태를 갱신할 때 변경 전 상태를 이력에 보존한다. 세 컬럼 모두 nullable이므로 롤링 배포 구간에서 구버전 writer와 혼재해도 호환된다.
+
+> **migration-039 feedback-instrumentation (5.6.0 선행 필수)**: `task_feedback`에 `outcome`·`evaluator`·`evidence`·`unmet_requirements` 컬럼과 `outcome`·`evaluator` CHECK 제약을, `tool_feedback`에 `irrelevance_reason` 컬럼과 CHECK 제약, partial index `idx_tf_irrelevance`를 추가한다. **5.6.0 서버는 이 마이그레이션 없이 기동하면 `tool_feedback` 호출과 `reflect`의 `task_effectiveness` 기록이 컬럼 부재로 실패한다.** 기존 행은 백필하지 않으므로 NULL은 "미보고"를 뜻하며, `memory_stats`의 `task_completed_rate`·`irrelevance_breakdown`은 보고된 행만 분모로 삼는다.
 
 > **rollback 파일 네이밍**: rollback SQL 파일은 `rollback-migration-NNN-*.sql` 형식으로 이름을 지정해야 한다. `migrate.js`의 auto-pickup glob은 `migration-*.sql` 패턴만 인식하므로, `rollback-` 접두어를 붙이면 자동 실행에서 제외된다.
 
@@ -224,6 +236,30 @@ npm run migrate
 node server.js
 ```
 
+### 5.6.0으로 업그레이드 (migration-039 선행 필수)
+
+5.6.0은 `tool_feedback.irrelevance_reason`과 `task_feedback.outcome` 계열 컬럼에 직접 INSERT한다. migration-039를 적용하지 않은 상태로 5.6.0을 기동하면 `tool_feedback` 저장과 `reflect`의 `task_effectiveness` 기록이 실패하므로, 서버 재시작보다 마이그레이션을 먼저 수행한다.
+
+```bash
+# 1. 의존성 업데이트
+npm install
+
+# 2. 마이그레이션 실행 (migration-038, migration-039 포함)
+npm run migrate
+
+# 3. 적용 확인
+psql $DATABASE_URL -c "\d agent_memory.task_feedback"   # outcome, evaluator, evidence, unmet_requirements
+psql $DATABASE_URL -c "\d agent_memory.tool_feedback"   # irrelevance_reason
+
+# 4. .env 항목 확인 (선택)
+#    MEMENTO_FEEDBACK_SAMPLING=false     : 쓰기 도구 응답의 피드백 요청 힌트 비활성화
+#    MEMENTO_SPLIT_SUBJECT_GATE=false    : 분할 자식 주어 앵커 검사 비활성화
+#    MEMENTO_SPLIT_MODALITY_GATE=false   : 분할 자식 양상 표류 검사 비활성화
+
+# 5. 서버 재시작
+node server.js
+```
+
 migration-034-v2.16.0-bundle 인덱스 적용 확인:
 
 ```sql
@@ -287,6 +323,9 @@ LLM_FALLBACKS                 - JSON 배열. 각 원소: {"provider":"anthropic"
 MEMENTO_REMEMBER_ATOMIC       - true로 설정 시 remember() quota 체크+INSERT를 단일 트랜잭션으로 원자화 (기본: false)
 MEMENTO_CASE_BACKPROP_ENABLED - true로 설정 시 CaseRewardBackprop 활성화 — case_id 단위 reward 역전파 (기본: false)
 MEMENTO_STORAGE               - 스토리지 어댑터 선택. pgvector (기본) 지원. 추가 어댑터는 lib/storage/ 참조
+MEMENTO_FEEDBACK_SAMPLING     - remember/amend/forget 성공 응답에 tool_feedback 요청 힌트를 확률적으로 동봉 (기본: true)
+MEMENTO_SPLIT_SUBJECT_GATE    - 분할 자식이 부모의 주어 앵커를 하나도 담지 못하면 폐기 (기본: true)
+MEMENTO_SPLIT_MODALITY_GATE   - 분할 자식이 부모에 없던 양상(예정·의도·추측·당위)을 도입하면 폐기 (기본: true)
 MIGRATION_LINT_FROM           - lint:migrations가 검사를 시작하는 마이그레이션 번호 하한. 미설정 시 현존 파일 최대값+1
 ```
 
@@ -373,14 +412,14 @@ CLI provider를 사용하려면 `LLM_PRIMARY` 또는 `LLM_FALLBACKS`에 `"codex"
 curl -s http://localhost:57332/health | jq .status
 
 # 2. 임베딩 일관성 검사 결과 확인 (서버 로그)
-# 정상: "consistency check result: PASS"
-# 불일치: EMBEDDING_DIMENSIONS 재검토 후 migration-007 재실행
+# 정상: 관련 로그 없이 기동 계속
+# 불일치: "[embedding-consistency] 차원 불일치 발견:" 출력 후 기동 중단
 
 # 3. CLI 진단
 node bin/memento.js health
 ```
 
-`consistency check result: PASS` 로그가 출력되면 임베딩 차원과 DB 벡터가 일치하는 상태다. `FAIL`이 출력되면 `EMBEDDING_DIMENSIONS` 설정과 실제 DB 차원 불일치 — `scripts/post-migrate-flexible-embedding-dims.js`를 재실행한 뒤 서버를 재시작한다.
+임베딩 일관성 검사는 통과 시 아무 로그도 남기지 않고 기동을 이어간다. `[embedding-consistency] 차원 불일치 발견:` 뒤에 테이블별 `DB=Nd, config=Nd`가 출력되고 기동이 중단되면 `EMBEDDING_DIMENSIONS` 설정과 실제 DB 차원이 어긋난 상태다. 이전 provider로 되돌리거나, `EMBEDDING_DIMENSIONS=N npm run migrate-007` 실행 후 `node scripts/backfill-embeddings.js`로 재생성한 뒤 서버를 재시작한다.
 
 ## CLI 사용법
 

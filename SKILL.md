@@ -2,9 +2,9 @@
 
 AI 에이전트가 AnchorMind 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
 
-## 현재 버전: v5.5.0
+## 현재 버전: v5.6.0
 
-AnchorMind 서버는 AI 에이전트의 세션 간 장기 기억을 파편(Fragment) 단위로 영속화하고, 18개 도구를 통해 저장·검색·연결·반성 기능을 제공한다.
+AnchorMind 서버는 AI 에이전트의 세션 간 장기 기억을 파편(Fragment) 단위로 영속화하고, 18개 도구를 통해 저장·검색·연결·반성 기능을 제공한다. 마스터 키 세션에서는 갱신 도구 2종(`check_update`, `apply_update`)이 추가로 노출되어 총 20개가 된다.
 
 주요 현재 기능:
 
@@ -621,15 +621,17 @@ tokenBudget을 초과하면 중요도 낮은 파편부터 잘림. 중요한 정�
   }],
   "searchPath": "L1+L2+RRF",
   "_meta": {
-    "searchEventId": "evt-abc123",
-    "hints": { "signal": "consider_context" },
-    "suggestion": { "code": "large_limit_no_budget", "message": "..." }
+    "searchEventId": 1234,
+    "hints": [
+      { "signal": "consider_context", "suggestion": "...", "trigger": "recall" }
+    ],
+    "suggestion": { "code": "empty_result_no_context", "message": "..." }
   }
 }
 ```
 
-- `_meta.searchEventId`: tool_feedback에 전달하여 검색 품질 개선
-- `_meta.hints.signal`: 시스템 권고 신호
+- `_meta.searchEventId`: tool_feedback에 전달하여 검색 품질 개선. search_events 테이블의 정수 id
+- `_meta.hints[0].signal`: 시스템 권고 신호. hints는 최대 1건이 담긴 배열이며 신호가 없으면 빈 배열
 - `_meta.suggestion.recommendedTool`: 후속 호출 권장 도구
 
 - similarity 0.7 이상: 높은 관련성
@@ -842,8 +844,10 @@ RBAC default-deny: 도구 맵에 등록되지 않은 도구를 호출하면 `"Ac
 | outcome | string | - | 에피소드 결과 |
 | phase | string | - | 작업 단계 (예: planning, debugging, verification) |
 | resolutionStatus | string | - | open / resolved / abandoned |
-| assertionStatus | string | observed | observed / inferred / verified / rejected |
-| affect | string | - | 감정 태그. neutral / frustration / confidence / surprise / doubt / satisfaction |
+| assertionStatus | string | - | observed(기본) / inferred / verified / rejected |
+| affect | string | - | 감정 태그. neutral(기본) / frustration / confidence / surprise / doubt / satisfaction |
+| idempotencyKey | string | - | 재시도 안전 식별자. 같은 key_id 범위에서 같은 값으로 반복 호출하면 새 파편을 만들지 않고 기존 id를 반환. 권장 형식 {작업명}-{날짜}-{순번} |
+| dryRun | boolean | - | true 시 저장 없이 할당량·충돌 검사 결과와 실행 계획만 반환 |
 
 품질 게이트: content < 10자, URL만, type+topic null인 경우 거부. content > 4000자면 "content length N exceeds max 4000" 메시지와 함께 -32602로 거부(300자 절삭보다 앞단의 수신 게이트). importance < 0.3이면 경고 + TTL short 자동 설정.
 
@@ -858,6 +862,7 @@ RBAC default-deny: 도구 맵에 등록되지 않은 도구를 호출하면 `"Ac
 | fragments | array | O | [{content, topic, type, importance?, keywords?}] 최대 200건. 항목별 content가 4000자를 초과하면 해당 항목만 -32602로 실패 처리되고 나머지 항목은 정상 저장된다. 배열 전체의 content 총 문자수가 상한(기본 200,000자, `BATCH_REMEMBER_MAX_TOTAL_CHARS`)을 초과하면 sync/async 분기 이전에 요청 전체가 거부된다(항목별 4000자 게이트와 별개). |
 | async | boolean | - | true 시 비동기 모드. 선검증 후 Redis 큐 적재, `{async, accepted, jobId}` 즉시 반환. 워커가 ack·재시도(최대 3회)·dead-letter·기동 복구로 at-least-once 처리. 기본 false(동기). Redis 비활성 시 동기 폴백. |
 | stream | boolean | - | deprecated. 더 이상 SSE progress 이벤트를 보내지 않는다. 무시됨. |
+| workspace | string | - | 배치 기본 워크스페이스. 개별 파편에 workspace 미지정 시 이 값으로 대체. 미지정 시 키의 default_workspace 적용. |
 | agentId | string | - | 에이전트 ID |
 
 async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기를 피하려면 `async: true`. 즉시 반환되는 것은 `accepted` 수와 `jobId`이며, per-fragment id는 반환되지 않고 파편은 워커 처리 후에 recall 가능(eventual)하다. `batch_status(jobId)`로 처리 상태를 확인할 수 있다. 재시도 안전이 필요하면 각 항목에 `idempotencyKey`를 넣는다. 소수 저장이나 직후 해당 파편을 곧바로 참조해야 하는 경우는 기본 동기 모드(async 생략)를 쓴다.
@@ -900,6 +905,7 @@ async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기�
 | isAnchor | boolean | - | true 시 앵커(고정) 파편만 반환 |
 | depth | string | - | 검색 깊이. high-level(decision/episode), detail(전체), tool-level(procedure/error/fact) |
 | affect | string/string[] | - | 감정 태그 필터. neutral / frustration / confidence / surprise / doubt / satisfaction. 배열 또는 단일 문자열 지원 |
+| fields | string[] | - | 응답에 포함할 파편 필드 목록(sparse fields). 미지정 시 전체 반환. 지원 키: id, content, type, topic, keywords, importance, created_at, access_count, confidence, linked, explanations, workspace, context_summary, case_id, valid_to, affect, ema_activation, key_id, key_name |
 
 ### forget
 
@@ -909,6 +915,7 @@ async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기�
 | topic | string | - | 해당 주제 전체 삭제 |
 | force | boolean | - | permanent 파편 강제 삭제. 기본 false. |
 | agentId | string | - | 에이전트 ID |
+| dryRun | boolean | - | true 시 실제 삭제 없이 삭제 대상 파편 정보와 연결 링크 수만 반환 |
 
 타 테넌트(다른 API 키) 소유 파편을 삭제 시도하면 `"Fragment not found or no permission"` 오류가 반환된다. master key는 전체 파편에 접근 가능하다.
 
@@ -921,6 +928,7 @@ async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기�
 | relationType | string | - | related(기본), caused_by, resolved_by, part_of, contradicts |
 | weight | number | - | 관계 가중치 (0-1, 기본 1) |
 | agentId | string | - | 에이전트 ID |
+| dryRun | boolean | - | true 시 실제 링크 생성 없이 사이클 여부·소유권 검사 결과만 반환 |
 
 fromId 또는 toId가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permission"` 오류가 반환된다.
 
@@ -941,7 +949,11 @@ fromId 또는 toId가 타 테넌트 소유 파편인 경우 `"Fragment not found
 | isAnchor | boolean | - | 고정 여부 |
 | supersedes | boolean | - | 기존 파편 대체 |
 | assertionStatus | string | - | 확인 상태 변경 (observed, inferred, verified, rejected) |
+| resolutionStatus | string | - | 케이스 해결 상태 변경 (open / resolved / abandoned). case_id 보유 파편은 resolved 전환 시 case_closed 이벤트가 자동 기록된다 |
+| outcome | string | - | 케이스 종결 결과 요약. resolutionStatus='resolved'와 함께 기록 |
+| phase | string | - | 작업 단계 변경 (planning, debugging, implementation, verification 등) |
 | agentId | string | - | 에이전트 ID |
+| dryRun | boolean | - | true 시 실제 변경 없이 패치 적용 후 예상 파편 상태만 반환 |
 
 ### reflect
 
@@ -956,10 +968,23 @@ fromId 또는 toId가 타 테넌트 소유 파편인 경우 `"Fragment not found
 | new_procedures | string[] | - | 확립된 절차 |
 | open_questions | string[] | - | 미해결 질문 |
 | narrative_summary | string | - | 3~5문장 서사 요약. episode 파편으로 저장되어 세션 연속성에 기여. |
-| task_effectiveness | object | - | {overall_success, tool_highlights[], tool_pain_points[]} |
+| task_effectiveness | object | - | {outcome, evaluator, evidence, unmet_requirements[], overall_success, tool_highlights[], tool_pain_points[]} |
+| workspace | string | - | 생성되는 모든 reflect 파편에 적용할 워크스페이스. 미지정 시 키의 default_workspace, 그것도 없으면 전역(NULL). |
 | agentId | string | - | 에이전트 ID |
 
 summary 또는 sessionId 중 하나 이상 필수.
+
+task_effectiveness 세부 필드:
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| outcome | string | 작업 종료 상태. completed(요구사항 전부 충족) / partial(일부 충족) / blocked(외부 요인으로 진행 불가) / abandoned(중단) / unknown(판정 불가). 확신이 없으면 추정하지 말고 unknown. 목록 밖 값은 미보고(NULL)로 기록된다. |
+| evaluator | string | outcome 판정 주체. agent(에이전트 자기보고) / automatic(테스트·빌드 자동 판정) / human(사용자 확인). outcome이 있을 때만 기록되며 생략 시 agent. |
+| evidence | string | outcome 판정 근거 (1000자 이내). 통과한 테스트 수, 확인한 로그, 사용자 승인 발화 등. |
+| unmet_requirements | string[] | 충족하지 못한 요구사항 (최대 20건·각 200자). partial/blocked/abandoned일 때 남은 항목을 명시. |
+| overall_success | boolean | 호환 유지 필드. 생략 시 outcome이 completed면 true, 그 외에는 false로 파생된다. |
+| tool_highlights | string[] | 유용했던 도구 |
+| tool_pain_points | string[] | 불편했던 도구 |
 
 ### context
 
@@ -988,6 +1013,7 @@ summary 또는 sessionId 중 하나 이상 필수.
 | context | string | - | 사용 맥락 (50자) |
 | session_id | string | - | 세션 ID |
 | trigger_type | string | - | sampled 또는 voluntary |
+| irrelevance_reason | string | - | not_stored / search_miss / scope_leak / topic_mismatch / other. relevant=false일 때만 기록되며, 그 외에는 값을 보내도 폐기된다 |
 | fragment_ids | string[] | - | 피드백 대상 파편 ID (EMA 조정) |
 | search_event_id | integer | - | recall의 _searchEventId |
 
@@ -1023,6 +1049,8 @@ startId가 타 테넌트 소유 파편인 경우 `"Fragment not found or no perm
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | id | string | O | 조회할 파편 ID |
+| agentId | string | - | 에이전트 ID |
+| includePeerAgents | boolean | - | true 시 같은 API 키 스코프 내 다른 agentId의 파편 이력도 조회. 테넌트(키) 경계는 유지. 기본 false |
 
 id가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permission"` 오류가 반환된다.
 
@@ -1079,7 +1107,10 @@ id가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permissio
 | case_id | string | - | 특정 케이스 필터 |
 | session_id | string | - | 특정 세션 필터 |
 | time_range | object | - | { from: ISO8601, to: ISO8601 } |
+| workspace | string | - | 워크스페이스 필터. 지정 시 해당 workspace + 전역(NULL) 파편만 대상 |
 | limit | number | 20 | 최대 반환 수 (최대 100) |
+
+snake_case 파라미터에는 camelCase alias가 있다: `eventType`, `entityKey`, `caseId`, `sessionId`. 두 표기 중 어느 쪽을 보내도 동일하게 처리된다.
 
 반환값: `{ success, traces[], count }`
 
@@ -1538,19 +1569,23 @@ recall 시 신뢰도 기반 판단:
 
 ### _meta.hints 처리 규칙
 
-recall 또는 context 응답의 `_meta.hints` 필드를 읽는다:
+recall·context 응답과 쓰기 도구(remember/amend/forget) 성공 응답의 `_meta.hints` 필드를 읽는다:
 - `signal` 값을 읽어 상황 파악
 - `suggestion` 텍스트를 사용자에게 알리거나 즉시 실행 고려
 - `trigger` 필드에 지정된 도구를 다음 행동으로 우선 고려
 
 | signal | 의미 | 권장 행동 |
 |--------|------|----------|
+| topic_mismatch | 지정한 topic 파편 없음, 유사 topic 존재 | 제안된 유사 topic으로 재검색 |
 | no_results | 관련 기억 없음 | 작업 완료 후 remember |
 | contradiction_pending | 반환 파편에 미해결 contradicts 링크 | 상충 파편 확인 후 amend 정리 또는 잘못된 쪽 forget |
 | stale_results | 30일+ 경과 파편 | amend로 갱신 또는 forget |
 | consider_context | 파편 5개 이상 | includeContext=true 재검색 |
 | active_errors | 미해결 error 파편 존재 | 각 파편 확인 후 forget |
 | empty_context | 저장된 기억 없음 | 세션 후 remember/reflect |
+| feedback_sampled | 쓰기 도구 응답에 피드백 요청이 표집됨 | 직전 결과를 `tool_feedback(tool_name=대상 도구, trigger_type="sampled")`로 평가. relevant=false이면 `irrelevance_reason`도 함께 전달 |
+
+recall/context 힌트는 위 표의 순서대로 우선순위가 판정되어 최상위 1건만 실린다(topic_mismatch가 no_results보다 먼저 판정된다). `active_errors`·`empty_context`는 context 전용이다. `feedback_sampled`는 recall/context가 아니라 remember·amend·forget 성공 응답에만 실리며, `hints[0].args`에 `tool_name`·`trigger_type`이 채워져 있다.
 
 ### 능동 활용 트리거 테이블
 
