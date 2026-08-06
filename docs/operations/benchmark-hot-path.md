@@ -122,5 +122,5 @@ benchmark-hot-path 측정 시 이 변경이 `recall` p50/p95/p99에 유의미한
 
 ## Notes
 
-- `scripts/baseline-v27.json`은 초기 스켈레톤 상태로 커밋되어 있다. 실제 측정 전에는 모든 수치가 `null`이다.
+- `scripts/baseline-v27.json`에는 테스트 DB(임베딩 비활성) 기준 실측치가 커밋되어 있다. `runAt`·`gitSha`·`note`로 측정 시점과 버전을 확인하고, 재측정 시 동일 조건(테스트 DB, 임베딩 키 미설정)으로 실행해야 비교가 성립한다.
 - `link` 반복 횟수는 `remember`에서 생성한 fragment 쌍으로 제한된다. `--link N`이 실제 생성된 fragment 쌍 수보다 크면 실제 실행 횟수가 더 적을 수 있다.

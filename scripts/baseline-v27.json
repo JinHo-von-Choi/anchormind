@@ -1,9 +1,29 @@
 {
-  "runAt": null,
-  "gitSha": null,
-  "note": "실제 수치는 사용자가 `node scripts/benchmark-hot-path.js` 실행 후 자동으로 채워진다. 이 파일은 Phase 0 스켈레톤.",
-  "remember": { "p50": null, "p95": null, "p99": null, "n": 0 },
-  "recall":   { "p50": null, "p95": null, "p99": null, "n": 0 },
-  "link":     { "p50": null, "p95": null, "p99": null, "n": 0 },
-  "reflect":  { "p50": null, "p95": null, "p99": null, "n": 0 }
+  "runAt": "2026-08-06T11:00:46.010Z",
+  "gitSha": "f069afb",
+  "note": "v5.6.0 hot-path baseline for regression comparison",
+  "remember": {
+    "p50": 23.9,
+    "p95": 38.85,
+    "p99": 261.28,
+    "n": 100
+  },
+  "recall": {
+    "p50": 2.94,
+    "p95": 3.28,
+    "p99": 4.46,
+    "n": 100
+  },
+  "link": {
+    "p50": 15.9,
+    "p95": 18.59,
+    "p99": 20.3,
+    "n": 50
+  },
+  "reflect": {
+    "p50": 0.04,
+    "p95": 3.46,
+    "p99": 3.46,
+    "n": 10
+  }
 }

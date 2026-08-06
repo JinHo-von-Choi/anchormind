@@ -212,7 +212,7 @@ async function run() {
       await manager.link?.({
         fromId,
         toId,
-        relationType: 'related_to',
+        relationType: 'related',
         agentId,
         keyId,
       });
@@ -234,10 +234,13 @@ async function run() {
   }
 
   /* ---------- write result ---------- */
+  const pkgVersion = JSON.parse(
+    fs.readFileSync(path.join(import.meta.dirname, '..', 'package.json'), 'utf8')
+  ).version;
   const result = {
     runAt    : new Date().toISOString(),
     gitSha   : getGitSha(),
-    note     : 'v2.7.0 baseline for Symbolic Memory regression comparison',
+    note     : `v${pkgVersion} hot-path baseline for regression comparison`,
     remember : summarize(rememberSamples),
     recall   : summarize(recallSamples),
     link     : summarize(linkSamples),
