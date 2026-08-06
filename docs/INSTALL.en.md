@@ -37,7 +37,7 @@ The fastest path for someone new to this repository is to hand the work to an AI
 After the assistant finishes, all of the following must hold:
 
 - `.env` exists, with `MEMENTO_ACCESS_KEY`, `POSTGRES_*`, and `REDIS_*` populated
-- `npm run migrate` succeeds through `migration-037`
+- `npm run migrate` succeeds through `migration-039`
 - `node bin/memento.js health` returns OK for DB, Redis, and the embedding provider
 - The AI client lists `mcp__*__remember`, `recall`, and `reflect`
 - A `memory_stats` call returns a valid response (zero fragments is fine)
@@ -203,6 +203,12 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-036-split-attempt-failed-a
 
 # HNSW index rename for naming consistency
 psql $DATABASE_URL -f lib/memory/migrations/migration-037-hnsw-index-rename.sql
+
+# fragment_versions resolution_status/outcome/phase columns
+psql $DATABASE_URL -f lib/memory/migrations/migration-038-fragment-versions-case-fields.sql
+
+# task_feedback outcome/evaluator/evidence/unmet_requirements + tool_feedback irrelevance_reason
+psql $DATABASE_URL -f lib/memory/migrations/migration-039-feedback-instrumentation.sql
 ```
 
 > **Re-running migration-007**: If you change `EMBEDDING_DIMENSIONS` or switch embedding providers, re-run `scripts/post-migrate-flexible-embedding-dims.js` to update the vector column dimensions in both the `fragments` and `morpheme_dict` tables simultaneously.
@@ -226,6 +232,10 @@ See [docs/migration-conventions.md](migration-conventions.md) for convention det
 > **migration-036 split_attempt_failed_at**: Adds `fragments.split_attempt_failed_at TIMESTAMPTZ` to record split-attempt failure timestamps, enabling the reprocessing scheduler to track failure history.
 
 > **migration-037 hnsw-index-rename**: Renames HNSW indexes for naming consistency. Drops the existing indexes and recreates them under the standard naming convention.
+
+> **migration-038 fragment-versions-case-fields**: Adds `resolution_status`, `outcome`, and `phase` to `fragment_versions` so an amend that updates case state preserves the prior state in history. All three columns are nullable, so mixed old/new writers during a rolling deploy stay compatible.
+
+> **migration-039 feedback-instrumentation (required before 5.6.0)**: Adds `outcome`, `evaluator`, `evidence`, `unmet_requirements` plus CHECK constraints on `outcome` and `evaluator` to `task_feedback`, and `irrelevance_reason` with its CHECK constraint plus the partial index `idx_tf_irrelevance` to `tool_feedback`. **A 5.6.0 server started without this migration fails to persist `tool_feedback` calls and the `task_effectiveness` payload of `reflect`, because the columns are missing.** Existing rows are not backfilled, so NULL means "unreported"; `task_completed_rate` and `irrelevance_breakdown` in `memory_stats` denominate only reported rows.
 
 > **migration-034-v2.16.0-bundle CONCURRENTLY option**: migration-034-v2.16.0-bundle runs inside a transaction, so it uses `CREATE UNIQUE INDEX` (not CONCURRENTLY). For large production tables (millions of fragments) where minimizing lock time is critical, run the two statements below manually before `npm run migrate`. The IF NOT EXISTS guard ensures they are safely skipped during automatic execution.
 >
@@ -281,6 +291,30 @@ npm run migrate
 node server.js
 ```
 
+### Upgrading to 5.6.0 (migration-039 required first)
+
+5.6.0 inserts directly into `tool_feedback.irrelevance_reason` and the `task_feedback.outcome` family of columns. Starting 5.6.0 without migration-039 makes `tool_feedback` writes and the `task_effectiveness` payload of `reflect` fail, so run the migration before restarting the server.
+
+```bash
+# 1. Update dependencies
+npm install
+
+# 2. Run migrations (includes migration-038, migration-039)
+npm run migrate
+
+# 3. Verify
+psql $DATABASE_URL -c "\d agent_memory.task_feedback"   # outcome, evaluator, evidence, unmet_requirements
+psql $DATABASE_URL -c "\d agent_memory.tool_feedback"   # irrelevance_reason
+
+# 4. Review .env (optional)
+#    MEMENTO_FEEDBACK_SAMPLING=false     : disable the feedback request hint on write tools
+#    MEMENTO_SPLIT_SUBJECT_GATE=false    : disable the split-child subject anchor check
+#    MEMENTO_SPLIT_MODALITY_GATE=false   : disable the split-child modality drift check
+
+# 5. Restart the server
+node server.js
+```
+
 Applied migrations are tracked in `agent_memory.schema_migrations`. Only unapplied files are executed in order.
 
 > **Upgrading from v1.1.0 or earlier**: If migration-006 is not applied, any operation that creates a `superseded_by` link — `amend`, `memory_consolidate`, and automatic relationship generation in GraphLinker — will fail with a DB constraint error. This migration is mandatory when upgrading an existing database.
@@ -320,6 +354,9 @@ LLM_FALLBACKS                 - JSON array of fallback providers: [{"provider":"
 MEMENTO_REMEMBER_ATOMIC       - When true, atomizes quota check + INSERT in remember() into a single transaction to eliminate TOCTOU (default: false)
 MEMENTO_CASE_BACKPROP_ENABLED - When true, enables CaseRewardBackprop — reward back-propagation per case_id (default: false)
 MEMENTO_STORAGE               - Storage adapter selection. pgvector (default). See lib/storage/ for additional adapters
+MEMENTO_FEEDBACK_SAMPLING     - Attaches a tool_feedback request hint to successful remember/amend/forget responses with a fixed probability (default: true)
+MEMENTO_SPLIT_SUBJECT_GATE    - Discards a split child carrying none of the parent's subject anchors (default: true)
+MEMENTO_SPLIT_MODALITY_GATE   - Discards a split child introducing a modality absent from the parent (default: true)
 MIGRATION_LINT_FROM           - Lower-bound migration number for lint:migrations checks. Defaults to max existing number + 1 when unset
 ```
 

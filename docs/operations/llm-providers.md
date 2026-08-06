@@ -347,3 +347,7 @@ split skip 건수를 `reason` 라벨별로 측정한다.
 | `low_yield` | 게이트 통과 자식 수 < `minItems` |
 | `insert_shortfall` | insert 후 자식 수 < `minItems` (롤백됨) |
 | `anchor_loss` | 자식 합집합에 원문의 수치 앵커가 남지 않아 원본 대체 중단 |
+| `subject_loss` | 자식이 부모의 주어 앵커를 하나도 담지 못해 해당 자식 폐기 (`MEMENTO_SPLIT_SUBJECT_GATE`) |
+| `modality_drift` | 자식이 부모에 없던 양상(예정·의도·추측·당위)을 도입해 해당 자식 폐기 (`MEMENTO_SPLIT_MODALITY_GATE`) |
+
+집계 단위 주의: `provider_error`·`llm_error`·`low_yield`·`insert_shortfall`·`anchor_loss`는 파편(부모) 단위로 1회 기록되지만, `subject_loss`·`modality_drift`는 자식 단위로 기록되어 한 부모에서 여러 건이 누적될 수 있다. 두 계열을 같은 분모로 비교하면 안 된다.

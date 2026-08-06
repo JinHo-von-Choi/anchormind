@@ -354,7 +354,7 @@ erDiagram
         text goal "케이스 목표"
         text outcome "케이스 결과"
         text phase "케이스 단계"
-        text resolution_status "open / resolved / wont_fix"
+        text resolution_status "open / resolved / abandoned"
         text assertion_status "observed / inferred / verified / rejected"
         text affect "neutral / frustration / confidence / surprise / doubt / satisfaction"
     }
@@ -376,11 +376,14 @@ erDiagram
         boolean relevant
         boolean sufficient
         text session_id
+        text irrelevance_reason "not_stored / search_miss / scope_leak / topic_mismatch / other"
     }
     task_feedback {
         bigserial id PK
         text session_id
         boolean overall_success
+        text outcome "completed / partial / blocked / abandoned / unknown"
+        text evaluator "agent / automatic / human"
     }
     case_events {
         text event_id PK
@@ -417,16 +420,16 @@ erDiagram
 | content | TEXT | NOT NULL | 기억 내용 본문 (300자 권장, 원자적 1~3문장) |
 | topic | TEXT | NOT NULL | 주제 레이블 (예: database, deployment, security) |
 | keywords | TEXT[] | NOT NULL DEFAULT '{}' | 검색용 키워드 배열 (GIN 인덱스) |
-| type | TEXT | NOT NULL, CHECK | fact / decision / error / preference / procedure / relation |
+| type | TEXT | NOT NULL, CHECK | fact / decision / error / preference / procedure / relation / episode |
 | importance | REAL | 0.0~1.0 CHECK | 중요도. type별 기본값, MemoryConsolidator에 의해 감쇠 |
-| content_hash | TEXT | UNIQUE | SHA 해시 기반 중복 방지 |
+| content_hash | TEXT | NOT NULL | SHA 해시 기반 중복 방지. 전역 UNIQUE가 아니라 테넌트별 partial unique index 2종(`uq_frag_hash_master`, `uq_frag_hash_per_key`, migration-031)으로 강제 |
 | source | TEXT | | 출처 식별자 (세션 ID, 도구명 등) |
 | linked_to | TEXT[] | DEFAULT '{}' | 연결 파편 ID 목록 (GIN 인덱스) |
 | agent_id | TEXT | NOT NULL DEFAULT 'default' | RLS 격리 기준 에이전트 ID |
 | access_count | INTEGER | DEFAULT 0 | 회상 횟수 — utility_score 산정에 반영 |
 | accessed_at | TIMESTAMPTZ | | 최근 회상 시각 |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | 생성 시각 |
-| ttl_tier | TEXT | CHECK | hot / warm(기본) / cold / permanent |
+| ttl_tier | TEXT | CHECK | short / hot / warm(기본) / cold / permanent |
 | estimated_tokens | INTEGER | DEFAULT 0 | cl100k_base 토큰 수 — tokenBudget 계산에 사용 |
 | utility_score | REAL | DEFAULT 1.0 | MemoryEvaluator/MemoryConsolidator가 갱신하는 유용성 점수 |
 | verified_at | TIMESTAMPTZ | DEFAULT NOW() | 마지막 품질 검증 시각 |
@@ -434,7 +437,6 @@ erDiagram
 | is_anchor | BOOLEAN | DEFAULT FALSE | true 시 감쇠, TTL 강등, 만료 삭제 전부 면제 |
 | valid_from | TIMESTAMPTZ | DEFAULT NOW() | Temporal 유효 구간 시작. `asOf` 쿼리의 하한 |
 | valid_to | TIMESTAMPTZ | | Temporal 유효 구간 종료. NULL이면 현재 유효 파편 |
-| superseded_by | TEXT | | 이 파편을 대체한 파편의 ID |
 | last_decay_at | TIMESTAMPTZ | | 마지막 감쇠 적용 시각. NULL이면 accessed_at/created_at 기준으로 보정 |
 | key_id | TEXT | FK → api_keys.id, ON DELETE SET NULL | API 키 기반 기억 격리. NULL이면 마스터 키(MEMENTO_ACCESS_KEY)로 저장된 기억. 값이 있으면 해당 API 키로만 조회 가능 |
 | ema_activation | FLOAT | DEFAULT 0.0 | ACT-R 기저 활성화 EMA 근사값. `incrementAccess()` 호출 시 `α * (Δt_sec)^{-0.5} + (1-α) * prev` 수식으로 갱신(α=0.3). L1 fallback 경로에서는 갱신되지 않음(noEma=true). `_computeRankScore()`에서 importance 부스트로 활용 |
@@ -447,7 +449,7 @@ erDiagram
 | goal | TEXT | | 케이스의 목표 설명 |
 | outcome | TEXT | | 케이스의 실제 결과 설명 |
 | phase | TEXT | | 케이스의 현재 단계 레이블 |
-| resolution_status | TEXT | CHECK | 케이스 해결 상태: open(진행 중) / resolved(해결됨) / wont_fix(미해결 종료) |
+| resolution_status | TEXT | CHECK | 케이스 해결 상태: open(진행 중) / resolved(해결됨) / abandoned(중단) |
 | assertion_status | TEXT | CHECK | 파편 주장 신뢰도: observed(기본, 직접 관측) / inferred(추론) / verified(검증됨) / rejected(기각됨) |
 | affect | TEXT | CHECK, DEFAULT 'neutral' | 기억 당시의 정서 상태 태그. neutral / frustration / confidence / surprise / doubt / satisfaction |
 
@@ -490,7 +492,8 @@ HNSW 벡터 인덱스는 `embedding IS NOT NULL` 조건부 인덱스로 생성�
 | suggestion | TEXT | 개선 제안 (100자 이내 권장) |
 | context | TEXT | 사용 맥락 요약 (50자 이내 권장) |
 | session_id | TEXT | 세션 식별자 |
-| trigger_type | TEXT | sampled(훅 샘플링) / voluntary(AI 자발적 호출) |
+| trigger_type | TEXT | sampled(훅 샘플링 또는 쓰기 도구의 feedback_sampled 힌트 응답) / voluntary(AI 자발적 호출) |
+| irrelevance_reason | TEXT | 무관 판정 원인. not_stored / search_miss / scope_leak / topic_mismatch / other. relevant=false인 경우에만 기록되며 그 외에는 NULL (migration-039). partial index `idx_tf_irrelevance`로 원인 분포 집계가 전체 테이블을 훑지 않는다 |
 | created_at | TIMESTAMPTZ | |
 
 ### task_feedback
@@ -501,7 +504,11 @@ HNSW 벡터 인덱스는 `embedding IS NOT NULL` 조건부 인덱스로 생성�
 |------|------|------|
 | id | BIGSERIAL PK | |
 | session_id | TEXT | 세션 식별자 |
-| overall_success | BOOLEAN | 세션의 주요 작업이 성공적으로 완료되었는가 |
+| overall_success | BOOLEAN | 호환 유지 컬럼. 명시값이 없으면 outcome='completed'에서 파생 |
+| outcome | TEXT | 작업 종료 상태. completed / partial / blocked / abandoned / unknown (CHECK 제약, migration-039). NULL은 미보고 |
+| evaluator | TEXT | outcome 판정 주체. agent / automatic / human. outcome이 있을 때만 기록되며 기본 agent |
+| evidence | TEXT | outcome 판정 근거 (1000자 절삭) |
+| unmet_requirements | TEXT[] | 충족하지 못한 요구사항 (최대 20건, 각 200자 절삭) |
 | tool_highlights | TEXT[] | 특히 유용했던 도구와 이유 목록 |
 | tool_pain_points | TEXT[] | 불편하거나 개선이 필요한 도구와 이유 목록 |
 | created_at | TIMESTAMPTZ | |

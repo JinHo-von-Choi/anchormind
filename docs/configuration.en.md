@@ -38,7 +38,6 @@
 | RERANKER_EXTERNAL_FALLBACK | skip | Policy applied after 3 consecutive external reranker failures. `skip` (default): no switch to in-process — external calls are simply skipped for `RERANKER_EXTERNAL_COOLDOWN_MS`, and original scores (RRF order) are returned as-is. `inprocess`: switches to the ONNX in-process model (opt-in, the previous behavior) |
 | RERANKER_EXTERNAL_COOLDOWN_MS | 60000 | Cooldown duration (ms) when `RERANKER_EXTERNAL_FALLBACK=skip`. After the window expires, the next recall retries the external call once; success resumes normal operation, failure re-enters cooldown |
 | QUOTA_NEAR_LIMIT_MARGIN | 10 | Remaining-quota threshold at which `QuotaChecker.check()` switches to the precise FOR UPDATE check. The transaction lock is only acquired when `remaining` is at or below this value; above it, the check passes using the 10-second TTL cache (getUsage) without locking |
-| FRAGMENT_DEFAULT_LIMIT | 5000 | Default fragment quota for new API keys (default: 5000, NULL=unlimited) |
 | ENABLE_RECONSOLIDATION | false | Enable ReconsolidationEngine. When true, tool_feedback and contradicts detection dynamically update fragment_links weight/confidence |
 | ENABLE_SPREADING_ACTIVATION | false | Enable SpreadingActivation. When true, the contextText parameter in recall proactively activates related fragments. Recommended to measure latency impact before enabling |
 | ENABLE_PATTERN_ABSTRACTION | false | Enable pattern abstraction. Planned for activation after sufficient data accumulation (not yet implemented) |
@@ -51,6 +50,9 @@
 | MEMENTO_RECALL_MIN_SIM_FLOOR | (unset) | Opt-in floor for the adaptive similarity threshold returned by `SearchParamAdaptor.getMinSimilarity`. Example: when set to `0.45`, the returned value is clamped to at least 0.45 even if the learned value is lower. Unset preserves the existing behavior |
 | MEMENTO_MORPHEME_TOKENIZER | local | Morpheme tokenizer path. `local` (default): routes to per-language CPU analyzers — garu-ko (Korean), natural PorterStemmer (English), @node-rs/jieba (Chinese), kuromoji (Japanese). `llm`: falls back to the LLM subprocess path (`MorphemeIndex._tokenizeViaLLM()`). |
 | MEMENTO_ENABLE_KUROMOJI | true | When `false`, skips loading the kuromoji Japanese analyzer, saving ~269MB resident memory. Useful for deployments with no Japanese fragments. Synced with `config/memory.js` `morphemeIndex.enableKuromoji`. |
+| MEMENTO_FEEDBACK_SAMPLING | true | Attaches a `feedback_sampled` hint to successful remember/amend/forget responses with a fixed probability (`config/memory.js` `feedback.sampling.enabled`). When `false`, no hint is attached |
+| MEMENTO_SPLIT_SUBJECT_GATE | true | Discards a split child that carries none of the parent's subject anchors (`fragmentSplit.requireSubjectAnchor`). When `false`, the subject check is skipped |
+| MEMENTO_SPLIT_MODALITY_GATE | true | Discards a split child that introduces a modality absent from the parent (planned/intended/conjectured/obligatory) (`fragmentSplit.rejectIntroducedModality`). When `false`, the modality check is skipped |
 
 #### Migration Linting
 
@@ -122,6 +124,7 @@ When REDIS_ENABLED=true, state is stored in Redis; otherwise in-memory.
   "ollama": 16,
   "openai|https://token-plan-sgp.xiaomimimo.com/v1|mimo-v2-pro": 8,
   "gemini-cli": 1,
+  "agy-cli": 1,
   "copilot-cli": 1,
   "codex-cli": 1,
   "qwen-cli": 1,
@@ -192,7 +195,7 @@ Sliding window: each time an OAuth-authenticated request arrives, the Redis TTL 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | SSE_HEARTBEAT_INTERVAL_MS | 25000 | SSE heartbeat ping interval (ms). Used to verify client connection is alive |
-| SSE_MAX_HEARTBEAT_FAILURES | 3 | Consecutive heartbeat send failure tolerance. Session is automatically terminated when exceeded. Detects write backpressure and network errors |
+| SSE_MAX_HEARTBEAT_FAILURES | 10 | Consecutive heartbeat send failure tolerance. Session is automatically terminated when exceeded. Detects write backpressure and network errors |
 | SSE_RETRY_MS | 5000 | SSE reconnection wait time (ms). Sent to client via the `retry:` field |
 | MCP_IDLE_REFLECT_HOURS | 24 | Idle session intermediate autoReflect threshold (hours). Sessions inactive for this duration receive a mid-session reflect during cleanup to prevent memory loss. |
 
@@ -419,6 +422,27 @@ Split children receive their `keywords` from their own body via `FragmentFactory
 
 Anchor coverage check for `splitLongFragments`: the split rewrites the source through an LLM rather than cutting it, so an entire proposition can go missing. Right before the children are stored, the numeric anchors of the source (dates, amounts, ratios, measurements) are matched against the union of the children. If any anchor is absent, no child is stored, the original is left intact, `split_attempt_failed_at` is refreshed, and `memento_consolidate_split_skipped_total{reason="anchor_loss"}` is incremented. A date such as `2026-07-15` is compared as `2026`/`07`/`15` and a range such as `75~85` as `75`/`85`, so rephrasing passes as long as the component digits survive. Digit group separators are ignored; single digits and sources without any numeric token are excluded from the check.
 
+Subject anchor gate (`fragmentSplit.requireSubjectAnchor`, default `true`, ENV `MEMENTO_SPLIT_SUBJECT_GATE`): up to `subjectAnchorMax` (default 12) subject anchors are extracted from the parent body — proper-noun/foreign/Han tokens from the morphological analyzer plus code identifiers (camelCase, PascalCase, snake_case) and Latin+Hangul compounds such as `A사`. A child carrying none of them is discarded and `memento_consolidate_split_skipped_total{reason="subject_loss"}` is incremented. Single-character Hangul tokens are not used as anchors because they collide by chance. Only when no anchor can be extracted at all does the gate pass (fail-open). Even if the morphological analyzer fails to load, code identifiers and Latin+Hangul compounds are still extracted by regex, so an unloaded analyzer does not by itself disable the gate.
+
+Modality drift gate (`fragmentSplit.rejectIntroducedModality`, default `true`, ENV `MEMENTO_SPLIT_MODALITY_GATE`): the modality families of parent and child (future, intention, conjecture, obligation) are compared. A child that introduces a family absent from the parent is discarded and `memento_consolidate_split_skipped_total{reason="modality_drift"}` is incremented. Swapping expressions within the same family is allowed as a rewrite; only a completed statement turning into a plan, conjecture, or obligation is blocked.
+
+Both gates judge per child, so a single parent can produce several increments. Do not compare them against per-fragment reasons such as `low_yield` or `anchor_loss` using the same denominator.
+
+### feedback.sampling
+
+Write-path tools attach a `tool_feedback` request hint with a fixed probability. Voluntary feedback alone skews the sample toward successes, so an evaluation is requested right after a store, amend, or delete. Configured in the `feedback.sampling` block of `config/memory.js`.
+
+| Key | Default | Description |
+|-|-|-|
+| `enabled` | `true` | Enables hint attachment. ENV: `MEMENTO_FEEDBACK_SAMPLING` |
+| `rates.remember` | `0.10` | Sampling probability for successful remember responses |
+| `rates.amend` | `0.25` | Sampling probability for successful amend responses |
+| `rates.forget` | `0.25` | Sampling probability for successful forget responses |
+| `maxHintsPerSession` | `2` | Per-session hint cap. Silent beyond the cap |
+| `cooldownSeconds` | `900` | Minimum interval before another hint may be issued |
+
+recall is excluded from `rates` because it already has its own hint path. Cap and cooldown counters live in Redis (`frag:fbhint:count:*`, `frag:fbhint:cd:*`); when Redis is unavailable only the probability check applies (fail-open). `remember(dryRun=true)`, `forget(dryRun=true)`, and an `amend` that changed nothing are never sampled. A sampled response carries `signal: "feedback_sampled"` and `args: {tool_name, trigger_type: "sampled"}` in `_meta.hints[0]`.
+
 ### SearchParamAdaptor (Automatic Search Parameter Learning)
 
 SearchParamAdaptor operates automatically without any separate environment variables. It uses the `semanticSearch.minSimilarity` value from `config/memory.js` as the default. After 50 or more searches, the learned value per key_id x query_type x hour combination replaces the default.
@@ -431,6 +455,8 @@ SearchParamAdaptor operates automatically without any separate environment varia
 | step | 0.01 | Adjustment step size (symmetric) |
 
 Learned data is stored in the `agent_memory.search_param_thresholds` table (migration-029).
+
+Searches that return zero rows because of an exact-match `topic` filter are excluded from the learning sample. topic is evaluated as an exact match across every layer, so a single typo drives all layers to zero at once, and feeding that into the adaptor only produces downward pressure on minSimilarity. The `search_events` record is still written; only SearchParamAdaptor learning skips it. In that case recall looks up nearby topics and attaches a `topic_mismatch` hint to `_meta.hints` to steer a re-query (`TopicResolver`).
 
 ### Runtime Validation
 
@@ -831,6 +857,8 @@ Run `npm run migrate` to execute unapplied migrations in order. History is manag
 | 035 | migration-035-morpheme-indexed.sql | fragments.morpheme_indexed BOOLEAN NOT NULL DEFAULT false + partial index, backfills existing fragments |
 | 036 | migration-036-split-attempt-failed-at.sql | `fragments.split_attempt_failed_at TIMESTAMPTZ NULL` column + partial index, used for splitLongFragments failure backoff |
 | 037 | migration-037-hnsw-index-rename.sql | Aligns the HNSW index name (idx_frag_embedding), applies ef_construction=128 |
+| 038 | migration-038-fragment-versions-case-fields.sql | Adds `resolution_status`, `outcome`, and `phase` to `fragment_versions`, preserving the pre-amend case state in history |
+| 039 | migration-039-feedback-instrumentation.sql | Adds `outcome`, `evaluator`, `evidence`, `unmet_requirements` (+ CHECK constraints on `outcome` and `evaluator`) to `task_feedback` and `irrelevance_reason` (+ CHECK constraint and partial index `idx_tf_irrelevance`) to `tool_feedback`. Existing rows are not backfilled, so NULL means "unreported" |
 
 ---
 

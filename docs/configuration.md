@@ -38,7 +38,6 @@
 | RERANKER_EXTERNAL_FALLBACK | skip | external 리랭커 3회 연속 실패 시 정책. `skip`(기본): in-process 전환 없이 `RERANKER_EXTERNAL_COOLDOWN_MS` 동안 external 호출 자체를 생략하고 원점수(RRF 순서)를 그대로 반환. `inprocess`: ONNX in-process 모드로 전환(opt-in, 이전 동작) |
 | RERANKER_EXTERNAL_COOLDOWN_MS | 60000 | `RERANKER_EXTERNAL_FALLBACK=skip`일 때의 쿨다운 유지 시간(ms). 창 만료 후 다음 recall이 external을 1건 재시도하며, 성공 시 정상 복귀·실패 시 쿨다운 재진입 |
 | QUOTA_NEAR_LIMIT_MARGIN | 10 | `QuotaChecker.check()`가 FOR UPDATE 정밀 검사로 전환하는 잔여 할당량 임계치. `remaining`이 이 값 이하일 때만 트랜잭션 락을 획득하며, 그 이상이면 10초 TTL 캐시(getUsage) 결과로 락 없이 통과한다 |
-| FRAGMENT_DEFAULT_LIMIT | 5000 | 새 API 키 생성 시 기본 파편 할당량 (기본: 5000, NULL=무제한) |
 | ENABLE_RECONSOLIDATION | false | ReconsolidationEngine 활성화. true 시 tool_feedback과 contradicts 감지 시 fragment_links weight/confidence를 동적 갱신한다 |
 | ENABLE_SPREADING_ACTIVATION | false | SpreadingActivation 활성화. true 시 recall의 contextText 파라미터로 관련 파편을 선제적 활성화한다. 레이턴시 영향 측정 후 활성화 권장 |
 | ENABLE_PATTERN_ABSTRACTION | false | 패턴 추상화 활성화. 데이터 충분 축적 후 활성화 예정 (현재 미구현) |
@@ -52,6 +51,9 @@
 | MIGRATION_LINT_FROM | (없음) | `npm run lint:migrations` 검사 cutoff override. 지정 마이그레이션 번호 이후분만 검사. 미설정 시 전체 검사 |
 | MEMENTO_MORPHEME_TOKENIZER | local | 형태소 토크나이저 경로 선택. `local`: garu-ko(한글)·natural PorterStemmer(영어)·@node-rs/jieba(중국어)·kuromoji(일본어) 로컬 CPU 분석기 사용(기본). `llm`: LLM 서브프로세스 경로(`MorphemeIndex._tokenizeViaLLM()`)로 전환. |
 | MEMENTO_ENABLE_KUROMOJI | true | `false` 설정 시 kuromoji 일본어 분석기 로딩 생략. 일본어 파편이 없는 환경에서 상주 메모리 약 269MB 절감. `config/memory.js` `morphemeIndex.enableKuromoji`와 동기화됨. |
+| MEMENTO_FEEDBACK_SAMPLING | true | remember·amend·forget 성공 응답에 `feedback_sampled` 힌트를 확률적으로 동봉(`config/memory.js` `feedback.sampling.enabled`). `false` 시 힌트 부착 자체를 생략한다 |
+| MEMENTO_SPLIT_SUBJECT_GATE | true | 분할 자식이 부모의 주어 앵커를 하나도 담지 못하면 해당 자식을 폐기(`fragmentSplit.requireSubjectAnchor`). `false` 시 주어 검사를 건너뛴다 |
+| MEMENTO_SPLIT_MODALITY_GATE | true | 분할 자식이 부모에 없던 양상(예정·의도·추측·당위)을 도입하면 해당 자식을 폐기(`fragmentSplit.rejectIntroducedModality`). `false` 시 양상 검사를 건너뛴다 |
 
 #### CLI 원격 접속
 
@@ -117,6 +119,7 @@ REDIS_ENABLED=true면 Redis에 상태 저장, 아니면 in-memory.
   "ollama": 16,
   "openai|https://token-plan-sgp.xiaomimimo.com/v1|mimo-v2-pro": 8,
   "gemini-cli": 1,
+  "agy-cli": 1,
   "copilot-cli": 1,
   "codex-cli": 1,
   "qwen-cli": 1,
@@ -191,7 +194,7 @@ OAuth 토큰 TTL은 세션 TTL과 연동된다.
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
 | SSE_HEARTBEAT_INTERVAL_MS | 25000 | SSE heartbeat ping 전송 간격 (ms). 클라이언트 연결 유지 확인용 |
-| SSE_MAX_HEARTBEAT_FAILURES | 3 | 연속 heartbeat 전송 실패 허용 횟수. 초과 시 세션 자동 종료. write backpressure 및 네트워크 오류 감지 |
+| SSE_MAX_HEARTBEAT_FAILURES | 10 | 연속 heartbeat 전송 실패 허용 횟수. 초과 시 세션 자동 종료. write backpressure 및 네트워크 오류 감지 |
 | SSE_RETRY_MS | 5000 | SSE 재연결 대기 시간 (ms). 클라이언트 `retry:` 필드로 전달 |
 | MCP_IDLE_REFLECT_HOURS | 24 | 세션 idle 중간 autoReflect 임계 시간 (시간). 이 시간 이상 비활성 상태인 세션에 주기 정리 시 중간 reflect를 실행하여 기억 손실을 방지. 0 설정 시 사실상 비활성화(단, 0h 초과 조건이므로 매 정리 주기마다 실행됨) |
 
@@ -462,14 +465,38 @@ LLM 재작성이 수반되어 파편 내용을 변경할 수 있는 3개 stage�
 | `minChildLength` | `20` | 이 길이 미만 자식 단편은 품질 게이트에서 폐기 |
 | `excludeMetaTopics` | `["session_reflect","consolidation","reflection"]` | 분할 제외 topic 목록 |
 | `failureBackoffHours` | `24` | 분할 실패 후 이 시간 동안 재선정 제외 (`split_attempt_failed_at` 컬럼, migration-036) |
+| `requireSubjectAnchor` | `true` | 부모의 주어 앵커를 하나도 담지 못한 자식을 폐기. ENV: `MEMENTO_SPLIT_SUBJECT_GATE` |
+| `rejectIntroducedModality` | `true` | 부모에 없던 양상을 도입한 자식을 폐기. ENV: `MEMENTO_SPLIT_MODALITY_GATE` |
+| `subjectAnchorMax` | `12` | 부모 원문에서 추출할 주어 앵커 상한 |
 
 분할 자식 품질 게이트(`split-gate.js`): 최소 길이(`minChildLength`) 미달·대체 문자(`�`) 포함·CJK/가나 혼입(한글 본문 기준)·대명사/메타 시작 토큰이면 reject. fact 타입 자식의 importance가 클램프 후 0.4 미만이면 저장 차단.
+
+주어 앵커 게이트(`requireSubjectAnchor`): 부모 원문에서 형태소 분석기의 고유명사·외국어·한자 토큰과 코드 식별자(camelCase·PascalCase·snake_case), 라틴+한글 혼합 토큰(A사, K팀)을 최대 `subjectAnchorMax`개까지 추출한 뒤, 이 중 어느 것도 담지 못한 자식을 폐기하고 `memento_consolidate_split_skipped_total{reason="subject_loss"}`를 증가시킨다. 한글 1자 토큰은 우연 일치가 잦아 앵커로 쓰지 않는다. 앵커를 하나도 추출하지 못한 경우에만 판정 근거가 없으므로 통과시킨다(fail-open). 형태소 분석기가 로드되지 않아도 코드 식별자·라틴+한글 혼합 토큰은 정규식으로 계속 추출되므로, 분석기 미로드가 곧 게이트 비활성을 뜻하지는 않는다.
+
+양상 표류 게이트(`rejectIntroducedModality`): 부모와 자식의 양상 패밀리(future·intention·conjecture·obligation)를 대조하여, 부모에 없던 패밀리를 자식이 새로 도입하면 폐기하고 `memento_consolidate_split_skipped_total{reason="modality_drift"}`를 증가시킨다. 같은 패밀리 안의 표현 교체("제출할 예정이다" → "제출할 것이다")는 재작성으로 허용하며, 완료 사실이 예정·추측·당위로 바뀌는 경우만 차단한다.
+
+두 게이트는 자식 단위로 판정되므로 한 부모에서 여러 건이 누적될 수 있다. 파편 단위로 1회 기록되는 `low_yield`·`anchor_loss` 등과 같은 분모로 비교하지 않는다.
 
 자식 파편의 `keywords`는 `remember` 경로와 동일하게 자식 본문에서 추출된다(`FragmentFactory.extractKeywords`). 부모의 keywords를 복사하지 않는다.
 
 Phase 1(gate-only)에서 통과 자식 수 < `minItems`이면 DB insert 없이 해당 파편의 `split_attempt_failed_at`을 갱신하고 `memento_consolidate_split_skipped_total{reason="low_yield"}`를 증가시킨다. 분할 성공 시 원본은 `valid_to = NOW()`, `ttl_tier = 'cold'`, `importance = GREATEST(0.2, importance × 0.3)` 처리된다.
 
 앵커 커버리지 검사: 분할은 원문을 자르지 않고 LLM이 다시 쓰므로 명제 하나가 통째로 누락될 수 있다. 자식 저장 직전에 원문의 수치 앵커(날짜·금액·비율·측정값)가 자식 합집합에 모두 남아 있는지 대조하고, 하나라도 빠지면 자식을 저장하지 않고 원본을 그대로 둔다. 이때 `split_attempt_failed_at`을 갱신하고 `memento_consolidate_split_skipped_total{reason="anchor_loss"}`를 증가시킨다. 날짜 `2026-07-15`는 `2026`/`07`/`15`로, 범위 `75~85`는 `75`/`85`로 분해 비교하므로 표기가 바뀌어도 구성 숫자가 남으면 보존으로 판정한다. 자릿수 구분자는 무시하며, 한 자리 숫자와 수치가 전혀 없는 원문은 판정 대상에서 제외한다.
+
+### feedback.sampling
+
+쓰기 계열 도구 응답에 `tool_feedback` 요청 힌트를 확률적으로 동봉한다. 자발적 피드백만으로는 표본이 성공 사례에 편중되므로, 저장·수정·삭제 직후 일정 확률로 평가를 요청한다. `config/memory.js`의 `feedback.sampling` 블록에서 설정한다.
+
+| 키 | 기본값 | 설명 |
+|-|-|-|
+| `enabled` | `true` | 힌트 동봉 활성화. ENV: `MEMENTO_FEEDBACK_SAMPLING` |
+| `rates.remember` | `0.10` | remember 성공 응답의 힌트 표집 확률 |
+| `rates.amend` | `0.25` | amend 성공 응답의 힌트 표집 확률 |
+| `rates.forget` | `0.25` | forget 성공 응답의 힌트 표집 확률 |
+| `maxHintsPerSession` | `2` | 세션당 힌트 상한. 초과 시 무음 |
+| `cooldownSeconds` | `900` | 직전 힌트 이후 재발행 금지 시간 |
+
+recall은 자체 힌트 경로를 이미 갖고 있어 `rates`에서 제외된다. 상한·쿨다운 카운터는 Redis(`frag:fbhint:count:*`, `frag:fbhint:cd:*`)에 보관하며, Redis 미가용 시에는 상한·쿨다운 없이 확률 판정만 적용된다(fail-open). `remember(dryRun=true)`·`forget(dryRun=true)`과 실제 갱신이 없었던 `amend`는 표집 대상이 아니다. 표집된 응답에는 `_meta.hints[0]`에 `signal: "feedback_sampled"`와 `args: {tool_name, trigger_type: "sampled"}`가 실린다.
 
 ### SearchParamAdaptor (자동 검색 파라미터 학습)
 
@@ -483,6 +510,8 @@ SearchParamAdaptor는 별도 환경변수 없이 자동으로 동작한다. `con
 | step | 0.01 | 조정 보폭 (대칭) |
 
 학습 데이터는 `agent_memory.search_param_thresholds` 테이블에 저장된다 (migration-029).
+
+`topic` 정확일치 필터로 0건이 된 검색은 학습 표본에서 제외된다. topic은 전 계층에서 정확일치로 평가되므로 오기 한 글자에도 모든 계층이 동시에 0건이 되고, 이를 학습에 넣으면 minSimilarity 하향 압력만 남는다. `search_events` 기록은 그대로 유지되며 제외 대상은 SearchParamAdaptor 학습뿐이다. 이 경우 recall은 근접 topic 후보를 조회해 `_meta.hints`에 `topic_mismatch`를 실어 재검색을 유도한다(`TopicResolver`).
 
 ### 런타임 검증
 
@@ -853,6 +882,8 @@ EMBEDDING_DIMENSIONS=768
 | 035 | migration-035-morpheme-indexed.sql | fragments.morpheme_indexed BOOLEAN NOT NULL DEFAULT false + 부분 인덱스, 기존 파편 백필 |
 | 036 | migration-036-split-attempt-failed-at.sql | `fragments.split_attempt_failed_at TIMESTAMPTZ NULL` 컬럼 + partial index. splitLongFragments 분할 실패 backoff에 사용 |
 | 037 | migration-037-hnsw-index-rename.sql | HNSW 인덱스명 정합화 (idx_frag_embedding), ef_construction=128 적용 |
+| 038 | migration-038-fragment-versions-case-fields.sql | `fragment_versions`에 `resolution_status`·`outcome`·`phase` 컬럼 추가. amend 직전 케이스 상태를 이력에 보존 |
+| 039 | migration-039-feedback-instrumentation.sql | `task_feedback`에 `outcome`·`evaluator`·`evidence`·`unmet_requirements` 컬럼 + `outcome`·`evaluator` CHECK 제약, `tool_feedback`에 `irrelevance_reason` 컬럼 + CHECK 제약 + partial index `idx_tf_irrelevance`. 기존 행은 백필하지 않으므로 NULL이 "미보고"를 뜻한다 |
 
 ---
 

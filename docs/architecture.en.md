@@ -373,11 +373,14 @@ erDiagram
         boolean relevant
         boolean sufficient
         text session_id
+        text irrelevance_reason "not_stored / search_miss / scope_leak / topic_mismatch / other"
     }
     task_feedback {
         bigserial id PK
         text session_id
         boolean overall_success
+        text outcome "completed / partial / blocked / abandoned / unknown"
+        text evaluator "agent / automatic / human"
     }
     case_events {
         text event_id PK
@@ -487,7 +490,8 @@ Tool usefulness feedback. Records whether recall returned results matching the i
 | suggestion | TEXT | Improvement suggestion (100 characters recommended) |
 | context | TEXT | Usage context summary (50 characters recommended) |
 | session_id | TEXT | Session identifier |
-| trigger_type | TEXT | sampled (hook sampling) / voluntary (AI voluntary call) |
+| trigger_type | TEXT | sampled (hook sampling or a reply to a write tool's feedback_sampled hint) / voluntary (AI voluntary call) |
+| irrelevance_reason | TEXT | Why the result was judged irrelevant. not_stored / search_miss / scope_leak / topic_mismatch / other. Recorded only when relevant=false, otherwise NULL (migration-039). The partial index `idx_tf_irrelevance` keeps the cause breakdown from scanning the whole table |
 | created_at | TIMESTAMPTZ | |
 
 ### task_feedback
@@ -498,7 +502,11 @@ Per-session task effectiveness. Recorded via the reflect tool's task_effectivene
 |--------|------|-------------|
 | id | BIGSERIAL PK | |
 | session_id | TEXT | Session identifier |
-| overall_success | BOOLEAN | Whether the session's primary task completed successfully |
+| overall_success | BOOLEAN | Compatibility column. Derived from outcome='completed' when not supplied explicitly |
+| outcome | TEXT | Task end state. completed / partial / blocked / abandoned / unknown (CHECK constraint, migration-039). NULL means unreported |
+| evaluator | TEXT | Who judged the outcome. agent / automatic / human. Stored only alongside an outcome; defaults to agent |
+| evidence | TEXT | Rationale for the outcome judgement (truncated at 1000 characters) |
+| unmet_requirements | TEXT[] | Requirements left unmet (up to 20 items, each truncated to 200 characters) |
 | tool_highlights | TEXT[] | Especially useful tools and reasons |
 | tool_pain_points | TEXT[] | Tools needing improvement and reasons |
 | created_at | TIMESTAMPTZ | |
