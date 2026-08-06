@@ -163,8 +163,26 @@ psql "$DATABASE_URL" -f lib/memory/migrations/migration-016-agent-topic-index.sq
 # Episodic memory table and indexes
 psql "$DATABASE_URL" -f lib/memory/migrations/migration-017-episodic.sql
 
+# api_keys.fragment_limit column (NULL = unlimited)
+psql $DATABASE_URL -f lib/memory/migrations/migration-018-fragment-quota.sql
+
+# HNSW tuning: rebuilds the index with ef_construction 64 → 128
+psql $DATABASE_URL -f lib/memory/migrations/migration-019-hnsw-tuning.sql
+
+# search_events per-layer latency columns
+psql $DATABASE_URL -f lib/memory/migrations/migration-020-search-layer-latency.sql
+
 # OAuth client registration
 psql $DATABASE_URL -f lib/memory/migrations/migration-021-oauth-clients.sql
+
+# fragment_links CHECK: adds the temporal relation type
+psql $DATABASE_URL -f lib/memory/migrations/migration-022-temporal-link-type.sql
+
+# fragment_links.weight integer → real
+psql $DATABASE_URL -f lib/memory/migrations/migration-023-link-weight-float.sql
+
+# Workspace isolation: fragments.workspace + api_keys.default_workspace
+psql $DATABASE_URL -f lib/memory/migrations/migration-024-workspace.sql
 
 # Narrative Reconstruction columns: case_id + structured episode columns in fragments
 psql $DATABASE_URL -f lib/memory/migrations/migration-025-case-id-episode.sql
@@ -446,15 +464,15 @@ After the server starts, verify the following in order:
 # 1. Health endpoint returns 200
 curl -s http://localhost:57332/health | jq .status
 
-# 2. Check server log for embedding consistency (printed at startup)
-# Success: "consistency check result: PASS"
-# Failure: review EMBEDDING_DIMENSIONS and re-run migration-007 if needed
+# 2. Check server log for embedding consistency (evaluated at startup)
+# Success: no log line — startup simply continues
+# Failure: "[embedding-consistency] 차원 불일치 발견:" followed by an aborted startup
 
 # 3. CLI diagnostics
 node bin/memento.js health
 ```
 
-A `consistency check result: PASS` log line confirms that `EMBEDDING_DIMENSIONS` matches the actual vector dimensions stored in the database. If `FAIL` appears, re-run `scripts/post-migrate-flexible-embedding-dims.js` and restart the server.
+The embedding consistency check is silent on success and startup proceeds. When it prints `[embedding-consistency] 차원 불일치 발견:` with a per-table `DB=Nd, config=Nd` breakdown and halts startup, `EMBEDDING_DIMENSIONS` disagrees with the dimensions actually stored in the database. Either revert to the previous provider, or run `EMBEDDING_DIMENSIONS=N npm run migrate-007` followed by `node scripts/backfill-embeddings.js`, then restart the server.
 
 ## Starting the Server
 

@@ -122,7 +122,13 @@ psql "$DATABASE_URL" -f lib/memory/migrations/migration-014-ttl-short.sql
 psql "$DATABASE_URL" -f lib/memory/migrations/migration-015-created-at-index.sql
 psql "$DATABASE_URL" -f lib/memory/migrations/migration-016-agent-topic-index.sql
 psql "$DATABASE_URL" -f lib/memory/migrations/migration-017-episodic.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-018-fragment-quota.sql   # api_keys.fragment_limit 컬럼 추가 (NULL=무제한)
+psql $DATABASE_URL -f lib/memory/migrations/migration-019-hnsw-tuning.sql      # HNSW ef_construction 64 → 128 재구축
+psql $DATABASE_URL -f lib/memory/migrations/migration-020-search-layer-latency.sql # search_events 레이어별 레이턴시 컬럼 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-021-oauth-clients.sql  # OAuth 클라이언트 등록
+psql $DATABASE_URL -f lib/memory/migrations/migration-022-temporal-link-type.sql # fragment_links CHECK에 temporal 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-023-link-weight-float.sql  # fragment_links.weight integer → real
+psql $DATABASE_URL -f lib/memory/migrations/migration-024-workspace.sql          # fragments.workspace + api_keys.default_workspace 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-025-case-id-episode.sql    # fragments narrative reconstruction 컬럼 (case_id, goal, outcome, phase, resolution_status, assertion_status)
 psql $DATABASE_URL -f lib/memory/migrations/migration-026-case-events.sql        # case_events + case_event_edges + fragment_evidence 테이블 (Narrative Reconstruction)
 psql $DATABASE_URL -f lib/memory/migrations/migration-027-v25-reconsolidation-episode-spreading.sql  # fragment_links 재통합 컬럼 + link_reconsolidations + case_events idempotency_key + keywords GIN 인덱스
@@ -406,14 +412,14 @@ CLI provider를 사용하려면 `LLM_PRIMARY` 또는 `LLM_FALLBACKS`에 `"codex"
 curl -s http://localhost:57332/health | jq .status
 
 # 2. 임베딩 일관성 검사 결과 확인 (서버 로그)
-# 정상: "consistency check result: PASS"
-# 불일치: EMBEDDING_DIMENSIONS 재검토 후 migration-007 재실행
+# 정상: 관련 로그 없이 기동 계속
+# 불일치: "[embedding-consistency] 차원 불일치 발견:" 출력 후 기동 중단
 
 # 3. CLI 진단
 node bin/memento.js health
 ```
 
-`consistency check result: PASS` 로그가 출력되면 임베딩 차원과 DB 벡터가 일치하는 상태다. `FAIL`이 출력되면 `EMBEDDING_DIMENSIONS` 설정과 실제 DB 차원 불일치 — `scripts/post-migrate-flexible-embedding-dims.js`를 재실행한 뒤 서버를 재시작한다.
+임베딩 일관성 검사는 통과 시 아무 로그도 남기지 않고 기동을 이어간다. `[embedding-consistency] 차원 불일치 발견:` 뒤에 테이블별 `DB=Nd, config=Nd`가 출력되고 기동이 중단되면 `EMBEDDING_DIMENSIONS` 설정과 실제 DB 차원이 어긋난 상태다. 이전 provider로 되돌리거나, `EMBEDDING_DIMENSIONS=N npm run migrate-007` 실행 후 `node scripts/backfill-embeddings.js`로 재생성한 뒤 서버를 재시작한다.
 
 ## CLI 사용법
 

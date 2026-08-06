@@ -111,7 +111,10 @@ CREATE INDEX IF NOT EXISTS idx_fragments_embedding
 
 ## 기존 파일 처리 방침
 
-번호 `035` 이하의 기존 파일(cutoff 이전)은 lint 대상에서 제외된다.
-`MIGRATION_LINT_FROM` 환경변수로 cutoff를 조정할 수 있다.
+`npm run lint:migrations`는 cutoff 번호 이상인 파일만 검사한다. cutoff는 `MIGRATION_LINT_FROM` 환경변수로 지정하며, 미설정 시 `scripts/lint-migrations.js`가 현존 파일 최대 번호 + 1을 cutoff로 잡는다. 즉 env 없이 실행하면 기존 파일이 전부 제외되고 새로 추가할 파일부터 검사 대상이 된다.
 
-향후 추가되는 파일(번호 `036` 이상)만 위 규약 준수가 강제된다.
+기존 파일을 함께 검사하려면 하한을 명시한다.
+
+```bash
+MIGRATION_LINT_FROM=036 npm run lint:migrations
+```

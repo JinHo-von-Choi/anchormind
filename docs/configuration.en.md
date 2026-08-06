@@ -40,7 +40,11 @@
 | QUOTA_NEAR_LIMIT_MARGIN | 10 | Remaining-quota threshold at which `QuotaChecker.check()` switches to the precise FOR UPDATE check. The transaction lock is only acquired when `remaining` is at or below this value; above it, the check passes using the 10-second TTL cache (getUsage) without locking |
 | ENABLE_RECONSOLIDATION | false | Enable ReconsolidationEngine. When true, tool_feedback and contradicts detection dynamically update fragment_links weight/confidence |
 | ENABLE_SPREADING_ACTIVATION | false | Enable SpreadingActivation. When true, the contextText parameter in recall proactively activates related fragments. Recommended to measure latency impact before enabling |
-| ENABLE_PATTERN_ABSTRACTION | false | Enable pattern abstraction. Planned for activation after sufficient data accumulation (not yet implemented) |
+| ENABLE_PATTERN_ABSTRACTION | (unused) | Reserved for pattern abstraction. No code reads this variable, so setting it has no effect |
+| MEMENTO_METRICS_DEFAULT | (none) | Set to `off` to skip prom-client default metrics (CPU, memory, …). Any other value keeps collection on |
+| MEMENTO_ADMIN_METRICS_SAMPLING | (none) | Set to `off` to disable admin console metric sampling. Any other value keeps sampling on |
+| UPDATE_CHECK_DISABLED | false | Set to `true` to skip new-version checks |
+| UPDATE_CHECK_INTERVAL_HOURS | 24 | New-version check interval (hours) |
 | MEMENTO_REMEMBER_ATOMIC | false | When true, atomizes the quota check + INSERT in remember() into a single transaction. Sequence: BEGIN → api_keys FOR UPDATE (quota re-validation) → INSERT → COMMIT, fully eliminating TOCTOU. false (default) performs only a pre-check and is appropriate for environments with low concurrent request volume |
 | MEMENTO_CASE_BACKPROP_ENABLED | false | When true, enables CaseRewardBackprop, which back-propagates tool_feedback reward signals along case_id fragment chains. Adjust importance scores of cause fragments based on outcome quality |
 | MEMENTO_STORAGE | pgvector | Storage adapter selection. `pgvector` (default, PostgreSQL + pgvector). Additional adapters can be registered in `lib/storage/`. Changing this value requires all fragments to be re-indexed in the target backend |
@@ -98,6 +102,8 @@ Automatic fallback to 15 providers beyond Gemini CLI. Existing behavior is fully
 |----------|---------|-------------|
 | LLM_PRIMARY | gemini-cli | Primary provider name. gemini-cli requires no env configuration |
 | LLM_FALLBACKS | (none) | JSON array. Each element specifies provider/apiKey/model/baseUrl/timeoutMs/extraHeaders |
+| LLM_PROVIDER_TIMEOUT_MS | 60000 | Per-provider call timeout (ms). Overrides the caller-supplied timeout only when explicitly set; otherwise each call path keeps its own value |
+| LLM_CHAIN_TIMEOUT_MS | 0 | Deadline for the whole chain (ms). `0` disables the deadline. Exceeding it aborts with `chain deadline exceeded after Nms` |
 
 ##### Circuit Breaker
 
@@ -268,8 +274,8 @@ This feature operates asynchronously only when `REDIS_ENABLED=true`. When `REDIS
 | EMBEDDING_DIMENSIONS | (provider default) | Embedding vector dimensions. Must match the DB schema's vector dimension |
 | EMBEDDING_SUPPORTS_DIMS_PARAM | (provider default) | Override dimensions parameter support (`true`\|`false`) |
 | GEMINI_API_KEY | (none) | Google Gemini API key. Used when `EMBEDDING_PROVIDER=gemini` |
-| CF_ACCOUNT_ID | (none) | Cloudflare account ID. Required when `EMBEDDING_PROVIDER=cloudflare` |
-| CF_API_TOKEN | (none) | Cloudflare API token. Required when `EMBEDDING_PROVIDER=cloudflare` |
+| CF_ACCOUNT_ID | (none) | Cloudflare account ID. Required when `EMBEDDING_PROVIDER=cloudflare`. Falls back to `CLOUDFLARE_ACCOUNT_ID` when unset |
+| CF_API_TOKEN | (none) | Cloudflare API token. Required when `EMBEDDING_PROVIDER=cloudflare`. Falls back to `CLOUDFLARE_API_TOKEN` when unset |
 | EMBEDDING_TIMEOUT_MS | 8000 | Absolute per-call timeout (ms) for embedding API requests. Applied via `AbortSignal.timeout()` and acts as the overall deadline |
 | EMBEDDING_MAX_RETRIES | 0 | Retry count for the OpenAI-compatible client's own retry logic. Defaults to 0 because the per-call timeout already acts as the absolute deadline; stacking retries on top would let semaphore hold time accumulate as timeout × retries |
 | EMBEDDING_CONCURRENCY | 6 | Process-wide concurrency cap for embedding calls. The semaphore slot count that prevents embedding service latency from propagating into the overall request queue |

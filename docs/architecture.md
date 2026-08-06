@@ -452,8 +452,11 @@ erDiagram
 | resolution_status | TEXT | CHECK | 케이스 해결 상태: open(진행 중) / resolved(해결됨) / abandoned(중단) |
 | assertion_status | TEXT | CHECK | 파편 주장 신뢰도: observed(기본, 직접 관측) / inferred(추론) / verified(검증됨) / rejected(기각됨) |
 | affect | TEXT | CHECK, DEFAULT 'neutral' | 기억 당시의 정서 상태 태그. neutral / frustration / confidence / surprise / doubt / satisfaction |
+| validation_warnings | JSONB | | PolicyRules soft gate 위반 rule 이름 목록. 위반이 없으면 NULL (migration-032) |
+| morpheme_indexed | BOOLEAN | NOT NULL DEFAULT false | MorphemeIndex 등록 완료 여부. false인 파편은 형태소 검색 대상에서 제외 (migration-035) |
+| split_attempt_failed_at | TIMESTAMPTZ | | splitLongFragments 분할 실패 시각. `failureBackoffHours` 동안 재선정에서 제외 (migration-036) |
 
-인덱스 목록: content_hash(UNIQUE), topic(B-tree), type(B-tree), keywords(GIN), importance DESC(B-tree), created_at DESC(B-tree), agent_id(B-tree), linked_to(GIN), (ttl_tier, created_at)(B-tree), source(B-tree), verified_at(B-tree), is_anchor WHERE TRUE(부분 인덱스), valid_from(B-tree), (topic, type) WHERE valid_to IS NULL(부분 인덱스), id WHERE valid_to IS NULL(부분 UNIQUE). `idx_fragments_key_workspace` (key_id, workspace) WHERE valid_to IS NULL (복합 부분 인덱스 — API 키 + workspace 동시 필터 최적화), `idx_fragments_workspace` (workspace) WHERE workspace IS NOT NULL AND valid_to IS NULL (workspace 단독 전체 조회용 부분 인덱스).
+인덱스 목록: content_hash 테넌트별 partial UNIQUE 2종(`uq_frag_hash_master`, `uq_frag_hash_per_key`), topic(B-tree), type(B-tree), keywords(GIN), importance DESC(B-tree), created_at DESC(B-tree), agent_id(B-tree), linked_to(GIN), (ttl_tier, created_at)(B-tree), source(B-tree), verified_at(B-tree), is_anchor WHERE TRUE(부분 인덱스), valid_from(B-tree), (topic, type) WHERE valid_to IS NULL(부분 인덱스), id WHERE valid_to IS NULL(부분 UNIQUE). `idx_fragments_key_workspace` (key_id, workspace) WHERE valid_to IS NULL (복합 부분 인덱스 — API 키 + workspace 동시 필터 최적화), `idx_fragments_workspace` (workspace) WHERE workspace IS NOT NULL AND valid_to IS NULL (workspace 단독 전체 조회용 부분 인덱스).
 
 HNSW 벡터 인덱스는 `embedding IS NOT NULL` 조건부 인덱스로 생성된다. 파라미터: m=16(이웃 연결 수), ef_construction=128(인덱스 구축 탐색 깊이), 거리 함수 vector_cosine_ops. ef_search=80 (세션 레벨 SET LOCAL 적용). 벡터 검색 실행 직전 `SET LOCAL enable_seqscan = off`, `SET LOCAL enable_bitmapscan = off`, `SET LOCAL hnsw.iterative_scan = relaxed_order`를 세션 단위로 강제하여 HNSW 인덱스 경로를 보장한다 (`lib/tools/db.js` queryWithAgentVector).
 
@@ -526,6 +529,9 @@ amend 도구로 파편을 수정할 때마다 이전 버전이 여기에 보존�
 | keywords | TEXT[] | 수정 전 키워드 |
 | type | TEXT | 수정 전 유형 |
 | importance | REAL | 수정 전 중요도 |
+| resolution_status | TEXT | 수정 전 케이스 해결 상태 (migration-038) |
+| outcome | TEXT | 수정 전 케이스 결과 요약 (migration-038) |
+| phase | TEXT | 수정 전 작업 단계 (migration-038) |
 | amended_at | TIMESTAMPTZ | 수정 시각 |
 | amended_by | TEXT | 수정한 agent_id |
 

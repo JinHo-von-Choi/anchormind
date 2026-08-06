@@ -604,7 +604,7 @@ violations 있는 경우 (soft gate — 저장됨):
 
 힌트를 받은 클라이언트는 `hints[0].args`를 그대로 `tool_feedback` 인자로 사용해 평가를 보내는 것이 권장된다(`trigger_type="sampled"`). 무관 판정 시에는 `irrelevance_reason`을 함께 보낸다.
 
-표집 규칙은 `config/memory.js`의 `feedback.sampling`을 따른다. 도구별 확률은 remember 0.10, amend 0.25, forget 0.25이며, 세션당 최대 2건·직전 힌트 이후 900초 쿨다운이 적용된다(Redis 미가용 시 상한과 쿨다운은 적용되지 않는다). `MEMENTO_FEEDBACK_SAMPLING=false`로 전체 비활성화할 수 있다. `remember(dryRun=true)`·`forget(dryRun=true)`과 실제 갱신이 없었던 `amend`(`updated=false`)는 표집 대상에서 제외된다. recall은 자체 힌트 경로를 이미 갖고 있어 표집 대상이 아니다.
+표집 규칙은 `config/memory.js`의 `feedback.sampling`을 따른다. 도구별 확률은 remember 0.10, amend 0.25, forget 0.25이며, 세션당 최대 2건·직전 힌트 이후 900초 쿨다운이 적용된다(Redis 미가용 시 상한과 쿨다운은 적용되지 않는다). `MEMENTO_FEEDBACK_SAMPLING=false`로 전체 비활성화할 수 있다. `remember(dryRun=true)`·`dryRun=true` 호출(remember·forget)과 실제 갱신이 없었던 `amend`(`updated=false`)는 표집 대상에서 제외된다. recall은 자체 힌트 경로를 이미 갖고 있어 표집 대상이 아니다.
 
 ### 에러 코드
 
@@ -839,6 +839,7 @@ Core Memory + Working Memory + session_reflect를 분리 로드한다. 세션 �
 | agentId | string | - | 에이전트 ID |
 | workspace | string | - | 워크스페이스 필터. 지정 시 해당 workspace 파편 + 전역(NULL) 파편만 반환. 미지정 시 키의 default_workspace 적용. |
 | structured | boolean | - | true 시 계층적 트리 구조 반환, false/미지정 시 기존 flat list (기본값: false) |
+| includeKeyName | boolean | - | true 시 fragments 각 항목에 key_id와 key_name(액세스 키 라벨)을 포함한다. 같은 키 그룹 스코프의 정보만 노출되며, structured=true 트리 응답에는 적용되지 않는다. 기본 false. |
 
 ---
 
@@ -950,7 +951,7 @@ AnchorMind 최적 활용 가이드를 반환한다. 기억 도구 사용법, 세
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| section | string | - | 특정 섹션만 조회. 미지정 시 전체 가이드 반환. 가능한 값: overview, lifecycle, keywords, search, episode, multiplatform, tools, importance, experiential, triggers, antipatterns |
+| section | string | - | 특정 섹션만 조회. 미지정 시 전체 가이드 반환. 가능한 값: overview, lifecycle, keywords, search, episode, multiplatform, codex, tools, importance, experiential, cbr, triggers, antipatterns |
 
 ---
 

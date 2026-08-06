@@ -758,6 +758,7 @@ Loads Core Memory + Working Memory + session_reflect separately. Injects prefere
 | agentId | string | - | Agent ID |
 | workspace | string | - | Workspace filter. When specified, returns only fragments from the given workspace + global (NULL) fragments. Key's default_workspace applied if not specified. |
 | structured | boolean | - | When true, returns hierarchical tree structure; when false/omitted, returns existing flat list (default: false) |
+| includeKeyName | boolean | - | When true, each fragment carries key_id and key_name (the access key label). Only information within the same key group scope is exposed, and it does not apply to the structured=true tree response. Default false. |
 
 ---
 
@@ -869,7 +870,7 @@ Returns the AnchorMind best practices guide. Comprehensive skill reference cover
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| section | string | - | Query a specific section only. Returns full guide if not specified. Possible values: overview, lifecycle, keywords, search, episode, multiplatform, tools, importance, experiential, triggers, antipatterns |
+| section | string | - | Query a specific section only. Returns full guide if not specified. Possible values: overview, lifecycle, keywords, search, episode, multiplatform, codex, tools, importance, experiential, cbr, triggers, antipatterns |
 
 ---
 
