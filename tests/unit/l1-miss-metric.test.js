@@ -4,7 +4,7 @@
  *
  * 작성자: 최진호
  * 작성일: 2026-03-31
- * 수정일: 2026-04-19 (Jest → node:test 이주)
+ * 수정일: 2026-08-12 (명시 조건 miss 시 폴백 금지 계약 반영)
  */
 
 import { describe, it } from "node:test";
@@ -53,9 +53,11 @@ describe("L1 miss 메트릭 — text-only 쿼리", () => {
 });
 
 describe("L1 miss 메트릭 — keywords 쿼리", () => {
-    it("keywords가 있지만 Redis 결과가 없으면 isFallback: true여야 한다", async () => {
+    it("keywords가 있지만 Redis 결과가 없으면 폴백 없이 isFallback: false여야 한다", async () => {
+        /** 명시 조건이 있는 쿼리는 L1이 getRecent로 후보를 지어내지 않는다.
+         *  L2/L3 SQL 검색이 담당하며, 폴백 메트릭은 조건 전무 조회 전용이다. */
         const isFallback = await getL1FallbackFlag({ keywords: ["배포", "절차"] }, false);
-        assert.strictEqual(isFallback, true);
+        assert.strictEqual(isFallback, false);
     });
 
     it("keywords가 있고 Redis 결과가 있으면 isFallback: false여야 한다", async () => {
@@ -63,14 +65,15 @@ describe("L1 miss 메트릭 — keywords 쿼리", () => {
         assert.strictEqual(isFallback, false);
     });
 
-    it("topic만 있지만 Redis 결과가 없으면 isFallback: true여야 한다", async () => {
+    it("topic만 있지만 Redis 결과가 없으면 공집합·isFallback: false여야 한다", async () => {
+        /** topic은 정확일치 하드 필터라 0건이면 교집합이 공집합이다. */
         const isFallback = await getL1FallbackFlag({ topic: "architecture" }, false);
-        assert.strictEqual(isFallback, true);
+        assert.strictEqual(isFallback, false);
     });
 
-    it("type만 있지만 Redis 결과가 없으면 isFallback: true여야 한다", async () => {
+    it("type만 있지만 Redis 결과가 없으면 공집합·isFallback: false여야 한다", async () => {
         const isFallback = await getL1FallbackFlag({ type: "decision" }, false);
-        assert.strictEqual(isFallback, true);
+        assert.strictEqual(isFallback, false);
     });
 });
 
@@ -80,9 +83,9 @@ describe("L1 miss 메트릭 — 경계 케이스", () => {
         assert.strictEqual(isFallback, false);
     });
 
-    it("text + keywords 복합 쿼리에서 Redis miss이면 isFallback: true이다", async () => {
+    it("text + keywords 복합 쿼리에서 Redis miss여도 폴백하지 않는다", async () => {
         const isFallback = await getL1FallbackFlag({ text: "배포 절차", keywords: ["배포"] }, false);
-        assert.strictEqual(isFallback, true);
+        assert.strictEqual(isFallback, false);
     });
 
     it("빈 keywords 배열은 text-only와 동일하게 처리한다", async () => {
