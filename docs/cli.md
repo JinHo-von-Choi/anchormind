@@ -483,7 +483,7 @@ EMBEDDING_DIMENSIONS=384 DATABASE_URL=$DATABASE_URL \
   node scripts/post-migrate-flexible-embedding-dims.js
 ```
 
-`fragments`와 `morpheme_dict` 테이블의 벡터 컬럼 차원을 동시에 갱신한다.
+`fragments`와 `morpheme_dict` 테이블의 벡터 컬럼 차원을 동시에 갱신한다. 스킵 판정은 (타입, 선언 차원) 쌍으로 하며, `--dry-run`으로 변환 대상만 미리 확인할 수 있다. 변환은 테이블별 트랜잭션으로 실행되어 중간 실패 시 롤백된다. 변환 후 `fragments`는 서버 스케줄러가 자동 재임베딩하지만 `morpheme_dict`는 `node scripts/backfill-morpheme-dict.js`를 별도 실행해야 한다.
 
 ### 임베딩 백필
 
