@@ -192,10 +192,12 @@ describe("MorphemeIndex — Phase 4 배치 임베딩 + multi-row INSERT", () => 
     assert.equal(batchEmbedFn.mock.callCount(), 2, "첫 실패 + 재시도 = 2회");
   });
 
-  test("인덱스 미명시 에러 → 단건 fallback generateEmbedding 호출", async () => {
+  test("비분류 배치 에러 → 단건 fallback generateEmbedding 호출", async () => {
+    /** 프로바이더 계층 장애(429/5xx/네트워크/인증)는 쿨다운으로 전환되므로,
+     *  단건 fallback은 분류 불가 에러에만 동작한다. */
     const morphemes = ["a", "b", "c"];
     batchEmbedFn.mock.mockImplementation(async () => {
-      throw new Error("network timeout");
+      throw new Error("malformed batch response");
     });
     singleEmbedFn.mock.mockImplementation(async (m) => makeVec(m.charCodeAt(0) * 0.01));
 
