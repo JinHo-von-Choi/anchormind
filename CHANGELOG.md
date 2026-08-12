@@ -1,5 +1,21 @@
 # Changelog
 
+## [5.6.1] - 2026-08-12
+
+운영 인스턴스 주간 텔레메트리(recall 무관 피드백 27건 중 topic_mismatch 17건)와 열린 이슈 2건(#51, #52)을 반영한 검색 정합 패치.
+
+### Fixed
+- recall 명시 topic/type 필터가 L1 유래 후보에서 소실되던 경로 2곳을 차단한다 (#51). topic/type 인덱스가 0건이면 L1이 공집합을 반환하고(0건 집합이 교집합에서 누락되어 keyword 집합 단독이 교집합 행세하던 결함), L1 미스분 ID 보충 조회 결과에 SearchScope(topic/type/caseId/phase/affect)와 timeRange를 정합 적용한다. 오기 topic은 이제 0건과 함께 `topic_mismatch` 후보 힌트로 응답한다.
+- RRF 병합에서 L1의 ID-only 항목이 이후 도착한 완전 파편 객체로 승격되지 않아 content 부재 필터에서 정당한 L1 hit가 탈락하던 결함을 수정한다.
+- `morpheme_dict`의 embedding NULL 행이 캐시 히트로 오인되어 재계산 없이 영구 잔존하던 결함을 수정한다 (#52). NULL 행을 miss로 취급해 재계산하고, 등록 쿼리를 NULL 행 한정 조건부 UPDATE로 교체해 접근 시 치유한다. 유효 임베딩은 덮어쓰지 않아 프로바이더·차원 혼합을 방지한다.
+
+### Added
+- `scripts/backfill-morpheme-dict.js` — morpheme_dict NULL 행 일괄 재임베딩. 커서 기반 배치, `--dry-run`, 실패 형태소 격리(무한 재선택 방지), 배치 전멸 시 중단. 기존 `backfill-embeddings.js`는 fragments 전용이라 이 테이블을 다루지 않는다.
+- 형태소 임베딩 등록에 프로바이더 오류 분류(인증·한도·서버·네트워크)와 지수 백오프 쿨다운(30초~10분), 동시 중복 요청 방지(inFlight)를 도입한다. 배치 1회 실패가 단건 최대 200회 호출로 증폭되던 경로를 차단한다.
+
+### Changed
+- L1 폴백 계약: 명시 조건(keywords/topic/type/text)이 있는 검색은 인덱스 0건 시 최근 접근 파편 폴백을 발동하지 않는다. 폴백은 조건 전무 조회 전용이다.
+
 ## [5.6.0] - 2026-08-06
 
 운영 인스턴스의 최근 7일 검색 텔레메트리(무결과 mixed 검색 60건 중 51건이 topic 필터 조합)와 열린 이슈 2건(#48, #33)을 반영한다.
