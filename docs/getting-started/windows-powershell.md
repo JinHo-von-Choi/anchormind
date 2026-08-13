@@ -138,3 +138,10 @@ node bin/memento.js stats --remote "https://memento.anchormind.net/mcp" --key "m
 ```
 
 주의: PowerShell에서 `--key $env:MEMENTO_CLI_KEY` 형태로 전달할 때, 값에 특수문자가 있으면 따옴표로 감싸야 한다.
+
+## 재부팅 후 자동 복구
+
+Docker 기반으로 상시 운영하는 경우, restart 정책과 Windows 로그인 시 복구 패턴은
+[Production Docker](../operations/production-docker.md)를 따른다. 요지: Docker Desktop의
+"Start when you sign in" 활성화 + compose `restart: unless-stopped` 조합으로 대부분 해결되고,
+`/health` 게이트를 쓸 때는 HTTP 200이 아니라 응답의 `status === "healthy"`를 확인해야 한다.

@@ -58,6 +58,7 @@
 - Windows에서 가장 안정적인 설치: [Windows WSL2 Setup](getting-started/windows-wsl2.md)
 - Windows에서 Bash 없이 수동 설치: [Windows PowerShell Setup](getting-started/windows-powershell.md)
 - Claude Code 연동: [Claude Code Configuration](getting-started/claude-code.md)
+- Docker 상시 운영·재부팅 복구: [Production Docker](operations/production-docker.md)
 - 설치 후 첫 검증: [First Memory Flow](getting-started/first-memory-flow.md)
 - 문제 해결: [Troubleshooting](getting-started/troubleshooting.md)
 
