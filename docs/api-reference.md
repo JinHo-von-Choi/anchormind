@@ -132,6 +132,8 @@ X-Memento-Mode: recall-only
 
 토큰 기반 세션 재사용이 활성화되어 있다. 클라이언트가 `Mcp-Session-Id` 없이 재연결하더라도 동일 Bearer 토큰이면 서버가 기존 세션을 자동으로 복구한다. 클라이언트 측에는 투명하게 동작하며 별도 설정이 필요하지 않다.
 
+세션 세그먼트가 활성화된 경우(`MEMENTO_SESSION_SEGMENT`, 기본 true), 파편의 `session_id`는 전송계층 `Mcp-Session-Id`가 아니라 유휴·수명 기준으로 회전하는 파생 ID `{전송세션ID}#{seq}` 형식일 수 있다. 회전이 발생하면 직전 세그먼트가 자동 reflect된다.
+
 ### POST /session/rotate
 
 세션 ID 탈취 의심 시 진행 중 상태를 유지한 채 세션 식별자만 재발급한다. Redis에 저장된 세션 데이터는 그대로 보존되고 ID만 교체되므로 기억 파편과 MCP 연결 상태에 영향 없다.
@@ -577,8 +579,13 @@ violations 있는 경우 (soft gate — 저장됨):
 - `procedureHasStepMarkers` — procedure 타입에 번호/단계 마커 부재
 - `caseIdHasResolutionStatus` — case_id 보유 파편이 resolution_status 미설정
 - `assertionNotContradictory` — 기존 assertion과 polarity 충돌
+- `fragmentHasWorkspace` — workspace가 명시값·키 default 어느 쪽으로도 해석되지 않음 (severity: low)
 
-경고는 soft gate이므로 저장을 차단하지 않는다. `api_keys.symbolic_hard_gate=true` 설정 시 경고 발생 파편은 저장 거부된다. 이 경우 아래 에러 코드가 반환된다.
+경고는 soft gate이므로 저장을 차단하지 않는다. `api_keys.symbolic_hard_gate=true` 설정 시 경고 발생 파편은 저장 거부된다. 이 경우 아래 에러 코드가 반환된다. `fragmentHasWorkspace`는 `MEMENTO_WORKSPACE_GATE=true`일 때만 hard gate 대상에 포함되며, 기본값(`false`)에서는 hard gate 활성 키에서도 저장을 차단하지 않는다.
+
+`workspaceNotAllowed` — 파편의 workspace가 API 키의 `allowed_workspaces` 허가 집합 밖일 때 기록되는 경고(severity: medium). `MEMENTO_SYMBOLIC_POLICY_RULES` 설정과 무관하게 항상 평가되며, 저장을 거부하지 않는 순수 경고로 hard gate 대상에서 항상 제외된다.
+
+파편에는 workspace 해석 출처가 `workspace_source`로 함께 기록된다: `explicit`(요청에 workspace 명시) · `key_default`(API 키의 default_workspace 적용) · `unscoped`(둘 다 없어 미지정).
 
 ### 피드백 샘플링 힌트
 
@@ -777,7 +784,7 @@ violations 있는 경우 (soft gate — 저장됨):
 | open_questions | string[] | - | 미해결 질문 목록. 항목 1개 = 질문 1건. |
 | narrative_summary | string | - | 세션 전체를 3~5문장의 서사(narrative)로 요약. episode 파편으로 저장되어 세션 간 맥락 연속성에 기여. 생략 시 summary에서 자동 생성. |
 | agentId | string | - | 에이전트 ID |
-| workspace | string | - | 생성되는 모든 reflect 파편에 적용할 워크스페이스. 미지정 시 API 키의 default_workspace, 그것도 없으면 전역(NULL). 멀티 프로젝트 환경에서 세션 요약의 교차 주입 방지에 권장. |
+| workspace | string | - | 생성되는 모든 reflect 파편에 적용할 워크스페이스. 미지정 시 각 그룹 자체의 workspace, 그것도 없으면 API 키의 default_workspace, 그것도 없으면 전역(NULL). 명시하면 세션 종합으로 도출된 그룹별 workspace보다 우선한다. 멀티 프로젝트 환경에서 세션 요약의 교차 주입 방지에 권장. |
 | task_effectiveness | object | - | 세션 작업 결과와 도구 사용 효과성 평가. outcome, evaluator, evidence, unmet_requirements, overall_success, tool_highlights, tool_pain_points로 구성된다. 아래 표 참조. |
 
 #### task_effectiveness 하위 필드
@@ -809,11 +816,16 @@ violations 있는 경우 (soft gate — 저장됨):
     "procedures": 1,
     "questions": 1,
     "episode": 1
-  }
+  },
+  "groups": [
+    { "workspace": "memento-mcp", "topic": "session_reflect", "caseId": "debug-recall-2026-08-16", "fragmentIds": ["frag-...", "frag-..."] }
+  ]
 }
 ```
 
 `breakdown` 필드는 카테고리별 저장된 파편 수를 나타낸다. `episode`는 narrative_summary가 있을 때만 포함된다. 내부적으로 5개 카테고리는 단일 `batchRememberProcessor` 호출로 처리되지만 결과는 `_category` 메타를 기반으로 카테고리별 재집계되므로 breakdown shape이 보존된다.
+
+`sessionId`가 지정되면 세션 파편을 workspace → case_id → topic 경계로 그룹핑해 그룹마다 별도로 종합·영속화한다. `groups` 필드는 그룹별 결과(`workspace`, `topic`, `caseId`, 해당 그룹에서 생성된 파편 id 목록 `fragmentIds` — narrative_summary가 있으면 episode 파편 id 포함)를 배열로 반환하며, 그룹이 서로 다른 workspace를 가져도 각 파편에는 소속 그룹의 workspace가 개별 기록된다. `sessionId`가 없으면 `params`(summary/decisions/...) 자체가 단일 그룹으로 취급되는 레거시 경로로 동작한다.
 
 ### AutoReflect 타임아웃
 
@@ -889,6 +901,18 @@ Core Memory + Working Memory + session_reflect를 분리 로드한다. 세션 �
 | irrelevance_breakdown | object \| null | `relevant=false` 피드백의 원인 분포. `total_irrelevant`(무관 판정 총건), `reported`(원인이 기록된 건), `counts`(`not_stored`·`search_miss`·`scope_leak`·`topic_mismatch`·`other`·`unreported`) |
 
 `irrelevance_breakdown.counts`에서 `not_stored` 우세는 저장 습관, `search_miss` 우세는 검색 리콜, `scope_leak` 우세는 스코프 격리 문제를 가리킨다.
+
+### 응답 — `stats.workspaces`
+
+workspace 기입 현황과 세션당 파편 분포를 반환한다.
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| distribution.top | array | 상위 workspace별 파편 수 `{workspace, count}` 목록 (내림차순) |
+| distribution.null_count | number | workspace 미기입(NULL, 전역) 파편 수 |
+| distribution.distinct_count | number | 값이 있는 workspace의 고유 개수 |
+| key_fill_rate | array | API 키별 workspace 기입률 `{key_id, key_name, total, with_workspace, fill_rate}`. `fill_rate`는 `with_workspace / total` |
+| session_fragment_distribution | object | 최근 30일 세션당 파편 수 분포 `{p50, p90, max, sample_sessions}`. 표본이 없으면 `p50`·`p90`·`max`는 `null` |
 
 ---
 

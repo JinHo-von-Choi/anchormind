@@ -58,6 +58,19 @@
 | MEMENTO_SPLIT_SUBJECT_GATE | true | Discards a split child that carries none of the parent's subject anchors (`fragmentSplit.requireSubjectAnchor`). When `false`, the subject check is skipped |
 | MEMENTO_SPLIT_MODALITY_GATE | true | Discards a split child that introduces a modality absent from the parent (planned/intended/conjectured/obligatory) (`fragmentSplit.rejectIntroducedModality`). When `false`, the modality check is skipped |
 
+#### Workspace Scoping & Session Segmentation
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| MEMENTO_WORKSPACE_DECAY | true | When `false`, disables workspace ranking decay. When enabled, if the search scope specifies a workspace, a decay multiplier is applied to the ranking score of mismatched or global (NULL) fragments (the fragments themselves are still returned). Applies to both the recall and context injection paths |
+| MEMENTO_WORKSPACE_DECAY_PENALTY | 0.7 | Decay multiplier (0-1) applied to the ranking score of workspace-mismatched or global fragments |
+| MEMENTO_SESSION_SEGMENT | true | When `false`, disables session segment rotation and uses the transport-layer session ID as-is |
+| MEMENTO_SEGMENT_IDLE_MS | 2700000 | When session idle time exceeds this value (ms), the segment rotates on the next tool call. Default 45 minutes |
+| MEMENTO_SEGMENT_MAX_AGE_MS | 43200000 | When a segment's age exceeds this value (ms), it rotates regardless of idle state. Default 12 hours |
+| MEMENTO_SEGMENT_MIN_ACTIVITY | 3 | Minimum activity (fragments + tool calls) required in the previous segment for AutoReflect to fire on segment rotation |
+| MEMENTO_WORKSPACE_GATE | false | When `true`, includes `fragmentHasWorkspace` violations (workspace could not be resolved from an explicit value or the key default) in the hard-gate-eligible set. By default only a warning is recorded and storage is not blocked. Actual blocking still requires `MEMENTO_SYMBOLIC_POLICY_RULES` to be enabled and the key to have `api_keys.symbolic_hard_gate=true` |
+| EPISODE_CONTINUITY_CACHE_TTL_MS | 5000 | TTL (ms) of the in-memory cache EpisodeContinuityService keeps per scope (`agentId:keyId:scopeType:scopeValue`) for the most recent milestone event ID. Insertion-order LRU, tracking up to 1000 scopes |
+
 #### Migration Linting
 
 | Variable | Default | Description |

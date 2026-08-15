@@ -128,6 +128,8 @@ Via `initialize` parameters:
 
 Token-based session reuse is enabled. Even when a client reconnects without an `Mcp-Session-Id`, the server automatically recovers the existing session if the same Bearer token is presented. This is transparent to the client and requires no additional configuration.
 
+When session segmentation is active (`MEMENTO_SESSION_SEGMENT`, default true), a fragment's `session_id` may be a derived ID `{transport session ID}#{seq}` that rotates on idle or age thresholds, rather than the raw transport-layer `Mcp-Session-Id`. A rotation triggers an automatic reflect of the previous segment.
+
 ### POST /session/rotate
 
 Reissues only the session identifier while preserving all in-flight state, intended for suspected session-ID compromise. Redis-stored session data is retained as-is; only the ID is swapped, so memory fragments and the MCP connection state are unaffected.
@@ -557,8 +559,13 @@ Normal response:
 - `procedureHasStepMarkers` — procedure type lacks numbered/step markers
 - `caseIdHasResolutionStatus` — fragment with a case_id has no resolution_status set
 - `assertionNotContradictory` — polarity conflict with an existing assertion
+- `fragmentHasWorkspace` — workspace could not be resolved from an explicit value or the key default (severity: low)
 
-Warnings are soft gates and do not block storage. When `api_keys.symbolic_hard_gate=true`, fragments triggering warnings are rejected.
+Warnings are soft gates and do not block storage. When `api_keys.symbolic_hard_gate=true`, fragments triggering warnings are rejected. `fragmentHasWorkspace` is only included in the hard-gate-eligible set when `MEMENTO_WORKSPACE_GATE=true`; by default (`false`) it never blocks storage even on hard-gate-enabled keys.
+
+`workspaceNotAllowed` — recorded when a fragment's workspace falls outside the API key's `allowed_workspaces` set (severity: medium). Evaluated unconditionally, independent of `MEMENTO_SYMBOLIC_POLICY_RULES`. It is a pure warning that never blocks storage and is always excluded from the hard-gate-eligible set.
+
+Fragments also record the resolution source of their workspace as `workspace_source`: `explicit` (workspace given in the request), `key_default` (the API key's default_workspace was applied), or `unscoped` (neither was available).
 
 ### Feedback sampling hint
 
@@ -725,7 +732,7 @@ Persist session learnings as atomic fragments at session end. Each array item is
 | open_questions | string[] | - | Unresolved question list. 1 item = 1 question. |
 | narrative_summary | string | - | Summarize the entire session as a 3-5 sentence narrative. Stored as an episode fragment contributing to cross-session context continuity. Auto-generated from summary if omitted. |
 | agentId | string | - | Agent ID |
-| workspace | string | - | Workspace applied to all fragments created by this reflect call. Falls back to the API key's default_workspace, then global (NULL). Recommended in multi-project setups to prevent cross-project session summary injection. |
+| workspace | string | - | Workspace applied to all fragments created by this reflect call. Falls back to each group's own workspace, then the API key's default_workspace, then global (NULL). When set explicitly, it overrides the workspace derived per-group from session synthesis. Recommended in multi-project setups to prevent cross-project session summary injection. |
 | task_effectiveness | object | - | Session outcome and tool usage effectiveness assessment. Composed of outcome, evaluator, evidence, unmet_requirements, overall_success, tool_highlights, tool_pain_points. See the table below. |
 
 #### task_effectiveness sub-fields
@@ -741,6 +748,32 @@ Persist session learnings as atomic fragments at session end. Each array item is
 | tool_pain_points | string[] | Tools that got in the way |
 
 `task_effectiveness` is written to `agent_memory.task_feedback`; the `outcome`, `evaluator`, `evidence`, and `unmet_requirements` columns were added in migration-039. Aggregates surface in the `evaluation` block of `memory_stats`.
+
+### Response Structure
+
+```json
+{
+  "count": 5,
+  "fragments": [
+    { "id": "frag-...", "content": "...", "type": "fact", "keywords": ["..."] }
+  ],
+  "breakdown": {
+    "summary": 2,
+    "decisions": 1,
+    "errors": 0,
+    "procedures": 1,
+    "questions": 1,
+    "episode": 1
+  },
+  "groups": [
+    { "workspace": "memento-mcp", "topic": "session_reflect", "caseId": "debug-recall-2026-08-16", "fragmentIds": ["frag-...", "frag-..."] }
+  ]
+}
+```
+
+`breakdown` reports the number of fragments stored per category; `episode` is present only when a narrative_summary was produced. Internally all five categories go through a single `batchRememberProcessor` call, but the result is re-tallied per category via `_category` metadata, preserving the breakdown shape.
+
+When `sessionId` is provided, session fragments are synthesized separately per workspace → case_id → topic group. The `groups` field returns one entry per group (`workspace`, `topic`, `caseId`, and `fragmentIds` — the fragments created for that group, including the episode fragment id when a narrative_summary was produced). Groups with different workspaces each stamp their own workspace on their fragments. Without `sessionId`, `params` (summary/decisions/...) itself is treated as a single group (legacy path).
 
 ---
 
@@ -808,6 +841,18 @@ Returns search quality and downstream task outcome indicators. Ratio fields are 
 | irrelevance_breakdown | object \| null | Cause distribution for `relevant=false` feedback: `total_irrelevant`, `reported` (entries carrying a reason), and `counts` (`not_stored`, `search_miss`, `scope_leak`, `topic_mismatch`, `other`, `unreported`) |
 
 Within `irrelevance_breakdown.counts`, a `not_stored` majority points at storage habits, `search_miss` at search recall, and `scope_leak` at scope isolation.
+
+### Response — `stats.workspaces`
+
+Returns workspace fill status and per-session fragment distribution.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| distribution.top | array | Top workspaces by fragment count, `{workspace, count}` (descending) |
+| distribution.null_count | number | Fragments with no workspace (NULL, global) |
+| distribution.distinct_count | number | Distinct count of non-null workspace values |
+| key_fill_rate | array | Per-API-key workspace fill rate, `{key_id, key_name, total, with_workspace, fill_rate}`. `fill_rate` is `with_workspace / total` |
+| session_fragment_distribution | object | Fragment-count-per-session distribution over the last 30 days, `{p50, p90, max, sample_sessions}`. `p50`/`p90`/`max` are `null` when there is no sample |
 
 ---
 

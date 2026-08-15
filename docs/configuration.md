@@ -59,6 +59,19 @@
 | MEMENTO_SPLIT_SUBJECT_GATE | true | 분할 자식이 부모의 주어 앵커를 하나도 담지 못하면 해당 자식을 폐기(`fragmentSplit.requireSubjectAnchor`). `false` 시 주어 검사를 건너뛴다 |
 | MEMENTO_SPLIT_MODALITY_GATE | true | 분할 자식이 부모에 없던 양상(예정·의도·추측·당위)을 도입하면 해당 자식을 폐기(`fragmentSplit.rejectIntroducedModality`). `false` 시 양상 검사를 건너뛴다 |
 
+#### workspace 스코프 & 세션 세그먼트
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| MEMENTO_WORKSPACE_DECAY | true | `false` 시 workspace 랭킹 감쇠를 비활성화한다. 활성 시 검색 scope에 workspace가 지정되면 불일치·전역(NULL) 파편의 랭킹 점수에 감쇠 배율을 적용한다(반환 자체는 유지). recall과 context 주입 경로 공통 적용 |
+| MEMENTO_WORKSPACE_DECAY_PENALTY | 0.7 | workspace 불일치·전역 파편 랭킹 점수에 곱하는 감쇠 배율(0~1) |
+| MEMENTO_SESSION_SEGMENT | true | `false` 시 세션 세그먼트 회전을 비활성화하고 전송계층 세션 ID를 그대로 사용한다 |
+| MEMENTO_SEGMENT_IDLE_MS | 2700000 | 세션 유휴 시간이 이 값(ms)을 초과하면 다음 도구 호출 시 세그먼트를 회전한다. 기본 45분 |
+| MEMENTO_SEGMENT_MAX_AGE_MS | 43200000 | 세그먼트 시작 후 이 값(ms)을 초과하면 유휴 여부와 무관하게 세그먼트를 회전한다. 기본 12시간 |
+| MEMENTO_SEGMENT_MIN_ACTIVITY | 3 | 세그먼트 회전 시 직전 세그먼트에 대한 AutoReflect 발동에 필요한 세그먼트당 최소 활동(파편+도구 호출) 수 |
+| MEMENTO_WORKSPACE_GATE | false | `true` 시 `fragmentHasWorkspace` 위반(workspace가 명시값·키 default 어느 쪽으로도 해석되지 않음)을 hard gate 대상에 포함한다. 기본은 경고만 남기고 저장을 차단하지 않는다. `MEMENTO_SYMBOLIC_POLICY_RULES` 활성화 및 `api_keys.symbolic_hard_gate=true`인 키에서만 실제 차단으로 이어진다 |
+| EPISODE_CONTINUITY_CACHE_TTL_MS | 5000 | EpisodeContinuityService가 스코프(`agentId:keyId:scopeType:scopeValue`)별 최근 milestone 이벤트 ID를 보관하는 in-memory 캐시의 TTL(ms). 삽입 순서 기반 LRU이며 최대 1000개 스코프까지 추적한다 |
+
 #### CLI 원격 접속
 
 | 변수 | 기본값 | 설명 |
