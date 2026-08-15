@@ -52,8 +52,8 @@ function createMockDeps(overrides = {}) {
   };
 
   const index = {
-    index            : mock.fn(async () => {}),
-    clearWorkingMemory: mock.fn(async () => {}),
+    index                   : mock.fn(async () => {}),
+    evictWorkingMemoryItems : mock.fn(async () => 0),
     ...overrides.index,
   };
 
@@ -206,13 +206,18 @@ describe("ReflectProcessor - session consolidation", () => {
   it("sessionId 존재 시 consolidateSessionFragments 호출", async () => {
     const deps = createMockDeps({
       sessionLinker: {
-        consolidateSessionFragments: mock.fn(async () => ({
-          summary         : "통합 요약",
-          decisions       : ["통합 결정: 마이크로서비스 분리 전략을 다음 분기 로드맵에 반영"],
-          errors_resolved : null,
-          new_procedures  : null,
-          open_questions  : null,
-        })),
+        consolidateSessionFragments: mock.fn(async () => ([{
+          workspace        : null,
+          topic             : null,
+          caseId            : null,
+          summary           : "통합 요약",
+          decisions         : ["통합 결정: 마이크로서비스 분리 전략을 다음 분기 로드맵에 반영"],
+          errors_resolved   : [],
+          new_procedures    : [],
+          open_questions    : [],
+          sourceFragmentIds : [],
+          wmItemIds         : [],
+        }])),
         autoLinkSessionFragments: mock.fn(async () => {}),
       },
     });
@@ -226,25 +231,53 @@ describe("ReflectProcessor - session consolidation", () => {
     assert.equal(deps.sessionLinker.consolidateSessionFragments.mock.callCount(), 1);
     assert.equal(result.breakdown.summary, 1);
     assert.equal(result.breakdown.decisions, 1);
+    assert.equal(result.groups.length, 1);
   });
 
-  it("sessionId 존재 시 clearWorkingMemory 호출", async () => {
-    const deps      = createMockDeps();
+  it("sessionId 존재 시 그룹이 소비한 WM 항목만 evict", async () => {
+    const deps = createMockDeps({
+      sessionLinker: {
+        consolidateSessionFragments: mock.fn(async () => ([{
+          workspace        : null,
+          topic             : null,
+          caseId            : null,
+          summary           : "통합 요약",
+          decisions         : [],
+          errors_resolved   : [],
+          new_procedures    : [],
+          open_questions    : [],
+          sourceFragmentIds : ["frag-src-1"],
+          wmItemIds         : ["wm-1", "wm-2"],
+        }])),
+        autoLinkSessionFragments: mock.fn(async () => ({ linkSuggestions: [] })),
+      },
+    });
     const processor = new ReflectProcessor(deps);
 
     await processor.process({ sessionId: "sess-1", agentId: "test-agent" });
 
-    assert.equal(deps.index.clearWorkingMemory.mock.callCount(), 1);
-    assert.equal(deps.index.clearWorkingMemory.mock.calls[0].arguments[0], "sess-1");
+    assert.equal(deps.index.evictWorkingMemoryItems.mock.callCount(), 1);
+    const args = deps.index.evictWorkingMemoryItems.mock.calls[0].arguments;
+    assert.equal(args[0], "sess-1");
+    assert.deepEqual([...args[1]].sort(), ["wm-1", "wm-2"]);
   });
 
-  it("sessionId 없으면 clearWorkingMemory 미호출", async () => {
+  it("sessionId 없으면 evict 미호출", async () => {
     const deps      = createMockDeps();
     const processor = new ReflectProcessor(deps);
 
     await processor.process({ summary: "테스트", agentId: "test-agent" });
 
-    assert.equal(deps.index.clearWorkingMemory.mock.callCount(), 0);
+    assert.equal(deps.index.evictWorkingMemoryItems.mock.callCount(), 0);
+  });
+
+  it("sessionId 있으나 소비된 WM이 없으면 evict 미호출", async () => {
+    const deps      = createMockDeps();
+    const processor = new ReflectProcessor(deps);
+
+    await processor.process({ sessionId: "sess-2", agentId: "test-agent" });
+
+    assert.equal(deps.index.evictWorkingMemoryItems.mock.callCount(), 0);
   });
 });
 

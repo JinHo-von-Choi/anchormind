@@ -4,12 +4,13 @@
  * 작성자: 최진호
  * 작성일: 2026-04-15
  *
- * 5개 predicate 독립 검증:
+ * 6개 predicate 독립 검증:
  * 1. decisionHasRationale
  * 2. errorHasResolutionPath
  * 3. procedureHasStepMarkers
  * 4. caseIdHasResolutionStatus
  * 5. assertionNotContradictory
+ * 6. fragmentHasWorkspace
  */
 
 import { describe, it } from "node:test";
@@ -225,12 +226,58 @@ describe("PolicyRules.check — 엣지 케이스", () => {
     }
   });
 
-  it("fact type 파편은 case_id 없으면 모든 rule 통과", () => {
+  it("fact type 파편은 case_id 없고 workspace 있으면 모든 rule 통과", () => {
     const v = rules.check({
-      type   : "fact",
-      content: "단순 사실"
+      type     : "fact",
+      content  : "단순 사실",
+      workspace: "memento-mcp"
     });
     assert.deepEqual(v, []);
+  });
+
+});
+
+describe("PolicyRules.check — fragmentHasWorkspace", () => {
+
+  const rules = new PolicyRules();
+
+  it("workspace 명시값 있음 → 위반 없음", () => {
+    const v = rules.check({
+      type     : "fact",
+      content  : "테스트 사실",
+      workspace: "memento-mcp"
+    });
+    assert.equal(v.filter(x => x.rule === "fragmentHasWorkspace").length, 0);
+  });
+
+  it("workspace 없음(undefined) → 위반", () => {
+    const v = rules.check({
+      type   : "fact",
+      content: "테스트 사실"
+    });
+    const m = v.find(x => x.rule === "fragmentHasWorkspace");
+    assert.ok(m, "fragmentHasWorkspace 위반 필수");
+    assert.equal(m.severity, "low");
+  });
+
+  it("workspace null → 위반", () => {
+    const v = rules.check({
+      type     : "fact",
+      content  : "테스트 사실",
+      workspace: null
+    });
+    const m = v.find(x => x.rule === "fragmentHasWorkspace");
+    assert.ok(m, "fragmentHasWorkspace 위반 필수");
+  });
+
+  it("workspace 빈 문자열 → 위반", () => {
+    const v = rules.check({
+      type     : "fact",
+      content  : "테스트 사실",
+      workspace: ""
+    });
+    const m = v.find(x => x.rule === "fragmentHasWorkspace");
+    assert.ok(m, "fragmentHasWorkspace 위반 필수");
   });
 
 });

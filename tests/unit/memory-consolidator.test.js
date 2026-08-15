@@ -18,7 +18,12 @@
 import { describe, it, beforeEach }  from "node:test";
 import assert                         from "node:assert/strict";
 
-import { MemoryConsolidator }  from "../../lib/memory/consolidate/MemoryConsolidator.js";
+import {
+  MemoryConsolidator,
+  summarizeWorkspaceDistribution,
+  summarizeKeyWorkspaceFillRate,
+  summarizeSessionFragmentDistribution
+}                               from "../../lib/memory/consolidate/MemoryConsolidator.js";
 import { feedbackFactor }      from "../../lib/memory/consolidate/feedbackFactor.js";
 import { disconnectRedis }     from "../../lib/redis.js";
 
@@ -68,6 +73,111 @@ describe("MemoryConsolidator.getStats — DB pool 부재 시", () => {
   });
 
 });
+
+/* ── summarizeWorkspaceDistribution — workspace별 파편 수 분포 ── */
+
+describe("summarizeWorkspaceDistribution", () => {
+
+  it("NULL과 명시 workspace를 분리하고 count 내림차순으로 정렬한다", () => {
+    const rows = [
+      { workspace: "docs-mcp", cnt: "5" },
+      { workspace: null,       cnt: "12" },
+      { workspace: "memento",  cnt: "9" }
+    ];
+
+    const result = summarizeWorkspaceDistribution(rows);
+
+    assert.strictEqual(result.null_count, 12);
+    assert.strictEqual(result.distinct_count, 2);
+    assert.deepStrictEqual(result.top, [
+      { workspace: "memento", count: 9 },
+      { workspace: "docs-mcp", count: 5 }
+    ]);
+  });
+
+  it("21개 이상의 workspace가 있으면 상위 20개만 top에 반환한다", () => {
+    const rows = Array.from({ length: 25 }, (_, i) => ({ workspace: `ws-${i}`, cnt: String(25 - i) }));
+
+    const result = summarizeWorkspaceDistribution(rows);
+
+    assert.strictEqual(result.top.length, 20);
+    assert.strictEqual(result.distinct_count, 25);
+    assert.strictEqual(result.top[0].workspace, "ws-0");
+  });
+
+  it("빈 배열이면 null_count 0, top 빈 배열을 반환한다", () => {
+    const result = summarizeWorkspaceDistribution([]);
+    assert.deepStrictEqual(result, { top: [], null_count: 0, distinct_count: 0 });
+  });
+
+});
+
+/* ── summarizeKeyWorkspaceFillRate — 키별 workspace 기입률 ── */
+
+describe("summarizeKeyWorkspaceFillRate", () => {
+
+  it("fill_rate를 with_workspace/total로 계산한다", () => {
+    const rows = [
+      { key_id: "key-1", key_name: "claude-web", total: "100", with_workspace: "31" }
+    ];
+
+    const result = summarizeKeyWorkspaceFillRate(rows);
+
+    assert.strictEqual(result[0].fill_rate, 0.31);
+    assert.strictEqual(result[0].total, 100);
+    assert.strictEqual(result[0].with_workspace, 31);
+  });
+
+  it("total이 0이면 fill_rate 0을 반환하고 0으로 나누지 않는다", () => {
+    const rows = [{ key_id: "key-2", key_name: null, total: "0", with_workspace: "0" }];
+    const result = summarizeKeyWorkspaceFillRate(rows);
+    assert.strictEqual(result[0].fill_rate, 0);
+  });
+
+  it("key_id가 null인 행(레거시 미기입)도 그대로 통과시킨다", () => {
+    const rows = [{ key_id: null, key_name: null, total: "10", with_workspace: "10" }];
+    const result = summarizeKeyWorkspaceFillRate(rows);
+    assert.strictEqual(result[0].key_id, null);
+    assert.strictEqual(result[0].fill_rate, 1);
+  });
+
+});
+
+/* ── summarizeSessionFragmentDistribution — 세션당 파편 수 p50/p90/max ── */
+
+describe("summarizeSessionFragmentDistribution", () => {
+
+  it("빈 배열이면 모두 null, sample_sessions 0을 반환한다", () => {
+    const result = summarizeSessionFragmentDistribution([]);
+    assert.deepStrictEqual(result, { p50: null, p90: null, max: null, sample_sessions: 0 });
+  });
+
+  it("10개 샘플의 p50/p90/max를 nearest-rank로 계산한다", () => {
+    const counts = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    const result = summarizeSessionFragmentDistribution(counts);
+
+    assert.strictEqual(result.sample_sessions, 10);
+    assert.strictEqual(result.p50, 5);
+    assert.strictEqual(result.p90, 9);
+    assert.strictEqual(result.max, 10);
+  });
+
+  it("단일 값이면 p50=p90=max=해당 값", () => {
+    const result = summarizeSessionFragmentDistribution([7]);
+    assert.strictEqual(result.p50, 7);
+    assert.strictEqual(result.p90, 7);
+    assert.strictEqual(result.max, 7);
+    assert.strictEqual(result.sample_sessions, 1);
+  });
+
+  it("정렬되지 않은 입력도 올바르게 처리한다", () => {
+    const result = summarizeSessionFragmentDistribution([50, 1, 20, 3]);
+    assert.strictEqual(result.max, 50);
+    assert.strictEqual(result.sample_sessions, 4);
+  });
+
+});
+
 
 /* ── MemoryConsolidator._resolveContradiction — 시간 논리 ── */
 

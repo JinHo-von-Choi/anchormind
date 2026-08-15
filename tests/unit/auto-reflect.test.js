@@ -115,7 +115,7 @@ describe("_shouldSkipReflect — 보완 케이스", () => {
     const start = new Date("2026-04-19T10:00:00.000Z");
     const end   = new Date(start.getTime() + MIN_SESSION_DURATION_MS);
     const activity = {
-      toolCalls:   { context: 1 },
+      toolCalls:   { context: 3 },
       startedAt:   start.toISOString(),
       lastActivity: end.toISOString(),
       fragments:   []
@@ -127,13 +127,26 @@ describe("_shouldSkipReflect — 보완 케이스", () => {
     const start = new Date("2026-04-19T10:00:00.000Z");
     const end   = new Date(start.getTime() + 60_000);
     const activity = {
-      toolCalls:   { context: 2 },
+      toolCalls:   { context: 3 },
       startedAt:   start.toISOString(),
       lastActivity: end.toISOString(),
       fragments:   null
     };
     // Array.isArray(null) = false → explicitCount=0 → skip false
     assert.strictEqual(_shouldSkipReflect(activity), false);
+  });
+
+  it("활동량(도구 호출 수)이 minActivityForReflect 미만이면 skip true", () => {
+    const start = new Date("2026-04-19T10:00:00.000Z");
+    const end   = new Date(start.getTime() + 60_000);
+    const activity = {
+      toolCalls:   { context: 2 },
+      startedAt:   start.toISOString(),
+      lastActivity: end.toISOString(),
+      fragments:   []
+    };
+    // toolCallTotal=2 < 기본 minActivityForReflect(3) → skip true
+    assert.strictEqual(_shouldSkipReflect(activity), true);
   });
 
 });

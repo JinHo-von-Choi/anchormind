@@ -468,6 +468,7 @@ context 로드 후 행동:
 | 아키텍처/기술 결정 | decision | 0.7 | "인증은 OAuth 2.0 + PKCE로 결정" |
 | 배포/빌드 절차 완성 | procedure | 0.7 | "배포: git push -> CI -> Docker build -> kubectl apply" |
 | 새 설정값/경로 확인 | fact | 0.5 | "memento-mcp 포트: 57332, admin: /v1/internal/model/nothing" |
+| 멀티 프로젝트 공유 키로 remember/reflect 호출 | (해당 타입) | (유지) | workspace 파라미터 필수 기입: `workspace="memento-mcp"` |
 
 #### recall 선행 호출 시점 (작업 전 의무)
 
@@ -537,13 +538,14 @@ reflect 규칙:
 
 3. reflect의 summary/decisions/errors_resolved에도 동일 규칙 적용
 
-### workspace 파라미터 활용 규칙
+### workspace 파라미터 기입 규칙 (필수)
 
-- workspace: 프로젝트·직종·클라이언트 단위로 기억을 분리하려면 workspace 파라미터를 지정한다.
+- 멀티 프로젝트·멀티 클라이언트를 하나의 API 키로 공유하는 환경에서는 remember/reflect/batch_remember 호출마다 workspace 파라미터를 필수 기입한다.
   예: `workspace: "memento-mcp"`, `workspace: "client-acme"`, `workspace: "personal"`
-- 미지정 시 키의 default_workspace가 자동 적용된다.
-- reflect도 workspace를 받는다. 멀티 프로젝트 환경에서는 reflect에 workspace를 지정해 세션 요약이 다른 프로젝트 context에 주입되는 것을 방지한다.
-- 전역 기억(모든 workspace에서 조회)으로 저장하려면 workspace를 지정하지 않고 키에 default_workspace도 없으면 된다.
+- workspace 미기입은 다른 프로젝트의 기억과 섞여 recall/reflect 결과에 혼입되는 원인이 된다. "이 정도는 괜찮겠지"로 생략하지 않는다.
+- 프로젝트 전용 키(1:1 매핑)라 default_workspace가 이미 지정된 경우에만 미지정 호출이 허용된다. 그 외에는 매 호출 명시가 원칙이다.
+- reflect도 workspace를 받는다. 멀티 프로젝트 환경에서는 reflect에 workspace를 반드시 지정해 세션 요약이 다른 프로젝트 context에 주입되는 것을 방지한다.
+- 전역 기억(모든 workspace에서 조회)으로 저장하려면 workspace를 의도적으로 비우고, 키에도 default_workspace가 없어야 한다. 의도치 않은 미기입과 의도된 전역 저장은 구분해서 판단한다.
 - 검색 시 workspace를 지정하면 해당 workspace 파편과 workspace=NULL(전역) 파편이 함께 반환된다.
 
 #### workspace 활용 예시
@@ -1219,6 +1221,7 @@ snake_case 파라미터에는 camelCase alias가 있다: `eventType`, `entityKey
 5. 앵커: 절대 변경되지 않는 핵심 규칙만 isAnchor=true.
 6. 대체: 정보 업데이트 시 supersedes로 구 파편 연결. 새 파편이 구 파편을 대체.
 7. 연결: 인과 관계가 있는 파편은 link로 즉시 연결. 나중에 graph_explore로 추적 가능.
+8. 워크스페이스: 멀티 프로젝트 공유 키에서는 workspace 파라미터를 필수 기입한다. 프로젝트 전용 키(default_workspace 지정)만 예외로 미지정을 허용한다.
 
 ## 검색 계층 구조
 

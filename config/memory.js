@@ -280,5 +280,25 @@ export const MEMORY_CONFIG = {
     kanaMinChars      : 2,
     /** false이면 kuromoji를 절대 로드하지 않는다 (+269MB 상주 방지) */
     enableKuromoji    : process.env.MEMENTO_ENABLE_KUROMOJI !== "false"
+  },
+  /**
+   * workspace 스코프 랭킹 감쇠.
+   * 검색 scope에 workspace가 지정됐을 때, workspace 불일치·NULL(전역) 파편의
+   * 랭킹 점수에 penalty 배율을 곱한다. 반환 자체는 유지한다.
+   */
+  workspaceDecay: {
+    enabled : process.env.MEMENTO_WORKSPACE_DECAY !== "false",
+    penalty : parseFloat(process.env.MEMENTO_WORKSPACE_DECAY_PENALTY ?? "0.7")
+  },
+  /**
+   * 세션 세그먼트. 전송계층 세션 ID를 파편에 직접 쓰지 않고
+   * 유휴·수명 기준으로 회전하는 파생 ID({원본}#{seq})를 주입한다.
+   */
+  sessionSegment: {
+    enabled  : process.env.MEMENTO_SESSION_SEGMENT !== "false",
+    idleMs   : Number(process.env.MEMENTO_SEGMENT_IDLE_MS    || 2_700_000),
+    maxAgeMs : Number(process.env.MEMENTO_SEGMENT_MAX_AGE_MS || 43_200_000),
+    /** AutoReflect 발동에 필요한 세그먼트당 최소 활동(파편+도구 호출) 수 */
+    minActivityForReflect: Number(process.env.MEMENTO_SEGMENT_MIN_ACTIVITY || 3)
   }
 };

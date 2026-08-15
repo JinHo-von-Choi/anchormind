@@ -1,5 +1,27 @@
 # Changelog
 
+## [5.7.0] - 2026-08-16
+
+workspace 스코프 체계와 세션 세그먼트를 도입한 마이너 릴리즈.
+
+### Added
+- workspace 기입 출처 추적: 파편에 `workspace_source`(explicit/key_default/inferred/unscoped)를 기록한다 (migration-040).
+- reflect 그룹 영속화: 세션 종합을 workspace → case → topic 경계로 그룹핑해 그룹별 파편·에피소드를 생성하고 각 산물에 workspace를 기록한다. Working Memory는 종합에 사용한 항목만 소거한다.
+- 세션 세그먼트: 전송계층 세션이 유휴 45분 또는 수명 12시간을 넘기면 파생 ID(`{원본}#{seq}`)로 회전하며, 회전 시 직전 세그먼트를 자동 reflect한다. `MEMENTO_SESSION_SEGMENT=false`로 비활성화할 수 있다.
+- workspace 랭킹 감쇠: 검색 scope에 workspace를 지정하면 불일치·전역(NULL) 파편의 랭킹 점수에 감쇠 배율(기본 0.7)을 적용한다. recall과 context 주입 경로 공통.
+- workspace 검증: `fragmentHasWorkspace` 정책 경고와 API 키별 `allowed_workspaces` 허가 집합(migration-042)을 추가한다. 기본은 경고만이며 `MEMENTO_WORKSPACE_GATE=true`로 차단 전환.
+- 비파괴 workspace 추론 백필 스크립트(`scripts/backfill-workspace-inference.js`): 추론 결과를 `workspace_inferred`·`inference_confidence`·`backfill_batch_id`(migration-041)에만 기록한다. dryRun 기본.
+- memory_stats에 workspace 분포·키별 기입률·세션당 파편 분포(`stats.workspaces`)를 노출한다.
+- get_skill_guide에 `workspace` 섹션을 추가하고 SKILL.md의 workspace 기입 규칙을 필수로 격상한다.
+
+### Changed
+- 에피소드 `preceded_by` 체인을 workspace(부재 시 topic) 스코프 내로 한정하고, 최근 milestone 조회를 인메모리 캐시에서 DB 기반으로 전환한다.
+- 품질 평가 rationale을 keywords 배열 대신 전용 컬럼 `quality_rationale`에 저장한다 (migration-040).
+- ProactiveRecall 키워드 중첩 판정에서 불용어·2자 미만 토큰을 제외하고, temporal 자동 링크에 workspace 일치 조건을 추가한다.
+
+### Fixed
+- `memory://active-session` 리소스가 세션 활동 로그를 반환하도록 세션 컨텍스트 주입과 조회 경로를 정정한다.
+
 ## [5.6.2] - 2026-08-13
 
 임베딩 차원 마이그레이션 판정 결함(#54)과 운영 와치독 재시작 폭풍을 정비한 패치.

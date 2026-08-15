@@ -47,6 +47,7 @@ class TestableTL {
     const agentId     = options.agentId || "default";
     const keyId       = options.keyId ?? null;
     const groupKeyIds = options.groupKeyIds ?? (keyId != null ? [keyId] : null);
+    const workspace   = fragment.workspace ?? null;
 
     const params  = [fragment.topic, fragment.id, fragment.created_at, 5];
     let keyFilter = "";
@@ -55,12 +56,19 @@ class TestableTL {
       keyFilter = `AND key_id = ANY($${params.length}::integer[])`;
     }
 
+    let workspaceFilter = "";
+    if (workspace != null) {
+      params.push(workspace);
+      workspaceFilter = `AND (workspace IS NULL OR workspace = $${params.length})`;
+    }
+
     const sql = `SELECT id, created_at FROM agent_memory.fragments
        WHERE topic = $1 AND id != $2
          AND created_at BETWEEN $3::timestamptz - interval '24 hours'
                              AND $3::timestamptz + interval '24 hours'
          AND valid_to IS NULL
          ${keyFilter}
+         ${workspaceFilter}
        ORDER BY ABS(EXTRACT(EPOCH FROM (created_at - $3::timestamptz))) ASC
        LIMIT $4`;
 
@@ -275,6 +283,70 @@ describe("TemporalLinker — cross-tenant 링크 미생성 검증", () => {
     const result = await tl.linkTemporalNeighbors(fragment, { keyId: 1 });
     assert.equal(result.length, 0);
     assert.equal(queryCalled, false);
+  });
+
+});
+
+/** ===== workspace 스코프 필터 ===== */
+
+describe("TemporalLinker — workspace 불일치 시 후보 제외", () => {
+
+  it("fragment.workspace 지정 시 workspaceFilter SQL 절이 추가된다", async () => {
+    const now = new Date().toISOString();
+    let capturedSql = null;
+
+    const mockDb = {
+      query: async (sql) => { capturedSql = sql; return { rows: [] }; }
+    };
+    const mockLinkStore = { createLink: async () => {} };
+
+    const tl      = new TestableTL(mockDb, mockLinkStore);
+    const fragment = { id: "frag-ws-a", topic: "deploy", created_at: now, workspace: "proj-a" };
+
+    await tl.linkTemporalNeighbors(fragment, { agentId: "default", keyId: null });
+
+    assert.ok(capturedSql.includes("workspace IS NULL OR workspace ="), "workspaceFilter가 SQL에 포함돼야 함");
+  });
+
+  it("fragment.workspace 미지정 시 workspaceFilter가 추가되지 않는다", async () => {
+    const now = new Date().toISOString();
+    let capturedSql = null;
+    let capturedParams = null;
+
+    const mockDb = {
+      query: async (sql, params) => { capturedSql = sql; capturedParams = params; return { rows: [] }; }
+    };
+    const mockLinkStore = { createLink: async () => {} };
+
+    const tl      = new TestableTL(mockDb, mockLinkStore);
+    const fragment = { id: "frag-no-ws", topic: "deploy", created_at: now };
+
+    await tl.linkTemporalNeighbors(fragment, { agentId: "default", keyId: null });
+
+    assert.ok(!capturedSql.includes("workspace IS NULL OR workspace ="), "workspace 미지정 시 필터 없음");
+    assert.equal(capturedParams.length, 4, "workspace 파라미터가 추가되지 않아야 함");
+  });
+
+  it("workspace가 다른 파편은 DB WHERE 절에서 걸러짐(파라미터 전달 검증)", async () => {
+    const now = new Date().toISOString();
+    let capturedParams = null;
+
+    const mockDb = {
+      query: async (_sql, params) => {
+        capturedParams = params;
+        // 실제 DB WHERE 절이 workspace 불일치 행을 걸러낸다고 가정하고 빈 결과 반환
+        return { rows: [] };
+      }
+    };
+    const mockLinkStore = { createLink: async () => {} };
+
+    const tl      = new TestableTL(mockDb, mockLinkStore);
+    const fragment = { id: "frag-ws-b", topic: "deploy", created_at: now, workspace: "proj-b" };
+
+    const result = await tl.linkTemporalNeighbors(fragment, { agentId: "default", keyId: null });
+
+    assert.equal(capturedParams[capturedParams.length - 1], "proj-b");
+    assert.equal(result.length, 0);
   });
 
 });
