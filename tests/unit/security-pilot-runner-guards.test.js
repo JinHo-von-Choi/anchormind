@@ -92,3 +92,29 @@ test("security pilot cache gate requires the q8 ONNX filenames used by Transform
   assert.match(runner, /onnx\/model_q8\.onnx/);
   assert.match(runner, /refusing external download/);
 });
+
+test("security pilot does not require a host SQL client before the canonical service is healthy", () => {
+  const runner = fs.readFileSync(RUNNER, "utf8");
+  const healthyIndex = runner.indexOf("docker inspect -f '{{.State.Health.Status}}' \"$SERVICE_ID\"");
+  assert.notEqual(healthyIndex, -1, "the canonical service health assertion must exist");
+  const preStart = runner.slice(0, healthyIndex);
+  assert.doesNotMatch(preStart, /command -v psql|command -v pg_isready/);
+});
+
+test("security pilot prefers host SQL clients and falls back only to the healthy canonical service", () => {
+  const runner = fs.readFileSync(RUNNER, "utf8");
+  const healthyIndex = runner.indexOf("docker inspect -f '{{.State.Health.Status}}' \"$SERVICE_ID\"");
+  const clientIndex = runner.indexOf("if command -v psql", healthyIndex);
+  assert.ok(clientIndex > healthyIndex, "SQL client selection must happen after health verification");
+  assert.match(runner.slice(clientIndex), /if command -v psql[\s\S]*?psql \"\$DATABASE_URL\"/);
+  assert.match(runner.slice(clientIndex), /if command -v pg_isready[\s\S]*?pg_isready/);
+  assert.match(
+    runner.slice(clientIndex),
+    /docker compose \"\$\{COMPOSE_ARGS\[@\]\}\" exec -T postgres-security-pilot[\s\S]*?psql -U \"\$\{SECURITY_PILOT_DB_USER\}\" -d \"\$\{SECURITY_PILOT_DB_NAME\}\"/
+  );
+  assert.match(
+    runner.slice(clientIndex),
+    /docker compose \"\$\{COMPOSE_ARGS\[@\]\}\" exec -T postgres-security-pilot[\s\S]*?pg_isready -U \"\$\{SECURITY_PILOT_DB_USER\}\" -d \"\$\{SECURITY_PILOT_DB_NAME\}\"/
+  );
+  assert.doesNotMatch(runner.slice(clientIndex), /docker exec(?!.*postgres-security-pilot)/);
+});

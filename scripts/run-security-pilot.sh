@@ -188,10 +188,6 @@ if [[ ! -f "$COMPOSE_FILE" ]]; then
   echo "BLOCKED: dedicated compose file is missing: $COMPOSE_FILE" >&2
   exit 3
 fi
-if ! command -v psql >/dev/null 2>&1; then
-  echo "BLOCKED: psql is unavailable; refusing to run the pilot without SQL readback" >&2
-  exit 3
-fi
 
 cd "$REPO_ROOT"
 COMPOSE_ARGS=(--project-name anchormind-security-pilot -f "$COMPOSE_FILE" --env-file "$ENV_FILE")
@@ -219,13 +215,45 @@ SERVICE_ID="$(docker compose "${COMPOSE_ARGS[@]}" ps -q postgres-security-pilot)
 NETWORK_NAME="$(docker inspect -f '{{range $name, $network := .NetworkSettings.Networks}}{{$name}}{{end}}' "$SERVICE_ID")"
 [[ "$(docker network inspect -f '{{.Internal}}' "$NETWORK_NAME")" == true ]]
 
+# Prefer host PostgreSQL clients when available. Otherwise use only the
+# already-healthy canonical service; never target an arbitrary container.
+if command -v psql >/dev/null 2>&1; then
+  SECURITY_PILOT_PSQL_MODE=host
+else
+  SECURITY_PILOT_PSQL_MODE=container
+fi
+if command -v pg_isready >/dev/null 2>&1; then
+  SECURITY_PILOT_PG_ISREADY_MODE=host
+else
+  SECURITY_PILOT_PG_ISREADY_MODE=container
+fi
+run_security_pilot_pg_isready() {
+  if [[ "$SECURITY_PILOT_PG_ISREADY_MODE" == host ]]; then
+    PGPASSWORD="$SECURITY_PILOT_DB_PASSWORD" pg_isready \
+      -h "$SECURITY_PILOT_DB_HOST" -p "$SECURITY_PILOT_DB_PORT" \
+      -U "$SECURITY_PILOT_DB_USER" -d "$SECURITY_PILOT_DB_NAME"
+  else
+    docker compose "${COMPOSE_ARGS[@]}" exec -T postgres-security-pilot \
+      pg_isready -U "${SECURITY_PILOT_DB_USER}" -d "${SECURITY_PILOT_DB_NAME}"
+  fi
+}
+run_security_pilot_psql() {
+  if [[ "$SECURITY_PILOT_PSQL_MODE" == host ]]; then
+    psql "$DATABASE_URL" "$@"
+  else
+    docker compose "${COMPOSE_ARGS[@]}" exec -T postgres-security-pilot \
+      psql -U "${SECURITY_PILOT_DB_USER}" -d "${SECURITY_PILOT_DB_NAME}" "$@"
+  fi
+}
+run_security_pilot_pg_isready >/dev/null
+
 echo "[security-pilot] database=memento_security_pilot"
 echo "[security-pilot] binding=127.0.0.1:35434"
 echo "[security-pilot] volume=anchormind_security_pilot_pgdata"
 echo "[security-pilot] network=$NETWORK_NAME internal=true"
 
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS vector" >/dev/null
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f lib/memory/memory-schema.sql >/dev/null
+run_security_pilot_psql -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS vector" >/dev/null
+run_security_pilot_psql -v ON_ERROR_STOP=1 -f - < lib/memory/memory-schema.sql >/dev/null
 node scripts/migrate.js
 EMBEDDING_DIMENSIONS=384 node scripts/post-migrate-flexible-embedding-dims.js
 
@@ -261,13 +289,13 @@ EMBEDDING_DIMENSIONS=384 \
 node --test --test-concurrency=1 tests/integration/security-pilot.test.js | tee /tmp/anchormind-security-pilot-test.log
 grep -Fxq '[security-pilot] external_network_attempts=0' /tmp/anchormind-security-pilot-test.log
 
-[[ "$(psql "$DATABASE_URL" -Atqc 'SELECT current_database()')" == memento_security_pilot ]]
-[[ "$(psql "$DATABASE_URL" -Atqc "SELECT extname FROM pg_extension WHERE extname = 'vector'")" == vector ]]
-[[ "$(psql "$DATABASE_URL" -Atqc "SELECT format_type(a.atttypid, a.atttypmod) FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'agent_memory' AND c.relname = 'fragments' AND a.attname = 'embedding'")" == "vector(384)" ]]
+[[ "$(run_security_pilot_psql -Atqc 'SELECT current_database()')" == memento_security_pilot ]]
+[[ "$(run_security_pilot_psql -Atqc "SELECT extname FROM pg_extension WHERE extname = 'vector'")" == vector ]]
+[[ "$(run_security_pilot_psql -Atqc "SELECT format_type(a.atttypid, a.atttypmod) FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'agent_memory' AND c.relname = 'fragments' AND a.attname = 'embedding'")" == "vector(384)" ]]
 EXPECTED_COUNT=$(node --input-type=module -e "import fs from 'node:fs'; const rows=fs.readFileSync('tests/fixtures/security-pilot.ndjson','utf8').trim().split('\\n').map(JSON.parse).filter(row=>row.kind==='fragment'); console.log(rows.length)")
-[[ "$(psql "$DATABASE_URL" -Atqc "SELECT count(*) FROM agent_memory.fragments WHERE topic = 'security-pilot-synthetic'")" == "$EXPECTED_COUNT" ]]
+[[ "$(run_security_pilot_psql -Atqc "SELECT count(*) FROM agent_memory.fragments WHERE topic = 'security-pilot-synthetic'")" == "$EXPECTED_COUNT" ]]
 EXPECTED_PAIRS=$(node --input-type=module -e "import fs from 'node:fs'; const rows=fs.readFileSync('tests/fixtures/security-pilot.ndjson','utf8').trim().split('\\n').map(JSON.parse).filter(row=>row.kind==='fragment').map(row=>row.key_id+'|'+row.workspace).sort(); console.log(rows.join('\\n'))")
-ACTUAL_PAIRS=$(psql "$DATABASE_URL" -Atqc "SELECT key_id || '|' || workspace FROM agent_memory.fragments WHERE topic = 'security-pilot-synthetic' ORDER BY key_id, workspace")
+ACTUAL_PAIRS=$(run_security_pilot_psql -Atqc "SELECT key_id || '|' || workspace FROM agent_memory.fragments WHERE topic = 'security-pilot-synthetic' ORDER BY key_id, workspace")
 [[ "$ACTUAL_PAIRS" == "$EXPECTED_PAIRS" ]]
 echo "[security-pilot] fixture_count=$EXPECTED_COUNT"
 printf '%s\n' "$ACTUAL_PAIRS"
