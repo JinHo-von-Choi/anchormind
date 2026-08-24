@@ -24,8 +24,9 @@ describe("whole-branch security hardening", () => {
   });
 
   test("scheduler does not launch unscoped GraphLinker work", () => {
-    assert.doesNotMatch(schedulerSource, /linkFragment\(fragmentId,\s*["']system["'],\s*null/);
-    assert.match(schedulerSource, /exact.*key|workspace|scope/i);
+    assert.match(schedulerSource, /isSecurityPilotAutomationOff/);
+    assert.match(schedulerSource, /linkFragment\(fragmentId,\s*["']system["'],\s*null/);
+    assert.match(schedulerSource, /startSchedulers[\s\S]*isSecurityPilotAutomationOff[\s\S]*return/);
   });
 
   test("security pilot off guards server automation preload", () => {

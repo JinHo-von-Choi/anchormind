@@ -108,7 +108,7 @@ before(async () => {
     "security pilot requires the local q8 ONNX model"
   );
   transformersEnv.cacheDir = process.env.SECURITY_PILOT_MODEL_CACHE
-    ? path.dirname(process.env.SECURITY_PILOT_MODEL_CACHE)
+    ? process.env.SECURITY_PILOT_MODEL_CACHE
     : path.dirname(path.dirname(path.dirname(snapshot)));
   transformersEnv.localModelPath = snapshot;
   transformersEnv.allowLocalModels = true;

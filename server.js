@@ -57,7 +57,7 @@ import { logInfo, logWarn, logError } from "./lib/logger.js";
 import { installProcessGuards }     from "./lib/process-guards.js";
 import { createHttpServer }         from "./lib/http-server.js";
 import { resolveAuthStatus, resolveBindHost } from "./lib/http/bind.js";
-import { isSecurityPilotAutomationOff } from "./lib/security-pilot.js";
+import { isSecurityPilotAutomationOff, validateSecurityPilotStartup } from "./lib/security-pilot.js";
 
 /** 임베딩 차원 일관성 검증 */
 import { checkEmbeddingConsistency } from "./scripts/check-embedding-consistency.js";
@@ -90,6 +90,11 @@ import {
 } from "./lib/http-handlers.js";
 
 /** Rate Limiter 인스턴스 (IP/API 키 이중 제한) */
+const securityPilotValidation = validateSecurityPilotStartup();
+if (!securityPilotValidation.ok) {
+  throw new Error(`[SecurityPilot] startup blocked: ${securityPilotValidation.reason}`);
+}
+
 const rateLimiter = new DualRateLimiter({
   windowMs: RATE_LIMIT_WINDOW_MS,
   perIp:    RATE_LIMIT_PER_IP,

@@ -47,7 +47,12 @@ set +a
 
 COMPOSE_FILE="${SECURITY_PILOT_COMPOSE_FILE:-docker-compose.security-pilot.yml}"
 if [[ "$COMPOSE_FILE" != /* ]]; then COMPOSE_FILE="$REPO_ROOT/$COMPOSE_FILE"; fi
-MODEL_CACHE="${SECURITY_PILOT_MODEL_CACHE:-$HOME/.cache/huggingface/hub/models--Xenova--multilingual-e5-small}"
+MODEL_ID="${SECURITY_PILOT_MODEL_ID:-Xenova/multilingual-e5-small}"
+MODEL_CACHE="${SECURITY_PILOT_MODEL_CACHE:-$HOME/.cache/huggingface/hub}"
+if [[ "$(basename "$MODEL_CACHE")" == models--* ]]; then
+  MODEL_CACHE="$(dirname "$MODEL_CACHE")"
+fi
+MODEL_DIR="$MODEL_CACHE/models--${MODEL_ID//\//--}"
 DATABASE_URL="${DATABASE_URL:-postgresql://memento_pilot:local_security_pilot_only@127.0.0.1:35434/memento_security_pilot}"
 export DATABASE_URL
 EXPECTED_COMPOSE_FILE="$REPO_ROOT/docker-compose.security-pilot.yml"
@@ -131,13 +136,13 @@ if ! docker image inspect pgvector/pgvector:pg15 >/dev/null 2>&1; then
   exit 3
 fi
 SNAPSHOT_DIR=""
-if [[ -d "$MODEL_CACHE/snapshots" ]]; then
+if [[ -d "$MODEL_DIR/snapshots" ]]; then
   while IFS= read -r candidate; do
     if [[ -f "$candidate/config.json" && -f "$candidate/tokenizer.json" ]]; then
       SNAPSHOT_DIR="$candidate"
       break
     fi
-  done < <(find "$MODEL_CACHE/snapshots" -mindepth 1 -maxdepth 1 -type d -print | sort)
+  done < <(find "$MODEL_DIR/snapshots" -mindepth 1 -maxdepth 1 -type d -print | sort)
 fi
 if [[ -z "$SNAPSHOT_DIR" ]]; then
   echo "BLOCKED: transformers model cache snapshot is missing; refusing external download" >&2
@@ -148,7 +153,9 @@ if [[ ! -f "$SNAPSHOT_DIR/onnx/model_quantized.onnx" &&
   echo "BLOCKED: transformers q8 ONNX model is missing from the local snapshot; refusing external download" >&2
   exit 3
 fi
+export SECURITY_PILOT_MODEL_CACHE="$MODEL_CACHE"
 export SECURITY_PILOT_MODEL_SNAPSHOT="$SNAPSHOT_DIR"
+export SECURITY_PILOT_MODEL_ID="$MODEL_ID"
 export DOTENV_CONFIG_PATH="$ENV_FILE"
 port_is_listening() {
   local port="$1"
