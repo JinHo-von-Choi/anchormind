@@ -1,8 +1,11 @@
+import { createRequire } from "node:module";
 import { createHttpServer } from "../../lib/http-server.js";
+import { handleMcpPost } from "../../lib/handlers/mcp-handler.js";
 import { runAutoReflectFixture } from "../../lib/memory/processors/AutoReflect.js";
+import { createSecurityPilotFakeAdapters } from "./security-hardening-adapters.js";
 
-const TOKENS = new Map([["pilot-key-a", "key-a"], ["pilot-key-b", "key-b"]]);
-const tripwireState = { outside: [], originalFetch: null, previousSpreading: undefined };
+const require = createRequire(import.meta.url);
+const tripwireState = { outside: [], patches: [], originalFetch: null, previousSpreading: undefined };
 
 export const networkTripwire = {
   callsOutsideLoopback() { return tripwireState.outside.length; },
@@ -18,6 +21,30 @@ function isLoopback(url) {
   }
 }
 
+function hostFromArgs(args) {
+  const first = args[0];
+  if (typeof first === "string") {
+    try { return new URL(first).hostname; } catch { return args[1] || null; }
+  }
+  if (first && typeof first === "object") return first.hostname || first.host || "127.0.0.1";
+  return typeof args[1] === "string" ? args[1] : "127.0.0.1";
+}
+
+function guardDestination(kind, args) {
+  const host = hostFromArgs(args);
+  if (host && !isLoopback(`http://${host}`)) {
+    tripwireState.outside.push(`${kind}:${host}`);
+    throw new Error("EXTERNAL_NETWORK_FORBIDDEN");
+  }
+}
+
+function patchMethod(target, name, wrapper) {
+  if (!target || typeof target[name] !== "function") return;
+  const original = target[name];
+  target[name] = wrapper(original);
+  tripwireState.patches.push(() => { target[name] = original; });
+}
+
 function installTripwire() {
   if (tripwireState.originalFetch) return;
   tripwireState.outside = [];
@@ -26,71 +53,80 @@ function installTripwire() {
   tripwireState.originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, options) => {
     if (!isLoopback(url)) {
-      tripwireState.outside.push(String(url));
+      tripwireState.outside.push(`fetch:${String(url)}`);
       throw new Error("EXTERNAL_NETWORK_FORBIDDEN");
     }
     return tripwireState.originalFetch(url, options);
   };
+
+  const http = require("node:http");
+  const https = require("node:https");
+  const net = require("node:net");
+  const tls = require("node:tls");
+  const childProcess = require("node:child_process");
+
+  for (const [module, name, kind] of [
+    [http, "request", "http"], [http, "get", "http"],
+    [https, "request", "https"], [https, "get", "https"],
+    [net, "connect", "net"], [net, "createConnection", "net"],
+    [tls, "connect", "tls"]
+  ]) {
+    patchMethod(module, name, original => (...args) => {
+      guardDestination(kind, args);
+      return original.apply(module, args);
+    });
+  }
+
+  const dns = require("node:dns");
+  for (const name of [
+    "lookup", "resolve", "resolve4", "resolve6", "resolveAny", "resolveCaa",
+    "resolveCname", "resolveMx", "resolveNaptr", "resolveNs", "resolvePtr",
+    "resolveSoa", "resolveSrv", "resolveTxt", "reverse"
+  ]) {
+    patchMethod(dns, name, original => (...args) => {
+      const host = args[0];
+      if (host && !isLoopback(`http://${host}`)) {
+        tripwireState.outside.push(`dns:${host}`);
+        throw new Error("EXTERNAL_NETWORK_FORBIDDEN");
+      }
+      return original.apply(dns, args);
+    });
+  }
+
+  for (const name of ["spawn", "exec", "execFile", "fork", "spawnSync", "execSync", "execFileSync"]) {
+    patchMethod(childProcess, name, _original => (..._args) => {
+      tripwireState.outside.push(`child_process:${name}`);
+      throw new Error("EXTERNAL_NETWORK_FORBIDDEN");
+    });
+  }
 }
 
 function restoreTripwire() {
-  if (!tripwireState.originalFetch) return;
-  globalThis.fetch = tripwireState.originalFetch;
+  for (const restore of tripwireState.patches.splice(0).reverse()) restore();
+  if (tripwireState.originalFetch) globalThis.fetch = tripwireState.originalFetch;
+  tripwireState.originalFetch = null;
   if (tripwireState.previousSpreading === undefined) delete process.env.ENABLE_SPREADING_ACTIVATION;
   else process.env.ENABLE_SPREADING_ACTIVATION = tripwireState.previousSpreading;
   tripwireState.previousSpreading = undefined;
-  tripwireState.originalFetch = null;
-}
-
-function exactRows(fixture, scope) {
-  return fixture.fragments.filter(row => row.key_id === scope.keyId && row.workspace === scope.workspace);
-}
-
-function toolResult(fixture, name, args, tokenKeyId) {
-  const scope = { keyId: tokenKeyId, workspace: args.workspace };
-  const rows = exactRows(fixture, scope);
-  if (name === "recall") return { fragments: rows.filter(row => (args.keywords || []).includes(row.topic)) };
-  if (name === "memory_stats") return { stats: { total: rows.length } };
-  if (name === "fragment_history") {
-    const row = rows.find(candidate => candidate.id === args.id);
-    return row ? { success: true, fragment: row } : { success: false, reason: "not_found" };
-  }
-  throw new Error(`FAKE_TOOL_NOT_IMPLEMENTED:${name}`);
 }
 
 export function createSecurityPilotHarness(fixture) {
   let server;
   let baseUrl;
+  let sessionId;
   let closed = false;
+  const { authenticate, dispatch } = createSecurityPilotFakeAdapters(fixture);
 
   const requestHandler = async (req, res) => {
-    if (req.method !== "POST" || new URL(req.url || "/", "http://127.0.0.1").pathname !== "/mcp") {
-      res.statusCode = 404;
-      res.end("Not Found");
-      return;
-    }
-    const authorization = req.headers.authorization || "";
-    const token = /^Bearer\s+(.+)$/i.exec(authorization)?.[1] || req.headers["memento-access-key"];
-    const tokenKeyId = TOKENS.get(token);
-    if (!tokenKeyId) {
-      res.statusCode = 401;
-      res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify({ error: "Unauthorized" }));
-      return;
-    }
-
-    let raw = "";
-    for await (const chunk of req) raw += chunk;
-    const msg = JSON.parse(raw || "null");
-    const name = msg?.params?.name;
-    const args = msg?.params?.arguments || {};
-    const result = toolResult(fixture, name, args, tokenKeyId);
-    res.statusCode = 200;
-    res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify({ jsonrpc: "2.0", id: msg?.id ?? null, result }));
+    await handleMcpPost(req, res, process.hrtime.bigint(), { allow: () => true }, {
+      authenticate,
+      dispatch,
+      skipRateLimitHeaders: true
+    });
   };
 
   return {
+    get baseUrl() { return baseUrl; },
     async start() {
       if (server) return { baseUrl };
       installTripwire();
@@ -105,16 +141,20 @@ export function createSecurityPilotHarness(fixture) {
     },
     async callTool(name, args = {}) {
       if (!baseUrl) await this.start();
-      const token = args._keyId === "key-b" ? "pilot-key-b" : "pilot-key-a";
+      if (!sessionId) {
+        const init = await fetch(`${baseUrl}/mcp`, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: "Bearer pilot-key-a" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {} } })
+        });
+        if (!init.ok) throw new Error(`MCP_INIT_${init.status}`);
+        sessionId = init.headers.get("mcp-session-id");
+      }
+      const token = "pilot-key-a";
       const response = await fetch(`${baseUrl}/mcp`, {
         method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: Date.now(),
-          method: "tools/call",
-          params: { name, arguments: args }
-        })
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}`, "mcp-session-id": sessionId },
+        body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method: "tools/call", params: { name, arguments: args } })
       });
       if (!response.ok) throw new Error(`MCP_${response.status}`);
       const body = await response.json();
@@ -124,11 +164,10 @@ export function createSecurityPilotHarness(fixture) {
     async close() {
       if (closed) return;
       closed = true;
+      if (server) await new Promise(resolve => server.close(() => resolve()));
       restoreTripwire();
-      if (server) {
-        await new Promise(resolve => server.close(() => resolve()));
-        server = null;
-      }
+      server = null;
+      sessionId = null;
     }
   };
 }
