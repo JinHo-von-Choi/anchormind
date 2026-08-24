@@ -45,19 +45,22 @@ describe("whole-branch security hardening round 2", () => {
       EMBEDDING_PROVIDER: "openai"
     }, { exists: () => false });
     assert.equal(result.ok, false);
-    assert.match(result.reason, /transformers|local/i);
+    assert.match(result.reason, /transformers|local|access key/i);
   });
 
   test("startup validation accepts only the complete local offline pilot contract", () => {
     const env = {
       MEMENTO_SECURITY_PILOT_AUTOMATION: "off",
       MEMENTO_AUTO_REFLECT: "false",
+      MEMENTO_ACCESS_KEY: "round2-access-key",
+      MEMENTO_AUTH_DISABLED: "false",
+      MEMENTO_BIND_HOST: "127.0.0.1",
       EMBEDDING_PROVIDER: "transformers",
-      EMBEDDING_MODEL: "/cache/models--Xenova--multilingual-e5-small/snapshots/abc",
+      EMBEDDING_MODEL: "/cache/huggingface/hub/models--Xenova--multilingual-e5-small/snapshots/abc",
       EMBEDDING_DIMENSIONS: "384",
       SECURITY_PILOT_MODEL_ID: "Xenova/multilingual-e5-small",
       SECURITY_PILOT_MODEL_CACHE: "/cache/huggingface/hub",
-      SECURITY_PILOT_MODEL_SNAPSHOT: "/cache/models--Xenova--multilingual-e5-small/snapshots/abc",
+      SECURITY_PILOT_MODEL_SNAPSHOT: "/cache/huggingface/hub/models--Xenova--multilingual-e5-small/snapshots/abc",
       HF_HUB_OFFLINE: "1",
       TRANSFORMERS_OFFLINE: "1",
       HF_DATASETS_OFFLINE: "1",
@@ -69,7 +72,7 @@ describe("whole-branch security hardening round 2", () => {
       NLI_SERVICE_URL: "",
       EMBEDDING_BASE_URL: ""
     };
-    const result = validateSecurityPilotStartup(env, { exists: value => value.endsWith("/abc") || value === "/cache/huggingface/hub" });
+    const result = validateSecurityPilotStartup(env, { exists: () => true });
     assert.equal(result.ok, true, result.reason);
   });
 

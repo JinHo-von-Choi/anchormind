@@ -85,10 +85,14 @@ if [[ "${POSTGRES_HOST:-}" != "127.0.0.1" || "${POSTGRES_PORT:-}" != "35434" ||
   exit 3
 fi
 if [[ "${EMBEDDING_PROVIDER:-}" != "transformers" ||
-      "${EMBEDDING_MODEL:-}" != "${SECURITY_PILOT_MODEL_ID:-Xenova/multilingual-e5-small}" ||
       "${EMBEDDING_DIMENSIONS:-}" != "384" ||
       -n "${EMBEDDING_API_KEY:-}" ]]; then
-  echo "BLOCKED: embedding provider/model contract is not local transformers 384-dimensional mode" >&2
+  echo "BLOCKED: embedding provider contract is not local transformers 384-dimensional mode" >&2
+  exit 3
+fi
+if [[ -z "${MEMENTO_ACCESS_KEY:-}" || "${MEMENTO_AUTH_DISABLED:-}" == "true" ||
+      "${MEMENTO_BIND_HOST:-127.0.0.1}" != "127.0.0.1" ]]; then
+  echo "BLOCKED: security pilot requires an access key, authentication, and bind host 127.0.0.1" >&2
   exit 3
 fi
 for credential in OPENAI_API_KEY GEMINI_API_KEY CF_API_TOKEN CLOUDFLARE_API_TOKEN \
@@ -156,6 +160,7 @@ fi
 export SECURITY_PILOT_MODEL_CACHE="$MODEL_CACHE"
 export SECURITY_PILOT_MODEL_SNAPSHOT="$SNAPSHOT_DIR"
 export SECURITY_PILOT_MODEL_ID="$MODEL_ID"
+export EMBEDDING_MODEL="$SNAPSHOT_DIR"
 export DOTENV_CONFIG_PATH="$ENV_FILE"
 port_is_listening() {
   local port="$1"
@@ -226,6 +231,9 @@ REDIS_ENABLED=false \
 CACHE_ENABLED=false \
 MEMENTO_SECURITY_PILOT_AUTOMATION=off \
 MEMENTO_AUTO_REFLECT=false \
+MEMENTO_ACCESS_KEY="${MEMENTO_ACCESS_KEY}" \
+MEMENTO_AUTH_DISABLED=false \
+MEMENTO_BIND_HOST=127.0.0.1 \
 MEMENTO_GRAPH_LINK=false \
 MEMENTO_CONSOLIDATE=false \
 MEMENTO_GC=false \

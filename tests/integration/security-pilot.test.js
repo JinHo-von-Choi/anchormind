@@ -102,6 +102,7 @@ before(async () => {
   const { env: transformersEnv } = await import("@huggingface/transformers");
   const snapshot = process.env.SECURITY_PILOT_MODEL_SNAPSHOT;
   assert.ok(snapshot, "security pilot model snapshot must be selected by the runner");
+  assert.equal(process.env.EMBEDDING_MODEL, snapshot, "embedding model must be the selected snapshot");
   assert.ok(
     fs.existsSync(path.join(snapshot, "onnx/model_quantized.onnx")) ||
       fs.existsSync(path.join(snapshot, "onnx/model_q8.onnx")),
