@@ -48,6 +48,15 @@ Read-only preflight also found no local `pgvector/pgvector:pg15` image and no lo
 - `bash -n scripts/run-security-pilot.sh`, Node syntax checks, and `git diff --check`: passed.
 - `bash scripts/run-security-pilot.sh`: `BLOCKED: docker is unavailable; refusing external pull`, exit 3; no Docker pull, model download, migration, or database mutation.
 
+## Fix round 2 verification
+
+- `.env.security-pilot.example` now pins `DATABASE_URL`, `POSTGRES_*`, `DB_*`, and blank `BATCH_DATABASE_URL` to the same dedicated database. The runner exports and validates all of them before compose, migration, post-migration, shared Pool, or psql use.
+- Conflicting inherited `DATABASE_URL`, `POSTGRES_*`, `DB_*`, `PG*`, compose, and external credential variables are rejected before any import or runtime mutation. OpenAI, Gemini, Cloudflare, Anthropic, XAI, Google, Azure, embedding API keys, and embedding base URL are required to be empty.
+- Transformers cache selection now requires a snapshot with `config.json`, `tokenizer.json`, and an actual q8 ONNX file (`onnx/model_quantized.onnx` or `onnx/model_q8.onnx`).
+- DNS callback and promise wrappers cover lookup, resolve, resolve4/6, resolveAny, resolveCaa/Cname, resolveMx/Naptr/Ns/Ptr/Soa/Srv/Txt, and reverse.
+- `tests/unit/security-pilot-runner-guards.test.js`: 8 passed, 0 failed, 0 cancelled, 0 skipped.
+- Syntax and diff checks passed; runner remains `BLOCKED`/exit 3 because Docker is unavailable.
+
 ## Status
 
 `BLOCKED` by missing local Docker runtime/image and transformers cache. Real PostgreSQL SQL readback, migration, and integration pass remain unverified until those prerequisites are intentionally made available locally. The dedicated volume is never removed by the runner (`down --remove-orphans` only).

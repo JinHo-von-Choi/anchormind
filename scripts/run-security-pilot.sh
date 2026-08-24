@@ -6,6 +6,32 @@ if [[ -n "${COMPOSE_FILE:-}" ]]; then
   echo "BLOCKED: an existing compose file is selected; refusing non-pilot compose" >&2
   exit 3
 fi
+reject_conflicting_inherited() {
+  local name expected value
+  for name in "$@"; do
+    expected="${2:-}"
+    case "$name" in
+      DATABASE_URL) expected="postgresql://memento_pilot:local_security_pilot_only@127.0.0.1:35434/memento_security_pilot" ;;
+      POSTGRES_HOST|DB_HOST|PGHOST) expected="127.0.0.1" ;;
+      POSTGRES_PORT|DB_PORT|PGPORT) expected="35434" ;;
+      POSTGRES_DB|DB_NAME|PGDATABASE) expected="memento_security_pilot" ;;
+      POSTGRES_USER|DB_USER|PGUSER) expected="memento_pilot" ;;
+      POSTGRES_PASSWORD|DB_PASSWORD|PGPASSWORD) expected="local_security_pilot_only" ;;
+      BATCH_DATABASE_URL|PGSERVICE|EMBEDDING_API_KEY|EMBEDDING_BASE_URL|OPENAI_API_KEY|GEMINI_API_KEY|CF_API_TOKEN|CLOUDFLARE_API_TOKEN|ANTHROPIC_API_KEY|XAI_API_KEY|GOOGLE_API_KEY|AZURE_OPENAI_API_KEY) expected="" ;;
+    esac
+    value="${!name-}"
+    if [[ -n "$value" && "$value" != "$expected" ]]; then
+      echo "BLOCKED: inherited $name conflicts with the dedicated security-pilot contract" >&2
+      exit 3
+    fi
+  done
+}
+reject_conflicting_inherited \
+  DATABASE_URL POSTGRES_HOST POSTGRES_PORT POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD \
+  DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD PGHOST PGPORT PGDATABASE PGUSER PGPASSWORD \
+  BATCH_DATABASE_URL PGSERVICE EMBEDDING_API_KEY EMBEDDING_BASE_URL \
+  OPENAI_API_KEY GEMINI_API_KEY CF_API_TOKEN CLOUDFLARE_API_TOKEN \
+  ANTHROPIC_API_KEY XAI_API_KEY GOOGLE_API_KEY AZURE_OPENAI_API_KEY
 EXPECTED_ENV_FILE="$REPO_ROOT/.env.security-pilot.example"
 ENV_FILE="${SECURITY_PILOT_ENV_FILE:-.env.security-pilot.example}"
 if [[ "$ENV_FILE" != /* ]]; then ENV_FILE="$REPO_ROOT/$ENV_FILE"; fi
@@ -41,6 +67,18 @@ if [[ "${SECURITY_PILOT_DB_HOST:-}" != "127.0.0.1" ||
   echo "BLOCKED: security pilot database settings are not the dedicated local contract" >&2
   exit 3
 fi
+if [[ "${POSTGRES_HOST:-}" != "127.0.0.1" || "${POSTGRES_PORT:-}" != "35434" ||
+      "${POSTGRES_DB:-}" != "memento_security_pilot" ||
+      "${POSTGRES_USER:-}" != "memento_pilot" ||
+      "${POSTGRES_PASSWORD:-}" != "local_security_pilot_only" ||
+      "${DB_HOST:-}" != "127.0.0.1" || "${DB_PORT:-}" != "35434" ||
+      "${DB_NAME:-}" != "memento_security_pilot" ||
+      "${DB_USER:-}" != "memento_pilot" ||
+      "${DB_PASSWORD:-}" != "local_security_pilot_only" ||
+      -n "${BATCH_DATABASE_URL:-}" || -n "${PGSERVICE:-}" ]]; then
+  echo "BLOCKED: inherited/application database settings are not the dedicated local contract" >&2
+  exit 3
+fi
 if [[ "${EMBEDDING_PROVIDER:-}" != "transformers" ||
       "${EMBEDDING_MODEL:-}" != "${SECURITY_PILOT_MODEL_ID:-Xenova/multilingual-e5-small}" ||
       "${EMBEDDING_DIMENSIONS:-}" != "384" ||
@@ -48,9 +86,26 @@ if [[ "${EMBEDDING_PROVIDER:-}" != "transformers" ||
   echo "BLOCKED: embedding provider/model contract is not local transformers 384-dimensional mode" >&2
   exit 3
 fi
+for credential in OPENAI_API_KEY GEMINI_API_KEY CF_API_TOKEN CLOUDFLARE_API_TOKEN \
+  ANTHROPIC_API_KEY XAI_API_KEY GOOGLE_API_KEY AZURE_OPENAI_API_KEY; do
+  if [[ -n "${!credential:-}" ]]; then
+    echo "BLOCKED: external credential $credential is set; refusing pilot imports" >&2
+    exit 3
+  fi
+done
+if [[ -n "${EMBEDDING_BASE_URL:-}" ]]; then
+  echo "BLOCKED: EMBEDDING_BASE_URL must be empty for the local transformers pilot" >&2
+  exit 3
+fi
 if [[ "${LLM_PRIMARY:-}" != "none" || "${LLM_FALLBACKS:-}" != "[]" ||
       -n "${RERANKER_URL:-}" || -n "${NLI_SERVICE_URL:-}" ]]; then
   echo "BLOCKED: external LLM, reranker, or NLI configuration is not empty/off" >&2
+  exit 3
+fi
+if [[ "${MEMENTO_SPLIT_LLM_PRIMARY:-}" != "none" ||
+      "${MEMENTO_SPLIT_LLM_FALLBACKS:-}" != "[]" ||
+      "${MEMENTO_MORPHEME_TOKENIZER:-}" != "local" ]]; then
+  echo "BLOCKED: split/tokenizer LLM fallback is not disabled" >&2
   exit 3
 fi
 if [[ "${MEMENTO_SECURITY_PILOT_AUTOMATION:-}" != "off" ||
@@ -86,6 +141,11 @@ if [[ -d "$MODEL_CACHE/snapshots" ]]; then
 fi
 if [[ -z "$SNAPSHOT_DIR" ]]; then
   echo "BLOCKED: transformers model cache snapshot is missing; refusing external download" >&2
+  exit 3
+fi
+if [[ ! -f "$SNAPSHOT_DIR/onnx/model_quantized.onnx" &&
+      ! -f "$SNAPSHOT_DIR/onnx/model_q8.onnx" ]]; then
+  echo "BLOCKED: transformers q8 ONNX model is missing from the local snapshot; refusing external download" >&2
   exit 3
 fi
 export SECURITY_PILOT_MODEL_SNAPSHOT="$SNAPSHOT_DIR"

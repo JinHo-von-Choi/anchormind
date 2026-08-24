@@ -67,18 +67,29 @@ function installNetworkTripwire() {
     [net, "connect"], [net, "createConnection"], [tls, "connect"],
     [http, "request"], [http, "get"], [https, "request"], [https, "get"]
   ]) wrap(target, name);
-  const dnsOriginal = dns.lookup;
-  dns.lookup = function (...args) {
-    guard("dns.lookup", args);
-    return dnsOriginal.apply(this, args);
-  };
-  originals.push(() => { dns.lookup = dnsOriginal; });
-  const dnsPromisesOriginal = dns.promises.lookup;
-  dns.promises.lookup = async function (...args) {
-    guard("dns.promises.lookup", args);
-    return dnsPromisesOriginal.apply(this, args);
-  };
-  originals.push(() => { dns.promises.lookup = dnsPromisesOriginal; });
+  const dnsNames = [
+    "lookup", "resolve", "resolve4", "resolve6", "resolveAny", "resolveCaa",
+    "resolveCname", "resolveMx", "resolveNaptr", "resolveNs", "resolvePtr",
+    "resolveSoa", "resolveSrv", "resolveTxt", "reverse"
+  ];
+  for (const name of dnsNames) {
+    const original = dns[name];
+    if (typeof original === "function") {
+      dns[name] = function (...args) {
+        guard(`dns.${name}`, args);
+        return original.apply(this, args);
+      };
+      originals.push(() => { dns[name] = original; });
+    }
+    const promiseOriginal = dns.promises[name];
+    if (typeof promiseOriginal === "function") {
+      dns.promises[name] = async function (...args) {
+        guard(`dns.promises.${name}`, args);
+        return promiseOriginal.apply(this, args);
+      };
+      originals.push(() => { dns.promises[name] = promiseOriginal; });
+    }
+  }
   for (const name of ["spawn", "exec", "execFile", "fork", "spawnSync", "execSync", "execFileSync"]) {
     const original = childProcess[name];
     childProcess[name] = function (...args) {
@@ -127,7 +138,8 @@ async function loadFixture() {
            content = EXCLUDED.content, topic = EXCLUDED.topic,
            keywords = EXCLUDED.keywords, key_id = EXCLUDED.key_id,
            workspace = EXCLUDED.workspace, session_id = EXCLUDED.session_id,
-           case_id = EXCLUDED.case_id, valid_to = NULL`,
+           case_id = EXCLUDED.case_id, embedding = EXCLUDED.embedding,
+           valid_to = NULL`,
         [row.id, row.content, row.topic, [row.topic], row.type, `security-pilot-hash-${row.id.slice(-4)}`,
           row.key_id, row.workspace, row.session_id, row.case_id, vectorToSql(embeddings[fragments.indexOf(row)])]
       );
@@ -170,6 +182,11 @@ before(async () => {
   const { env: transformersEnv } = await import("@huggingface/transformers");
   const snapshot = process.env.SECURITY_PILOT_MODEL_SNAPSHOT;
   assert.ok(snapshot, "security pilot model snapshot must be selected by the runner");
+  assert.ok(
+    fs.existsSync(path.join(snapshot, "onnx/model_quantized.onnx")) ||
+      fs.existsSync(path.join(snapshot, "onnx/model_q8.onnx")),
+    "security pilot requires the local q8 ONNX model"
+  );
   transformersEnv.cacheDir = process.env.SECURITY_PILOT_MODEL_CACHE
     ? path.dirname(process.env.SECURITY_PILOT_MODEL_CACHE)
     : path.dirname(path.dirname(path.dirname(snapshot)));

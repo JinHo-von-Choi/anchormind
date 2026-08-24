@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
@@ -7,9 +8,18 @@ const ROOT = path.resolve(import.meta.dirname, "../..");
 const RUNNER = path.join(ROOT, "scripts/run-security-pilot.sh");
 
 function run(env) {
+  const cleanEnv = { ...process.env };
+  for (const name of [
+    "COMPOSE_FILE", "SECURITY_PILOT_ENV_FILE", "DATABASE_URL", "POSTGRES_HOST", "POSTGRES_PORT",
+    "POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD", "DB_HOST", "DB_PORT", "DB_NAME",
+    "DB_USER", "DB_PASSWORD", "PGHOST", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD",
+    "BATCH_DATABASE_URL", "PGSERVICE", "EMBEDDING_API_KEY", "EMBEDDING_BASE_URL",
+    "OPENAI_API_KEY", "GEMINI_API_KEY", "CF_API_TOKEN", "CLOUDFLARE_API_TOKEN",
+    "ANTHROPIC_API_KEY", "XAI_API_KEY", "GOOGLE_API_KEY", "AZURE_OPENAI_API_KEY"
+  ]) delete cleanEnv[name];
   return spawnSync("bash", [RUNNER], {
     cwd: ROOT,
-    env: { ...process.env, ...env },
+    env: { ...cleanEnv, ...env },
     encoding: "utf8"
   });
 }
@@ -20,13 +30,52 @@ test("security pilot rejects a custom compose selection before any runtime mutat
   assert.match(result.stderr, /existing compose file is selected/);
 });
 
-test("security pilot rejects a custom env path before reading a malicious DATABASE_URL", () => {
+test("security pilot env readback pins every application DB path to the dedicated target", () => {
+  const values = Object.fromEntries(
+    fs.readFileSync(path.join(ROOT, ".env.security-pilot.example"), "utf8")
+      .split("\n")
+      .filter(line => line && !line.startsWith("#"))
+      .map(line => line.split(/=(.*)/s, 2))
+  );
+  assert.deepEqual(
+    Object.fromEntries(["POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD", "DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"]
+      .map(name => [name, values[name]])),
+    {
+      POSTGRES_HOST: "127.0.0.1", POSTGRES_PORT: "35434", POSTGRES_DB: "memento_security_pilot",
+      POSTGRES_USER: "memento_pilot", POSTGRES_PASSWORD: "local_security_pilot_only",
+      DB_HOST: "127.0.0.1", DB_PORT: "35434", DB_NAME: "memento_security_pilot",
+      DB_USER: "memento_pilot", DB_PASSWORD: "local_security_pilot_only"
+    }
+  );
+});
+
+test("security pilot rejects an inherited hostile POSTGRES target before Docker", () => {
+  const result = run({ POSTGRES_HOST: "203.0.113.10" });
+  assert.equal(result.status, 3);
+  assert.match(result.stderr, /inherited POSTGRES_HOST conflicts/);
+  assert.doesNotMatch(result.stderr, /docker compose|psql|migrate/);
+});
+
+test("security pilot rejects inherited external credentials before imports", () => {
+  const result = run({ OPENAI_API_KEY: "sk-test-only" });
+  assert.equal(result.status, 3);
+  assert.match(result.stderr, /inherited OPENAI_API_KEY conflicts/);
+  assert.doesNotMatch(result.stderr, /docker compose|psql|migrate/);
+});
+
+test("security pilot rejects a custom env path before loading any env", () => {
   const result = run({
-    SECURITY_PILOT_ENV_FILE: "/tmp/security-pilot-malicious.env",
-    DATABASE_URL: "postgresql://attacker:secret@203.0.113.10:5432/production"
+    SECURITY_PILOT_ENV_FILE: "/tmp/security-pilot-malicious.env"
   });
   assert.equal(result.status, 3);
   assert.match(result.stderr, /security pilot env file is missing/);
+  assert.doesNotMatch(result.stderr, /docker compose|psql|migrate/);
+});
+
+test("security pilot rejects an inherited hostile DATABASE_URL before Docker", () => {
+  const result = run({ DATABASE_URL: "postgresql://attacker:secret@203.0.113.10:5432/production" });
+  assert.equal(result.status, 3);
+  assert.match(result.stderr, /inherited DATABASE_URL conflicts/);
   assert.doesNotMatch(result.stderr, /docker compose|psql|migrate/);
 });
 
@@ -35,4 +84,11 @@ test("security pilot remains blocked locally without Docker and never attempts a
   assert.equal(result.status, 3);
   assert.match(`${result.stdout}\n${result.stderr}`, /BLOCKED:/);
   assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /docker compose .* up|migrate\.js|psql /);
+});
+
+test("security pilot cache gate requires the q8 ONNX filenames used by Transformers.js", () => {
+  const runner = fs.readFileSync(RUNNER, "utf8");
+  assert.match(runner, /onnx\/model_quantized\.onnx/);
+  assert.match(runner, /onnx\/model_q8\.onnx/);
+  assert.match(runner, /refusing external download/);
 });
