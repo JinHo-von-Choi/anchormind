@@ -18,10 +18,8 @@
  *   - 또는 initialize 시 환경 변수 ACCESS_KEY 일치
  */
 
-import http from "http";
-
 /** 설정 */
-import { PORT, ACCESS_KEY, AUTH_DISABLED, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI } from "./lib/config.js";
+import { PORT, ACCESS_KEY, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI } from "./lib/config.js";
 import { MEMORY_CONFIG }          from "./config/memory.js";
 import { validateMemoryConfig }   from "./config/validate-memory-config.js";
 
@@ -57,6 +55,8 @@ import { preloadReranker } from "./lib/memory/read/Reranker.js";
 import { warmup as warmupMorpheme } from "./lib/memory/embedding/MorphemeTokenizer.js";
 import { logInfo, logWarn, logError } from "./lib/logger.js";
 import { installProcessGuards }     from "./lib/process-guards.js";
+import { createHttpServer }         from "./lib/http-server.js";
+import { resolveBindHost }          from "./lib/http/bind.js";
 
 /** 임베딩 차원 일관성 검증 */
 import { checkEmbeddingConsistency } from "./scripts/check-embedding-consistency.js";
@@ -104,7 +104,7 @@ const ADMIN_BASE = "/v1/internal/model/nothing";
 /**
  * HTTP 서버
  */
-const server = http.createServer(async (req, res) => {
+const server = createHttpServer({ requestHandler: async (req, res) => {
   const startTime = process.hrtime.bigint();
 
   if (!validateOrigin(req, res)) {
@@ -282,7 +282,7 @@ const server = http.createServer(async (req, res) => {
 
   const duration = Number(process.hrtime.bigint() - startTime) / 1e9;
   recordHttpRequest(req.method, url.pathname, 404, duration);
-});
+} });
 
 server.keepAliveTimeout = Number(process.env.KEEP_ALIVE_TIMEOUT_MS  || 75000);
 server.headersTimeout   = Number(process.env.HEADERS_TIMEOUT_MS    || 76000);
@@ -293,7 +293,7 @@ server.on("connection", (socket) => {
   socket.setNoDelay(true);
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, resolveBindHost(), () => {
   validateMemoryConfig(MEMORY_CONFIG);
   console.log(`Memento MCP HTTP server listening on port ${PORT}`);
   console.log("Streamable HTTP endpoints: POST/GET/DELETE /mcp");
