@@ -79,6 +79,7 @@ describe("security hardening fake-data MCP boundary", () => {
     });
     assert.deepEqual(result.groups.map((group) => group.workspace), ["ws-a"]);
     assert.ok(result.fragments.every((row) => row.key_id === "key-a" && row.workspace === "ws-a"));
+    assert.equal(result.count, result.fragments.length);
   });
 
   test("session activity scope is exact and rejects foreign metadata", () => {
@@ -130,6 +131,25 @@ describe("security hardening fake-data MCP boundary", () => {
     await assert.rejects(() => fetch("https://example.com"), /EXTERNAL_NETWORK_FORBIDDEN/);
     assert.throws(() => http.request("https://example.com"), /EXTERNAL_NETWORK_FORBIDDEN/);
     assert.throws(() => dns.lookup("example.com", () => {}), /EXTERNAL_NETWORK_FORBIDDEN/);
+    await assert.rejects(() => dns.promises.lookup("example.com"), /EXTERNAL_NETWORK_FORBIDDEN/);
     assert.throws(() => require("node:child_process").spawn(process.execPath, ["-e", ""]), /EXTERNAL_NETWORK_FORBIDDEN/);
+  });
+
+  test("harness start-close-start-close restores tripwire each time", async () => {
+    const originalFetch = globalThis.fetch;
+    const harness = newHarness();
+    await harness.start();
+    await harness.close();
+    assert.strictEqual(globalThis.fetch, originalFetch);
+
+    await harness.start();
+    const result = await harness.callTool("memory_stats", {
+      _keyId: "key-a",
+      _groupKeyIds: ["key-a"],
+      workspace: "ws-a"
+    });
+    assert.equal(result.stats.total, 1);
+    await harness.close();
+    assert.strictEqual(globalThis.fetch, originalFetch);
   });
 });

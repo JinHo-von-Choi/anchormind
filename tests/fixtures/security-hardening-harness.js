@@ -78,18 +78,23 @@ function installTripwire() {
   }
 
   const dns = require("node:dns");
+  const dnsPromises = require("node:dns/promises");
+  const dnsTargets = [dns, dnsPromises, dns.promises].filter((target, index, all) => target && all.indexOf(target) === index);
   for (const name of [
     "lookup", "resolve", "resolve4", "resolve6", "resolveAny", "resolveCaa",
     "resolveCname", "resolveMx", "resolveNaptr", "resolveNs", "resolvePtr",
     "resolveSoa", "resolveSrv", "resolveTxt", "reverse"
-  ]) {
-    patchMethod(dns, name, original => (...args) => {
+  ]) for (const target of dnsTargets) {
+    patchMethod(target, name, original => (...args) => {
       const host = args[0];
       if (host && !isLoopback(`http://${host}`)) {
         tripwireState.outside.push(`dns:${host}`);
+        if (target === dnsPromises || target === dns.promises) {
+          return Promise.reject(new Error("EXTERNAL_NETWORK_FORBIDDEN"));
+        }
         throw new Error("EXTERNAL_NETWORK_FORBIDDEN");
       }
-      return original.apply(dns, args);
+      return original.apply(target, args);
     });
   }
 
@@ -129,6 +134,7 @@ export function createSecurityPilotHarness(fixture) {
     get baseUrl() { return baseUrl; },
     async start() {
       if (server) return { baseUrl };
+      closed = false;
       installTripwire();
       server = createHttpServer({ requestHandler, host: "127.0.0.1" });
       await new Promise((resolve, reject) => {
