@@ -80,10 +80,18 @@ test("security pilot rejects an inherited hostile DATABASE_URL before Docker", (
 });
 
 test("security pilot remains blocked locally without Docker and never attempts a pull", () => {
-  const result = run({});
-  assert.equal(result.status, 3);
-  assert.match(`${result.stdout}\n${result.stderr}`, /BLOCKED:/);
-  assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /docker compose .* up|migrate\.js|psql /);
+  const commandPath = fs.mkdtempSync(path.join("/tmp", "security-pilot-no-docker-"));
+  for (const [name, target] of [["bash", "/bin/bash"], ["dirname", "/usr/bin/dirname"], ["pwd", "/bin/pwd"], ["basename", "/usr/bin/basename"]]) {
+    fs.symlinkSync(target, path.join(commandPath, name));
+  }
+  try {
+    const result = run({ PATH: commandPath });
+    assert.equal(result.status, 3);
+    assert.match(`${result.stdout}\n${result.stderr}`, /BLOCKED: docker is unavailable/);
+    assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /docker compose .* up|migrate\.js|psql /);
+  } finally {
+    fs.rmSync(commandPath, { recursive: true, force: true });
+  }
 });
 
 test("security pilot cache gate requires the q8 ONNX filenames used by Transformers.js", () => {

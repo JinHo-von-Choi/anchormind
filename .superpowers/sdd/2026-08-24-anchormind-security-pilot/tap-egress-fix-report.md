@@ -17,3 +17,11 @@ The security-pilot integration test emits the zero-egress count as a TAP diagnos
 - `bash -n scripts/run-security-pilot.sh` — passed.
 - `git diff --check` — passed.
 - Docker/full security pilot was not run by design.
+
+## Deterministic guard-test follow-up
+
+The local-without-Docker guard now runs the runner with an isolated temporary `PATH` containing only the required shell utilities and no `docker` entry. This keeps the test at the runner's `command -v docker` gate regardless of whether Docker is installed on the host; the shim is removed in a `finally` block and no Docker command is invoked.
+
+- `node --test tests/unit/security-pilot-runner-guards.test.js` — 13 passed.
+- `bash -n scripts/run-security-pilot.sh` — passed.
+- `git diff --check` — passed.
