@@ -14,6 +14,7 @@ function run(env) {
     "POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD", "DB_HOST", "DB_PORT", "DB_NAME",
     "DB_USER", "DB_PASSWORD", "PGHOST", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD",
     "BATCH_DATABASE_URL", "PGSERVICE", "EMBEDDING_API_KEY", "EMBEDDING_BASE_URL",
+    "SECURITY_PILOT_DEFER_SYNTHETIC_CLEANUP",
     "OPENAI_API_KEY", "GEMINI_API_KEY", "CF_API_TOKEN", "CLOUDFLARE_API_TOKEN",
     "ANTHROPIC_API_KEY", "XAI_API_KEY", "GOOGLE_API_KEY", "AZURE_OPENAI_API_KEY"
   ]) delete cleanEnv[name];
@@ -114,15 +115,15 @@ test("security pilot prefers host SQL clients and falls back only to the healthy
   const healthyIndex = runner.indexOf("docker inspect -f '{{.State.Health.Status}}' \"$SERVICE_ID\"");
   const clientIndex = runner.indexOf("if command -v psql", healthyIndex);
   assert.ok(clientIndex > healthyIndex, "SQL client selection must happen after health verification");
-  assert.match(runner.slice(clientIndex), /if command -v psql[\s\S]*?psql \"\$DATABASE_URL\"/);
+  assert.match(runner.slice(clientIndex), /if command -v psql[\s\S]*?psql "\$DATABASE_URL"/);
   assert.match(runner.slice(clientIndex), /if command -v pg_isready[\s\S]*?pg_isready/);
   assert.match(
     runner.slice(clientIndex),
-    /docker compose \"\$\{COMPOSE_ARGS\[@\]\}\" exec -T postgres-security-pilot[\s\S]*?psql -U \"\$\{SECURITY_PILOT_DB_USER\}\" -d \"\$\{SECURITY_PILOT_DB_NAME\}\"/
+    /docker compose "\$\{COMPOSE_ARGS\[@\]\}" exec -T postgres-security-pilot[\s\S]*?psql -U "\$\{SECURITY_PILOT_DB_USER\}" -d "\$\{SECURITY_PILOT_DB_NAME\}"/
   );
   assert.match(
     runner.slice(clientIndex),
-    /docker compose \"\$\{COMPOSE_ARGS\[@\]\}\" exec -T postgres-security-pilot[\s\S]*?pg_isready -U \"\$\{SECURITY_PILOT_DB_USER\}\" -d \"\$\{SECURITY_PILOT_DB_NAME\}\"/
+    /docker compose "\$\{COMPOSE_ARGS\[@\]\}" exec -T postgres-security-pilot[\s\S]*?pg_isready -U "\$\{SECURITY_PILOT_DB_USER\}" -d "\$\{SECURITY_PILOT_DB_NAME\}"/
   );
   assert.doesNotMatch(runner.slice(clientIndex), /docker exec(?!.*postgres-security-pilot)/);
 });
@@ -135,8 +136,8 @@ test("security pilot compose uses one explicit named non-internal bridge and exa
   assert.doesNotMatch(compose, /internal:\s*true/);
   const servicesSection = compose.split(/^networks:\s*$/m, 1)[0];
   const networksSection = compose.split(/^networks:\s*$/m)[1].split(/^volumes:\s*$/m, 1)[0];
-  assert.equal((servicesSection.match(/^  [^ \n]+:\s*$/gm) || []).length, 1);
-  assert.equal((networksSection.match(/^  [^ \n]+:\s*$/gm) || []).length, 1);
+  assert.equal((servicesSection.match(/^\x20{2}[^\x20\n]+:\s*$/gm) || []).length, 1);
+  assert.equal((networksSection.match(/^\x20{2}[^\x20\n]+:\s*$/gm) || []).length, 1);
   assert.match(compose, /-\s*"127\.0\.0\.1:35434:5432"/);
   assert.doesNotMatch(compose, /-\s*"(?:0\.0\.0\.0|\[?::\]?):\d+:\d+"/);
 });
@@ -145,9 +146,9 @@ test("security pilot runner rejects extra networks and published addresses at ru
   const runner = fs.readFileSync(RUNNER, "utf8");
   assert.match(runner, /docker compose "\$\{COMPOSE_ARGS\[@\]\}" config --networks/);
   assert.match(runner, /anchormind_security_pilot_bridge/);
-  assert.match(runner, /docker network inspect -f '\{\{\.Internal\}\}' "\$NETWORK_NAME"\)" == false/);
-  assert.match(runner, /docker port "\$SERVICE_ID"\)" == "5432\/tcp -> 127\.0\.0\.1:35434"/);
-  assert.doesNotMatch(runner, /docker network inspect -f '\{\{\.Internal\}\}' "\$NETWORK_NAME"\)" == true/);
+  assert.match(runner, /security_pilot_require "canonical PostgreSQL network must be non-internal" test/);
+  assert.match(runner, /security_pilot_require "canonical PostgreSQL port binding is not loopback-only" test/);
+  assert.doesNotMatch(runner, /^\s*\[\[.*\.Internal.*$/m);
 });
 
 test("security pilot runner accepts one exact TAP egress diagnostic", () => {
@@ -171,4 +172,33 @@ test("security pilot runner accepts one exact TAP egress diagnostic", () => {
     fs.rmSync(file, { force: true });
     assert.equal(result.status, example.expected, example.name);
   }
+});
+
+test("security pilot assertion helper fails closed under Bash 3.2 semantics", () => {
+  const runner = fs.readFileSync(RUNNER, "utf8");
+  const helper = runner.match(/security_pilot_require\(\) \{[\s\S]*?^\}/m);
+  assert.ok(helper, "runner must define the fail-closed assertion helper");
+  const result = spawnSync("/bin/bash", ["-c", `set -euo pipefail\n${helper[0]}\nsecurity_pilot_require "false gate" test actual = expected`], {
+    encoding: "utf8"
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /false gate/);
+});
+
+test("security pilot runner has no standalone bare assertions", () => {
+  const runner = fs.readFileSync(RUNNER, "utf8");
+  assert.doesNotMatch(runner, /^\s*\[\[/m);
+});
+
+test("security pilot runner defers synthetic cleanup to preserve authoritative readback", () => {
+  const runner = fs.readFileSync(RUNNER, "utf8");
+  const integration = fs.readFileSync(path.join(ROOT, "tests/integration/security-pilot.test.js"), "utf8");
+  assert.match(runner, /SECURITY_PILOT_DEFER_SYNTHETIC_CLEANUP=true/);
+  assert.match(runner, /security-pilot-synthetic/);
+  assert.match(runner, /00000000-0000-0000-0000-00000000aaaa/);
+  assert.match(runner, /00000000-0000-0000-0000-00000000bbbb/);
+  assert.match(runner, /fixture_pairs/);
+  assert.match(integration, /shouldDeferSyntheticCleanup\(\)/);
+  assert.match(integration, /pool\.end\(\)/);
+  assert.match(integration, /tripwire\?\.restore\(\)/);
 });

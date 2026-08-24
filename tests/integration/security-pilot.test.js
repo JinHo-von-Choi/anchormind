@@ -3,6 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import pg from "pg";
+import {
+  deleteSyntheticFixture,
+  shouldDeferSyntheticCleanup
+} from "../fixtures/security-pilot-cleanup.js";
 import { createNetworkTripwire, isLoopbackHost } from "../fixtures/security-pilot-tripwire.js";
 
 const { Pool } = pg;
@@ -124,20 +128,32 @@ before(async () => {
 });
 
 after(async () => {
+  let cleanupError;
   try {
-    if (pool) {
-      if (fixtureLoaded) {
-        await pool.query("DELETE FROM agent_memory.fragments WHERE topic = $1", ["security-pilot-synthetic"]);
-        await pool.query("DELETE FROM agent_memory.api_keys WHERE id = ANY($1::text[])", [
-          fixture.filter(row => row.kind === "api_key").map(row => row.id)
-        ]);
-      }
-      await pool.end();
+    if (pool && fixtureLoaded && !shouldDeferSyntheticCleanup()) {
+      await deleteSyntheticFixture(pool);
     }
-    await shutdownPool?.();
+  } catch (error) {
+    cleanupError = error;
   } finally {
-    tripwire?.restore();
-    console.log(`[security-pilot] external_network_attempts=${externalNetworkAttempts.length}`);
+    try {
+      if (pool) await pool.end();
+    } catch (error) {
+      cleanupError ||= error;
+    }
+    try {
+      if (shutdownPool) await shutdownPool();
+    } catch (error) {
+      cleanupError ||= error;
+    }
+    try {
+      tripwire?.restore();
+    } finally {
+      console.log(`[security-pilot] external_network_attempts=${externalNetworkAttempts.length}`);
+    }
+  }
+  if (cleanupError) {
+    throw cleanupError;
   }
 });
 
