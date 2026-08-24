@@ -47,3 +47,18 @@ legacy calls retain their prior non-strict behavior.
   pre-existing 7-failure/7-cancellation baseline after adding 11 round-3 tests.
 - `node --check` for all modified JavaScript and `git diff --check`: passed.
 - Round-3 tests use synthetic rows and mocked DB clients only; no real DB/Redis/LLM/network or external effect.
+
+## Round 4 reviewer-fix
+
+- RED evidence: five new static boundary checks failed before implementation (caseMode/CaseRecall,
+  `search_traces`, stats legacy branching, case-event scope propagation, and symbolic polarity/ClaimStore scope).
+- Minimal fixes: CaseRecall now forwards and enforces exact key/workspace scope for fragments and case events;
+  `search_traces` uses exact tuple SQL plus final row filtering; workspace-only stats retain the legacy
+  workspace/NULL behavior while API-key stats set `strictScope`; CaseEventStore writes/reads and
+  `preceded_by` ownership carry the tuple; ConflictResolver passes the detector options object and ClaimStore
+  rechecks both fragment endpoints.
+- Focused round-4 plus prior security/ownership suites: **116 passed, 0 failed**.
+- Full unit command: **2535 passed, 7 failed, 7 cancelled, 2 skipped** (2551 total), preserving the
+  existing 7-failure/7-cancellation baseline after adding 11 round-4 tests.
+- `node --check` for all modified JavaScript and `git diff --check`: passed.
+- Round-4 tests use synthetic rows and mocked DB clients only; no real DB/Redis/LLM/network or external effect.
