@@ -64,6 +64,13 @@ pilot importer -- scope/key/workspace 검증 --> dedicated PostgreSQL + pgvector
 | Scheduler/maintenance | 파일럿에서는 health와 명시적 projection 작업만 | link/merge/consolidate/gc/reflect 자동 실행 | `lib/scheduler.js`, `config/memory.js` |
 | Dedicated DB | AnchorMind projection과 검증 ledger 저장 | 개발 DB, 테스트 DB, Ballast/Codex DB 공유 | `lib/config.js:341-350`, 기존 compose |
 
+전용 PostgreSQL 컨테이너는 Docker Desktop의 host port forwarding과 호환되는 별도 bridge
+network 하나에만 연결한다. Docker Desktop 4.72.0에서는 `internal: true` network의 컨테이너
+IP를 host port 전달 대상으로 선택하지 않아 `127.0.0.1:35434`가 열리지 않으므로
+`internal: true`는 사용하지 않는다. 이 변경은 외부 공개를 허용하지 않는다. published
+binding은 계속 정확히 `127.0.0.1:35434:5432`이고, 서비스는 PostgreSQL 하나뿐이며,
+integration tripwire는 비-loopback 연결 시도를 0건으로 검증한다.
+
 ## 4. 데이터 흐름과 불변식
 
 ### 정상 흐름
@@ -83,6 +90,9 @@ pilot importer -- scope/key/workspace 검증 --> dedicated PostgreSQL + pgvector
 - cross-scope 후보는 결과에서 제거하며, link row, `valid_to`, merge, delete를 자동으로 만들지 않는다.
 - 임베딩 provider가 `transformers`가 아니거나 local-only 정책을 입증할 수 없으면 시작 단계에서 중단한다.
 - AutoReflect는 호출자가 누구인지와 무관하게 pilot에서 no-op/skip한다.
+- Docker network는 전용 bridge 하나만 사용하고 `Internal=false`를 권위 있게 확인한다.
+  host 공개 범위는 정확히 `127.0.0.1:35434`이며 `0.0.0.0`, IPv6 wildcard, 추가 service,
+  추가 published port를 허용하지 않는다.
 
 ## 5. 설정 envelope
 

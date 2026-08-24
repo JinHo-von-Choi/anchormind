@@ -619,7 +619,7 @@ Create docker-compose.security-pilot.yml with only this service and its private 
 
     networks:
       security_pilot_internal:
-        internal: true
+        name: anchormind_security_pilot_bridge
 
     volumes:
       security_pilot_pgdata:
@@ -659,10 +659,10 @@ Implement scripts/run-security-pilot.sh with these exact gates and order:
 2. Verify docker and docker compose are available. Verify `docker image inspect pgvector/pgvector:pg15` succeeds; otherwise print `BLOCKED: pgvector image is not present locally; refusing external pull` and exit 3.
 3. Verify SECURITY_PILOT_MODEL_CACHE contains a snapshot config.json and tokenizer.json. If either is absent, print `BLOCKED: transformers model cache is missing; refusing external download` and exit 3.
 4. Verify no listener is using 35432 or 35433 and no existing compose project is selected. Do not call docker compose against either existing compose file.
-5. Run `docker compose -f docker-compose.security-pilot.yml --env-file .env.security-pilot.example up -d --wait` and assert the service is healthy, the published binding is 127.0.0.1:35434, the named volume is anchormind_security_pilot_pgdata, and the network has Internal=true.
+5. Run `docker compose -f docker-compose.security-pilot.yml --env-file .env.security-pilot.example up -d --wait` and assert the service is healthy, the published binding is exactly 127.0.0.1:35434, the named volume is anchormind_security_pilot_pgdata, the only service is `postgres-security-pilot`, and the dedicated network is named `anchormind_security_pilot_bridge` with `Internal=false`. This bridge is required because Docker Desktop 4.72.0 does not publish a host port from an `internal: true` network.
 6. Set DATABASE_URL from the pilot env and run `node scripts/migrate.js`. Run only the requested integration test with test concurrency 1. Do not start server.js, Redis, scheduler, worker, AutoReflect, GraphLinker, consolidation, FragmentGC, or NLI preload.
 7. Perform authoritative readback with `psql` against DATABASE_URL: current_database() must be memento_security_pilot, vector must be installed, fixture count must be 3, and all key/workspace pairs must match the NDJSON file.
-8. Confirm the integration tripwire reports zero non-loopback connection attempts and the internal Docker network reports `Internal=true`.
+8. Confirm the integration tripwire reports zero non-loopback connection attempts, the dedicated bridge reports `Internal=false`, and no address other than `127.0.0.1:35434` is published.
 9. On exit, run `docker compose -f docker-compose.security-pilot.yml --env-file .env.security-pilot.example down --remove-orphans` without `-v`; never touch any other volume or container. Preserve the dedicated synthetic volume for inspection.
 
 - [ ] **Step 4: Run the dedicated pilot and verify real SQL readback**
