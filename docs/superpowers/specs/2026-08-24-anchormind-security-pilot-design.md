@@ -86,10 +86,10 @@ pilot importer -- scope/key/workspace 검증 --> dedicated PostgreSQL + pgvector
 
 ## 5. 설정 envelope
 
-아래는 파일럿용 `.env.security-pilot.example`에 둘 설정 이름과 기대값이다. `MEMENTO_BIND_HOST`, `MEMENTO_LOCAL_MODEL_ONLY`, `MEMENTO_AUTO_REFLECT`, `MEMENTO_CONSOLIDATE_ENABLED`, `MEMENTO_GC_ENABLED`는 구현 시 중앙 설정으로 추가할 pilot guard다. 기존 설정 이름은 현재 코드의 환경변수 계약을 따른다.
+아래는 파일럿용 `.env.security-pilot.example`의 canonical 설정 이름과 기대값이다. 파일럿 활성화 스위치는 오직 `MEMENTO_SECURITY_PILOT_AUTOMATION=off`이며, `MEMENTO_PILOT_MODE`나 `*_ENABLED` 별칭은 지원하지 않는다. 서버는 아래 maintenance 플래그가 하나라도 누락되거나 `false`가 아니면 시작하지 않는다.
 
 ```dotenv
-MEMENTO_PILOT_MODE=true
+MEMENTO_SECURITY_PILOT_AUTOMATION=off
 MEMENTO_BIND_HOST=127.0.0.1
 MEMENTO_ACCESS_KEY=<synthetic-local-key>
 MEMENTO_AUTH_DISABLED=false
@@ -105,8 +105,11 @@ REDIS_ENABLED=false
 EMBEDDING_PROVIDER=transformers
 EMBEDDING_MODEL=Xenova/multilingual-e5-small
 EMBEDDING_DIMENSIONS=384
-MEMENTO_LOCAL_MODEL_ONLY=true
-TRANSFORMERS_CACHE_DIR=<local-cached-model-dir>
+HF_HUB_OFFLINE=1
+TRANSFORMERS_OFFLINE=1
+HF_DATASETS_OFFLINE=1
+SECURITY_PILOT_MODEL_CACHE=<huggingface-hub-root>
+SECURITY_PILOT_MODEL_SNAPSHOT=<validated-absolute-snapshot-dir>
 LLM_PRIMARY=none
 LLM_FALLBACKS=[]
 RERANKER_URL=
@@ -114,14 +117,20 @@ NLI_SERVICE_URL=
 
 MEMENTO_AUTO_REFLECT=false
 MEMENTO_PROACTIVE_RECALL_MODE=off
-MEMENTO_CONSOLIDATE_ENABLED=false
-MEMENTO_GC_ENABLED=false
+MEMENTO_GRAPH_LINK=false
+MEMENTO_CONSOLIDATE=false
+MEMENTO_GC=false
+MEMENTO_CONSOLIDATE_SPLIT_LONG=false
+MEMENTO_CONSOLIDATE_DETECT_CONTRADICT=false
+MEMENTO_CONSOLIDATE_COMPRESS_OLD=false
+ENABLE_RECONSOLIDATION=false
+ENABLE_SPREADING_ACTIVATION=false
 MCP_STRICT_ORIGIN=true
 MCP_ALLOW_AUTO_DCR_REGISTER=false
 MCP_REJECT_NONAPIKEY_OAUTH=true
 ```
 
-설정 검증은 startup에서 수행한다. `MEMENTO_PILOT_MODE=true`인데 access key가 비어 있거나, bind host가 `127.0.0.1`이 아니거나, embedding provider가 local Transformers가 아니거나, 모델 cache가 없거나, maintenance guard가 꺼져 있지 않으면 서버를 시작하지 않는다.
+설정 검증은 startup에서 수행한다. `MEMENTO_SECURITY_PILOT_AUTOMATION=off`인데 access key가 비어 있거나, bind host가 `127.0.0.1`이 아니거나, embedding provider가 검증된 local Transformers snapshot이 아니거나, 모델 cache가 없거나, 위 maintenance guard가 명시적으로 `false`가 아니면 서버를 시작하지 않는다.
 
 ## 6. 세 구현 slice
 
