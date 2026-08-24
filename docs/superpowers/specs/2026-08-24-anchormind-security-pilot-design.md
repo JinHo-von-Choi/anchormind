@@ -103,7 +103,7 @@ POSTGRES_PASSWORD=<local-only-password>
 REDIS_ENABLED=false
 
 EMBEDDING_PROVIDER=transformers
-EMBEDDING_MODEL=Xenova/multilingual-e5-small
+EMBEDDING_MODEL=<validated-absolute-snapshot-dir>
 EMBEDDING_DIMENSIONS=384
 HF_HUB_OFFLINE=1
 TRANSFORMERS_OFFLINE=1

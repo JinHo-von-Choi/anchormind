@@ -636,7 +636,7 @@ Create .env.security-pilot.example with only local synthetic settings:
     SECURITY_PILOT_DB_PASSWORD=local_security_pilot_only
     DATABASE_URL=postgresql://memento_pilot:local_security_pilot_only@127.0.0.1:35434/memento_security_pilot
     EMBEDDING_PROVIDER=transformers
-    EMBEDDING_MODEL=Xenova/multilingual-e5-small
+    EMBEDDING_MODEL=
     EMBEDDING_DIMENSIONS=384
     EMBEDDING_API_KEY=
     HF_HUB_OFFLINE=1
@@ -678,11 +678,15 @@ Expected result:
 - The model is loaded from the existing local transformers cache only. A missing cache produces BLOCKED/exit 3 and no download attempt.
 - Existing dev/test compose projects, ports 35432/35433, and volumes are unchanged.
 
-After the script finishes, run the integration test directly once more only if the dedicated container is intentionally left running:
+The runner resolves a validated local snapshot and exports its absolute path as both
+`SECURITY_PILOT_MODEL_SNAPSHOT` and `EMBEDDING_MODEL`. After the script finishes, run the
+integration test directly once more only if the dedicated container is intentionally left
+running, using that same resolved absolute snapshot path:
 
     DOTENV_CONFIG_PATH=.env.security-pilot.example \
     DATABASE_URL=postgresql://memento_pilot:local_security_pilot_only@127.0.0.1:35434/memento_security_pilot \
-    EMBEDDING_PROVIDER=transformers EMBEDDING_MODEL=Xenova/multilingual-e5-small \
+    SECURITY_PILOT_MODEL_SNAPSHOT=/absolute/local/snapshot \
+    EMBEDDING_PROVIDER=transformers EMBEDDING_MODEL=/absolute/local/snapshot \
     HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
     MEMENTO_SECURITY_PILOT_AUTOMATION=off MEMENTO_AUTO_REFLECT=false \
     MEMENTO_GRAPH_LINK=false MEMENTO_CONSOLIDATE=false MEMENTO_GC=false \
