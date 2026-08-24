@@ -10,6 +10,33 @@
 
 ## Global Constraints
 
+### Canonical security-pilot runtime contract
+
+The pilot has one supported automation contract: `MEMENTO_SECURITY_PILOT_AUTOMATION=off`.
+There is no supported alias such as `MEMENTO_PILOT_MODE` or a pilot-specific
+`MEMENTO_*_ENABLED` variable. Those aliases do not activate the pilot and must not
+be used as substitutes for the canonical names below. Startup validation fails closed
+when any required name is missing or has an unsafe value:
+
+```text
+ENABLE_SPREADING_ACTIVATION=false
+ENABLE_RECONSOLIDATION=false
+MEMENTO_AUTO_REFLECT=false
+MEMENTO_GRAPH_LINK=false
+MEMENTO_CONSOLIDATE=false
+MEMENTO_GC=false
+MEMENTO_CONSOLIDATE_SPLIT_LONG=false
+MEMENTO_CONSOLIDATE_DETECT_CONTRADICT=false
+MEMENTO_CONSOLIDATE_COMPRESS_OLD=false
+```
+
+The validator also requires a non-empty `MEMENTO_ACCESS_KEY`, authentication enabled
+(`MEMENTO_AUTH_DISABLED` is not `true`), an exactly resolved `127.0.0.1` bind, and a
+complete absolute local embedding snapshot. It rejects external model/API/LLM URLs
+before listener, scheduler, or model side effects are created. This is the authoritative
+pilot contract; generic product flags such as `MEMENTO_CASE_BACKPROP_ENABLED` remain
+separate features and are not pilot aliases.
+
 - 사용자가 승인한 범위는 이 계획의 코드 구현, 로컬 테스트, 가짜 데이터 파일럿, 작업 branch의 로컬 commit까지다. 실제 데이터 접근, 외부 전송, 공개, push, PR, merge, 배포는 수행하지 않는다.
 - 실제 데이터와 운영 자격 증명을 사용하지 않는다. 모든 row, API key, session activity, LLM 응답은 결정론적 fixture로 만든다.
 - Task 1~3은 외부 네트워크 연결 0회여야 한다. 자기 자신에게 보내는 127.0.0.1 loopback HTTP만 허용하고 PostgreSQL, Redis, Gemini, DNS, 일반 TCP/TLS, child process provider 호출은 금지한다.
