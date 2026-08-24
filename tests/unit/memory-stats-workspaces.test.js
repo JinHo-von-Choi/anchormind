@@ -16,9 +16,12 @@ import { mock }                  from "node:test";
 
 const queryResponses = [];
 let   queryCallLog    = [];
+const dbModuleUrl     = new URL("../../lib/tools/db.js", import.meta.url).href;
+const redisModuleUrl  = new URL("../../lib/redis.js", import.meta.url).href;
+const loggerModuleUrl = new URL("../../lib/logger.js", import.meta.url).href;
 
-mock.module("../../lib/tools/db.js", {
-  exports: {
+mock.module(dbModuleUrl, {
+  namedExports: {
     getPrimaryPool: () => ({
       query: async (sql) => {
         queryCallLog.push(sql);
@@ -33,15 +36,15 @@ mock.module("../../lib/tools/db.js", {
   }
 });
 
-mock.module("../../lib/redis.js", {
-  exports: {
+mock.module(redisModuleUrl, {
+  namedExports: {
     pushToQueue : async () => undefined,
     redisClient : null
   }
 });
 
-mock.module("../../lib/logger.js", {
-  exports: {
+mock.module(loggerModuleUrl, {
+  namedExports: {
     logInfo : () => {},
     logWarn : () => {},
     logError: () => {},
@@ -82,6 +85,34 @@ describe("MemoryConsolidator.getStats — workspaces 필드", () => {
     assert.strictEqual(stats.workspaces.key_fill_rate[0].fill_rate, 0.75);
     assert.strictEqual(stats.workspaces.session_fragment_distribution.max, 4);
     assert.strictEqual(stats.workspaces.session_fragment_distribution.sample_sessions, 2);
+  });
+
+  it("PostgreSQL bigint 통계 필드를 공개 숫자 계약으로 정규화한다", async () => {
+    queryCallLog = [];
+    queryResponses.length = 0;
+    queryResponses.push(
+      { rows: [{
+        total: "9007199254740001", permanent: "1", hot: "2", warm: "3", cold: "4", embedded: "5",
+        avg_importance: "0.5", topic_count: "6", error_count: "7", preference_count: "8",
+        decision_count: "9", procedure_count: "10", fact_count: "11", relation_count: "12",
+        total_accesses: "13", avg_utility: "0", total_tokens: "14"
+      }] },
+      { rows: [] },
+      { rows: [] },
+      { rows: [] }
+    );
+
+    const consolidator = new MemoryConsolidator();
+    const stats = await consolidator.getStats();
+
+    for (const field of [
+      "total", "permanent", "hot", "warm", "cold", "embedded", "topic_count",
+      "error_count", "preference_count", "decision_count", "procedure_count",
+      "fact_count", "relation_count", "total_accesses", "total_tokens"
+    ]) {
+      assert.strictEqual(typeof stats[field], "number", `${field} must be a number`);
+    }
+    assert.strictEqual(stats.total, 9007199254740001);
   });
 
   it("workspace/session 그룹 쿼리가 비어 있으면 빈 구조를 반환한다", async () => {
