@@ -122,6 +122,9 @@ if [[ "${MEMENTO_SECURITY_PILOT_AUTOMATION:-}" != "off" ||
       "${MEMENTO_GRAPH_LINK:-}" != "false" ||
       "${MEMENTO_CONSOLIDATE:-}" != "false" ||
       "${MEMENTO_GC:-}" != "false" ||
+      "${MEMENTO_CONSOLIDATE_SPLIT_LONG:-}" != "false" ||
+      "${MEMENTO_CONSOLIDATE_DETECT_CONTRADICT:-}" != "false" ||
+      "${MEMENTO_CONSOLIDATE_COMPRESS_OLD:-}" != "false" ||
       "${ENABLE_RECONSOLIDATION:-}" != "false" ||
       "${ENABLE_SPREADING_ACTIVATION:-}" != "false" ]]; then
   echo "BLOCKED: security pilot automation is not fully disabled" >&2
