@@ -191,7 +191,7 @@ node --experimental-test-module-mocks --test --test-concurrency=1 \
   tests/e2e/security-hardening-fake-data.test.js
 ```
 
-Result: 16 passed, 0 failed, 0 cancelled, 0 skipped. It covers true master
+Result: 18 passed, 0 failed, 0 cancelled, 0 skipped. It covers true master
 streamable close/idle/expiry/segment paths, legacy SSE close, authenticated
 partial scope denial, exact group metadata filtering, and every patched
 transport function identity after two complete harness lifecycles.
