@@ -166,6 +166,57 @@ The report update is a separate follow-up documentation commit; at final
 handoff, the report-update commit is repository `HEAD` and the implementation
 commit is `HEAD^`.
 
+## Reviewer fix round 3
+
+RED command:
+
+```text
+DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false \
+node --experimental-test-module-mocks --test --test-concurrency=1 \
+  tests/unit/session-scope-autoreflect.test.js \
+  tests/e2e/security-hardening-fake-data.test.js
+```
+
+Result: 15 tests — 13 passed, 2 failed, 0 cancelled, 0 skipped. The failures
+were the missing master/legacy close, idle, expiry, segment, and legacy-SSE
+reflect behavior. A separate RED assertion caught that an authenticated key
+with fragment metadata missing its group scope must not use the legacy path.
+
+Round 3 focused GREEN command:
+
+```text
+DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false \
+node --experimental-test-module-mocks --test --test-concurrency=1 \
+  tests/unit/session-scope-autoreflect.test.js tests/unit/session-linker-scope.test.js \
+  tests/e2e/security-hardening-fake-data.test.js
+```
+
+Result: 16 passed, 0 failed, 0 cancelled, 0 skipped. It covers true master
+streamable close/idle/expiry/segment paths, legacy SSE close, authenticated
+partial scope denial, exact group metadata filtering, and every patched
+transport function identity after two complete harness lifecycles.
+
+Complete security suite plus E2E: 84 passed, 0 failed, 0 cancelled, 0 skipped.
+
+Related production-path command: 71 tests — 70 passed, 1 failed. The single
+failure is the pre-existing tenant-isolation test that supplies an
+authenticated `keyId` while omitting all fragment key/workspace/group metadata;
+Round 3 intentionally removes that legacy bypass per the accepted contract.
+
+Existing baseline comparison (same pre-task files, excluding the two new Task
+3 scope test files and security-hardening suite): 2488 tests — 2471 passed,
+8 failed, 7 cancelled, 2 skipped. The one-count delta is the intentional
+tenant-isolation contract change above; the remaining failures are the known
+mock-linkage/module-isolation baseline failures.
+
+Static checks: ESLint 0 errors with the existing `sessions.js:512`
+`preserveRedis` unused-parameter warning; `git diff --check` clean.
+
+Round 3 implementation commit:
+`dd49c564e35a999c364441cf514719868a84c3a1` (`fix: preserve master reflect and enforce exact linker scope`).
+The documentation update is a follow-up commit; at final handoff the report
+commit is `HEAD` and this implementation commit is `HEAD^`.
+
 ## Commit
 
 The implementation commit is the parent of the report-update commit at this
