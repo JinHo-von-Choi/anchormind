@@ -33,3 +33,17 @@ legacy calls retain their prior non-strict behavior.
 - The full-suite baseline remains non-clean for the same pre-existing mock-linkage cluster; the focused and related suites for this task are green.
 - The runtime tests use only synthetic rows/fixtures and mocked DB clients; no real DB, Redis, LLM, network, or external effect was used.
 - No real database, Redis, LLM, network, external send, push, PR, merge, or deployment was used.
+
+## Round 3 reviewer-fix
+
+- RED evidence: the new six static bypass checks initially reported **4 failures** (post-processing
+  scope propagation, temporal/conflict scope, auto-case-id/update scope, and touch/assertion scope).
+- Minimal fixes: HotCache now has an exact tuple final defense; remember post-processing, linked/proactive
+  recall, temporal/conflict auto-links, supersede/TTL/assertion/touch/case-id mutations, and case candidates
+  carry explicit `{keyId, workspace, strictScope}`. Hostile fake rows are filtered again at runtime.
+- Focused round-3 + prior security suites: **35 passed, 0 failed**.
+- Related characterization/security suite including linkedTo ownership: **121 passed, 0 failed**.
+- Full unit command: **2524 passed, 7 failed, 7 cancelled, 2 skipped** (2540 total), matching the
+  pre-existing 7-failure/7-cancellation baseline after adding 11 round-3 tests.
+- `node --check` for all modified JavaScript and `git diff --check`: passed.
+- Round-3 tests use synthetic rows and mocked DB clients only; no real DB/Redis/LLM/network or external effect.
