@@ -47,6 +47,7 @@ mock.module("../../lib/tools/embedding.js", {
     computeContentHash: value => `hash:${value}`,
     vectorToSql: vector => `(${(vector || []).join(",")})`,
     generateBatchEmbeddings: async () => [],
+    generateEmbedding: async () => null,
     EMBEDDING_ENABLED: false,
     EMBEDDING_API_KEY: null,
     OPENAI_API_KEY: null,
