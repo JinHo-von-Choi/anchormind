@@ -218,6 +218,36 @@ The documentation updates are follow-up commits. At final handoff the report
 is repository `HEAD`, while the Round 3 implementation commit remains the
 explicitly recorded `dd49c564e35a999c364441cf514719868a84c3a1` above.
 
+## Reviewer fix round 4
+
+The stale tenant-isolation fixture was updated to represent an authenticated
+tenant correctly: every error/decision/procedure fragment now carries matching
+`key_id`, `workspace`, and `group_key_ids`, and the linker call supplies the
+same exact tuple. Production `SessionLinker` code was not weakened.
+
+Focused verification:
+
+```text
+DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false \
+node --experimental-test-module-mocks --test --test-concurrency=1 \
+  tests/unit/tenant-isolation.test.js tests/unit/session-linker-scope.test.js \
+  tests/unit/session-scope-autoreflect.test.js tests/e2e/security-hardening-fake-data.test.js
+```
+
+Result: 30 passed, 0 failed, 0 cancelled, 0 skipped.
+
+Existing baseline comparison (excluding the two new Task 3 scope test files
+and security-hardening suite): 2488 tests — 2472 passed, 7 failed, 7
+cancelled, 2 skipped. This exactly restores the recorded baseline.
+
+Static checks: `npx eslint tests/unit/tenant-isolation.test.js` passed with 0
+errors, and `git diff --check` passed.
+
+Round 4 test commit:
+`4a177c2dd620f43606ddd5fd4b59767d29e21f18` (`test: bind tenant linker fixture to exact scope`).
+The report update is a separate follow-up documentation commit; final report
+identity is recorded at `HEAD`.
+
 ## Commit
 
 The implementation and report commits are kept separate. The final report
