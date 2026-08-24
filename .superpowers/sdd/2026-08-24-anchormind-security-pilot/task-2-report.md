@@ -2,17 +2,22 @@
 
 ## Status
 
-Implemented and committed Task 2 reviewer fix round 2: API-key/workspace exact tuple scope is
-now fail-closed across the pilot's temporal/graph/context reads, linked preview, feedback,
-reconsolidation, contradiction, linker, and forget/amend mutation paths. Workspace-only
-legacy calls retain their prior non-strict behavior.
+Implemented and committed Task 2 reviewer fixes through round 5: API-key/workspace exact tuple
+scope is fail-closed across the pilot's read, link, stats, feedback, reconstruction, event,
+and mutation paths. Workspace-only legacy calls retain their prior non-strict behavior.
 
 ## Commit
 
-- `df08d27 fix: enforce key and workspace scope across memory paths`
-- follow-up commit at current `HEAD`: `fix: close exact tuple scope gaps across memory paths`
-- `727ad5f fix: close task 2 exact tuple bypasses`
+- `d7601f4 fix: close round 5 scope ownership gaps`
+- `552ef0c docs: record task 2 round 4 verification`
+- `fc4a722 fix: close round 4 scope bypasses`
+- `7a4fb3f docs: record task 2 round 3 verification`
+- `f1d3057 fix: close round 3 exact tuple scope bypasses`
+- `783f5eb docs: record round 2 test mock commit`
 - `3badb4a test: complete round 2 embedding mock surface`
+- `727ad5f fix: close task 2 exact tuple bypasses`
+- `57ef206 fix: close exact tuple scope gaps across memory paths`
+- `df08d27 fix: enforce key and workspace scope across memory paths`
 
 ## Tests
 
@@ -62,3 +67,27 @@ legacy calls retain their prior non-strict behavior.
   existing 7-failure/7-cancellation baseline after adding 11 round-4 tests.
 - `node --check` for all modified JavaScript and `git diff --check`: passed.
 - Round-4 tests use synthetic rows and mocked DB clients only; no real DB/Redis/LLM/network or external effect.
+
+## Round 5 reviewer-fix
+
+- RED evidence: the new static boundary suite had **4 failures** and the runtime suite had
+  **5 failures** before implementation. The failures exposed the non-atomic case-event
+  `strictScope` omission, linked-preview scope omission, timeline-outside links, append tuple
+  mismatch, and fragment-only evidence ownership.
+- Minimal fixes: both non-atomic `MemoryRememberer` case-event calls now pass workspace and strict
+  scope; linked preview applies scalar key + workspace exact filtering; HistoryReconstructor requires
+  both link endpoints to be in the scoped timeline for strict and legacy workspace paths and rejects
+  hostile adapter rows; `CaseEventStore.append()` rejects authenticated/payload tuple mismatches;
+  strict `addEvidence()` verifies both the evidence fragment and event source fragment ownership.
+  Adjacent `CaseEventStore` mutation methods were audited; strict `addEdge()` already checked both
+  endpoints and global `deleteExpired()` remains an unscoped maintenance operation.
+- Round-5 RED→GREEN suites: **10 passed, 0 failed** (5 static + 5 runtime).
+- Focused security-hardening glob after round 5: **73 passed, 0 failed, 0 cancelled**.
+- Related characterization/security command: **88 passed, 0 failed, 2 cancelled**; the two
+  cancellations are the pre-existing `memory-stats-workspaces` module-mock linkage issue.
+- Full `npm test`: **2545 passed, 7 failed, 7 cancelled, 2 skipped** (2561 total). Round-4
+  baseline was **2535 passed, 7 failed, 7 cancelled, 2 skipped** (2551 total), so the only
+  count increase is the 10 new round-5 tests; the existing failure/cancellation cluster is unchanged.
+- `node --check` for all round-5 JavaScript and `git diff --check`: passed.
+- Round-5 tests use only synthetic hostile rows and mocked DB clients; no real DB, Redis, LLM,
+  network, external send, push, PR, merge, or deployment was used.
