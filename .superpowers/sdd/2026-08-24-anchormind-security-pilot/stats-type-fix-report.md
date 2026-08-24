@@ -6,7 +6,7 @@ PostgreSQL bigint 문자열로 반환되던 `MemoryConsolidator.getStats()`의 �
 
 ## 현재 상태
 
-`완료` — 1차 수정은 `e609c75`, 엄격한 타입 검증 보강은 후속 로컬 커밋으로 저장한다. Docker/full pilot 재실행과 외부 작업은 하지 않았다.
+`완료` — 1차 수정 `e609c75`, 보고서 커밋 `f5aa30b`, 엄격한 타입 검증 보강 `385b856`가 현재 branch에 저장되어 있다. 이 보고서 수정은 문서-only이며 아직 커밋하지 않았다. Docker/full pilot 재실행과 외부 작업은 하지 않았다.
 
 ## 쉽게 말하면
 
@@ -21,11 +21,11 @@ PostgreSQL이 `COUNT(*)` 결과를 `"1"`이라는 문자열로 보냈는데, MCP
 
 ## 변경 범위
 
-`MemoryConsolidator.getStats()`에서 다음 SQL count 계열 필드와 `total_accesses`만 정수로 정규화한다.
+`MemoryConsolidator.getStats()`에서 다음 SQL count 계열 필드와 `total_accesses`·`total_tokens`를 정수로 정규화한다.
 
-`total`, `permanent`, `hot`, `warm`, `cold`, `embedded`, `topic_count`, `error_count`, `preference_count`, `decision_count`, `procedure_count`, `fact_count`, `relation_count`, `total_accesses`
+`total`, `permanent`, `hot`, `warm`, `cold`, `embedded`, `topic_count`, `error_count`, `preference_count`, `decision_count`, `procedure_count`, `fact_count`, `relation_count`, `total_accesses`, `total_tokens`
 
-기존 `avg_importance`·`avg_utility`의 문자열 포맷과 이미 숫자로 변환하던 `total_tokens`, 스코프 SQL 및 workspace 요약 로직은 변경하지 않았다.
+기존 `avg_importance`·`avg_utility`의 문자열 포맷, 스코프 SQL 및 workspace 요약 로직은 변경하지 않았다.
 
 ## TDD 증거
 
@@ -38,12 +38,16 @@ PostgreSQL이 `COUNT(*)` 결과를 `"1"`이라는 문자열로 보냈는데, MCP
 - GREEN: canonical decimal digit string만 허용하고 `BigInt`로 안전 범위를 먼저 확인한 뒤 `Number`로 변환하도록 수정했다. JS 숫자 입력도 `Number.isSafeInteger`와 비음수 조건을 통과해야 한다.
 - SQL `SUM`인 `total_accesses`·`total_tokens`만 null/undefined를 0으로 대체하며, `COUNT` 계열 null/undefined는 필드 오류로 거부한다.
 
+### bigint 정책
+
+운영 경계의 node-postgres 기본 파서는 PostgreSQL `bigint`를 native `BigInt`가 아닌 십진 문자열로 반환한다. 따라서 이 공개 경계는 canonical 십진 문자열과 안전한 JavaScript 숫자만 허용하며, native `BigInt` 입력은 거부한다. custom bigint parser/타입 오버라이드는 이 경계에서 지원하지 않는다.
+
 ## 검증
 
-- 집중 통계 테스트: `memory-stats-workspaces.test.js` — 3/3 통과
-- 관련 통계·스코프 테스트 묶음 — 43/43 통과
-- `npx eslint lib/memory/consolidate/MemoryConsolidator.js tests/unit/memory-stats-workspaces.test.js` — 통과
-- `node --check` (소스·테스트) — 통과
+- 집중 통계 테스트: `memory-stats-workspaces.test.js` — 5/5 통과
+- 현재 관련 집중 명령(5개 test file) — 45 tests, 11 suites, 45 pass, 0 fail, 0 cancelled
+- `npx eslint` (production 1개 + 관련 test 2개) — 통과
+- `node --check` (production 1개 + 관련 test 2개) — 통과
 - `git diff --check` — 통과
 - null/undefined, canonical `0`/`1`, `Number.MAX_SAFE_INTEGER` 허용 및 malformed/negative/unsafe 값 거부 회귀 테스트 — 통과
 
