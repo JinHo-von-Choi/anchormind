@@ -60,3 +60,13 @@ Read-only preflight also found no local `pgvector/pgvector:pg15` image and no lo
 ## Status
 
 `BLOCKED` by missing local Docker runtime/image and transformers cache. Real PostgreSQL SQL readback, migration, and integration pass remain unverified until those prerequisites are intentionally made available locally. The dedicated volume is never removed by the runner (`down --remove-orphans` only).
+
+## Fix round 3 verification
+
+- Extracted the network tripwire into `tests/fixtures/security-pilot-tripwire.js` so integration and unit tests share the same guard.
+- DNS callback and Promise wrappers now read the destination only from the first DNS API argument for `lookup`, `resolve`, `resolve4/6`, `resolveAny`, all covered record resolvers, and `reverse`; callback, rrtype, and options values are never treated as hostnames.
+- Loopback overload tests cover `options+callback`, callback-only, and Promise calls for lookup/resolve/reverse paths using local stubs, so no real DNS call is made.
+- External `example.com` lookups and `203.0.113.10` reverse lookup are rejected before the original DNS function and recorded by the tripwire.
+- `tests/unit/security-pilot-runner-guards.test.js` and `tests/unit/security-pilot-tripwire.test.js`: 10 passed, 0 failed, 0 cancelled, 0 skipped.
+- `node --check` for the helper, unit test, and integration test, `bash -n scripts/run-security-pilot.sh`, and `git diff --check`: passed.
+- `bash scripts/run-security-pilot.sh`: `BLOCKED: docker is unavailable; refusing external pull`, exit 3. No Docker/network operation was attempted.

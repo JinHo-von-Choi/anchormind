@@ -1,22 +1,16 @@
 import assert from "node:assert/strict";
-import dns from "node:dns";
 import fs from "node:fs";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import pg from "pg";
-import childProcess from "node:child_process";
-import http from "node:http";
-import https from "node:https";
-import net from "node:net";
-import tls from "node:tls";
+import { createNetworkTripwire, isLoopbackHost } from "../fixtures/security-pilot-tripwire.js";
 
 const { Pool } = pg;
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const FIXTURE_PATH = path.join(ROOT, "tests/fixtures/security-pilot.ndjson");
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1"]);
 const DATABASE_URL = process.env.DATABASE_URL ||
   "postgresql://memento_pilot:local_security_pilot_only@127.0.0.1:35434/memento_security_pilot";
-const externalNetworkAttempts = [];
+let externalNetworkAttempts = [];
 const fixture = fs.readFileSync(FIXTURE_PATH, "utf8").trim().split("\n").map(line => JSON.parse(line));
 
 let pool;
@@ -27,81 +21,6 @@ let toolMemoryStats;
 let shutdownPool;
 let generateBatchEmbeddings;
 let vectorToSql;
-
-function hostFromArgs(args) {
-  const [first, second] = args;
-  if (typeof first === "string") {
-    try { return new URL(first).hostname; } catch { return second || first; }
-  }
-  if (first && typeof first === "object") return first.hostname || first.host || "127.0.0.1";
-  return typeof second === "string" ? second : "127.0.0.1";
-}
-
-function installNetworkTripwire() {
-  const originals = [];
-  const guard = (name, args) => {
-    const host = String(hostFromArgs(args)).replace(/^\[|\]$/g, "").toLowerCase();
-    if (!LOOPBACK_HOSTS.has(host)) {
-      externalNetworkAttempts.push({ name, host });
-      const error = new Error(`EXTERNAL_NETWORK_FORBIDDEN: ${host}`);
-      error.code = "EXTERNAL_NETWORK_FORBIDDEN";
-      throw error;
-    }
-  };
-  const wrap = (target, name) => {
-    const original = target[name];
-    target[name] = function (...args) {
-      guard(`${name}`, args);
-      return original.apply(this, args);
-    };
-    originals.push(() => { target[name] = original; });
-  };
-
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async function (...args) {
-    guard("fetch", args);
-    return originalFetch.apply(this, args);
-  };
-  originals.push(() => { globalThis.fetch = originalFetch; });
-  for (const [target, name] of [
-    [net, "connect"], [net, "createConnection"], [tls, "connect"],
-    [http, "request"], [http, "get"], [https, "request"], [https, "get"]
-  ]) wrap(target, name);
-  const dnsNames = [
-    "lookup", "resolve", "resolve4", "resolve6", "resolveAny", "resolveCaa",
-    "resolveCname", "resolveMx", "resolveNaptr", "resolveNs", "resolvePtr",
-    "resolveSoa", "resolveSrv", "resolveTxt", "reverse"
-  ];
-  for (const name of dnsNames) {
-    const original = dns[name];
-    if (typeof original === "function") {
-      dns[name] = function (...args) {
-        guard(`dns.${name}`, args);
-        return original.apply(this, args);
-      };
-      originals.push(() => { dns[name] = original; });
-    }
-    const promiseOriginal = dns.promises[name];
-    if (typeof promiseOriginal === "function") {
-      dns.promises[name] = async function (...args) {
-        guard(`dns.promises.${name}`, args);
-        return promiseOriginal.apply(this, args);
-      };
-      originals.push(() => { dns.promises[name] = promiseOriginal; });
-    }
-  }
-  for (const name of ["spawn", "exec", "execFile", "fork", "spawnSync", "execSync", "execFileSync"]) {
-    const original = childProcess[name];
-    childProcess[name] = function (...args) {
-      externalNetworkAttempts.push({ name: `child_process.${name}`, host: null });
-      const error = new Error("EXTERNAL_NETWORK_FORBIDDEN: child process");
-      error.code = "EXTERNAL_NETWORK_FORBIDDEN";
-      throw error;
-    };
-    originals.push(() => { childProcess[name] = original; });
-  }
-  return { restore: () => { while (originals.length) originals.pop()(); } };
-}
 
 async function queryValue(sql, params = []) {
   const result = await pool.query(sql, params);
@@ -176,7 +95,8 @@ async function memoryStatsWithScope(scope) {
 }
 
 before(async () => {
-  tripwire = installNetworkTripwire();
+  tripwire = createNetworkTripwire();
+  externalNetworkAttempts = tripwire.externalNetworkAttempts;
   pool = new Pool({ connectionString: DATABASE_URL, host: "127.0.0.1", port: 35434 });
   await pool.query("SELECT 1");
   const { env: transformersEnv } = await import("@huggingface/transformers");
@@ -271,5 +191,5 @@ test("automation remains off and no link/consolidation/GC side effect occurs", a
 });
 
 test("pilot external egress remains zero", async () => {
-  assert.deepEqual(externalNetworkAttempts.filter(attempt => !LOOPBACK_HOSTS.has(attempt.host)), []);
+  assert.deepEqual(externalNetworkAttempts.filter(attempt => !isLoopbackHost(attempt.host)), []);
 });
