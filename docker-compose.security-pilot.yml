@@ -20,7 +20,9 @@ services:
 
 networks:
   security_pilot_internal:
-    internal: true
+    driver: bridge
+    name: anchormind_security_pilot_bridge
+    internal: false
 
 volumes:
   security_pilot_pgdata:

@@ -191,7 +191,10 @@ fi
 
 cd "$REPO_ROOT"
 COMPOSE_ARGS=(--project-name anchormind-security-pilot -f "$COMPOSE_FILE" --env-file "$ENV_FILE")
+EXPECTED_NETWORK_KEY=security_pilot_internal
+EXPECTED_NETWORK_NAME=anchormind_security_pilot_bridge
 [[ "$(docker compose "${COMPOSE_ARGS[@]}" config --services)" == "postgres-security-pilot" ]]
+[[ "$(docker compose "${COMPOSE_ARGS[@]}" config --networks)" == "$EXPECTED_NETWORK_KEY" ]]
 
 cleanup() {
   local rc=$?
@@ -210,10 +213,11 @@ docker compose "${COMPOSE_ARGS[@]}" up -d --wait --pull never
 SERVICE_ID="$(docker compose "${COMPOSE_ARGS[@]}" ps -q postgres-security-pilot)"
 [[ -n "$SERVICE_ID" ]]
 [[ "$(docker inspect -f '{{.State.Health.Status}}' "$SERVICE_ID")" == "healthy" ]]
-[[ "$(docker port "$SERVICE_ID" 5432/tcp)" == 127.0.0.1:35434 ]]
+[[ "$(docker port "$SERVICE_ID")" == "5432/tcp -> 127.0.0.1:35434" ]]
 [[ "$(docker inspect -f '{{range .Mounts}}{{.Name}}{{end}}' "$SERVICE_ID")" == anchormind_security_pilot_pgdata ]]
 NETWORK_NAME="$(docker inspect -f '{{range $name, $network := .NetworkSettings.Networks}}{{$name}}{{end}}' "$SERVICE_ID")"
-[[ "$(docker network inspect -f '{{.Internal}}' "$NETWORK_NAME")" == true ]]
+[[ "$NETWORK_NAME" == "$EXPECTED_NETWORK_NAME" ]]
+[[ "$(docker network inspect -f '{{.Internal}}' "$NETWORK_NAME")" == false ]]
 
 # Prefer host PostgreSQL clients when available. Otherwise use only the
 # already-healthy canonical service; never target an arbitrary container.
@@ -250,7 +254,7 @@ run_security_pilot_pg_isready >/dev/null
 echo "[security-pilot] database=memento_security_pilot"
 echo "[security-pilot] binding=127.0.0.1:35434"
 echo "[security-pilot] volume=anchormind_security_pilot_pgdata"
-echo "[security-pilot] network=$NETWORK_NAME internal=true"
+echo "[security-pilot] network=$NETWORK_NAME internal=false"
 
 run_security_pilot_psql -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS vector" >/dev/null
 run_security_pilot_psql -v ON_ERROR_STOP=1 -f - < lib/memory/memory-schema.sql >/dev/null

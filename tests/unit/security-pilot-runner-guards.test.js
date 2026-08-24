@@ -118,3 +118,26 @@ test("security pilot prefers host SQL clients and falls back only to the healthy
   );
   assert.doesNotMatch(runner.slice(clientIndex), /docker exec(?!.*postgres-security-pilot)/);
 });
+
+test("security pilot compose uses one explicit named non-internal bridge and exact loopback binding", () => {
+  const compose = fs.readFileSync(path.join(ROOT, "docker-compose.security-pilot.yml"), "utf8");
+  assert.match(compose, /driver:\s*bridge/);
+  assert.match(compose, /name:\s*anchormind_security_pilot_bridge/);
+  assert.match(compose, /internal:\s*false/);
+  assert.doesNotMatch(compose, /internal:\s*true/);
+  const servicesSection = compose.split(/^networks:\s*$/m, 1)[0];
+  const networksSection = compose.split(/^networks:\s*$/m)[1].split(/^volumes:\s*$/m, 1)[0];
+  assert.equal((servicesSection.match(/^  [^ \n]+:\s*$/gm) || []).length, 1);
+  assert.equal((networksSection.match(/^  [^ \n]+:\s*$/gm) || []).length, 1);
+  assert.match(compose, /-\s*"127\.0\.0\.1:35434:5432"/);
+  assert.doesNotMatch(compose, /-\s*"(?:0\.0\.0\.0|\[?::\]?):\d+:\d+"/);
+});
+
+test("security pilot runner rejects extra networks and published addresses at runtime", () => {
+  const runner = fs.readFileSync(RUNNER, "utf8");
+  assert.match(runner, /docker compose "\$\{COMPOSE_ARGS\[@\]\}" config --networks/);
+  assert.match(runner, /anchormind_security_pilot_bridge/);
+  assert.match(runner, /docker network inspect -f '\{\{\.Internal\}\}' "\$NETWORK_NAME"\)" == false/);
+  assert.match(runner, /docker port "\$SERVICE_ID"\)" == "5432\/tcp -> 127\.0\.0\.1:35434"/);
+  assert.doesNotMatch(runner, /docker network inspect -f '\{\{\.Internal\}\}' "\$NETWORK_NAME"\)" == true/);
+});
