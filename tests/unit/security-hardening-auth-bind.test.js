@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { test } from "node:test";
 
 import { resolveAuthStatus, resolveBindHost } from "../../lib/http/bind.js";
@@ -113,6 +116,57 @@ test("HTTP server factory applies its host interface", async () => {
     assert.equal(server.address().address, "127.0.0.1");
   } finally {
     await closeServer(server);
+  }
+});
+
+test("HTTP server factory injects host for TCP backlog overload", async () => {
+  const server = createHttpServer({
+    requestHandler: (_req, res) => res.end("ok"),
+    host: "127.0.0.1",
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, 128, resolve);
+  });
+  try {
+    assert.equal(server.address().address, "127.0.0.1");
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test("HTTP server factory injects host for undefined-host TCP overload", async () => {
+  const server = createHttpServer({
+    requestHandler: (_req, res) => res.end("ok"),
+    host: "127.0.0.1",
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, undefined, resolve);
+  });
+  try {
+    assert.equal(server.address().address, "127.0.0.1");
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test("HTTP server factory preserves Unix socket paths", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "anchormind-http-"));
+  const socketPath = path.join(directory, "server.sock");
+  const server = createHttpServer({
+    requestHandler: (_req, res) => res.end("ok"),
+    host: "127.0.0.1",
+  });
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(socketPath, resolve);
+    });
+    assert.equal(server.address(), socketPath);
+  } finally {
+    await closeServer(server).catch(() => {});
+    await rm(directory, { recursive: true, force: true });
   }
 });
 
