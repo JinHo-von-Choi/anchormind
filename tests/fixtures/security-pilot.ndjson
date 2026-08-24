@@ -1,0 +1,5 @@
+{"kind":"api_key","id":"00000000-0000-0000-0000-00000000aaaa","name":"security-pilot-a","allowed_workspaces":["pilot-ws-a"]}
+{"kind":"api_key","id":"00000000-0000-0000-0000-00000000bbbb","name":"security-pilot-b","allowed_workspaces":["pilot-ws-a"]}
+{"kind":"fragment","id":"10000000-0000-0000-0000-00000000aaaa","key_id":"00000000-0000-0000-0000-00000000aaaa","workspace":"pilot-ws-a","topic":"security-pilot-synthetic","content":"Synthetic key A workspace A fact","session_id":"pilot-session-a","case_id":"pilot-case-a","type":"fact"}
+{"kind":"fragment","id":"10000000-0000-0000-0000-00000000aaab","key_id":"00000000-0000-0000-0000-00000000aaaa","workspace":"pilot-ws-b","topic":"security-pilot-synthetic","content":"Synthetic key A workspace B fact","session_id":"pilot-session-a","case_id":"pilot-case-a","type":"fact"}
+{"kind":"fragment","id":"10000000-0000-0000-0000-00000000bbbb","key_id":"00000000-0000-0000-0000-00000000bbbb","workspace":"pilot-ws-a","topic":"security-pilot-synthetic","content":"Synthetic key B workspace A fact","session_id":"pilot-session-b","case_id":"pilot-case-a","type":"fact"}

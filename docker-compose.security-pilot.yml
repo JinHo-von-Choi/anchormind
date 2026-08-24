@@ -1,0 +1,27 @@
+services:
+  postgres-security-pilot:
+    image: pgvector/pgvector:pg15
+    container_name: anchormind-security-pilot-postgres
+    environment:
+      POSTGRES_DB: memento_security_pilot
+      POSTGRES_USER: memento_pilot
+      POSTGRES_PASSWORD: local_security_pilot_only
+    ports:
+      - "127.0.0.1:35434:5432"
+    volumes:
+      - security_pilot_pgdata:/var/lib/postgresql/data
+    networks:
+      - security_pilot_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memento_pilot -d memento_security_pilot"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+networks:
+  security_pilot_internal:
+    internal: true
+
+volumes:
+  security_pilot_pgdata:
+    name: anchormind_security_pilot_pgdata
