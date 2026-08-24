@@ -46,7 +46,7 @@ node --experimental-test-module-mocks --test "tests/unit/security-hardening-*.te
   tests/e2e/security-hardening-fake-data.test.js
 ```
 
-Result: 81 passed, 0 failed, 0 cancelled, 0 skipped.
+Result: 82 passed, 0 failed, 0 cancelled, 0 skipped.
 
 Related production-path regression command:
 
@@ -73,9 +73,8 @@ new regression was observed.
 
 Static checks:
 
-- `npx eslint` on all changed Task 3 source/test files: no errors or warnings.
-  The existing `ACCESS_KEY` unused-import warning in `mcp-handler.js` remains
-  outside this round's change.
+- `npx eslint` on all changed Task 3 source/test files: 0 errors; the existing
+  unused `preserveRedis` parameter warning in `sessions.js:508` remains.
 - `git diff --check`: clean.
 
 ## Implementation
@@ -108,6 +107,64 @@ Static checks:
   Gemini availability; the dedicated PostgreSQL pilot is Task 4.
 - The existing baseline failures are unchanged and are not hidden by the new
   security suite.
+
+## Reviewer fix round 2
+
+RED additions and observed failures:
+
+- AutoReflect returned `count: 2` while workspace filtering retained one
+  fragment.
+- `node:dns/promises` was not covered by the tripwire.
+- A harness could not safely run start → close → start → close because the
+  closed flag prevented the second restore.
+- Session close/idle-expiry paths could invoke AutoReflect without an immutable
+  key/group/workspace tuple, and partial SessionLinker scope could fall through
+  to an unrestricted path.
+
+Focused GREEN command:
+
+```text
+DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false \
+node --experimental-test-module-mocks --test --test-concurrency=1 \
+  tests/unit/session-scope-autoreflect.test.js tests/unit/session-linker-scope.test.js \
+  tests/e2e/security-hardening-fake-data.test.js
+```
+
+Result: 13 passed, 0 failed, 0 cancelled, 0 skipped. The new tests cover
+close/idle-expiry/expired cleanup with a cross-workspace fixture, no reflect
+call for missing workspace, filtered fragment count, promise DNS blocking, and
+tripwire restoration across two complete harness lifecycles.
+
+Complete security suite plus Task 3 E2E after the fix:
+
+```text
+DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false \
+node --experimental-test-module-mocks --test --test-concurrency=1 \
+  $(rg --files tests/unit | rg 'security-hardening-.*\\.test\\.js$' | sort) \
+  tests/e2e/security-hardening-fake-data.test.js
+```
+
+Result: 82 passed, 0 failed, 0 cancelled, 0 skipped.
+
+Existing baseline comparison excluded all `security-hardening-*.test.js`
+files and the two new Task 3 scope regression files, so it compares the same
+pre-task file set:
+
+Result: 2488 tests — 2472 passed, 7 failed, 7 cancelled, 2 skipped. This is
+the recorded baseline; the known mock-linkage/module-isolation failures remain.
+
+Static checks after the fix:
+
+- `npx eslint` on all changed source/test files: 0 errors; one pre-existing
+  warning remains at `lib/sessions.js:508` for the unused `preserveRedis`
+  parameter in the legacy close function.
+- `git diff --check`: clean.
+
+The implementation and regression tests are stored in local commit
+`c50670580ceb8f9b051a2ef26386d192f3f064e2` (`fix: close Task 3 scope review gaps`).
+The report update is a separate follow-up documentation commit; at final
+handoff, the report-update commit is repository `HEAD` and the implementation
+commit is `HEAD^`.
 
 ## Commit
 
