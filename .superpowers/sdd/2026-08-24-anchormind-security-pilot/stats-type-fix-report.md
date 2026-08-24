@@ -2,15 +2,15 @@
 
 ## 한줄 결론
 
-PostgreSQL bigint 문자열로 반환되던 `MemoryConsolidator.getStats()`의 공개 count 통계를 숫자로 정규화했고, 회귀 테스트와 관련 통계 테스트를 통과했다.
+PostgreSQL bigint 문자열로 반환되던 `MemoryConsolidator.getStats()`의 공개 count 통계를 안전한 숫자로 정규화했고, 잘못된 값은 필드별 오류로 거부하도록 보강했다.
 
 ## 현재 상태
 
-`완료` — 소스·회귀 테스트 변경은 로컬 커밋 `e609c75` (`fix: normalize memory stats count fields`)에 저장됐다. Docker/full pilot 재실행과 외부 작업은 하지 않았다.
+`완료` — 1차 수정은 `e609c75`, 엄격한 타입 검증 보강은 후속 로컬 커밋으로 저장한다. Docker/full pilot 재실행과 외부 작업은 하지 않았다.
 
 ## 쉽게 말하면
 
-PostgreSQL이 `COUNT(*)` 결과를 `"1"`이라는 문자열로 보냈는데, MCP의 `memory_stats`는 숫자 `1`을 공개 계약으로 사용한다. DB 경계에서 count를 숫자로 바꿔 strict 비교가 일치하도록 했다.
+PostgreSQL이 `COUNT(*)` 결과를 `"1"`이라는 문자열로 보냈는데, MCP의 `memory_stats`는 숫자 `1`을 공개 계약으로 사용한다. DB 경계에서 안전한 숫자만 변환하고, 예를 들어 `"12abc"`는 조용히 `12`로 자르지 않고 오류로 막는다.
 
 ## 원인 추적
 
@@ -32,6 +32,12 @@ PostgreSQL이 `COUNT(*)` 결과를 `"1"`이라는 문자열로 보냈는데, MCP
 - RED: realistic pg bigint string fixture로 회귀 테스트를 먼저 실행했을 때 `total must be a number`, `'string' !== 'number'`로 실패했다.
 - GREEN: production boundary에 최소 정규화를 추가한 뒤 같은 테스트가 통과했다.
 
+### 엄격 검증 보강
+
+- RED: `"12abc"`, `"1.5"`, 음수, `NaN`, 빈 문자열, `Number.MAX_SAFE_INTEGER + 1`을 먼저 넣었을 때 기존 `parseInt`가 일부를 통과시켜 `Missing expected rejection`이 발생했다.
+- GREEN: canonical decimal digit string만 허용하고 `BigInt`로 안전 범위를 먼저 확인한 뒤 `Number`로 변환하도록 수정했다. JS 숫자 입력도 `Number.isSafeInteger`와 비음수 조건을 통과해야 한다.
+- SQL `SUM`인 `total_accesses`·`total_tokens`만 null/undefined를 0으로 대체하며, `COUNT` 계열 null/undefined는 필드 오류로 거부한다.
+
 ## 검증
 
 - 집중 통계 테스트: `memory-stats-workspaces.test.js` — 3/3 통과
@@ -39,6 +45,7 @@ PostgreSQL이 `COUNT(*)` 결과를 `"1"`이라는 문자열로 보냈는데, MCP
 - `npx eslint lib/memory/consolidate/MemoryConsolidator.js tests/unit/memory-stats-workspaces.test.js` — 통과
 - `node --check` (소스·테스트) — 통과
 - `git diff --check` — 통과
+- null/undefined, canonical `0`/`1`, `Number.MAX_SAFE_INTEGER` 허용 및 malformed/negative/unsafe 값 거부 회귀 테스트 — 통과
 
 ## 제한 사항
 

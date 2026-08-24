@@ -28,7 +28,12 @@ const pool = {
       ], rowCount: 3 };
     }
     if (text.includes("avg(importance)")) {
-      return { rows: [{ avg_importance: "0.5", avg_utility: "0.5", total_tokens: "0" }], rowCount: 1 };
+      return { rows: [{
+        total: "0", permanent: "0", hot: "0", warm: "0", cold: "0", embedded: "0",
+        avg_importance: "0.5", topic_count: "0", error_count: "0", preference_count: "0",
+        decision_count: "0", procedure_count: "0", fact_count: "0", relation_count: "0",
+        total_accesses: "0", avg_utility: "0.5", total_tokens: "0"
+      }], rowCount: 1 };
     }
     return { rows: [], rowCount: 1 };
   },

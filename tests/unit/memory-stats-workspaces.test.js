@@ -92,7 +92,7 @@ describe("MemoryConsolidator.getStats — workspaces 필드", () => {
     queryResponses.length = 0;
     queryResponses.push(
       { rows: [{
-        total: "9007199254740001", permanent: "1", hot: "2", warm: "3", cold: "4", embedded: "5",
+        total: String(Number.MAX_SAFE_INTEGER), permanent: "1", hot: "2", warm: "3", cold: "4", embedded: "5",
         avg_importance: "0.5", topic_count: "6", error_count: "7", preference_count: "8",
         decision_count: "9", procedure_count: "10", fact_count: "11", relation_count: "12",
         total_accesses: "13", avg_utility: "0", total_tokens: "14"
@@ -112,7 +112,60 @@ describe("MemoryConsolidator.getStats — workspaces 필드", () => {
     ]) {
       assert.strictEqual(typeof stats[field], "number", `${field} must be a number`);
     }
-    assert.strictEqual(stats.total, 9007199254740001);
+    assert.strictEqual(stats.total, Number.MAX_SAFE_INTEGER);
+  });
+
+  it("SUM aggregate의 null/undefined만 0으로 대체한다", async () => {
+    queryCallLog = [];
+    queryResponses.length = 0;
+    queryResponses.push(
+      { rows: [{
+        total: "0", permanent: "0", hot: "0", warm: "0", cold: "0", embedded: "0",
+        avg_importance: "0", topic_count: "0", error_count: "0", preference_count: "0",
+        decision_count: "0", procedure_count: "0", fact_count: "0", relation_count: "0",
+        total_accesses: null, avg_utility: "0"
+        // total_tokens is intentionally undefined, matching an empty SUM result.
+      }] },
+      { rows: [] },
+      { rows: [] },
+      { rows: [] }
+    );
+
+    const stats = await new MemoryConsolidator().getStats();
+
+    assert.strictEqual(stats.total_accesses, 0);
+    assert.strictEqual(stats.total_tokens, 0);
+  });
+
+  it("통계 정수 필드는 malformed/negative/unsafe 값을 명확한 필드 오류로 거부한다", async () => {
+    const invalidValues = [
+      ["total", "12abc"],
+      ["permanent", "1.5"],
+      ["hot", "-1"],
+      ["warm", null],
+      ["cold", String(BigInt(Number.MAX_SAFE_INTEGER) + 1n)],
+      ["embedded", NaN],
+      ["topic_count", -1],
+      ["error_count", 1.5],
+      ["total_accesses", ""],
+      ["total_tokens", "-1"]
+    ];
+
+    for (const [field, value] of invalidValues) {
+      queryCallLog = [];
+      queryResponses.length = 0;
+      queryResponses.push({ rows: [{
+        total: "0", permanent: "0", hot: "0", warm: "0", cold: "0", embedded: "0",
+        avg_importance: "0", topic_count: "0", error_count: "0", preference_count: "0",
+        decision_count: "0", procedure_count: "0", fact_count: "0", relation_count: "0",
+        total_accesses: "0", avg_utility: "0", total_tokens: "0", [field]: value
+      }] });
+
+      await assert.rejects(
+        () => new MemoryConsolidator().getStats(),
+        new RegExp(`stats\\.${field}`)
+      );
+    }
   });
 
   it("workspace/session 그룹 쿼리가 비어 있으면 빈 구조를 반환한다", async () => {
