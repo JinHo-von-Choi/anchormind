@@ -57,6 +57,7 @@ import { logInfo, logWarn, logError } from "./lib/logger.js";
 import { installProcessGuards }     from "./lib/process-guards.js";
 import { createHttpServer }         from "./lib/http-server.js";
 import { resolveAuthStatus, resolveBindHost } from "./lib/http/bind.js";
+import { isSecurityPilotAutomationOff } from "./lib/security-pilot.js";
 
 /** 임베딩 차원 일관성 검증 */
 import { checkEmbeddingConsistency } from "./scripts/check-embedding-consistency.js";
@@ -321,12 +322,17 @@ server.listen(PORT, resolveBindHost(), () => {
   setWorkerRefs({ embeddingWorkerRef });
   globalEmbeddingWorker = embeddingWorkerRef.current;
 
-  /** Reranker 사전 로드 (비차단 — 실패해도 서버 시작 중단 없음) */
-  preloadReranker().catch(() => {});
+  /** 파일럿에서는 reranker/NLI/백그라운드 자동화를 시작하지 않는다. */
+  if (!isSecurityPilotAutomationOff()) {
+    /** Reranker 사전 로드 (비차단 — 실패해도 서버 시작 중단 없음) */
+    preloadReranker().catch(() => {});
+  } else {
+    logInfo("[SecurityPilot] reranker preload skipped");
+  }
 
   /** 형태소 분석기 워밍업 (비차단 — garu-ko·PorterStemmer 선제 로드, jieba·kuromoji 제외) */
   const tokenizerMode = MEMORY_CONFIG?.morphemeIndex?.tokenizer ?? "local";
-  if (tokenizerMode === "local") {
+  if (!isSecurityPilotAutomationOff() && tokenizerMode === "local") {
     warmupMorpheme()
       .then(() => logInfo("[MorphemeTokenizer] Warmup complete (garu-ko, PorterStemmer)"))
       .catch(err => logWarn("[MorphemeTokenizer] Warmup failed (non-fatal)", { error: err?.message }));
