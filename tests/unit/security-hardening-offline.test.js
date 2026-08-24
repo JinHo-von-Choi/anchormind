@@ -8,12 +8,15 @@ import tls from "node:tls";
 
 const FORBIDDEN = "EXTERNAL_NETWORK_FORBIDDEN";
 
-function hostFrom(value, fallback = "") {
+function hostFrom(value, fallback = "", overloadHost) {
+  if (typeof overloadHost === "string" || (overloadHost && typeof overloadHost === "object")) {
+    return hostFrom(overloadHost, fallback);
+  }
   if (typeof value === "string") {
     try {
       return new URL(value).hostname;
     } catch {
-      return fallback;
+      return value.replace(/^\[|\]$/g, "");
     }
   }
   if (value && typeof value === "object") {
@@ -68,10 +71,10 @@ export function createNetworkTripwire({ allowedHosts = ["127.0.0.1", "localhost"
   };
   originals.push(() => { globalThis.fetch = originalFetch; });
 
-  wrap(net, "connect", (options) => hostFrom(options, "localhost"));
-  wrap(tls, "connect", (options) => hostFrom(options, "localhost"));
-  wrap(http, "request", (options) => hostFrom(options, "localhost"));
-  wrap(https, "request", (options) => hostFrom(options, "localhost"));
+  wrap(net, "connect", (options, overloadHost) => hostFrom(options, "localhost", overloadHost));
+  wrap(tls, "connect", (options, overloadHost) => hostFrom(options, "localhost", overloadHost));
+  wrap(http, "request", (options, overloadHost) => hostFrom(options, "localhost", overloadHost));
+  wrap(https, "request", (options, overloadHost) => hostFrom(options, "localhost", overloadHost));
   wrap(childProcess, "spawn", () => "child_process");
   wrap(childProcess, "execFile", () => "child_process");
 
@@ -101,14 +104,32 @@ test("offline adapter rejects non-allowlisted network destinations", async () =>
   try {
     assert.throws(() => net.connect({ host: "example.test", port: 443 }), { code: FORBIDDEN });
     assert.throws(() => tls.connect({ host: "example.test", port: 443 }), { code: FORBIDDEN });
+    assert.throws(() => net.connect(443, "example.test"), { code: FORBIDDEN });
+    assert.throws(() => tls.connect(443, "example.test"), { code: FORBIDDEN });
     assert.throws(() => http.request("https://example.test/"), { code: FORBIDDEN });
     assert.throws(() => https.request("https://example.test/"), { code: FORBIDDEN });
     assert.throws(() => childProcess.spawn("curl", ["https://example.test/"]), { code: FORBIDDEN });
     assert.throws(() => childProcess.execFile("curl", ["https://example.test/"]), { code: FORBIDDEN });
     await assert.rejects(globalThis.fetch("https://example.test/"), { code: FORBIDDEN });
-    assert.equal(adapter.externalNetworkAttempts.length, 7);
+    assert.equal(adapter.externalNetworkAttempts.length, 9);
   } finally {
     adapter.restore();
+  }
+});
+
+test("offline tripwire inspects host arguments in port-host overloads", () => {
+  const originalNetConnect = net.connect;
+  const originalTlsConnect = tls.connect;
+  net.connect = () => { throw new Error("ORIGINAL_NET_CONNECT_SHOULD_NOT_RUN"); };
+  tls.connect = () => { throw new Error("ORIGINAL_TLS_CONNECT_SHOULD_NOT_RUN"); };
+  const adapter = createOfflineTestAdapter({ allowedHosts: ["127.0.0.1", "localhost"] });
+  try {
+    assert.throws(() => net.connect(443, "example.test"), { code: FORBIDDEN });
+    assert.throws(() => tls.connect(443, "example.test"), { code: FORBIDDEN });
+  } finally {
+    adapter.restore();
+    net.connect = originalNetConnect;
+    tls.connect = originalTlsConnect;
   }
 });
 

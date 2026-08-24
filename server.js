@@ -19,7 +19,7 @@
  */
 
 /** 설정 */
-import { PORT, ACCESS_KEY, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI } from "./lib/config.js";
+import { PORT, ACCESS_KEY, AUTH_DISABLED, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI } from "./lib/config.js";
 import { MEMORY_CONFIG }          from "./config/memory.js";
 import { validateMemoryConfig }   from "./config/validate-memory-config.js";
 
@@ -56,7 +56,7 @@ import { warmup as warmupMorpheme } from "./lib/memory/embedding/MorphemeTokeniz
 import { logInfo, logWarn, logError } from "./lib/logger.js";
 import { installProcessGuards }     from "./lib/process-guards.js";
 import { createHttpServer }         from "./lib/http-server.js";
-import { resolveBindHost }          from "./lib/http/bind.js";
+import { resolveAuthStatus, resolveBindHost } from "./lib/http/bind.js";
 
 /** 임베딩 차원 일관성 검증 */
 import { checkEmbeddingConsistency } from "./scripts/check-embedding-consistency.js";
@@ -299,11 +299,7 @@ server.listen(PORT, resolveBindHost(), () => {
   console.log("Streamable HTTP endpoints: POST/GET/DELETE /mcp");
   console.log("Legacy SSE endpoints: GET /sse, POST /message");
 
-  if (ACCESS_KEY) {
-    console.log("Authentication: ENABLED");
-  } else {
-    console.log("Authentication: DISABLED (set MEMENTO_ACCESS_KEY to enable)");
-  }
+  console.log(`Authentication: ${resolveAuthStatus(ACCESS_KEY, AUTH_DISABLED)}`);
 
   console.log(`Session TTL: ${SESSION_TTL_MS / 60000} minutes`);
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
-import { resolveBindHost } from "../../lib/http/bind.js";
+import { resolveAuthStatus, resolveBindHost } from "../../lib/http/bind.js";
 import { createHttpServer } from "../../lib/http-server.js";
 
 const projectRoot = new URL("../..", import.meta.url).pathname.replace(/\/$/, "");
@@ -56,7 +56,8 @@ export async function runAuthChild({
 function listenOnEphemeralPort(server, host) {
   return new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(0, host, resolve);
+    if (host === undefined) server.listen(0, resolve);
+    else server.listen(0, host, resolve);
   });
 }
 
@@ -100,4 +101,23 @@ test("default listener address is IPv4 loopback", async () => {
   } finally {
     await closeServer(server);
   }
+});
+
+test("HTTP server factory applies its host interface", async () => {
+  const server = createHttpServer({
+    requestHandler: (_req, res) => res.end("ok"),
+    host: "127.0.0.1",
+  });
+  await listenOnEphemeralPort(server);
+  try {
+    assert.equal(server.address().address, "127.0.0.1");
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test("startup auth status reports fail-closed when the key is empty", () => {
+  assert.match(resolveAuthStatus("", false), /REQUIRED|FAIL-CLOSED/i);
+  assert.doesNotMatch(resolveAuthStatus("", false), /DISABLED/i);
+  assert.match(resolveAuthStatus("", true), /DISABLED/i);
 });
