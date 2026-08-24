@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import http from "node:http";
 import dns from "node:dns";
+import https from "node:https";
+import net from "node:net";
+import tls from "node:tls";
+import childProcess from "node:child_process";
 import { SessionActivityTracker } from "../../lib/memory/processors/SessionActivityTracker.js";
 import { fixture } from "../fixtures/security-hardening-data.js";
 import {
@@ -106,6 +110,19 @@ describe("security hardening fake-data MCP boundary", () => {
     assert.equal(result.reflected, false);
   });
 
+  test("AutoReflect preserves true master scope when activity has no authenticated key", async () => {
+    const result = await runAutoReflectFixture({
+      sessionId: "s-master",
+      agentId: "agent-master",
+      keyId: null,
+      groupKeyIds: [],
+      workspace: null
+    });
+    assert.equal(result.calls.llm, 1);
+    assert.equal(result.calls.reflect, 1);
+    assert.equal(result.reflected, true);
+  });
+
   test("fake-data E2E performs zero external network calls", async () => {
     const harness = newHarness();
     await harness.start();
@@ -151,5 +168,38 @@ describe("security hardening fake-data MCP boundary", () => {
     assert.equal(result.stats.total, 1);
     await harness.close();
     assert.strictEqual(globalThis.fetch, originalFetch);
+  });
+
+  test("harness restores every patched transport identity after restart", async () => {
+    const dnsNames = [
+      "lookup", "resolve", "resolve4", "resolve6", "resolveAny", "resolveCaa",
+      "resolveCname", "resolveMx", "resolveNaptr", "resolveNs", "resolvePtr",
+      "resolveSoa", "resolveSrv", "resolveTxt", "reverse"
+    ];
+    const childNames = ["spawn", "exec", "execFile", "fork", "spawnSync", "execSync", "execFileSync"];
+    const modules = [
+      ["fetch", globalThis, "fetch"],
+      ["http.request", http, "request"], ["http.get", http, "get"],
+      ["https.request", https, "request"], ["https.get", https, "get"],
+      ["net.connect", net, "connect"], ["net.createConnection", net, "createConnection"],
+      ["tls.connect", tls, "connect"],
+      ...dnsNames.map(name => [`dns.${name}`, dns, name]),
+      ...dnsNames.map(name => [`dns.promises.${name}`, dns.promises, name]),
+      ...childNames.map(name => [`child_process.${name}`, childProcess, name])
+    ];
+    const originals = modules.map(([, target, name]) => target[name]);
+    const assertRestored = () => {
+      modules.forEach(([label, target, name], index) => {
+        assert.strictEqual(target[name], originals[index], label);
+      });
+    };
+
+    const harness = newHarness();
+    await harness.start();
+    await harness.close();
+    assertRestored();
+    await harness.start();
+    await harness.close();
+    assertRestored();
   });
 });

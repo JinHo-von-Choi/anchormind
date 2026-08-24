@@ -25,4 +25,24 @@ describe("SessionLinker authenticated scope", () => {
     assert.equal(indexCalls, 0);
     assert.equal(storeCalls, 0);
   });
+
+  test("complete authenticated scope filters every fragment by exact group metadata", async () => {
+    const links = [];
+    const linker = new SessionLinker(
+      {
+        async createLinks(pairs) { links.push(...pairs); },
+        async isReachable() { return false; }
+      },
+      null
+    );
+    const fragments = [
+      { id: "e-a", type: "error", caseId: "case-a", key_id: "key-a", workspace: "ws-a", group_key_ids: ["key-a"], keywords: ["auth", "token"] },
+      { id: "d-a", type: "decision", caseId: "case-a", key_id: "key-a", workspace: "ws-a", group_key_ids: ["key-a"], keywords: ["auth", "token"] },
+      { id: "e-foreign-group", type: "error", caseId: "case-a", key_id: "key-a", workspace: "ws-a", group_key_ids: ["key-b"], keywords: ["auth", "token"] }
+    ];
+
+    await linker.autoLinkSessionFragments(fragments, "agent-a", "key-a", ["key-a"], "ws-a");
+
+    assert.deepEqual(links, [{ fromId: "e-a", toId: "d-a", relationType: "caused_by" }]);
+  });
 });

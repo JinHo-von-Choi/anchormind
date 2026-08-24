@@ -4,11 +4,16 @@ import {
   createStreamableSessionWithId,
   streamableSessions,
   closeStreamableSession,
-  cleanupExpiredSessions
+  cleanupExpiredSessions,
+  createLegacySseSession,
+  closeLegacySseSession,
+  currentSegmentId,
+  legacySseSessions
 } from "../../lib/sessions.js";
 
 afterEach(() => {
   streamableSessions.clear();
+  legacySseSessions.clear();
 });
 
 describe("session AutoReflect scope forwarding", () => {
@@ -79,5 +84,40 @@ describe("session AutoReflect scope forwarding", () => {
       "default",
       { keyId: "key-a", groupKeyIds: ["key-a"], workspace: "ws-a" }
     ]);
+  });
+
+  test("master streamable close, idle, and expiry preserve unrestricted AutoReflect", async () => {
+    const calls = [];
+    const autoReflectFn = async (...args) => { calls.push(args); };
+
+    await createStreamableSessionWithId("master-close", true, null, null, null, null);
+    await closeStreamableSession("master-close", { autoReflectFn });
+
+    await createStreamableSessionWithId("master-idle", true, null, null, null, null);
+    streamableSessions.get("master-idle").lastAccessedAt = Date.now() - (26 * 60 * 60 * 1000);
+    await cleanupExpiredSessions({ autoReflectFn });
+
+    await createStreamableSessionWithId("master-expired", true, null, null, null, null);
+    streamableSessions.get("master-expired").expiresAt = Date.now() - 1;
+    await cleanupExpiredSessions({ autoReflectFn });
+
+    assert.deepEqual(calls, [["master-close#1"], ["master-idle#1"], ["master-expired#1"]]);
+  });
+
+  test("master segment rotation and legacy SSE close preserve unrestricted AutoReflect", async () => {
+    const calls = [];
+    const autoReflectFn = async (...args) => { calls.push(args); };
+
+    await createStreamableSessionWithId("master-segment", true, null, null, null, null);
+    const master = streamableSessions.get("master-segment");
+    master.lastToolActivityAt = Date.now() - (60 * 60 * 1000);
+    await currentSegmentId("master-segment", { autoReflectFn });
+
+    const response = { endCalls: 0, end() { this.endCalls++; } };
+    const legacyId = createLegacySseSession(response);
+    await closeLegacySseSession(legacyId, { autoReflectFn });
+
+    assert.deepEqual(calls, [["master-segment#1"], [legacyId]]);
+    assert.equal(response.endCalls, 1);
   });
 });
