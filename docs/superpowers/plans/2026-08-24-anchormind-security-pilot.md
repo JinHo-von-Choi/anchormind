@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 가짜 데이터와 loopback HTTP만 사용하여 인증 fail-closed, loopback bind, API key/workspace 격리, 유지보수·조회 scope, AutoReflect scope, 외부 네트워크 0을 독립 검증 가능한 세 슬라이스로 만든다.
+**Goal:** 세 개의 가짜-data 논리 슬라이스와 별도 격리된 PostgreSQL+pgvector 로컬 파일럿으로 인증 fail-closed, loopback bind, API key/workspace 격리, 유지보수·조회 scope, AutoReflect scope, 외부 egress 0을 독립 검증한다.
 
-**Architecture:** 인증·bind 경계는 순수한 resolveBindHost()와 실제 listener address 검증 seam으로 분리한다. 메모리 read/write/maintenance 경로는 { keyId, groupKeyIds, workspace } scope를 명시적으로 전달하고 SQL과 결과 projection 양쪽에서 같은 경계를 적용한다. 마지막 fake-data E2E는 loopback HTTP의 실제 MCP 진입점에서 도구를 호출하되 DB·Redis·LLM은 fixture로 대체하고 외부 네트워크 tripwire로 범위 밖 연결을 즉시 실패시킨다.
+**Architecture:** 인증·bind 경계는 순수한 resolveBindHost()와 실제 listener address 검증 seam으로 분리한다. 메모리 read/write/maintenance 경로는 { keyId, groupKeyIds, workspace } scope를 명시적으로 전달하고 SQL과 결과 projection 양쪽에서 같은 경계를 적용한다. fake-data E2E는 DB·Redis·LLM을 fixture로 대체하고, 마지막 로컬 DB 파일럿만 별도 PostgreSQL+pgvector 컨테이너의 실제 SQL readback을 사용한다.
 
 **Tech Stack:** Node.js 22 node:test, node:assert/strict, ES modules, node:test module mocks, Node HTTP server, PostgreSQL/Redis/LLM fake adapters.
 
@@ -12,7 +12,11 @@
 
 - 사용자가 승인한 범위는 이 계획의 코드 구현, 로컬 테스트, 가짜 데이터 파일럿, 작업 branch의 로컬 commit까지다. 실제 데이터 접근, 외부 전송, 공개, push, PR, merge, 배포는 수행하지 않는다.
 - 실제 데이터와 운영 자격 증명을 사용하지 않는다. 모든 row, API key, session activity, LLM 응답은 결정론적 fixture로 만든다.
-- 외부 네트워크 연결은 0회여야 한다. 테스트가 자기 자신에게 보내는 127.0.0.1 loopback HTTP만 허용하고 PostgreSQL, Redis, Gemini, DNS, 일반 TCP/TLS, child process provider 호출은 금지한다.
+- Task 1~3은 외부 네트워크 연결 0회여야 한다. 자기 자신에게 보내는 127.0.0.1 loopback HTTP만 허용하고 PostgreSQL, Redis, Gemini, DNS, 일반 TCP/TLS, child process provider 호출은 금지한다.
+- Task 4만 예외적으로 전용 PostgreSQL+pgvector 컨테이너의 127.0.0.1 전용 published port에 연결한다. Task 4도 Redis·Gemini·외부 HTTP·외부 DNS·비 loopback TCP/TLS는 금지하며, Docker network는 internal로 설정하여 egress를 차단한다.
+- Task 4는 기존 dev/test DB, container, named volume, schema 상태, port를 읽거나 변경하지 않는다. 전용 compose 파일·DB 이름·volume 이름·port만 사용한다.
+- Task 4 fixture는 synthetic data뿐이다. EMBEDDING_PROVIDER=transformers와 사전 존재하는 local cache만 사용하며, 모델 cache가 없으면 다운로드하지 않고 BLOCKED 상태(exit 3)로 중단한다.
+- Task 4에서는 auto reflect, automatic graph link, scheduled consolidation, FragmentGC, NLI/LLM preload를 off로 고정한다. 테스트가 명시적으로 호출하는 scope·link·history 경로만 실행한다.
 - 새 보안 테스트는 기존 2472 pass, 7 fail, 7 cancelled 기준선과 별도 실행·보고한다. 기존 실패를 새 테스트의 성공 또는 실패로 합산하지 않는다.
 - 각 슬라이스는 독립 실행 가능하고, failing test → 실패 확인 → 최소 구현 → 통과 확인 → 커밋 순서를 지킨다.
 - 새 unit 테스트는 DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false 환경에서 실행하고 active handle을 남기지 않는다.
@@ -27,6 +31,7 @@
 | Auth + loopback + offline foundation | lib/http/bind.js, tests/unit/security-hardening-auth-bind.test.js, tests/unit/security-hardening-offline.test.js | lib/auth.js, server.js, lib/http-server.js | fail-closed runtime decision, loopback default, network tripwire/fake adapter contract |
 | Key + workspace scope integrity | tests/fixtures/security-hardening-data.js, tests/unit/security-hardening-key-workspace.test.js, tests/unit/security-hardening-maintenance-scope.test.js, tests/unit/security-hardening-read-scope.test.js | ContradictionDetector.js, GraphLinker.js, LinkStore.js, MemoryConsolidator.js, FragmentReader.js, HistoryReconstructor.js, lib/tools/memory.js, MemoryReflector.js | one scope contract across read, write, link, dedup, contradiction, history and stats |
 | Fake-data E2E | tests/fixtures/security-hardening-harness.js, tests/e2e/security-hardening-fake-data.test.js | AutoReflect.js, ReflectProcessor.js, lib/http-server.js, server.js | loopback MCP entry point, fake data lifecycle, AutoReflect propagation, no external network |
+| Dedicated local DB pilot | docker-compose.security-pilot.yml, .env.security-pilot.example, tests/fixtures/security-pilot.ndjson, scripts/run-security-pilot.sh, tests/integration/security-pilot.test.js | none | isolated PostgreSQL+pgvector readback with synthetic data, local transformers cache, and egress/automation gates |
 
 The exact shared scope shape is:
 
@@ -69,7 +74,7 @@ Each optional scope argument preserves master/backward-compatible calls by treat
 **Interfaces:**
 
 - Consumes: existing buildAuthDecision(accessKey, authDisabled, bearerToken) and current HTTP request handler.
-- Produces: resolveBindHost(env), createHttpServer({ requestHandler, host }), runtime validateAuthentication() fail-closed behavior, and a reusable tripwire helper.
+- Produces: resolveBindHost(env), createHttpServer({ requestHandler, host }), runtime validateAuthentication() fail-closed behavior, and createNetworkTripwire({ allowedHosts }) returning { externalNetworkAttempts, restore, assertNoExternalNetworkCalls }.
 - Security rule: empty MEMENTO_ACCESS_KEY is rejected unless MEMENTO_AUTH_DISABLED=true; default bind host is 127.0.0.1.
 
 - [ ] **Step 1: Write the failing test**
@@ -138,7 +143,7 @@ Implement only the two required boundaries:
 
 Change validateAuthentication() so the empty-key branch delegates to the fail-closed decision and returns valid false with error access_key_required unless AUTH_DISABLED is explicitly true. Change server wiring to call server.listen(PORT, resolveBindHost()). Move only the HTTP server construction needed for createHttpServer({ requestHandler, host }); do not change route semantics or add a network dependency.
 
-Add security-hardening-offline.test.js with networkTripwire wrappers for globalThis.fetch, net.connect, tls.connect, http.request, https.request, child_process.spawn, and child_process.execFile. Each wrapper throws EXTERNAL_NETWORK_FORBIDDEN. The test adapter supplies fake DB/Redis/LLM functions and exports assertNoExternalNetworkCalls().
+Add security-hardening-offline.test.js with createNetworkTripwire({ allowedHosts }) wrappers for globalThis.fetch, net.connect, tls.connect, http.request, https.request, child_process.spawn, and child_process.execFile. Each non-allowlisted wrapper throws EXTERNAL_NETWORK_FORBIDDEN and appends to externalNetworkAttempts. The test adapter supplies fake DB/Redis/LLM functions and exports assertNoExternalNetworkCalls().
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -464,9 +469,210 @@ Compare only this existing-file result with the recorded baseline 2472 pass, 7 f
 
 This local commit is executed after the task's focused checks pass; it is never pushed automatically.
 
+### Task 4: Dedicated PostgreSQL+pgvector local fake-data pilot
+
+**Files:**
+
+- Create: docker-compose.security-pilot.yml
+- Create: .env.security-pilot.example
+- Create: tests/fixtures/security-pilot.ndjson
+- Create: scripts/run-security-pilot.sh
+- Create: tests/integration/security-pilot.test.js
+- Modify: none
+
+**Interfaces:**
+
+- Consumes: Task 1–3 scope-aware code and the existing migration runner scripts/migrate.js.
+- Produces: a separate PostgreSQL+pgvector database named memento_security_pilot, bound only to 127.0.0.1:35434, seeded only from tests/fixtures/security-pilot.ndjson, with SQL readback proving key/workspace isolation.
+- Runtime contract: Redis, scheduler, AutoReflect, automatic GraphLinker, consolidation, FragmentGC, NLI preload, and external LLM providers are off. Only explicit test calls run.
+- Model contract: EMBEDDING_PROVIDER=transformers and Xenova/multilingual-e5-small are accepted only when the local model cache already exists. Missing cache is BLOCKED with exit code 3; no download or fallback is attempted.
+
+- [ ] **Step 1: Write the failing integration test and pilot fixture**
+
+Create tests/fixtures/security-pilot.ndjson as synthetic JSON Lines. Use valid UUID-shaped IDs so foreign-key constraints are exercised, and use no real person, property, account, or production content:
+
+    {"kind":"api_key","id":"00000000-0000-0000-0000-00000000aaaa","name":"security-pilot-a","allowed_workspaces":["pilot-ws-a"]}
+    {"kind":"api_key","id":"00000000-0000-0000-0000-00000000bbbb","name":"security-pilot-b","allowed_workspaces":["pilot-ws-a"]}
+    {"kind":"fragment","id":"10000000-0000-0000-0000-00000000aaaa","key_id":"00000000-0000-0000-0000-00000000aaaa","workspace":"pilot-ws-a","topic":"security-pilot-synthetic","content":"Synthetic key A workspace A fact","session_id":"pilot-session-a","case_id":"pilot-case-a","type":"fact"}
+    {"kind":"fragment","id":"10000000-0000-0000-0000-00000000aaab","key_id":"00000000-0000-0000-0000-00000000aaaa","workspace":"pilot-ws-b","topic":"security-pilot-synthetic","content":"Synthetic key A workspace B fact","session_id":"pilot-session-a","case_id":"pilot-case-a","type":"fact"}
+    {"kind":"fragment","id":"10000000-0000-0000-0000-00000000bbbb","key_id":"00000000-0000-0000-0000-00000000bbbb","workspace":"pilot-ws-a","topic":"security-pilot-synthetic","content":"Synthetic key B workspace A fact","session_id":"pilot-session-b","case_id":"pilot-case-a","type":"fact"}
+
+The test file must contain these named cases:
+
+    test("pilot database is the dedicated pgvector database", async () => {
+      const database = await queryValue("SELECT current_database()");
+      const vectorExtension = await queryValue("SELECT extname FROM pg_extension WHERE extname = 'vector'");
+      assert.equal(database, "memento_security_pilot");
+      assert.equal(vectorExtension, "vector");
+    });
+
+    test("NDJSON fixture readback contains exactly the synthetic key/workspace rows", async () => {
+      const rows = await queryRows("SELECT key_id, workspace FROM agent_memory.fragments WHERE topic = $1 ORDER BY key_id, workspace", ["security-pilot-synthetic"]);
+      assert.deepEqual(rows, [
+        { key_id: "00000000-0000-0000-0000-00000000aaaa", workspace: "pilot-ws-a" },
+        { key_id: "00000000-0000-0000-0000-00000000aaaa", workspace: "pilot-ws-b" },
+        { key_id: "00000000-0000-0000-0000-00000000bbbb", workspace: "pilot-ws-a" }
+      ]);
+    });
+
+    test("real PostgreSQL recall scope excludes the other key and workspace", async () => {
+      const result = await recallWithScope({
+        _keyId: "00000000-0000-0000-0000-00000000aaaa",
+        _groupKeyIds: ["00000000-0000-0000-0000-00000000aaaa"],
+        workspace: "pilot-ws-a",
+        keywords: ["security-pilot-synthetic"]
+      });
+      assert.deepEqual(result.fragments.map((row) => row.id), ["10000000-0000-0000-0000-00000000aaaa"]);
+    });
+
+    test("real PostgreSQL history and stats stay within the requested scope", async () => {
+      const history = await fragmentHistoryWithScope("10000000-0000-0000-0000-00000000aaab", {
+        _keyId: "00000000-0000-0000-0000-00000000aaaa",
+        _groupKeyIds: ["00000000-0000-0000-0000-00000000aaaa"],
+        workspace: "pilot-ws-a"
+      });
+      assert.equal(history.success, false);
+      const stats = await memoryStatsWithScope({
+        _keyId: "00000000-0000-0000-0000-00000000aaaa",
+        _groupKeyIds: ["00000000-0000-0000-0000-00000000aaaa"],
+        workspace: "pilot-ws-a"
+      });
+      assert.equal(stats.stats.total, 1);
+    });
+
+    test("automation remains off and no link/consolidation/GC side effect occurs", async () => {
+      assert.equal(process.env.MEMENTO_SECURITY_PILOT_AUTOMATION, "off");
+      assert.equal(process.env.MEMENTO_AUTO_REFLECT, "false");
+      assert.equal(process.env.MEMENTO_GRAPH_LINK, "false");
+      assert.equal(process.env.MEMENTO_CONSOLIDATE, "false");
+      assert.equal(process.env.MEMENTO_GC, "false");
+      assert.equal(await queryValue("SELECT count(*) FROM agent_memory.fragment_links"), "0");
+      assert.equal(await queryValue("SELECT count(*) FROM agent_memory.fragments WHERE topic = 'session_reflect'"), "0");
+    });
+
+    test("pilot external egress remains zero", async () => {
+      assert.deepEqual(externalNetworkAttempts.filter((attempt) => !isLoopback(attempt.host)), []);
+    });
+
+Before constructing the pg Pool, install the Task 1 network tripwire with an allowlist containing only 127.0.0.1 and ::1. The integration test uses a pg Pool with host 127.0.0.1 and port 35434 only; any non-loopback attempt throws and records externalNetworkAttempts. It loads the NDJSON fixture with parameterized INSERT statements, performs all assertions, and removes only rows whose topic is security-pilot-synthetic in this dedicated database during teardown. It must fail rather than skip when the dedicated database is unavailable.
+
+- [ ] **Step 2: Run the test to verify the precondition fails without external download or an existing pilot database**
+
+Run:
+
+    DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false \
+    MEMENTO_SECURITY_PILOT_AUTOMATION=off \
+    node --test --test-concurrency=1 tests/integration/security-pilot.test.js
+
+Expected result before the compose runner exists: connection failure or an explicit BLOCKED result stating that memento_security_pilot at 127.0.0.1:35434 is unavailable. This is a precondition failure, not a pass. The command must not contact a different port, start docker-compose.test.yml, start docker-compose.dev.yml, or download a model.
+
+- [ ] **Step 3: Write the minimal dedicated pilot files**
+
+Create docker-compose.security-pilot.yml with only this service and its private volume/network:
+
+    services:
+      postgres-security-pilot:
+        image: pgvector/pgvector:pg15
+        container_name: anchormind-security-pilot-postgres
+        environment:
+          POSTGRES_DB: memento_security_pilot
+          POSTGRES_USER: memento_pilot
+          POSTGRES_PASSWORD: local_security_pilot_only
+        ports:
+          - "127.0.0.1:35434:5432"
+        volumes:
+          - security_pilot_pgdata:/var/lib/postgresql/data
+        networks:
+          - security_pilot_internal
+        healthcheck:
+          test: ["CMD-SHELL", "pg_isready -U memento_pilot -d memento_security_pilot"]
+          interval: 2s
+          timeout: 5s
+          retries: 15
+
+    networks:
+      security_pilot_internal:
+        internal: true
+
+    volumes:
+      security_pilot_pgdata:
+        name: anchormind_security_pilot_pgdata
+
+Create .env.security-pilot.example with only local synthetic settings:
+
+    SECURITY_PILOT_COMPOSE_FILE=docker-compose.security-pilot.yml
+    SECURITY_PILOT_ENV_FILE=.env.security-pilot.example
+    SECURITY_PILOT_DB_HOST=127.0.0.1
+    SECURITY_PILOT_DB_PORT=35434
+    SECURITY_PILOT_DB_NAME=memento_security_pilot
+    SECURITY_PILOT_DB_USER=memento_pilot
+    SECURITY_PILOT_DB_PASSWORD=local_security_pilot_only
+    DATABASE_URL=postgresql://memento_pilot:local_security_pilot_only@127.0.0.1:35434/memento_security_pilot
+    EMBEDDING_PROVIDER=transformers
+    EMBEDDING_MODEL=Xenova/multilingual-e5-small
+    EMBEDDING_DIMENSIONS=384
+    EMBEDDING_API_KEY=
+    HF_HUB_OFFLINE=1
+    TRANSFORMERS_OFFLINE=1
+    SECURITY_PILOT_MODEL_CACHE=$HOME/.cache/huggingface/hub/models--Xenova--multilingual-e5-small
+    MEMENTO_SECURITY_PILOT_AUTOMATION=off
+    MEMENTO_AUTO_REFLECT=false
+    MEMENTO_GRAPH_LINK=false
+    MEMENTO_CONSOLIDATE=false
+    MEMENTO_GC=false
+    MEMENTO_CONSOLIDATE_SPLIT_LONG=false
+    MEMENTO_CONSOLIDATE_DETECT_CONTRADICT=false
+    MEMENTO_CONSOLIDATE_COMPRESS_OLD=false
+    ENABLE_RECONSOLIDATION=false
+    MCP_IDLE_REFLECT_HOURS=876000
+
+Implement scripts/run-security-pilot.sh with these exact gates and order:
+
+1. Set `set -euo pipefail`, resolve the repository root, and load only SECURITY_PILOT_ENV_FILE.
+2. Verify docker and docker compose are available. Verify `docker image inspect pgvector/pgvector:pg15` succeeds; otherwise print `BLOCKED: pgvector image is not present locally; refusing external pull` and exit 3.
+3. Verify SECURITY_PILOT_MODEL_CACHE contains a snapshot config.json and tokenizer.json. If either is absent, print `BLOCKED: transformers model cache is missing; refusing external download` and exit 3.
+4. Verify no listener is using 35432 or 35433 and no existing compose project is selected. Do not call docker compose against either existing compose file.
+5. Run `docker compose -f docker-compose.security-pilot.yml --env-file .env.security-pilot.example up -d --wait` and assert the service is healthy, the published binding is 127.0.0.1:35434, the named volume is anchormind_security_pilot_pgdata, and the network has Internal=true.
+6. Set DATABASE_URL from the pilot env and run `node scripts/migrate.js`. Run only the requested integration test with test concurrency 1. Do not start server.js, Redis, scheduler, worker, AutoReflect, GraphLinker, consolidation, FragmentGC, or NLI preload.
+7. Perform authoritative readback with `psql` against DATABASE_URL: current_database() must be memento_security_pilot, vector must be installed, fixture count must be 3, and all key/workspace pairs must match the NDJSON file.
+8. Confirm the integration tripwire reports zero non-loopback connection attempts and the internal Docker network reports `Internal=true`.
+9. On exit, run `docker compose -f docker-compose.security-pilot.yml --env-file .env.security-pilot.example down --remove-orphans` without `-v`; never touch any other volume or container. Preserve the dedicated synthetic volume for inspection.
+
+- [ ] **Step 4: Run the dedicated pilot and verify real SQL readback**
+
+Run exactly:
+
+    bash scripts/run-security-pilot.sh
+
+Expected result:
+
+- Exit 0 only when migrations, fixture load, PostgreSQL+pgvector readback, real recall/history/stats scope assertions, automation-off assertions, and egress checks pass.
+- The script prints the dedicated database identity, vector extension, bound address, named volume, fixture count, and key/workspace pairs from the actual database.
+- The model is loaded from the existing local transformers cache only. A missing cache produces BLOCKED/exit 3 and no download attempt.
+- Existing dev/test compose projects, ports 35432/35433, and volumes are unchanged.
+
+After the script finishes, run the integration test directly once more only if the dedicated container is intentionally left running:
+
+    DOTENV_CONFIG_PATH=.env.security-pilot.example \
+    DATABASE_URL=postgresql://memento_pilot:local_security_pilot_only@127.0.0.1:35434/memento_security_pilot \
+    EMBEDDING_PROVIDER=transformers EMBEDDING_MODEL=Xenova/multilingual-e5-small \
+    HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+    MEMENTO_SECURITY_PILOT_AUTOMATION=off MEMENTO_AUTO_REFLECT=false \
+    MEMENTO_GRAPH_LINK=false MEMENTO_CONSOLIDATE=false MEMENTO_GC=false \
+    node --test --test-concurrency=1 tests/integration/security-pilot.test.js
+
+- [ ] **Step 5: Commit the local pilot artifacts**
+
+    git add docker-compose.security-pilot.yml .env.security-pilot.example \
+      tests/fixtures/security-pilot.ndjson scripts/run-security-pilot.sh \
+      tests/integration/security-pilot.test.js
+    git commit -m "test: add isolated postgres security pilot"
+
+This commit is local to the approved work branch and is never pushed automatically.
+
 ## Verification and Stop Conditions
 
-The pilot is accepted only when all three slices pass their focused commands and the new security suite reports fail 0, cancelled 0, and skipped 0.
+The pilot is accepted only when the three logic slices and the dedicated local database pilot pass their focused commands and the new security suite reports fail 0, cancelled 0, and skipped 0.
 
 Stop immediately when any of these occurs:
 
