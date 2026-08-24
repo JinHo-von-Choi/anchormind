@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import dns from "node:dns";
 import fs from "node:fs";
 import path from "node:path";
 import { after, before, test } from "node:test";
@@ -23,6 +24,9 @@ let tripwire;
 let fixtureLoaded = false;
 let MemoryManager;
 let toolMemoryStats;
+let shutdownPool;
+let generateBatchEmbeddings;
+let vectorToSql;
 
 function hostFromArgs(args) {
   const [first, second] = args;
@@ -63,6 +67,18 @@ function installNetworkTripwire() {
     [net, "connect"], [net, "createConnection"], [tls, "connect"],
     [http, "request"], [http, "get"], [https, "request"], [https, "get"]
   ]) wrap(target, name);
+  const dnsOriginal = dns.lookup;
+  dns.lookup = function (...args) {
+    guard("dns.lookup", args);
+    return dnsOriginal.apply(this, args);
+  };
+  originals.push(() => { dns.lookup = dnsOriginal; });
+  const dnsPromisesOriginal = dns.promises.lookup;
+  dns.promises.lookup = async function (...args) {
+    guard("dns.promises.lookup", args);
+    return dnsPromisesOriginal.apply(this, args);
+  };
+  originals.push(() => { dns.promises.lookup = dnsPromisesOriginal; });
   for (const name of ["spawn", "exec", "execFile", "fork", "spawnSync", "execSync", "execFileSync"]) {
     const original = childProcess[name];
     childProcess[name] = function (...args) {
@@ -89,6 +105,7 @@ async function queryRows(sql, params = []) {
 async function loadFixture() {
   const keys = fixture.filter(row => row.kind === "api_key");
   const fragments = fixture.filter(row => row.kind === "fragment");
+  const embeddings = await generateBatchEmbeddings(fragments.map(row => row.content));
   await pool.query("BEGIN");
   try {
     for (const key of keys) {
@@ -104,15 +121,15 @@ async function loadFixture() {
       await pool.query(
         `INSERT INTO agent_memory.fragments
            (id, content, topic, keywords, type, content_hash, agent_id,
-            key_id, workspace, session_id, case_id, embedding)
-         VALUES ($1, $2, $3, $4, $5, $6, 'default', $7, $8, $9, $10, NULL)
+           key_id, workspace, session_id, case_id, embedding)
+         VALUES ($1, $2, $3, $4, $5, $6, 'default', $7, $8, $9, $10, $11::vector)
          ON CONFLICT (id) DO UPDATE SET
            content = EXCLUDED.content, topic = EXCLUDED.topic,
            keywords = EXCLUDED.keywords, key_id = EXCLUDED.key_id,
            workspace = EXCLUDED.workspace, session_id = EXCLUDED.session_id,
            case_id = EXCLUDED.case_id, valid_to = NULL`,
         [row.id, row.content, row.topic, [row.topic], row.type, `security-pilot-hash-${row.id.slice(-4)}`,
-          row.key_id, row.workspace, row.session_id, row.case_id]
+          row.key_id, row.workspace, row.session_id, row.case_id, vectorToSql(embeddings[fragments.indexOf(row)])]
       );
     }
     await pool.query("COMMIT");
@@ -128,7 +145,12 @@ function scopeFor(keyId, workspace) {
 
 async function recallWithScope(scope) {
   const manager = MemoryManager.getInstance();
-  return manager.recall({ ...scope, keywords: ["security-pilot-synthetic"], includeLinks: false });
+  return manager.recall({
+    ...scope,
+    text: "Synthetic key A workspace A fact",
+    includeLinks: false,
+    fragmentCount: 1
+  });
 }
 
 async function fragmentHistoryWithScope(id, scope) {
@@ -145,8 +167,20 @@ before(async () => {
   tripwire = installNetworkTripwire();
   pool = new Pool({ connectionString: DATABASE_URL, host: "127.0.0.1", port: 35434 });
   await pool.query("SELECT 1");
+  const { env: transformersEnv } = await import("@huggingface/transformers");
+  const snapshot = process.env.SECURITY_PILOT_MODEL_SNAPSHOT;
+  assert.ok(snapshot, "security pilot model snapshot must be selected by the runner");
+  transformersEnv.cacheDir = process.env.SECURITY_PILOT_MODEL_CACHE
+    ? path.dirname(process.env.SECURITY_PILOT_MODEL_CACHE)
+    : path.dirname(path.dirname(path.dirname(snapshot)));
+  transformersEnv.localModelPath = snapshot;
+  transformersEnv.allowLocalModels = true;
+  transformersEnv.allowRemoteModels = false;
+  process.env.EMBEDDING_MODEL = snapshot;
   await import("../../lib/memory/MemoryManager.js").then(module => { MemoryManager = module.MemoryManager; });
   ({ tool_memoryStats: toolMemoryStats } = await import("../../lib/tools/memory.js"));
+  ({ shutdownPool } = await import("../../lib/tools/db.js"));
+  ({ generateBatchEmbeddings, vectorToSql } = await import("../../lib/tools/embedding.js"));
   await loadFixture();
   fixtureLoaded = true;
 });
@@ -162,6 +196,7 @@ after(async () => {
       }
       await pool.end();
     }
+    await shutdownPool?.();
   } finally {
     tripwire?.restore();
     console.log(`[security-pilot] external_network_attempts=${externalNetworkAttempts.length}`);
@@ -171,6 +206,15 @@ after(async () => {
 test("pilot database is the dedicated pgvector database", async () => {
   assert.equal(await queryValue("SELECT current_database()"), "memento_security_pilot");
   assert.equal(await queryValue("SELECT extname FROM pg_extension WHERE extname = 'vector'"), "vector");
+  assert.equal(await queryValue(
+    "SELECT format_type(a.atttypid, a.atttypmod) FROM pg_attribute a " +
+      "JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace " +
+      "WHERE n.nspname = 'agent_memory' AND c.relname = 'fragments' AND a.attname = 'embedding'"
+  ), "vector(384)");
+  assert.equal(await queryValue(
+    "SELECT count(*) FROM agent_memory.fragments WHERE topic = $1 AND embedding IS NOT NULL",
+    ["security-pilot-synthetic"]
+  ), "3");
 });
 
 test("NDJSON fixture readback contains exactly the synthetic key/workspace rows", async () => {
@@ -178,11 +222,10 @@ test("NDJSON fixture readback contains exactly the synthetic key/workspace rows"
     "SELECT key_id, workspace FROM agent_memory.fragments WHERE topic = $1 ORDER BY key_id, workspace",
     ["security-pilot-synthetic"]
   );
-  assert.deepEqual(rows, [
-    { key_id: "00000000-0000-0000-0000-00000000aaaa", workspace: "pilot-ws-a" },
-    { key_id: "00000000-0000-0000-0000-00000000aaaa", workspace: "pilot-ws-b" },
-    { key_id: "00000000-0000-0000-0000-00000000bbbb", workspace: "pilot-ws-a" }
-  ]);
+  const expected = fixture.filter(row => row.kind === "fragment")
+    .map(row => ({ key_id: row.key_id, workspace: row.workspace }))
+    .sort((left, right) => `${left.key_id}|${left.workspace}`.localeCompare(`${right.key_id}|${right.workspace}`));
+  assert.deepEqual(rows, expected);
 });
 
 test("real PostgreSQL recall scope excludes the other key and workspace", async () => {
