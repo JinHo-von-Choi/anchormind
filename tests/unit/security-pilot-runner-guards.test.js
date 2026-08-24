@@ -141,3 +141,26 @@ test("security pilot runner rejects extra networks and published addresses at ru
   assert.match(runner, /docker port "\$SERVICE_ID"\)" == "5432\/tcp -> 127\.0\.0\.1:35434"/);
   assert.doesNotMatch(runner, /docker network inspect -f '\{\{\.Internal\}\}' "\$NETWORK_NAME"\)" == true/);
 });
+
+test("security pilot runner accepts one exact TAP egress diagnostic", () => {
+  const runner = fs.readFileSync(RUNNER, "utf8");
+  const functionMatch = runner.match(/parse_security_pilot_egress_log\(\) \{[\s\S]*?^\}/m);
+  assert.ok(functionMatch, "runner must expose the focused egress parser");
+  const cases = [
+    { name: "plain marker", output: "1..1\nok 1 - pilot\n[security-pilot] external_network_attempts=0\n", expected: 0 },
+    { name: "TAP diagnostic marker", output: "1..1\nok 1 - pilot\n# [security-pilot] external_network_attempts=0\n", expected: 0 },
+    { name: "nonzero marker", output: "# [security-pilot] external_network_attempts=1\n", expected: 1 },
+    { name: "malformed marker", output: "# [security-pilot] external_network_attempts=0 extra\n", expected: 1 },
+    { name: "duplicate markers", output: "# [security-pilot] external_network_attempts=0\n[security-pilot] external_network_attempts=0\n", expected: 1 }
+  ];
+
+  for (const example of cases) {
+    const file = path.join("/tmp", `security-pilot-egress-${process.pid}-${example.name.replaceAll(" ", "-")}.log`);
+    fs.writeFileSync(file, example.output);
+    const result = spawnSync("bash", ["-c", `${functionMatch[0]}\nparse_security_pilot_egress_log "$1"`, "runner-test", file], {
+      encoding: "utf8"
+    });
+    fs.rmSync(file, { force: true });
+    assert.equal(result.status, example.expected, example.name);
+  }
+});

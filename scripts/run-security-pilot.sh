@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+parse_security_pilot_egress_log() {
+  local log_file="$1"
+  awk '
+    $0 == "[security-pilot] external_network_attempts=0" ||
+    $0 == "# [security-pilot] external_network_attempts=0" { count++ }
+    END { exit (count == 1 ? 0 : 1) }
+  ' "$log_file"
+}
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 if [[ -n "${COMPOSE_FILE:-}" ]]; then
   echo "BLOCKED: an existing compose file is selected; refusing non-pilot compose" >&2
@@ -291,7 +300,10 @@ EMBEDDING_PROVIDER=transformers \
 EMBEDDING_MODEL="$SNAPSHOT_DIR" \
 EMBEDDING_DIMENSIONS=384 \
 node --test --test-concurrency=1 tests/integration/security-pilot.test.js | tee /tmp/anchormind-security-pilot-test.log
-grep -Fxq '[security-pilot] external_network_attempts=0' /tmp/anchormind-security-pilot-test.log
+if ! parse_security_pilot_egress_log /tmp/anchormind-security-pilot-test.log; then
+  echo "BLOCKED: expected exactly one external-network egress diagnostic" >&2
+  exit 1
+fi
 
 [[ "$(run_security_pilot_psql -Atqc 'SELECT current_database()')" == memento_security_pilot ]]
 [[ "$(run_security_pilot_psql -Atqc "SELECT extname FROM pg_extension WHERE extname = 'vector'")" == vector ]]
