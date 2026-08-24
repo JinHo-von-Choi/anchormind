@@ -104,7 +104,7 @@ const ADMIN_BASE = "/v1/internal/model/nothing";
 /**
  * HTTP 서버
  */
-const server = createHttpServer({ requestHandler: async (req, res) => {
+const server = createHttpServer({ host: resolveBindHost(), requestHandler: async (req, res) => {
   const startTime = process.hrtime.bigint();
 
   if (!validateOrigin(req, res)) {
