@@ -12,6 +12,7 @@ legacy calls retain their prior non-strict behavior.
 - `df08d27 fix: enforce key and workspace scope across memory paths`
 - follow-up commit at current `HEAD`: `fix: close exact tuple scope gaps across memory paths`
 - `727ad5f fix: close task 2 exact tuple bypasses`
+- `3badb4a test: complete round 2 embedding mock surface`
 
 ## Tests
 
