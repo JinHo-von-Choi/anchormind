@@ -162,9 +162,9 @@ Static checks after the fix:
 
 The implementation and regression tests are stored in local commit
 `c50670580ceb8f9b051a2ef26386d192f3f064e2` (`fix: close Task 3 scope review gaps`).
-The report update is a separate follow-up documentation commit; at final
-handoff, the report-update commit is repository `HEAD` and the implementation
-commit is `HEAD^`.
+The report update is a separate follow-up documentation commit. Round 2's
+report commit was `04756bf29d3ee63b256ecaa3325ad7744fbab408`; later Round 3
+commits supersede it.
 
 ## Reviewer fix round 3
 
@@ -214,11 +214,12 @@ Static checks: ESLint 0 errors with the existing `sessions.js:512`
 
 Round 3 implementation commit:
 `dd49c564e35a999c364441cf514719868a84c3a1` (`fix: preserve master reflect and enforce exact linker scope`).
-The documentation update is a follow-up commit; at final handoff the report
-commit is `HEAD` and this implementation commit is `HEAD^`.
+The documentation updates are follow-up commits. At final handoff the report
+is repository `HEAD`, while the Round 3 implementation commit remains the
+explicitly recorded `dd49c564e35a999c364441cf514719868a84c3a1` above.
 
 ## Commit
 
-The implementation commit is the parent of the report-update commit at this
-file's final handoff (`git show HEAD^`). The report intentionally does not
-hardcode a pre-amend hash.
+The implementation and report commits are kept separate. The final report
+commit is repository `HEAD`; implementation commits are explicitly recorded
+above rather than inferred from a pre-amend parent hash.
