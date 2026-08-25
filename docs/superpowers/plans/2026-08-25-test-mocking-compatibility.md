@@ -35,21 +35,21 @@
 - Consumes: existing test stubs and current production named exports.
 - Produces: module mocks that Node resolves and injects before the tested modules import.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Use the existing failing tests as the regression specification. Do not add production behavior or weaken assertions. The current baseline failure is the module-instantiation error for `ConsolidatorGC`, `MEMORY_CONFIG`, `SessionActivityTracker`, or `queryWithAgentVector`.
 
-- [ ] **Step 2: Run the affected tests to verify the baseline failure**
+- [x] **Step 2: Run the affected tests to verify the baseline failure**
 
 Run:
 
 ```bash
-npm test -- tests/unit/consolidator-metrics.test.js tests/unit/consolidator-split-anchor-guard.test.js tests/unit/consolidator-split-child-keywords.test.js tests/unit/consolidator-split-child-quality.test.js tests/unit/consolidator-split-partial-yield.test.js tests/unit/consolidator-split-subject-guard.test.js tests/unit/resources-active-session.test.js tests/unit/search-scope-type-topic.test.js
+DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false node --experimental-test-module-mocks --test tests/unit/consolidator-metrics.test.js tests/unit/consolidator-split-anchor-guard.test.js tests/unit/consolidator-split-child-keywords.test.js tests/unit/consolidator-split-child-quality.test.js tests/unit/consolidator-split-partial-yield.test.js tests/unit/consolidator-split-subject-guard.test.js tests/unit/resources-active-session.test.js tests/unit/search-scope-type-topic.test.js
 ```
 
 Expected: the legacy module-mocking errors occur before the affected assertions run.
 
-- [ ] **Step 3: Apply the minimal test-only compatibility change**
+- [x] **Step 3: Apply the minimal test-only compatibility change**
 
 For every `mock.module("../../...", { exports: { ... } })` in the eight files:
 
@@ -65,11 +65,11 @@ mock.module(moduleUrl, {
 
 Use one URL constant per mocked module, preserve the existing stub names and bodies verbatim, and use the exact relative path already used by that test. For mocked default exports, preserve the repository's current default-export shape instead of inventing a new one.
 
-- [ ] **Step 4: Run the focused tests to verify the fix**
+- [x] **Step 4: Run the focused tests to verify the fix**
 
-Run the same eight-file command from Step 2. Expected: all affected tests pass and no module-instantiation error remains.
+Run the same explicit eight-file Node test-runner command from Step 2. Result: 31 tests passed, 0 failed, 0 cancelled, and 0 skipped; no module-instantiation error remains.
 
-- [ ] **Step 5: Run repository verification**
+- [x] **Step 5: Run repository verification**
 
 Run:
 
@@ -79,11 +79,13 @@ npm run lint
 git diff --check
 ```
 
-Expected: `npm test` exits 0 with zero failures/cancellations, lint exits 0, and `git diff --check` emits no output.
+Result: `npm test` exited 0 with 2643 passed, 0 failed, 0 cancelled, and 2 pre-existing skipped tests; lint exited 0 with 128 existing warnings and 0 errors; `git diff --check` emitted no output.
 
-- [ ] **Step 6: Commit the bounded change**
+- [x] **Step 6: Commit the bounded change**
 
 ```bash
 git add tests/unit/consolidator-metrics.test.js tests/unit/consolidator-split-anchor-guard.test.js tests/unit/consolidator-split-child-keywords.test.js tests/unit/consolidator-split-child-quality.test.js tests/unit/consolidator-split-partial-yield.test.js tests/unit/consolidator-split-subject-guard.test.js tests/unit/resources-active-session.test.js tests/unit/search-scope-type-topic.test.js docs/superpowers/specs/2026-08-25-test-mocking-compatibility-design.md docs/superpowers/plans/2026-08-25-test-mocking-compatibility.md
 git commit -m "test: modernize stale module mocks"
 ```
+
+Implementation commit: `db88aea`.
