@@ -5,6 +5,7 @@
 - Base: `48db144`
 - Changes are limited to fail-closed background graph automation, health/metrics authentication, exact topic/working-memory scope propagation, and offline local-model loading.
 - No real data, external provider, deployment, push, PR, or merge was used. Node/application non-loopback outbound attempts were not exercised in this report; PostgreSQL container packets are not observed by the pilot tripwire.
+- The canonical egress field for a pilot run is `external_network_attempts=0`; this historical branch report did not execute that runtime gate.
 
 ## Implemented
 

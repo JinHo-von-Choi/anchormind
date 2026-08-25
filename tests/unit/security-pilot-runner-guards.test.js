@@ -302,7 +302,14 @@ test("security pilot documents keep egress evidence scoped and reject broad clai
     .filter(name => name.endsWith(".md"))
     .map(name => path.join(reportDir, name))];
   const documents = paths.map(filePath => ({ filePath, text: fs.readFileSync(filePath, "utf8") }));
-  const corpus = documents.map(({ text }) => text).join("\n");
+  const governedDocuments = [
+    specPath,
+    planPath,
+    path.join(reportDir, "final-gate-fix-report.md"),
+    path.join(reportDir, "tap-egress-fix-report.md"),
+    path.join(reportDir, "task-4-report.md"),
+    path.join(reportDir, "whole-branch-fix-report.md")
+  ].map(filePath => ({ filePath, text: fs.readFileSync(filePath, "utf8") }));
   const forbidden = [
     /네트워크 외부 전송은 0건/,
     /외부 네트워크 연결 0회/,
@@ -315,14 +322,23 @@ test("security pilot documents keep egress evidence scoped and reject broad clai
     /Docker-level firewall claim(?! is made)/i,
     /PostgreSQL(?: container| 컨테이너)[\s\S]{0,100}(?:firewall|방화벽)[\s\S]{0,80}(?:block(?:ed|s)?|차단(?:됨|한다)?|zero|0건|0회)/i
   ];
-  for (const pattern of forbidden) {
-    assert.doesNotMatch(corpus, pattern, `forbidden broad egress claim: ${pattern}`);
+  for (const { filePath, text } of documents) {
+    for (const pattern of forbidden) {
+      assert.doesNotMatch(text, pattern, `forbidden broad egress claim in ${filePath}: ${pattern}`);
+    }
   }
-  assert.match(corpus, /Node\/application[\s\S]{0,180}(?:non-loopback )?outbound attempts[\s\S]{0,100}(?:0|zero)/i);
-  assert.match(corpus, /PostgreSQL(?: container| 컨테이너)[\s\S]{0,160}(?:not observed|관찰 범위가 아니다|관찰되지)/i);
-  assert.match(corpus, /(?:PostgreSQL 하나|one named non-internal bridge|sole bridge attachment|only service)[\s\S]{0,180}(?:PostgreSQL|service|container)/i);
-  assert.match(corpus, /127\.0\.0\.1:35434/);
-  assert.match(corpus, /(?:external provider|외부 provider|LLM_PRIMARY=none|external endpoint)[\s\S]{0,160}(?:off|empty|disabled|none|비활성|없)/i);
+  const scopedZero = /(?:Node\/application[\s\S]{0,180}(?:non-loopback )?(?:outbound attempts|outbound-attempt)[\s\S]{0,100}(?:0건|zero\b)|external_network_attempts=0)/i;
+  const packetLimitation = /PostgreSQL(?: container| 컨테이너)[\s\S]{0,220}(?:not observed|관찰 범위가 아니다|관찰되지|outside[\s\S]{0,40}observation scope|outside[\s\S]{0,40}tripwire)/i;
+  for (const { filePath, text } of governedDocuments) {
+    assert.match(text, scopedZero, `missing canonical Node/application zero evidence in ${filePath}`);
+    assert.match(text, packetLimitation, `missing PostgreSQL packet observation limitation in ${filePath}`);
+  }
+  const designOrPlan = governedDocuments.filter(({ filePath }) => filePath === specPath || filePath === planPath);
+  for (const { filePath, text } of designOrPlan) {
+    assert.match(text, /(?:단일 PostgreSQL|PostgreSQL 하나|one named non-internal bridge|sole bridge attachment|only service)[\s\S]{0,180}(?:PostgreSQL|service|container)/i, `missing single PostgreSQL service/container mitigation in ${filePath}`);
+    assert.match(text, /127\.0\.0\.1:35434/, `missing loopback-only published port in ${filePath}`);
+    assert.match(text, /(?:external provider|외부 provider|LLM_PRIMARY=none|external endpoint)[\s\S]{0,160}(?:off|empty|disabled|none|비활성|부재|없)/i, `missing external-provider absence in ${filePath}`);
+  }
 });
 
 test("security pilot assertion helper fails closed under Bash 3.2 semantics", () => {

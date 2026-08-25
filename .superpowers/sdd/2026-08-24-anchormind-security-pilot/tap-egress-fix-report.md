@@ -2,7 +2,7 @@
 
 ## Root cause
 
-The security-pilot integration test emits the zero Node/application non-loopback outbound-attempt count as a TAP diagnostic line (`# [security-pilot] external_network_attempts=0`). The runner required the unprefixed line with `grep -Fxq`, so a passing 6/6 integration run was rejected.
+The security-pilot integration test emits the zero Node/application non-loopback outbound-attempt count as a TAP diagnostic line (`# [security-pilot] external_network_attempts=0`). This marker covers only the instrumented Node/application boundary; PostgreSQL container packets are not observed by this tripwire. The runner required the unprefixed line with `grep -Fxq`, so a passing 6/6 integration run was rejected.
 
 ## Change
 

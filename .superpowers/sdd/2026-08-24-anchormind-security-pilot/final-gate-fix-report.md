@@ -29,6 +29,11 @@ access, push, PR, merge, and deployment were not performed.
 - Added a static documentation regression test that rejects all-network-zero and
   Docker/PostgreSQL firewall claims while requiring the scoped evidence and
   limitation text.
+- Strengthened that regression test to scan each document independently and to
+  require a canonical zero marker (`Node/application ... 0` or
+  `external_network_attempts=0`) plus the PostgreSQL packet limitation in every
+  governed egress document; unrelated reports still receive the per-file
+  forbidden-claim scan.
 - Snapshot selection validates `config.json`, `tokenizer.json`, and q8 ONNX,
   prefers a valid `refs/main` target, and otherwise accepts exactly one stable,
   valid candidate. Ambiguous valid candidates fail closed.
@@ -52,6 +57,8 @@ After the minimal changes, the same focused tests passed.
 - Documentation/runner/cleanup/tripwire focused run: **24 passed, 0 failed,
   0 cancelled, 0 skipped**; the new broad-claim test was RED before wording
   changes and GREEN after them.
+- Minor test-only round: the per-document canonical-marker and limitation checks
+  pass; no Docker or production runtime was executed.
 - Shell cleanup tests: `security-pilot-cleanup shell tests: PASS`, including
   original-zero/original-nonzero `pg_isready` failure cases and no `-v` teardown.
 - `npm run lint`: exit 0, **0 errors** (existing warnings remain).
