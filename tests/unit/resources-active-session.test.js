@@ -15,15 +15,17 @@ import assert            from "node:assert/strict";
 import { mock }          from "node:test";
 
 const activityBySession = new Map();
+const dbModuleUrl       = new URL("../../lib/tools/db.js", import.meta.url).href;
+const trackerModuleUrl  = new URL("../../lib/memory/processors/SessionActivityTracker.js", import.meta.url).href;
 
-mock.module("../../lib/tools/db.js", {
-  exports: {
+mock.module(dbModuleUrl, {
+  namedExports: {
     getPrimaryPool: () => ({ query: async () => ({ rows: [] }) })
   }
 });
 
-mock.module("../../lib/memory/processors/SessionActivityTracker.js", {
-  exports: {
+mock.module(trackerModuleUrl, {
+  namedExports: {
     SessionActivityTracker: {
       getActivity: async (sessionId) => activityBySession.get(sessionId) ?? null
     }

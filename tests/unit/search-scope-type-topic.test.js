@@ -8,8 +8,10 @@ import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 
 let capturedSql = "";
-mock.module("../../lib/tools/db.js", {
-  exports: {
+const dbModuleUrl = new URL("../../lib/tools/db.js", import.meta.url).href;
+
+mock.module(dbModuleUrl, {
+  namedExports: {
     getPrimaryPool      : () => ({ query: async () => ({ rows: [] }) }),
     queryWithAgentVector: async (_agent, sql) => { capturedSql = sql; return { rows: [] }; }
   }

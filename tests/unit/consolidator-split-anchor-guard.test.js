@@ -8,21 +8,30 @@ import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 
 let llmReturn = [];
-mock.module("../../lib/gemini.js", {
+const geminiModuleUrl              = new URL("../../lib/gemini.js", import.meta.url).href;
+const dbModuleUrl                  = new URL("../../lib/tools/db.js", import.meta.url).href;
+const configModuleUrl              = new URL("../../lib/config.js", import.meta.url).href;
+const embeddingModuleUrl           = new URL("../../lib/tools/embedding.js", import.meta.url).href;
+const loggerModuleUrl              = new URL("../../lib/logger.js", import.meta.url).href;
+const splitMetricsModuleUrl        = new URL("../../lib/memory/consolidate/split-metrics.js", import.meta.url).href;
+const properNounsModuleUrl         = new URL("../../lib/memory/consolidate/proper-nouns.js", import.meta.url).href;
+const memoryConfigModuleUrl        = new URL("../../config/memory.js", import.meta.url).href;
+
+mock.module(geminiModuleUrl, {
   namedExports: {
     isGeminiCLIAvailable: async () => true,
     geminiCLIJson       : async () => llmReturn
   }
 });
 
-mock.module("../../lib/tools/db.js", {
-  exports: {
+mock.module(dbModuleUrl, {
+  namedExports: {
     getPrimaryPool      : () => null,
     queryWithAgentVector: async () => ({ rows: [], rowCount: 0 })
   }
 });
 
-mock.module("../../lib/config.js", {
+mock.module(configModuleUrl, {
   namedExports: {
     resolveSplitChainConfig: () => null,
     LLM_PRIMARY            : "gemini-cli",
@@ -31,15 +40,15 @@ mock.module("../../lib/config.js", {
   }
 });
 
-mock.module("../../lib/tools/embedding.js", {
+mock.module(embeddingModuleUrl, {
   namedExports: {
     computeContentHash: (text) => `hash-${String(text).length}`,
     cosineSimilarity  : () => 0
   }
 });
 
-mock.module("../../lib/logger.js", {
-  exports: {
+mock.module(loggerModuleUrl, {
+  namedExports: {
     logInfo        : () => {},
     logWarn        : () => {},
     logError       : () => {},
@@ -50,7 +59,7 @@ mock.module("../../lib/logger.js", {
 });
 
 const skipReasons = [];
-mock.module("../../lib/memory/consolidate/split-metrics.js", {
+mock.module(splitMetricsModuleUrl, {
   namedExports: {
     recordSplitSkip  : (reason) => { skipReasons.push(reason); },
     splitSkippedTotal: { inc: () => {} }
@@ -58,12 +67,12 @@ mock.module("../../lib/memory/consolidate/split-metrics.js", {
 });
 
 /** 주체 앵커 게이트 무력화 — 이 테스트의 관심사가 아니며 형태소 분석기 로드도 피한다. */
-mock.module("../../lib/memory/consolidate/proper-nouns.js", {
+mock.module(properNounsModuleUrl, {
   namedExports: { extractSubjectAnchors: async () => [] }
 });
 
-mock.module("../../config/memory.js", {
-  exports: {
+mock.module(memoryConfigModuleUrl, {
+  namedExports: {
     MEMORY_CONFIG: {
       fragmentSplit: {
         lengthThreshold    : 300,

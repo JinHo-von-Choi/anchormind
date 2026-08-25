@@ -15,22 +15,33 @@ import assert                         from "node:assert/strict";
 
 /** ── 의존성 모킹 ── */
 
-mock.module("../../lib/tools/db.js", {
-    exports: {
+const dbModuleUrl               = new URL("../../lib/tools/db.js", import.meta.url).href;
+const redisModuleUrl            = new URL("../../lib/redis.js", import.meta.url).href;
+const loggerModuleUrl           = new URL("../../lib/logger.js", import.meta.url).href;
+const memoryConfigModuleUrl     = new URL("../../config/memory.js", import.meta.url).href;
+const fragmentStoreModuleUrl    = new URL("../../lib/memory/write/FragmentStore.js", import.meta.url).href;
+const fragmentIndexModuleUrl    = new URL("../../lib/memory/FragmentIndex.js", import.meta.url).href;
+const embeddingWorkerModuleUrl = new URL("../../lib/memory/embedding/EmbeddingWorker.js", import.meta.url).href;
+const contradictionModuleUrl    = new URL("../../lib/memory/link/ContradictionDetector.js", import.meta.url).href;
+const consolidatorGCModuleUrl   = new URL("../../lib/memory/consolidate/ConsolidatorGC.js", import.meta.url).href;
+const graphLinkerModuleUrl      = new URL("../../lib/memory/link/GraphLinker.js", import.meta.url).href;
+
+mock.module(dbModuleUrl, {
+    namedExports: {
         getPrimaryPool:       () => null,
         queryWithAgentVector: async () => ({ rows: [], rowCount: 0 }),
     },
 });
 
-mock.module("../../lib/redis.js", {
-    exports: {
+mock.module(redisModuleUrl, {
+    namedExports: {
         pushToQueue: async () => undefined,
         redisClient: null,
     },
 });
 
-mock.module("../../lib/logger.js", {
-    exports: {
+mock.module(loggerModuleUrl, {
+    namedExports: {
         logInfo:  () => {},
         logWarn:  () => {},
         logError: () => {},
@@ -38,15 +49,15 @@ mock.module("../../lib/logger.js", {
     },
 });
 
-mock.module("../../config/memory.js", {
-    exports: {
+mock.module(memoryConfigModuleUrl, {
+    namedExports: {
         MEMORY_CONFIG: { gc: { utilityThreshold: 0.15 }, dedup: {} },
     },
 });
 
 /** FragmentStore 모킹 */
-mock.module("../../lib/memory/write/FragmentStore.js", {
-    exports: {
+mock.module(fragmentStoreModuleUrl, {
+    namedExports: {
         FragmentStore: class MockFragmentStore {
             decayImportance()       { return Promise.resolve(undefined); }
             deleteExpired()         { return Promise.resolve(0);         }
@@ -58,8 +69,8 @@ mock.module("../../lib/memory/write/FragmentStore.js", {
 });
 
 /** FragmentIndex 모킹 */
-mock.module("../../lib/memory/FragmentIndex.js", {
-    exports: {
+mock.module(fragmentIndexModuleUrl, {
+    namedExports: {
         getFragmentIndex: () => ({
             pruneKeywordIndexes: async () => undefined,
         }),
@@ -67,8 +78,8 @@ mock.module("../../lib/memory/FragmentIndex.js", {
 });
 
 /** EmbeddingWorker 모킹 */
-mock.module("../../lib/memory/embedding/EmbeddingWorker.js", {
-    exports: {
+mock.module(embeddingWorkerModuleUrl, {
+    namedExports: {
         EmbeddingWorker: class MockEmbeddingWorker {
             processOrphanFragments() { return Promise.resolve(0); }
         },
@@ -76,8 +87,8 @@ mock.module("../../lib/memory/embedding/EmbeddingWorker.js", {
 });
 
 /** ContradictionDetector 모킹 */
-mock.module("../../lib/memory/link/ContradictionDetector.js", {
-    exports: {
+mock.module(contradictionModuleUrl, {
+    namedExports: {
         ContradictionDetector: class MockContradictionDetector {
             resetCheckedPairs()             {}
             detectContradictions()          { return Promise.resolve({ found: 0, nliResolved: 0, nliSkipped: 0 }); }
@@ -88,8 +99,8 @@ mock.module("../../lib/memory/link/ContradictionDetector.js", {
 });
 
 /** ConsolidatorGC 모킹 */
-mock.module("../../lib/memory/consolidate/ConsolidatorGC.js", {
-    exports: {
+mock.module(consolidatorGCModuleUrl, {
+    namedExports: {
         ConsolidatorGC: class MockConsolidatorGC {
             generateFeedbackReport() { return Promise.resolve(false); }
             collectStaleFragments()  { return Promise.resolve([]);    }
@@ -103,8 +114,8 @@ mock.module("../../lib/memory/consolidate/ConsolidatorGC.js", {
 });
 
 /** GraphLinker 모킹 */
-mock.module("../../lib/memory/link/GraphLinker.js", {
-    exports: {
+mock.module(graphLinkerModuleUrl, {
+    namedExports: {
         GraphLinker: class MockGraphLinker {
             retroLink() { return Promise.resolve({ linksCreated: 0 }); }
         },
