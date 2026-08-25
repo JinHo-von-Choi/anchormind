@@ -21,6 +21,14 @@ access, push, PR, merge, and deployment were not performed.
 - Runner and design/plan/report wording now scopes egress evidence to
   Node/application outbound attempts. PostgreSQL container packets are outside
   that tripwire's observation scope; no Docker-level firewall claim is made.
+- The design, plan, and report corpus now use the canonical limitation: only
+  Node/application non-loopback outbound attempts are observed and must be zero;
+  PostgreSQL packet egress is not firewall-observed and is instead bounded by
+  one PostgreSQL service/container, the loopback-only published port, and absent
+  external provider configuration.
+- Added a static documentation regression test that rejects all-network-zero and
+  Docker/PostgreSQL firewall claims while requiring the scoped evidence and
+  limitation text.
 - Snapshot selection validates `config.json`, `tokenizer.json`, and q8 ONNX,
   prefers a valid `refs/main` target, and otherwise accepts exactly one stable,
   valid candidate. Ambiguous valid candidates fail closed.
@@ -41,6 +49,9 @@ After the minimal changes, the same focused tests passed.
 
 - Focused security unit tests: **23 passed, 0 failed, 0 cancelled, 0 skipped**.
   This includes runner guards, cleanup fixture helpers, and DNS tripwire tests.
+- Documentation/runner/cleanup/tripwire focused run: **24 passed, 0 failed,
+  0 cancelled, 0 skipped**; the new broad-claim test was RED before wording
+  changes and GREEN after them.
 - Shell cleanup tests: `security-pilot-cleanup shell tests: PASS`, including
   original-zero/original-nonzero `pg_isready` failure cases and no `-v` teardown.
 - `npm run lint`: exit 0, **0 errors** (existing warnings remain).

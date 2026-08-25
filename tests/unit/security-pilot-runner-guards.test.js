@@ -294,6 +294,37 @@ test("security pilot egress evidence is limited to Node/app outbound attempts", 
   }
 });
 
+test("security pilot documents keep egress evidence scoped and reject broad claims", () => {
+  const specPath = path.join(ROOT, "docs/superpowers/specs/2026-08-24-anchormind-security-pilot-design.md");
+  const planPath = path.join(ROOT, "docs/superpowers/plans/2026-08-24-anchormind-security-pilot.md");
+  const reportDir = path.join(ROOT, ".superpowers/sdd/2026-08-24-anchormind-security-pilot");
+  const paths = [specPath, planPath, ...fs.readdirSync(reportDir)
+    .filter(name => name.endsWith(".md"))
+    .map(name => path.join(reportDir, name))];
+  const documents = paths.map(filePath => ({ filePath, text: fs.readFileSync(filePath, "utf8") }));
+  const corpus = documents.map(({ text }) => text).join("\n");
+  const forbidden = [
+    /네트워크 외부 전송은 0건/,
+    /외부 네트워크 연결 0회/,
+    /외부 egress 0/,
+    /zero external network calls?/i,
+    /external network count is zero/i,
+    /외부 네트워크에 효과가 없었다/,
+    /외부 전송이 한 번이라도 관찰되면/,
+    /Docker-level firewall을 주장(?!하지)/i,
+    /Docker-level firewall claim(?! is made)/i,
+    /PostgreSQL(?: container| 컨테이너)[\s\S]{0,100}(?:firewall|방화벽)[\s\S]{0,80}(?:block(?:ed|s)?|차단(?:됨|한다)?|zero|0건|0회)/i
+  ];
+  for (const pattern of forbidden) {
+    assert.doesNotMatch(corpus, pattern, `forbidden broad egress claim: ${pattern}`);
+  }
+  assert.match(corpus, /Node\/application[\s\S]{0,180}(?:non-loopback )?outbound attempts[\s\S]{0,100}(?:0|zero)/i);
+  assert.match(corpus, /PostgreSQL(?: container| 컨테이너)[\s\S]{0,160}(?:not observed|관찰 범위가 아니다|관찰되지)/i);
+  assert.match(corpus, /(?:PostgreSQL 하나|one named non-internal bridge|sole bridge attachment|only service)[\s\S]{0,180}(?:PostgreSQL|service|container)/i);
+  assert.match(corpus, /127\.0\.0\.1:35434/);
+  assert.match(corpus, /(?:external provider|외부 provider|LLM_PRIMARY=none|external endpoint)[\s\S]{0,160}(?:off|empty|disabled|none|비활성|없)/i);
+});
+
 test("security pilot assertion helper fails closed under Bash 3.2 semantics", () => {
   const runner = fs.readFileSync(RUNNER, "utf8");
   const helper = runner.match(/security_pilot_require\(\) \{[\s\S]*?^\}/m);

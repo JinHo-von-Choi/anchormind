@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 세 개의 가짜-data 논리 슬라이스와 별도 격리된 PostgreSQL+pgvector 로컬 파일럿으로 인증 fail-closed, loopback bind, API key/workspace 격리, 유지보수·조회 scope, AutoReflect scope, 외부 egress 0을 독립 검증한다.
+**Goal:** 세 개의 가짜-data 논리 슬라이스와 별도 격리된 PostgreSQL+pgvector 로컬 파일럿으로 인증 fail-closed, loopback bind, API key/workspace 격리, 유지보수·조회 scope, AutoReflect scope, Node/application 프로세스의 non-loopback outbound attempts 0건을 독립 검증한다. PostgreSQL 컨테이너 패킷 egress는 이 tripwire로 방화벽 관찰하지 않으며, 단일 PostgreSQL service/container·loopback-only published port·외부 provider 설정 부재를 함께 확인한다.
 
 **Architecture:** 인증·bind 경계는 순수한 resolveBindHost()와 실제 listener address 검증 seam으로 분리한다. 메모리 read/write/maintenance 경로는 { keyId, groupKeyIds, workspace } scope를 명시적으로 전달하고 SQL과 결과 projection 양쪽에서 같은 경계를 적용한다. fake-data E2E는 DB·Redis·LLM을 fixture로 대체하고, 마지막 로컬 DB 파일럿만 별도 PostgreSQL+pgvector 컨테이너의 실제 SQL readback을 사용한다.
 
@@ -39,7 +39,7 @@ separate features and are not pilot aliases.
 
 - 사용자가 승인한 범위는 이 계획의 코드 구현, 로컬 테스트, 가짜 데이터 파일럿, 작업 branch의 로컬 commit까지다. 실제 데이터 접근, 외부 전송, 공개, push, PR, merge, 배포는 수행하지 않는다.
 - 실제 데이터와 운영 자격 증명을 사용하지 않는다. 모든 row, API key, session activity, LLM 응답은 결정론적 fixture로 만든다.
-- Task 1~3은 외부 네트워크 연결 0회여야 한다. 자기 자신에게 보내는 127.0.0.1 loopback HTTP만 허용하고 PostgreSQL, Redis, Gemini, DNS, 일반 TCP/TLS, child process provider 호출은 금지한다.
+- Task 1~3의 Node/application 프로세스는 127.0.0.1 loopback HTTP만 허용하고 non-loopback outbound attempts는 0건이어야 한다. PostgreSQL, Redis, Gemini, DNS, 일반 TCP/TLS, child process provider 호출은 금지한다. PostgreSQL 컨테이너 패킷은 이 tripwire 관찰 범위가 아니다.
 - Task 4만 예외적으로 전용 PostgreSQL+pgvector 컨테이너의 127.0.0.1 전용 published port에 연결한다. Task 4도 Redis·Gemini·외부 HTTP·외부 DNS·비 loopback TCP/TLS는 금지한다. 전용 bridge는 host port forwarding을 위해 `Internal=false`로 유지하고, Node/application outbound-attempts tripwire만 앱의 egress 증거로 사용한다. PostgreSQL 컨테이너 패킷은 이 증거에서 not observed(관찰되지 않음)이며 Docker-level firewall을 주장하지 않는다.
 - Task 4는 기존 dev/test DB, container, named volume, schema 상태, port를 읽거나 변경하지 않는다. 전용 compose 파일·DB 이름·volume 이름·port만 사용한다.
 - Task 4 fixture는 synthetic data뿐이다. EMBEDDING_PROVIDER=transformers와 사전 존재하는 local cache만 사용하며, 모델 cache가 없으면 다운로드하지 않고 BLOCKED 상태(exit 3)로 중단한다.
@@ -57,7 +57,7 @@ separate features and are not pilot aliases.
 |---|---|---|---|
 | Auth + loopback + offline foundation | lib/http/bind.js, tests/unit/security-hardening-auth-bind.test.js, tests/unit/security-hardening-offline.test.js | lib/auth.js, server.js, lib/http-server.js | fail-closed runtime decision, loopback default, network tripwire/fake adapter contract |
 | Key + workspace scope integrity | tests/fixtures/security-hardening-data.js, tests/unit/security-hardening-key-workspace.test.js, tests/unit/security-hardening-maintenance-scope.test.js, tests/unit/security-hardening-read-scope.test.js | ContradictionDetector.js, GraphLinker.js, LinkStore.js, MemoryConsolidator.js, FragmentReader.js, HistoryReconstructor.js, lib/tools/memory.js, MemoryReflector.js | one scope contract across read, write, link, dedup, contradiction, history and stats |
-| Fake-data E2E | tests/fixtures/security-hardening-harness.js, tests/e2e/security-hardening-fake-data.test.js | AutoReflect.js, ReflectProcessor.js, lib/http-server.js, server.js | loopback MCP entry point, fake data lifecycle, AutoReflect propagation, no external network |
+| Fake-data E2E | tests/fixtures/security-hardening-harness.js, tests/e2e/security-hardening-fake-data.test.js | AutoReflect.js, ReflectProcessor.js, lib/http-server.js, server.js | loopback MCP entry point, fake data lifecycle, AutoReflect propagation, Node/application outbound-attempt tripwire |
 | Dedicated local DB pilot | docker-compose.security-pilot.yml, .env.security-pilot.example, tests/fixtures/security-pilot.ndjson, scripts/run-security-pilot.sh, tests/integration/security-pilot.test.js | none | isolated PostgreSQL+pgvector readback with synthetic data, local transformers cache, and egress/automation gates |
 
 The exact shared scope shape is:
@@ -422,7 +422,7 @@ The execution session replaces these bodies with the fake adapter and a real loo
       assert.ok(result.fragments.every((row) => row.key_id === "key-a" && row.workspace === "ws-a"));
     });
 
-    test("fake-data E2E performs zero external network calls", async () => {
+    test("fake-data E2E records zero Node/application non-loopback outbound attempts", async () => {
       const harness = createSecurityPilotHarness(fixture);
       await harness.start();
       await harness.callTool("memory_stats", {
@@ -477,7 +477,7 @@ Run fake-data E2E and the complete new security suite:
     node --experimental-test-module-mocks --test \
       "tests/unit/security-hardening-*.test.js"
 
-Expected result: loopback MCP, scoped recall/stats/history, AutoReflect, contradiction/dedup/link guards, and authentication pass; external network count is zero; no test is skipped or cancelled.
+Expected result: loopback MCP, scoped recall/stats/history, AutoReflect, contradiction/dedup/link guards, and authentication pass; Node/application non-loopback outbound-attempt count is zero; no test is skipped or cancelled. PostgreSQL container packets are not observed by this tripwire.
 
 Then run the existing baseline-only command:
 
@@ -577,11 +577,11 @@ The test file must contain these named cases:
       assert.equal(await queryValue("SELECT count(*) FROM agent_memory.fragments WHERE topic = 'session_reflect'"), "0");
     });
 
-    test("pilot external egress remains zero", async () => {
+    test("pilot Node/application non-loopback outbound attempts remain zero", async () => {
       assert.deepEqual(externalNetworkAttempts.filter((attempt) => !isLoopback(attempt.host)), []);
     });
 
-Before constructing the pg Pool, install the Task 1 network tripwire with an allowlist containing only 127.0.0.1 and ::1. The integration test uses a pg Pool with host 127.0.0.1 and port 35434 only; any non-loopback attempt throws and records externalNetworkAttempts. It loads the NDJSON fixture with parameterized INSERT statements, performs all assertions, and removes only rows whose topic is security-pilot-synthetic in this dedicated database during teardown. It must fail rather than skip when the dedicated database is unavailable.
+Before constructing the pg Pool, install the Task 1 network tripwire with an allowlist containing only 127.0.0.1 and ::1. The integration test uses a pg Pool with host 127.0.0.1 and port 35434 only; any Node/application non-loopback outbound attempt throws and records externalNetworkAttempts. PostgreSQL container packets are not observed by this tripwire. It loads the NDJSON fixture with parameterized INSERT statements, performs all assertions, and removes only rows whose topic is security-pilot-synthetic in this dedicated database during teardown. It must fail rather than skip when the dedicated database is unavailable.
 
 - [ ] **Step 2: Run the test to verify the precondition fails without external download or an existing pilot database**
 
@@ -673,7 +673,7 @@ Run exactly:
 
 Expected result:
 
-- Exit 0 only when migrations, fixture load, PostgreSQL+pgvector readback, real recall/history/stats scope assertions, automation-off assertions, and egress checks pass.
+- Exit 0 only when migrations, fixture load, PostgreSQL+pgvector readback, real recall/history/stats scope assertions, automation-off assertions, and scoped Node/application outbound-attempt checks pass. PostgreSQL container packets are not observed by that tripwire.
 - The script prints the dedicated database identity, vector extension, bound address, named volume, fixture count, and key/workspace pairs from the actual database.
 - The model is loaded from the existing local transformers cache only. A missing cache produces BLOCKED/exit 3 and no download attempt.
 - Existing dev/test compose projects, ports 35432/35433, and volumes are unchanged.
@@ -711,7 +711,7 @@ Stop immediately when any of these occurs:
 - the actual default listener address is not 127.0.0.1;
 - a key-b or wrong-workspace row appears in recall, history, reconstruction, stats, link, contradiction, dedup, or AutoReflect output;
 - a cross-scope mutation occurs, including soft delete, importance update, link creation, or access-count update;
-- a non-loopback network tripwire fires;
+- a Node/application non-loopback outbound-attempt tripwire fires;
 - a test uses real database/Redis/LLM data or leaves an active handle;
 - a new security test is cancelled or skipped instead of passing.
 

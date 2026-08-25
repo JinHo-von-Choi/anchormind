@@ -11,7 +11,7 @@
 - 서버와 파일럿 클라이언트는 `127.0.0.1`에서만 통신한다.
 - 파일럿 DB는 개발/테스트 DB와 분리된 전용 PostgreSQL + pgvector 인스턴스다.
 - 입력은 저장소에 포함되는 가짜 fixture뿐이다. 실제 기억, 개인 정보, 원본 memory 디렉터리는 입력으로 사용하지 않는다.
-- 네트워크 외부 전송은 0건이다. OpenAI/Gemini/NLI/Reranker 외부 endpoint와 원격 모델 다운로드를 허용하지 않는다.
+- Node/application 프로세스의 non-loopback outbound attempts는 0건이어야 한다. PostgreSQL 컨테이너 패킷은 이 증거의 관찰 범위가 아니다. 단일 PostgreSQL service/container, loopback-only published port, 외부 provider 설정 부재를 함께 확인한다.
 - 자동 병합, 정리, 삭제, consolidation, AutoReflect를 끈다.
 - Ballast/Codex memory는 authoritative source(권위 있는 원본)로 유지하고 AnchorMind는 그 원본을 수정하지 않는다.
 - 이번 산출물은 설계 문서만 작성한다. 구현, 마이그레이션, 테스트 실행, 커밋, 배포는 다음 작업이다.
@@ -35,7 +35,7 @@
 - 인증 실패는 항상 거부로 끝난다. 인증 비활성화는 명시적인 개발 전용 opt-in에서만 가능하다.
 - 모든 검색/연결 후보는 `(key_id, workspace)` scope(데이터 경계)를 동일하게 만족해야 한다. scope가 없거나 확인할 수 없으면 후보를 버린다.
 - 로컬에 캐시된 모델만 사용한다. 캐시가 없으면 다운로드나 외부 fallback 없이 명확히 실패한다.
-- AnchorMind의 DB에는 fixture로부터 만든 검색 projection만 쌓인다. 원본의 수정, 자동 정리, 외부 전송, 자동 병합은 발생하지 않는다.
+- AnchorMind의 DB에는 fixture로부터 만든 검색 projection만 쌓인다. 원본의 수정, 자동 정리, 자동 병합은 발생하지 않으며 외부 provider 설정은 비활성/부재로 유지한다.
 
 ## 3. 구성요소 경계
 
@@ -83,7 +83,7 @@ published binding과 별도 네트워크 연결 상태를 각각 권위 있게 �
 3. AnchorMind는 전용 DB에 fragment와 로컬 임베딩을 기록한다. 이 DB는 기존 `memento_dev`/`memento_test`와 다른 이름과 포트를 사용한다.
 4. 검색 요청은 유효한 access key를 인증하고, 요청 scope를 DB 검색의 필수 조건으로 넘긴다.
 5. 검색 결과는 `key_id`와 workspace가 요청과 정확히 같은 projection만 반환한다.
-6. 파일럿 종료 시 fixture/import/search 결과와 외부 전송 차단 증거를 검사한다. Ballast/Codex memory는 read/write 대상에 포함되지 않는다.
+6. 파일럿 종료 시 fixture/import/search 결과와 Node/application outbound-attempts tripwire readback을 검사한다. Ballast/Codex memory는 read/write 대상에 포함되지 않는다.
 
 ### 반드시 지킬 불변식
 
@@ -225,7 +225,7 @@ MCP_REJECT_NONAPIKEY_OAUTH=true
 - 전용 DB가 준비되고 dev/test DB와 연결 정보가 다르다.
 - fixture의 합성 레코드만 projection으로 존재한다.
 - 인증된 각 scope가 자기 fixture만 검색한다.
-- 외부 DNS/HTTP 호출, provider request, 모델 다운로드가 0건이다.
+- Node/application 프로세스의 non-loopback DNS/HTTP/provider/model outbound attempts가 0건으로 관찰된다. PostgreSQL 컨테이너 패킷은 이 결과에 포함하지 않는다.
 - AutoReflect, consolidation, cleanup, merge, delete가 0건이다.
 - 파일럿 실패 시 결과를 `UNRESOLVED`로 남기고 자동 재시도/외부 전송/데이터 정리를 하지 않는다.
 
@@ -236,7 +236,7 @@ MCP_REJECT_NONAPIKEY_OAUTH=true
 - 보안 경계 실패는 빈 결과로 조용히 통과시키지 않고 요청 거부 또는 startup 중단으로 처리한다.
 - 불확실한 scope, provider, network state는 허용하지 않는다.
 - 모든 자동 처리 실패는 원인과 scope를 local log에 남기되 실제 fragment 내용이나 secret은 기록하지 않는다.
-- 외부 전송이 한 번이라도 관찰되면 파일럿을 즉시 중단하고 projection DB를 보존한 채 결과를 `BLOCKED`로 판정한다. 자동 삭제는 하지 않는다.
+- Node/application 프로세스에서 non-loopback outbound attempt가 한 번이라도 관찰되면 파일럿을 즉시 중단하고 projection DB를 보존한 채 결과를 `BLOCKED`로 판정한다. PostgreSQL 컨테이너 패킷은 이 tripwire의 방화벽 관찰 대상이 아니다. 자동 삭제는 하지 않는다.
 
 ### 즉시 중단 조건
 
@@ -244,7 +244,7 @@ MCP_REJECT_NONAPIKEY_OAUTH=true
 2. listener가 loopback 이외 interface에 열림.
 3. workspace 또는 key mismatch 후보가 recall/link 결과에 노출됨.
 4. scope 확인 오류가 allow로 처리됨.
-5. OpenAI/Gemini/NLI/Reranker endpoint, DNS, HTTP 또는 원격 model fetch가 관찰됨.
+5. Node/application 프로세스에서 OpenAI/Gemini/NLI/Reranker endpoint, DNS, HTTP 또는 원격 model fetch outbound attempt가 관찰됨.
 6. AutoReflect, merge, cleanup, consolidate, gc, delete가 pilot flag와 무관하게 실행됨.
 7. 전용 DB가 아닌 dev/test 또는 Ballast/Codex 저장소에 쓰기가 발생함.
 8. fixture 외 실제 기억/개인정보가 입력되었거나 로그에 기록됨.
@@ -311,7 +311,7 @@ MCP_REJECT_NONAPIKEY_OAUTH=true
 5. `npm audit`의 `1 moderate / 1 high`는 보안 수정의 성공으로 간주하지 않는다. advisory의 패키지, 도달 가능성, 조치 여부를 별도로 기록한다.
 6. 최종 보고에는 실제 실행 명령, 통과/실패 수, 외부 호출 관찰 결과, 전용 DB 이름/port, projection row와 mutation row readback을 포함한다.
 
-성공 판정은 “테스트가 통과했다” 하나로 끝내지 않는다. 인증된 대표 검색 흐름이 실제 entrypoint를 거쳤고, 결과가 동일 scope로 제한되었으며, local model만 사용했고, source memory와 외부 네트워크에 효과가 없었다는 네 가지 증거가 모두 있어야 한다.
+성공 판정은 “테스트가 통과했다” 하나로 끝내지 않는다. 인증된 대표 검색 흐름이 실제 entrypoint를 거쳤고, 결과가 동일 scope로 제한되었으며, local model만 사용했고, Node/application 프로세스의 non-loopback outbound attempts가 0건으로 관찰되었으며 외부 provider 설정이 없었다는 네 가지 증거가 모두 있어야 한다. PostgreSQL 컨테이너 패킷 egress는 이 tripwire의 관찰 범위가 아니다.
 
 ## 10. 구현 전 금지사항
 
