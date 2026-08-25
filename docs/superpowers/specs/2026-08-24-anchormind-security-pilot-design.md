@@ -69,7 +69,10 @@ network 하나에만 연결한다. Docker Desktop 4.72.0에서는 `internal: tru
 IP를 host port 전달 대상으로 선택하지 않아 `127.0.0.1:35434`가 열리지 않으므로
 `internal: true`는 사용하지 않는다. 이 변경은 외부 공개를 허용하지 않는다. published
 binding은 계속 정확히 `127.0.0.1:35434:5432`이고, 서비스는 PostgreSQL 하나뿐이며,
-integration tripwire는 비-loopback 연결 시도를 0건으로 검증한다.
+bridge readback은 서비스 컨테이너 ID 하나만 연결되었음을 확인한다. integration tripwire의
+egress 증거는 Node/application outbound attempts만 대상으로 하며 PostgreSQL 컨테이너
+패킷은 관찰 범위가 아니다. 따라서 이 파일럿은 Docker-level firewall을 주장하지 않고,
+published binding과 별도 네트워크 연결 상태를 각각 권위 있게 확인한다.
 
 ## 4. 데이터 흐름과 불변식
 
@@ -90,7 +93,9 @@ integration tripwire는 비-loopback 연결 시도를 0건으로 검증한다.
 - cross-scope 후보는 결과에서 제거하며, link row, `valid_to`, merge, delete를 자동으로 만들지 않는다.
 - 임베딩 provider가 `transformers`가 아니거나 local-only 정책을 입증할 수 없으면 시작 단계에서 중단한다.
 - AutoReflect는 호출자가 누구인지와 무관하게 pilot에서 no-op/skip한다.
-- Docker network는 전용 bridge 하나만 사용하고 `Internal=false`를 권위 있게 확인한다.
+- Docker network는 전용 bridge 하나만 사용하고 `Internal=false`와 서비스 컨테이너 ID 하나의
+  연결을 권위 있게 확인한다. integration egress 증거는 Node/application outbound attempts에
+  한정되며 PostgreSQL 컨테이너 패킷은 관찰 범위가 아니다.
   host 공개 범위는 정확히 `127.0.0.1:35434`이며 `0.0.0.0`, IPv6 wildcard, 추가 service,
   추가 published port를 허용하지 않는다.
 
@@ -143,6 +148,11 @@ MCP_REJECT_NONAPIKEY_OAUTH=true
 설정 검증은 startup에서 수행한다. `MEMENTO_SECURITY_PILOT_AUTOMATION=off`인데 access key가 비어 있거나, bind host가 `127.0.0.1`이 아니거나, embedding provider가 검증된 local Transformers snapshot이 아니거나, 모델 cache가 없거나, 위 maintenance guard가 명시적으로 `false`가 아니면 서버를 시작하지 않는다.
 
 ## 6. 세 구현 slice
+
+모델 cache snapshot은 `config.json`, `tokenizer.json`, `onnx/model_quantized.onnx` 또는
+`onnx/model_q8.onnx`를 모두 가진 후보만 유효하다. 유효한 `refs/main` 대상이 있으면 그것을
+선택하고, 없으면 안정적으로 정렬한 유효 후보가 정확히 하나일 때만 선택한다. revision 이름의
+사전순/시간순 의미를 추정하지 않으며, 여러 후보는 `BLOCKED`/ambiguous로 중단한다.
 
 ### Slice 1 — 인증 + loopback + offline envelope
 
@@ -205,7 +215,9 @@ MCP_REJECT_NONAPIKEY_OAUTH=true
 - importer는 합성 NDJSON만 읽고 source provenance를 `synthetic-pilot`으로 표시한다.
 - 최소 fixture는 `key-a/workspace-red`, `key-a/workspace-blue`, `key-b/workspace-red`를 포함하고, 일부는 의미적으로 유사하지만 scope가 다른 문장을 사용한다.
 - E2E는 `127.0.0.1` HTTP entrypoint에서 synthetic key로 ingest projection과 recall을 수행한다.
-- DB readback으로 projection row, scope, embedding dimension, mutation ledger를 확인하고, no-egress sentinel/log로 외부 전송 0건을 확인한다.
+- DB readback으로 projection row, scope, embedding dimension, mutation ledger를 확인하고,
+  Node/application outbound-attempts sentinel/log가 0건임을 확인한다. 이 로그는 PostgreSQL
+  컨테이너 패킷을 관찰하지 않는다.
 - 파일럿 결과는 원본 memory 파일이나 Ballast/Codex memory의 해시/내용을 읽거나 기록하지 않는다.
 
 #### acceptance criteria

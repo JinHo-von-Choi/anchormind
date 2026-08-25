@@ -147,20 +147,74 @@ test("security pilot runner rejects extra networks and published addresses at ru
   assert.match(runner, /docker compose "\$\{COMPOSE_ARGS\[@\]\}" config --networks/);
   assert.match(runner, /anchormind_security_pilot_bridge/);
   assert.match(runner, /security_pilot_require "canonical PostgreSQL network must be non-internal" test/);
+  assert.match(runner, /docker network inspect -f '\{\{range \$id, \$container := \.Containers\}\}\{\{\$id\}\}\{\{"\\n"\}\}\{\{end\}\}' "\$NETWORK_NAME"/);
+  assert.match(runner, /canonical PostgreSQL network must contain exactly one container/);
+  assert.match(runner, /canonical PostgreSQL network attachment must be the canonical service/);
   assert.match(runner, /security_pilot_require "canonical PostgreSQL port binding is not loopback-only" test/);
   assert.doesNotMatch(runner, /^\s*\[\[.*\.Internal.*$/m);
 });
 
-test("security pilot runner accepts one exact TAP egress diagnostic", () => {
+test("security pilot bridge readback rejects foreign or multiple attachments", () => {
+  const runner = fs.readFileSync(RUNNER, "utf8");
+  const helperMatch = runner.match(/security_pilot_require_single_network_attachment\(\) \{[\s\S]*?^\}/m);
+  assert.ok(helperMatch, "runner must expose the bridge attachment gate");
+  const cases = [
+    { name: "canonical only", attached: "canonical-service", expected: 0 },
+    { name: "foreign only", attached: "foreign-service", expected: 1 },
+    { name: "canonical and foreign", attached: "canonical-service\nforeign-service", expected: 1 },
+    { name: "empty", attached: "", expected: 1 }
+  ];
+  for (const example of cases) {
+    const result = spawnSync("bash", ["-c", `${helperMatch[0]}\nsecurity_pilot_require_single_network_attachment "$1" canonical-service`, "runner-test", example.attached], { encoding: "utf8" });
+    assert.equal(result.status, example.expected, example.name);
+  }
+});
+
+test("security pilot runner requires the exact six-test TAP summary and one diagnostic", () => {
   const runner = fs.readFileSync(RUNNER, "utf8");
   const functionMatch = runner.match(/parse_security_pilot_egress_log\(\) \{[\s\S]*?^\}/m);
   assert.ok(functionMatch, "runner must expose the focused egress parser");
   const cases = [
-    { name: "plain marker", output: "1..1\nok 1 - pilot\n[security-pilot] external_network_attempts=0\n", expected: 0 },
-    { name: "TAP diagnostic marker", output: "1..1\nok 1 - pilot\n# [security-pilot] external_network_attempts=0\n", expected: 0 },
-    { name: "nonzero marker", output: "# [security-pilot] external_network_attempts=1\n", expected: 1 },
-    { name: "malformed marker", output: "# [security-pilot] external_network_attempts=0 extra\n", expected: 1 },
-    { name: "duplicate markers", output: "# [security-pilot] external_network_attempts=0\n[security-pilot] external_network_attempts=0\n", expected: 1 }
+    {
+      name: "valid TAP summary",
+      output: "TAP version 13\n# [security-pilot] external_network_attempts=0\n1..6\n# tests 6\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n",
+      expected: 0
+    },
+    {
+      name: "plain marker is not TAP diagnostic",
+      output: "1..6\n# tests 6\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n[security-pilot] external_network_attempts=0\n",
+      expected: 1
+    },
+    {
+      name: "wrong plan",
+      output: "1..5\n# tests 6\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n# [security-pilot] external_network_attempts=0\n",
+      expected: 1
+    },
+    {
+      name: "missing summary",
+      output: "1..6\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n# [security-pilot] external_network_attempts=0\n",
+      expected: 1
+    },
+    {
+      name: "nonzero marker alongside zero",
+      output: "1..6\n# tests 6\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n# [security-pilot] external_network_attempts=1\n# [security-pilot] external_network_attempts=0\n",
+      expected: 1
+    },
+    {
+      name: "malformed marker alongside zero",
+      output: "1..6\n# tests 6\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n# [security-pilot] external_network_attempts=0 extra\n# [security-pilot] external_network_attempts=0\n",
+      expected: 1
+    },
+    {
+      name: "duplicate markers",
+      output: "1..6\n# tests 6\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n# [security-pilot] external_network_attempts=0\n# [security-pilot] external_network_attempts=0\n",
+      expected: 1
+    },
+    {
+      name: "wrong pass count",
+      output: "1..6\n# tests 6\n# pass 5\n# fail 1\n# cancelled 0\n# skipped 0\n# [security-pilot] external_network_attempts=0\n",
+      expected: 1
+    }
   ];
 
   for (const example of cases) {
@@ -171,6 +225,72 @@ test("security pilot runner accepts one exact TAP egress diagnostic", () => {
     });
     fs.rmSync(file, { force: true });
     assert.equal(result.status, example.expected, example.name);
+  }
+});
+
+test("security pilot snapshot selection is deterministic and fail-closed", () => {
+  const runner = fs.readFileSync(RUNNER, "utf8");
+  assert.match(runner, /select_security_pilot_snapshot\(\)/);
+  assert.match(runner, /refs\/main/);
+  assert.match(runner, /config\.json/);
+  assert.match(runner, /tokenizer\.json/);
+  assert.match(runner, /onnx\/model_quantized\.onnx/);
+  assert.match(runner, /onnx\/model_q8\.onnx/);
+  assert.match(runner, /ambiguous/);
+
+  const validatorMatch = runner.match(/snapshot_candidate_is_valid\(\) \{[\s\S]*?^\}/m);
+  assert.ok(validatorMatch, "runner must expose complete snapshot validation");
+  const functionMatch = runner.match(/select_security_pilot_snapshot\(\) \{[\s\S]*?^\}/m);
+  assert.ok(functionMatch, "runner must expose deterministic snapshot selection");
+  const tempRoot = fs.mkdtempSync(path.join("/tmp", "security-pilot-snapshots-"));
+  const snapshots = path.join(tempRoot, "snapshots");
+  fs.mkdirSync(snapshots, { recursive: true });
+  const makeCandidate = (name, { config = true, tokenizer = true, onnx = "q8" } = {}) => {
+    const dir = path.join(snapshots, name);
+    fs.mkdirSync(path.join(dir, "onnx"), { recursive: true });
+    if (config) fs.writeFileSync(path.join(dir, "config.json"), "{}");
+    if (tokenizer) fs.writeFileSync(path.join(dir, "tokenizer.json"), "{}");
+    if (onnx === "q8") fs.writeFileSync(path.join(dir, "onnx", "model_q8.onnx"), "onnx");
+    if (onnx === "quantized") fs.writeFileSync(path.join(dir, "onnx", "model_quantized.onnx"), "onnx");
+    return dir;
+  };
+  const invalid = makeCandidate("000-invalid", { tokenizer: false });
+  const valid = makeCandidate("999-valid");
+  const runSelector = (root) => spawnSync("bash", ["-c", `${validatorMatch[0]}\n${functionMatch[0]}\nselect_security_pilot_snapshot "$1"`, "runner-test", root], { encoding: "utf8" });
+  try {
+    let result = runSelector(snapshots);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), valid);
+    assert.ok(fs.existsSync(invalid));
+
+    makeCandidate("888-another-valid", { onnx: "quantized" });
+    result = runSelector(snapshots);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /ambiguous/);
+
+    fs.mkdirSync(path.join(tempRoot, "refs"), { recursive: true });
+    fs.writeFileSync(path.join(tempRoot, "refs", "main"), "999-valid\n");
+    result = runSelector(snapshots);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), valid);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("security pilot egress evidence is limited to Node/app outbound attempts", () => {
+  const runner = fs.readFileSync(RUNNER, "utf8");
+  const design = fs.readFileSync(path.join(ROOT, "docs/superpowers/specs/2026-08-24-anchormind-security-pilot-design.md"), "utf8");
+  const plan = fs.readFileSync(path.join(ROOT, "docs/superpowers/plans/2026-08-24-anchormind-security-pilot.md"), "utf8");
+  const report = fs.readFileSync(path.join(ROOT, ".superpowers/sdd/2026-08-24-anchormind-security-pilot/task-4-report.md"), "utf8");
+  for (const text of [runner, design, plan, report]) {
+    assert.match(text, /Node\/app|Node\/application|앱\/Node|application outbound/i);
+    assert.match(text, /PostgreSQL[\s\S]*(not observed|not covered|관찰하지|범위 밖)/i);
+    if (text === runner) {
+      assert.doesNotMatch(text, /Docker-level firewall|Docker firewall|Docker 네트워크.*방화벽|iptables/i);
+    } else {
+      assert.match(text, /(does not|no|주장하지)[\s\S]{0,80}Docker-level firewall|Docker-level firewall[\s\S]{0,80}(does not|no|주장하지)/i);
+    }
   }
 });
 

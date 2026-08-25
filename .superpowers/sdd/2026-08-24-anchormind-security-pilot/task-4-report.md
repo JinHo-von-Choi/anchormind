@@ -25,7 +25,8 @@ Result: expected precondition failure, `ECONNREFUSED 127.0.0.1:35434`; no test w
 - `bash -n scripts/run-security-pilot.sh`: passed
 - NDJSON UUID/row-count validation: passed (2 API-key rows, 3 fragment rows)
 - `git diff --check`: passed
-- Compose contract is isolated to `pgvector/pgvector:pg15`, `127.0.0.1:35434`, internal network, and named volume `anchormind_security_pilot_pgdata`.
+- Compose contract is isolated to `pgvector/pgvector:pg15`, `127.0.0.1:35434`, one named non-internal bridge, and named volume `anchormind_security_pilot_pgdata`. The runner now reads back that exactly the canonical service ID is the sole bridge attachment.
+- The integration egress diagnostic covers Node/application outbound attempts only; PostgreSQL container packets are not observed by that tripwire, and no Docker-level firewall claim is made.
 
 ## Dedicated pilot gate
 

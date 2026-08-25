@@ -21,14 +21,18 @@ security_pilot_verify_synthetic_rows_removed() {
 security_pilot_cleanup() {
   local rc=$?
   set +e
-  if [[ -n "${SERVICE_ID:-}" ]] && declare -F run_security_pilot_pg_isready >/dev/null 2>&1 &&
-     run_security_pilot_pg_isready >/dev/null 2>&1; then
-    if ! security_pilot_delete_synthetic_rows; then
-      echo "WARN: synthetic fixture cleanup failed before teardown" >&2
-      if (( rc == 0 )); then rc=1; fi
-    fi
-    if ! security_pilot_verify_synthetic_rows_removed; then
-      echo "WARN: synthetic fixture cleanup remaining-count readback failed before teardown" >&2
+  if [[ -n "${SERVICE_ID:-}" ]] && declare -F run_security_pilot_pg_isready >/dev/null 2>&1; then
+    if run_security_pilot_pg_isready >/dev/null 2>&1; then
+      if ! security_pilot_delete_synthetic_rows; then
+        echo "WARN: synthetic fixture cleanup failed before teardown" >&2
+        if (( rc == 0 )); then rc=1; fi
+      fi
+      if ! security_pilot_verify_synthetic_rows_removed; then
+        echo "WARN: synthetic fixture cleanup remaining-count readback failed before teardown" >&2
+        if (( rc == 0 )); then rc=1; fi
+      fi
+    else
+      echo "WARN: UNRESOLVED: canonical PostgreSQL service failed pg_isready; synthetic cleanup readback was skipped before teardown" >&2
       if (( rc == 0 )); then rc=1; fi
     fi
   fi

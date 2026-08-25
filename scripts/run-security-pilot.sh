@@ -13,10 +13,36 @@ security_pilot_require() {
 parse_security_pilot_egress_log() {
   local log_file="$1"
   awk '
-    $0 == "[security-pilot] external_network_attempts=0" ||
-    $0 == "# [security-pilot] external_network_attempts=0" { count++ }
-    END { exit (count == 1 ? 0 : 1) }
+    $0 == "1..6" { plan++ ; next }
+    $0 == "# tests 6" { tests++ ; next }
+    $0 == "# pass 6" { pass++ ; next }
+    $0 == "# fail 0" { fail++ ; next }
+    $0 == "# cancelled 0" { cancelled++ ; next }
+    $0 == "# skipped 0" { skipped++ ; next }
+    $0 == "# [security-pilot] external_network_attempts=0" { zero++ ; next }
+    $0 ~ /(^|[[:space:]])#?[[:space:]]*\[security-pilot\] external_network_attempts=/ ||
+    $0 ~ /^[[:space:]]*1\.\./ ||
+    $0 ~ /^[[:space:]]*#[[:space:]]*(tests|pass|fail|cancelled|skipped)([[:space:]]|$)/ { invalid++ ; next }
+    END {
+      exit (plan == 1 && tests == 1 && pass == 1 && fail == 1 &&
+        cancelled == 1 && skipped == 1 && zero == 1 && invalid == 0 ? 0 : 1)
+    }
   ' "$log_file"
+}
+
+security_pilot_require_single_network_attachment() {
+  local attached_ids="$1"
+  local service_id="$2"
+  local count
+  count="$(printf '%s\n' "$attached_ids" | awk 'NF { count++ } END { print count + 0 }')"
+  if ! test "$count" = 1; then
+    echo "BLOCKED: canonical PostgreSQL network must contain exactly one container" >&2
+    return 1
+  fi
+  if ! test "$attached_ids" = "$service_id"; then
+    echo "BLOCKED: canonical PostgreSQL network attachment must be the canonical service" >&2
+    return 1
+  fi
 }
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
@@ -162,22 +188,52 @@ if ! docker image inspect pgvector/pgvector:pg15 >/dev/null 2>&1; then
   echo "BLOCKED: pgvector image is not present locally; refusing external pull" >&2
   exit 3
 fi
-SNAPSHOT_DIR=""
-if [[ -d "$MODEL_DIR/snapshots" ]]; then
-  while IFS= read -r candidate; do
-    if [[ -f "$candidate/config.json" && -f "$candidate/tokenizer.json" ]]; then
-      SNAPSHOT_DIR="$candidate"
-      break
+snapshot_candidate_is_valid() {
+  local candidate="$1"
+  if ! test -f "$candidate/config.json" || ! test -f "$candidate/tokenizer.json"; then
+    return 1
+  fi
+  if test -f "$candidate/onnx/model_quantized.onnx"; then
+    return 0
+  fi
+  test -f "$candidate/onnx/model_q8.onnx"
+}
+select_security_pilot_snapshot() {
+  local snapshots_dir="$1"
+  local model_dir="$(dirname "$snapshots_dir")"
+  local main_ref="$model_dir/refs/main"
+  local main_revision main_candidate candidate
+  local candidates=()
+
+  if [[ -f "$main_ref" ]]; then
+    main_revision="$(< "$main_ref")"
+    if [[ "$main_revision" =~ ^[A-Za-z0-9._-]+$ ]]; then
+      main_candidate="$snapshots_dir/$main_revision"
+      if snapshot_candidate_is_valid "$main_candidate"; then
+        printf '%s\n' "$main_candidate"
+        return 0
+      fi
     fi
-  done < <(find "$MODEL_DIR/snapshots" -mindepth 1 -maxdepth 1 -type d -print | sort)
-fi
-if [[ -z "$SNAPSHOT_DIR" ]]; then
-  echo "BLOCKED: transformers model cache snapshot is missing; refusing external download" >&2
-  exit 3
-fi
-if [[ ! -f "$SNAPSHOT_DIR/onnx/model_quantized.onnx" &&
-      ! -f "$SNAPSHOT_DIR/onnx/model_q8.onnx" ]]; then
-  echo "BLOCKED: transformers q8 ONNX model is missing from the local snapshot; refusing external download" >&2
+  fi
+
+  if [[ -d "$snapshots_dir" ]]; then
+    while IFS= read -r candidate; do
+      if snapshot_candidate_is_valid "$candidate"; then
+        candidates+=("$candidate")
+      fi
+    done < <(find "$snapshots_dir" -mindepth 1 -maxdepth 1 -type d -print | LC_ALL=C sort)
+  fi
+  if (( ${#candidates[@]} == 0 )); then
+    echo "BLOCKED: transformers model cache snapshot is missing; refusing external download" >&2
+    return 1
+  fi
+  if (( ${#candidates[@]} != 1 )); then
+    echo "BLOCKED: transformers model cache snapshot selection is ambiguous; refusing external download" >&2
+    return 1
+  fi
+  printf '%s\n' "${candidates[0]}"
+}
+if ! SNAPSHOT_DIR="$(select_security_pilot_snapshot "$MODEL_DIR/snapshots")"; then
   exit 3
 fi
 export SECURITY_PILOT_MODEL_CACHE="$MODEL_CACHE"
@@ -237,6 +293,9 @@ security_pilot_require "canonical PostgreSQL volume is not mounted" test "$(dock
 NETWORK_NAME="$(docker inspect -f '{{range $name, $network := .NetworkSettings.Networks}}{{$name}}{{end}}' "$SERVICE_ID")"
 security_pilot_require "canonical PostgreSQL network is not selected" test "$NETWORK_NAME" = "$EXPECTED_NETWORK_NAME"
 security_pilot_require "canonical PostgreSQL network must be non-internal" test "$(docker network inspect -f '{{.Internal}}' "$NETWORK_NAME")" = false
+NETWORK_CONTAINER_IDS="$(docker network inspect -f '{{range $id, $container := .Containers}}{{$id}}{{"\n"}}{{end}}' "$NETWORK_NAME")"
+security_pilot_require "canonical PostgreSQL network attachment readback failed" \
+  security_pilot_require_single_network_attachment "$NETWORK_CONTAINER_IDS" "$SERVICE_ID"
 
 # Prefer host PostgreSQL clients when available. Otherwise use only the
 # already-healthy canonical service; never target an arbitrary container.
@@ -274,6 +333,9 @@ echo "[security-pilot] database=memento_security_pilot"
 echo "[security-pilot] binding=127.0.0.1:35434"
 echo "[security-pilot] volume=anchormind_security_pilot_pgdata"
 echo "[security-pilot] network=$NETWORK_NAME internal=false"
+# Egress evidence covers Node/application outbound attempts only; PostgreSQL container packets are not observed here.
+echo "[security-pilot] egress_evidence=node_application_outbound_attempts_only"
+echo "[security-pilot] egress_scope=PostgreSQL_container_packets_not_observed"
 
 run_security_pilot_psql -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS vector" >/dev/null
 run_security_pilot_psql -v ON_ERROR_STOP=1 -f - < lib/memory/memory-schema.sql >/dev/null
@@ -332,4 +394,4 @@ REMAINING_SYNTHETIC_ROWS=$(run_security_pilot_psql -Atqc "SELECT
   (SELECT count(*) FROM agent_memory.fragments WHERE topic = '$SYNTHETIC_TOPIC') +
   (SELECT count(*) FROM agent_memory.api_keys WHERE id IN ('$SYNTHETIC_API_KEY_A', '$SYNTHETIC_API_KEY_B'))")
 security_pilot_require "synthetic fixture cleanup readback failed" test "$REMAINING_SYNTHETIC_ROWS" = 0
-echo "[security-pilot] tripwire=zero-non-loopback"
+echo "[security-pilot] tripwire=node-application-zero-non-loopback"

@@ -134,6 +134,18 @@ assert_file_contains "SELECT" "$QUERY_LOG"
 assert_file_contains "other-fragment" "$ROWS_FILE"
 assert_file_contains "other-key" "$ROWS_FILE"
 
+assert_status 1 run_cleanup 0 FAKE_READY_RC=1
+assert_file_not_contains "DELETE FROM agent_memory.fragments" "$QUERY_LOG"
+assert_file_not_contains "SELECT" "$QUERY_LOG"
+assert_file_contains "other-fragment" "$ROWS_FILE"
+assert_file_contains "other-key" "$ROWS_FILE"
+
+assert_status 7 run_cleanup 7 FAKE_READY_RC=1
+assert_file_not_contains "DELETE FROM agent_memory.fragments" "$QUERY_LOG"
+assert_file_not_contains "SELECT" "$QUERY_LOG"
+assert_file_contains "other-fragment" "$ROWS_FILE"
+assert_file_contains "other-key" "$ROWS_FILE"
+
 assert_status 7 run_cleanup 7 FAKE_DOWN_RC=1
 assert_status 1 run_cleanup 0 FAKE_DOWN_RC=1
 
