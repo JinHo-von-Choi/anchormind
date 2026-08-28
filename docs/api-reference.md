@@ -97,6 +97,7 @@ X-RateLimit-Resource: fragments
 - API key (`mmcp_xxx`): 키 생성 시 지정된 `permissions` 배열 기준으로 도구 접근이 제한된다. 배열에 필요한 권한이 없으면 즉시 거부된다.
 - `TOOL_PERMISSIONS` 맵에 등록된 도구는 해당 권한 레벨이 요구된다. 맵에 등록되지 않은 도구명은 `required=null`로 간주되어 권한 검사를 통과한다. 도구를 RBAC 경계에 편입하려면 `TOOL_PERMISSIONS` 맵에 명시적으로 등록해야 한다.
 - 권한 레벨은 세 가지다: `read`(recall/context/memory_stats 등), `write`(remember/forget/amend 등), `admin`(memory_consolidate/apply_update 등). `admin` 권한을 가진 키는 모든 레벨을 호출할 수 있다.
+- 권한이 없는 도구를 호출하면 JSON-RPC 오류 `-32600`이 반환되며 `message`는 `Internal error`다. 거부 사유(`Permission denied: '<도구>' requires '<레벨>' permission`)는 서버 로그에만 남는다. 따라서 클라이언트는 응답만으로 권한 부족과 서버 오류를 구분할 수 없으므로, 재시도 정책을 세울 때 이 점을 감안해야 한다. `memory_consolidate`와 `apply_update`, `check_update`가 이 경로에 해당한다.
 - 타 테넌트(다른 API 키)가 소유한 파편에 forget/amend/link 요청 시 `"Fragment not found"` 에러가 반환된다. SQL 레벨에서 `key_id` 조건으로 격리되므로 존재 여부조차 노출되지 않는다.
 
 보호된 리소스에 인증 없이 접근하면 `401 Unauthorized`와 함께 `WWW-Authenticate: Bearer resource_metadata="</.well-known/oauth-protected-resource URL>"` 헤더가 반환된다.
@@ -740,6 +741,18 @@ violations 있는 경우 (soft gate — 저장됨):
 | agentId | string | - | 에이전트 ID |
 | dryRun | boolean | - | true 설정 시 실제 삭제 없이 삭제 대상 파편 정보와 연결 링크 수를 반환. |
 
+### 응답 형태
+
+호출 결과는 세 가지로 갈린다.
+
+| 상황 | 응답 | isError |
+|-|-|-|
+| 삭제 성공 | `{success: true, deleted: 1}` | false |
+| permanent 계층 파편에 force 미지정 | `{success: true, deleted: 0, protected: 1, reason: "permanent 파편은 force 옵션 필요"}` | false |
+| 대상이 없거나 접근 권한 없음 | `{success: true, deleted: 0, error: "Fragment not found or no permission"}` | true |
+
+세 번째 경우는 페이로드의 `success`가 true인데 `error` 키가 함께 실리고, 그 키 때문에 MCP 봉투가 `isError: true`로 뒤집힌다. 이미 삭제된 대상을 재시도로 다시 지우면 이 응답을 받으므로, 클라이언트는 삭제 실패로 오인하지 않도록 `deleted` 값을 함께 봐야 한다.
+
 ---
 
 ## MCP 도구 — link
@@ -941,6 +954,14 @@ workspace 기입 현황과 세션당 파편 분포를 반환한다.
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | stream | boolean | - | deprecated. SSE progress 이벤트를 더 이상 보내지 않는다. 하위 호환을 위해 스키마에 남아 있으며 동작에 영향을 주지 않는다. |
+
+### 실행 특성
+
+`admin` 권한이 필요하다. 일반 API 키로 호출하면 위의 RBAC 절에 적은 대로 `-32600 Internal error`가 반환된다.
+
+전체 사이클은 20개 이상의 stage로 구성되며 파편 규모에 비례해 시간이 걸린다. 약 1만 3천 파편 규모에서 전 사이클 소요는 7분 안팎이다. 스케줄러가 기본 6시간 주기로 같은 경로를 실행하므로, 수동 호출은 점검 목적일 때만 쓴다.
+
+시맨틱 중복 제거 단계에는 안전 게이트가 걸려 있다. 제거 대상의 변별 토큰이 승계자에 남지 않으면 해당 병합을 차단한다. 상세는 [configuration](configuration.md#consolidategate-정리-안전-게이트)을 참조한다.
 
 ---
 

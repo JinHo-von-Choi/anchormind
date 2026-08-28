@@ -663,6 +663,24 @@ Query the processing state of an async batch job started by `batch_remember(asyn
 
 ---
 
+### Permission denials
+
+Calling a tool without the required permission returns JSON-RPC error `-32600` with the message `Internal error`. The actual reason (`Permission denied: '<tool>' requires '<level>' permission`) is recorded in the server log only. A client therefore cannot tell an authorization failure from a server fault by the response alone, which matters when designing retry policy. `memory_consolidate`, `apply_update`, and `check_update` take this path.
+
+### forget response shapes
+
+| Situation | Response | isError |
+|-|-|-|
+| Deleted | `{success: true, deleted: 1}` | false |
+| Permanent tier without `force` | `{success: true, deleted: 0, protected: 1, reason: "..."}` | false |
+| Target missing or not permitted | `{success: true, deleted: 0, error: "Fragment not found or no permission"}` | true |
+
+In the third case the payload reports `success: true` while carrying an `error` key, and that key flips the MCP envelope to `isError: true`. Retrying a delete that already succeeded lands here, so clients should read `deleted` rather than treating the envelope as authoritative.
+
+### memory_consolidate execution
+
+Requires `admin`. The full cycle runs 20+ stages and scales with fragment count; around 13,000 fragments it takes roughly 7 minutes. The scheduler runs the same path every 6 hours by default, so manual invocation is for inspection only. The semantic dedup stage is guarded: a merge is blocked when the distinctive tokens of the fragment being removed do not survive in the one being kept.
+
 ## MCP Tool — forget
 
 Delete fragment memory. Either id or topic is required. Permanent-tier fragments require the force option.

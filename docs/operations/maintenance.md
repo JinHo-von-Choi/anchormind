@@ -182,6 +182,29 @@ Grafana 알림 권장 임계값: `memento_quota_used_total / memento_quota_limit
 
 ---
 
+## 정리 사이클 수동 실행
+
+스케줄러가 기본 6시간 주기로 실행하는 것과 같은 경로다. 점검이나 마이그레이션 직후 확인 목적으로만 수동 호출한다.
+
+MCP `memory_consolidate` 도구는 `admin` 권한을 요구하며, 권한이 없으면 `-32600 Internal error`가 반환되고 실제 사유는 서버 로그에만 남는다. 마스터 컨텍스트로 직접 실행하려면 다음을 쓴다.
+
+    node -e "import('dotenv/config').then(async()=>{const {MemoryManager}=await import('./lib/memory/MemoryManager.js');console.log(JSON.stringify(await MemoryManager.create().consolidate(),null,1));process.exit(0)})"
+
+2026-08-28 운영 실측 기준 약 1만 3천 파편 규모에서 전 사이클 소요는 7분(421초)이다. 한 사이클의 대표 결과는 다음과 같았다.
+
+| 항목 | 값 |
+|-|-|
+| ttlTransitions | 132 |
+| expiredDeleted | 9 |
+| fragmentsSplit | 2 |
+| semanticDedupMerged | 1 |
+| utilityUpdated | 13211 |
+| anchorsPromoted | 47 |
+
+`anchorsPromoted`가 발생하면 해당 파편이 permanent 계층으로 올라가므로, 이후 `forget`은 `force: true` 없이는 삭제하지 못한다. 점검용 파편을 만들었다면 정리 사이클을 돌리기 전에 회수하는 편이 낫다.
+
+시맨틱 중복 제거 단계의 차단 건수는 `memento_consolidate_gate_blocked_total`로 노출된다. 라벨이 붙은 카운터라 첫 차단이 발생하기 전에는 값이 출력되지 않는다.
+
 ## 스크립트 목록 및 호출 조건
 
 | 스크립트 | 목적 | 호출 조건 | 빈도 |
