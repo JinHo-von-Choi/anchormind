@@ -306,7 +306,20 @@ API 키 원문을 client_id로 등록한 기존 Redis 토큰은 `bound_key_id=nu
 
 ## Reranker (Cross-Encoder 재정렬)
 
-RRF 병합 이후 상위 30건을 cross-encoder로 정밀 재정렬하여 검색 정확도를 높인다. 서버 시작 시 `preloadReranker()`를 비동기로 호출하여 첫 recall 요청 전에 모델을 준비한다.
+RRF 병합 이후 상위 30건을 cross-encoder로 재정렬하고 15건만 남긴다. 서버 시작 시 `preloadReranker()`를 비동기로 호출하여 첫 recall 요청 전에 모델을 준비한다.
+
+**in-process 리랭커는 기본 비활성이다 (`MEMENTO_RERANKER_ENABLED=true`로 활성).**
+
+기본 모델 `Xenova/ms-marco-MiniLM-L-6-v2`는 영어 MS MARCO 전용 교차 인코더로 한국어 학습 데이터가 없다. 임베딩을 다국어 모델로 바꾼 뒤 절제 실험으로 측정한 결과는 다음과 같다.
+
+| 구성 | 격리 R@1 | 격리 R@5 | 코퍼스 R@1 | 코퍼스 R@5 | 코퍼스 MRR | p50 |
+|-|-|-|-|-|-|-|
+| 리랭커 활성 | 50.0% | 67.0% | 74.0% | 95.0% | 0.827 | 561ms |
+| 리랭커 비활성 | 71.0% | 85.0% | 85.0% | 95.0% | 0.890 | 126ms |
+
+코퍼스 R@5 한 항목만 무승부이고 나머지 전 지표에서 비활성이 낫다. 되돌릴 수 없는 이유는 상위 30건 중 15건만 남기는 하드 컷이다. 정답이 여기서 잘리면 `_deduplicate`와 `computeRecallScore`가 `rerankerScore`를 그대로 쓰므로 하류 어떤 보정도 복구하지 못한다. MMR 다양성 선택도 리랭커가 있을 때만 동작해 근사 표현이 몰린 구간에서 정답을 상위 5건 밖으로 밀어낸다.
+
+영어 코퍼스에서는 이득일 수 있으므로 켜는 경로는 남긴다. 외부 리랭커 서비스는 이 스위치와 무관하게 동작한다.
 
 **듀얼 모드:**
 - `RERANKER_URL` 설정 시: 외부 HTTP 서비스. 요청은 `POST /rerank { query, texts[], documents[] }`로 두 필드를 함께 전송하며, 응답은 `{ scores[] }`와 TEI(text-embeddings-inference) 규격의 `[{ index, score }]` 배열을 모두 지원한다. `/health`는 상태 코드만 검사하므로 빈 바디(TEI)도 허용된다.
@@ -317,7 +330,7 @@ RRF 병합 이후 상위 30건을 cross-encoder로 정밀 재정렬하여 검색
 | 값 | 모델 | 크기 | 언어 | 권장 대상 |
 |----|------|------|------|-----------|
 | `minilm` (기본값) | Xenova/ms-marco-MiniLM-L-6-v2 | ~80MB | 영어 전용 | 영어 사용자 |
-| `bge-m3` | onnx-community/bge-reranker-v2-m3-ONNX | ~280MB (q4) | 100+ 언어 (한국어 포함) | 비영어권 사용자 |
+| `bge-m3` | onnx-community/bge-reranker-v2-m3-ONNX | ~280MB (q4) | 100+ 언어 (한국어 포함) | GPU 기반 외부 서비스 |
 
 > **비영어권 사용자는 `RERANKER_MODEL=bge-m3` 사용을 권장한다.** ms-marco-MiniLM-L-6-v2는 영어 MS MARCO 데이터셋으로만 학습되어 한국어 등 비영어 쿼리-문서 쌍의 관련성 판단 능력이 없다. bge-m3는 동일한 ONNX in-process 방식으로 동작하며, 첫 실행 시 HuggingFace Hub에서 자동 다운로드된다.
 

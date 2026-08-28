@@ -289,7 +289,9 @@ After RRF merging, the top 30 candidates are reranked by a cross-encoder for hig
 | `minilm` (default) | Xenova/ms-marco-MiniLM-L-6-v2 | ~80MB | English only | English users |
 | `bge-m3` | onnx-community/bge-reranker-v2-m3-ONNX | ~280MB (q4) | 100+ languages (incl. Korean) | Non-English users |
 
-> **Non-English users are strongly recommended to use `RERANKER_MODEL=bge-m3`.** ms-marco-MiniLM-L-6-v2 was fine-tuned exclusively on the English MS MARCO dataset and cannot reliably rank non-English query-document pairs. bge-m3 operates via the same ONNX in-process mechanism and downloads automatically from HuggingFace Hub on first run.
+> **The in-process reranker is disabled by default (`MEMENTO_RERANKER_ENABLED=true` to enable).** ms-marco-MiniLM-L-6-v2 was fine-tuned exclusively on the English MS MARCO dataset and cannot reliably rank non-English query-document pairs. Once the embedding model was switched to a multilingual one, an ablation showed the reranker to be a net loss on a Korean corpus: Recall@1 74% to 85%, MRR 0.827 to 0.890, and p50 latency 561ms to 126ms, all improving when it is turned off. The cut is irreversible because only 15 of the top 30 candidates survive reranking, and both `_deduplicate` and `computeRecallScore` use `rerankerScore` directly when present.
+>
+> bge-m3 is multilingual and matches the embedding family, but on CPU it takes several seconds to rerank 30 candidates, which is far beyond the recall latency budget. Use it only behind a GPU-backed external service. External rerankers configured via `RERANKER_URL` operate regardless of this switch.
 
 **Policy after external failures (`RERANKER_EXTERNAL_FALLBACK`):** After 3 consecutive failures, one of two policies applies.
 - `skip` (default): does not switch to in-process; external calls are simply skipped for `RERANKER_EXTERNAL_COOLDOWN_MS` (default 60s), and `rerank()` returns the RRF original order (candidates) unchanged. This avoids shifting the bottleneck onto the CPU-heavy in-process model during a traffic burst. After the cooldown expires, the next recall retries the external call once; success resumes normal operation, failure re-enters cooldown.

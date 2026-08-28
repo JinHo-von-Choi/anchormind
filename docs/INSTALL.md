@@ -318,7 +318,8 @@ COMPRESS_AGE_DAYS             - 압축 대상 비활성 일수 (기본: 30)
 COMPRESS_MIN_GROUP            - 압축 그룹 최소 크기 (기본: 3)
 CONSOLIDATE_INTERVAL_MS       - consolidate 주기 (기본: 21600000 = 6시간)
 ALLOWED_ORIGINS               - CORS 허용 Origin 목록 (쉼표 구분)
-RERANKER_MODEL                - in-process ONNX 모델 선택: minilm (기본, 영어 전용) 또는 bge-m3 (다국어, 비영어권 권장)
+MEMENTO_RERANKER_ENABLED      - in-process 리랭커 활성화 (기본: false). 기본 모델이 영어 전용이라 한국어에서는 끄는 편이 정확도·지연 모두 낫다
+RERANKER_MODEL                - in-process ONNX 모델 선택: minilm (기본, 영어 전용) 또는 bge-m3 (다국어, CPU에서 매우 느림)
 LLM_PRIMARY                   - 주 LLM provider (기본: gemini-cli). gemini-cli, agy-cli, codex-cli, opencode-cli, anthropic 등
 LLM_FALLBACKS                 - JSON 배열. 각 원소: {"provider":"anthropic","apiKey":"...","model":"claude-opus-4-6"}
 MEMENTO_REMEMBER_ATOMIC       - true로 설정 시 remember() quota 체크+INSERT를 단일 트랜잭션으로 원자화 (기본: false)
