@@ -31,25 +31,21 @@ const LIB  = path.resolve(HERE, "..", "..", "lib");
  * 판단 없이 숫자만 올리면 이 가드는 의미를 잃는다.
  */
 const ALLOWED = {
-  /** 고정 위치 파라미터로 격리를 박은 질의 */
-  "memory/write/FragmentWriter.js"            : 4,
-  "symbolic/ClaimStore.js"                    : 4,
-  "memory/consolidate/MemoryConsolidator.js"  : 2,
-  "memory/CaseEventStore.js"                  : 2,
-  "tools/resources.js"                        : 2,
-  "memory/link/ContradictionDetector.js"      : 2,
+  /** 고정 위치 파라미터로 격리를 박은 질의와 격리가 아닌 회계·멤버십 질의 */
+  "admin/ApiKeyStore.js": 2,
+  "admin/admin-keys.js": 1,
+  "memory/CaseEventStore.js": 2,
+  "memory/consolidate/MemoryConsolidator.js": 2,
+  "memory/link/ContradictionDetector.js": 2,
   "memory/processors/EpisodeContinuityService.js": 1,
-  "memory/read/GraphNeighborSearch.js"        : 1,
-  "memory/read/RecallSuggestionEngine.js"     : 2,
-
-  /** 격리가 아닌 연산: 할당량 회계, 멤버십 조회, 멱등키 범위, 키별 파라미터 */
-  "admin/ApiKeyStore.js"                      : 3,
-  "admin/admin-keys.js"                       : 1,
-  "memory/QuotaChecker.js"                    : 2,
-  "memory/processors/MemoryRememberer.js"     : 1,
-  "memory/write/BatchRememberProcessor.js"    : 2,
-  "memory/signals/SearchParamAdaptor.js"      : 1,
-  "memory/read/FragmentReader.js"             : 1
+  "memory/read/FragmentReader.js": 1,
+  "memory/read/GraphNeighborSearch.js": 1,
+  "memory/read/RecallSuggestionEngine.js": 2,
+  "memory/read/quotaQueries.js": 1,
+  "memory/signals/SearchParamAdaptor.js": 1,
+  "memory/write/FragmentWriter.js": 4,
+  "symbolic/ClaimStore.js": 4,
+  "tools/resources.js": 2,
 };
 
 /** 격리 조건을 직접 쓴 것으로 보이는 줄인지 판정한다. */

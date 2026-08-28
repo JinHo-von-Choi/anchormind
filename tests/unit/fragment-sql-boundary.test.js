@@ -28,7 +28,7 @@ const LIB  = path.resolve(HERE, "..", "..", "lib");
 
 /** 파일별 fragments 직접 접근 허용 개수. */
 const ALLOWED = {
-  "admin/ApiKeyStore.js": 2,
+  "admin/ApiKeyStore.js": 1,
   "admin/admin-export.js": 2,
   "admin/admin-keys.js": 1,
   "admin/admin-memory.js": 12,
@@ -38,7 +38,6 @@ const ALLOWED = {
   "cli/inspect.js": 1,
   "cli/stats.js": 5,
   "memory/FragmentIndex.js": 1,
-  "memory/QuotaChecker.js": 2,
   "memory/consolidate/ConsolidatorGC.js": 12,
   "memory/consolidate/FragmentGC.js": 11,
   "memory/consolidate/MemoryConsolidator.js": 23,
@@ -52,7 +51,6 @@ const ALLOWED = {
   "memory/link/TemporalLinker.js": 1,
   "memory/processors/EpisodeContinuityService.js": 1,
   "memory/processors/MemoryRecaller.js": 1,
-  "memory/processors/MemoryRememberer.js": 1,
   "memory/read/CaseRecall.js": 1,
   "memory/read/ContextBuilder.js": 1,
   "memory/read/FragmentReader.js": 13,
@@ -62,10 +60,11 @@ const ALLOWED = {
   "memory/read/StitchSourceLoader.js": 1,
   "memory/read/SyntheticQuerySearch.js": 1,
   "memory/read/TopicResolver.js": 1,
+  "memory/read/quotaQueries.js": 1,
   "memory/signals/CaseRewardBackprop.js": 1,
   "memory/signals/RecallBenchmark.js": 1,
   "memory/signals/SpreadingActivation.js": 2,
-  "memory/write/BatchRememberProcessor.js": 3,
+  "memory/write/BatchRememberProcessor.js": 1,
   "memory/write/ConflictResolver.js": 2,
   "memory/write/FragmentWriter.js": 21,
   "memory/write/RememberPostProcessor.js": 1,
