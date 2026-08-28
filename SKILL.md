@@ -649,7 +649,7 @@ tokenBudget을 초과하면 중요도 낮은 파편부터 잘림. 중요한 정�
 
 | 사실 (fact) | 에피소드 (episode) |
 |-------------|-------------------|
-| "nginx 포트는 3999" | "nginx SSL 설정 과정: 처음에 443을 시도했으나 well-known 포트 금지 규칙에 따라 3999로 변경. certbot으로 인증서 발급 후 ssl-params에 경로 설정." |
+| "nginx 포트는 8443" | "nginx SSL 설정 과정: 처음에 443을 시도했으나 well-known 포트 금지 규칙에 따라 8443로 변경. certbot으로 인증서 발급 후 ssl-params에 경로 설정." |
 | 검색이 정확하고 빠름 | 전후관계와 이유를 보존 |
 | recall(keywords=["nginx","포트"]) | recall(text="nginx 설정 과정", includeContext=true) |
 

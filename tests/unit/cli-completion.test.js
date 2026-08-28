@@ -31,9 +31,20 @@ async function captureCompletion(shellArg) {
 
 describe("completion — L6 shell completion", () => {
   // ── 서브명령 / 플래그 메타데이터 ──────────────────────────────
-  it("COMMANDS 배열에 13개 서브명령이 포함된다", () => {
-    assert.strictEqual(COMMAND_COUNT, 13);
-    assert.strictEqual(COMMANDS.length, 13);
+  it("COMMANDS 배열에 15개 서브명령이 포함된다", () => {
+    assert.strictEqual(COMMAND_COUNT, 15);
+    assert.strictEqual(COMMANDS.length, 15);
+  });
+
+  it("자동완성 목록이 bin/memento.js 디스패치 목록과 일치한다", () => {
+    const required = [
+      "serve", "migrate", "cleanup", "backfill", "stats", "health", "recall",
+      "remember", "inspect", "update", "export", "import", "completion",
+      "session", "benchmark",
+    ];
+    for (const cmd of required) {
+      assert.ok(COMMANDS.includes(cmd), `COMMANDS에 ${cmd} 누락`);
+    }
   });
 
   it("COMMANDS 에 completion 자신이 포함된다", () => {

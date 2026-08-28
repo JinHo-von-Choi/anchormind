@@ -11,7 +11,7 @@
  * 업데이트 확인을 수행하며, UPDATE_CHECK_DISABLED=true 로 비활성화할 수 있다.
  *
  * 지원 커맨드: serve, migrate, cleanup, backfill, stats, health, recall, remember,
- * inspect, update, export, import, completion, session.
+ * inspect, update, export, import, completion, session, benchmark.
  */
 import "dotenv/config";
 import { parseArgs } from '../lib/cli/parseArgs.js';
@@ -32,10 +32,11 @@ const COMMANDS = {
   import:     () => import('../lib/cli/import.js'),
   completion: () => import('../lib/cli/completion.js'),
   session:    () => import('../lib/cli/session.js'),
+  benchmark:  () => import('../lib/cli/benchmark.js'),
 };
 
 /** 원격 모드를 지원하지 않는 로컬 전용 명령 목록 */
-const LOCAL_ONLY_COMMANDS = new Set(["serve", "migrate", "cleanup", "backfill", "health", "update", "export", "import"]);
+const LOCAL_ONLY_COMMANDS = new Set(["serve", "migrate", "cleanup", "backfill", "health", "update", "export", "import", "benchmark"]);
 
 /**
  * `memento-mcp --help` 출력 텍스트를 stdout으로 송출한다.
@@ -59,6 +60,7 @@ function printUsage() {
     '  import [--input FILE]            Import fragments from JSONL file or stdin',
     '  completion <shell>               Print shell completion script (bash|zsh)',
     '  session <list|show|delete>       Manage active sessions (headless/CI)',
+    '  benchmark [--goldset FILE]       Measure recall quality against a goldset',
     '',
     'Options:',
     '  --help                      Show this help message',
@@ -68,7 +70,7 @@ function printUsage() {
     '  --timeout <ms>              원격 요청 타임아웃 밀리초 (default: 30000)',
     '',
     'Remote-capable commands: recall, remember, stats, inspect, session',
-    'Local-only commands: serve, migrate, cleanup, backfill, health, update, export, import',
+    'Local-only commands: serve, migrate, cleanup, backfill, health, update, export, import, benchmark',
   ];
   console.log(lines.join('\n'));
 }
