@@ -1,0 +1,54 @@
+{
+  "generated_at": "2026-08-28T08:18:46.016Z",
+  "goldset": "tests/fixtures/recall-goldset.jsonl",
+  "goldset_size": 100,
+  "metrics": {
+    "cases": 100,
+    "offline_recall_at_1": 0.74,
+    "offline_recall_at_5": 0.94,
+    "offline_recall_at_10": 0.95,
+    "offline_mrr": 0.8249166666666666,
+    "offline_hit_rate_at_5": 0.94,
+    "misses": 5,
+    "latency_ms": {
+      "p50": 564.5,
+      "p95": 667.5,
+      "max": 775
+    },
+    "by_query_class": {
+      "exact_symbol": {
+        "cases": 25,
+        "offline_recall_at_1": 0.64,
+        "offline_recall_at_5": 0.84,
+        "offline_recall_at_10": 0.84,
+        "offline_mrr": 0.7333333333333334
+      },
+      "concept_intent": {
+        "cases": 35,
+        "offline_recall_at_1": 0.7142857142857143,
+        "offline_recall_at_5": 0.9714285714285714,
+        "offline_recall_at_10": 0.9714285714285714,
+        "offline_mrr": 0.8214285714285713
+      },
+      "hybrid": {
+        "cases": 25,
+        "offline_recall_at_1": 0.92,
+        "offline_recall_at_5": 1,
+        "offline_recall_at_10": 1,
+        "offline_mrr": 0.9413333333333332
+      },
+      "temporal": {
+        "cases": 15,
+        "offline_recall_at_1": 0.6666666666666666,
+        "offline_recall_at_5": 0.9333333333333333,
+        "offline_recall_at_10": 1,
+        "offline_mrr": 0.7777777777777778
+      }
+    },
+    "spread": {
+      "recall_at_5_min": 0.94,
+      "recall_at_5_max": 0.94,
+      "runs": 2
+    }
+  }
+}

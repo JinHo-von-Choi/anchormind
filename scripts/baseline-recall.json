@@ -1,53 +1,53 @@
 {
-  "generated_at": "2026-08-28T03:15:14.308Z",
+  "generated_at": "2026-08-28T08:15:06.452Z",
   "goldset": "tests/fixtures/recall-goldset.jsonl",
   "goldset_size": 100,
   "metrics": {
     "cases": 100,
-    "offline_recall_at_1": 0.68,
-    "offline_recall_at_5": 0.86,
-    "offline_recall_at_10": 0.87,
-    "offline_mrr": 0.7602500000000001,
-    "offline_hit_rate_at_5": 0.86,
-    "misses": 13,
+    "offline_recall_at_1": 0.5,
+    "offline_recall_at_5": 0.67,
+    "offline_recall_at_10": 0.71,
+    "offline_mrr": 0.5634285714285716,
+    "offline_hit_rate_at_5": 0.67,
+    "misses": 29,
     "latency_ms": {
-      "p50": 261,
-      "p95": 316,
-      "max": 591
+      "p50": 449,
+      "p95": 491,
+      "max": 666
     },
     "by_query_class": {
       "exact_symbol": {
         "cases": 25,
-        "offline_recall_at_1": 0.56,
-        "offline_recall_at_5": 0.72,
-        "offline_recall_at_10": 0.76,
-        "offline_mrr": 0.633
+        "offline_recall_at_1": 0.4,
+        "offline_recall_at_5": 0.48,
+        "offline_recall_at_10": 0.48,
+        "offline_mrr": 0.44
       },
       "concept_intent": {
         "cases": 35,
-        "offline_recall_at_1": 0.6571428571428571,
-        "offline_recall_at_5": 0.8,
-        "offline_recall_at_10": 0.8,
-        "offline_mrr": 0.7238095238095238
+        "offline_recall_at_1": 0.5428571428571428,
+        "offline_recall_at_5": 0.7714285714285715,
+        "offline_recall_at_10": 0.8285714285714286,
+        "offline_mrr": 0.6214285714285714
       },
       "hybrid": {
         "cases": 25,
-        "offline_recall_at_1": 0.8,
-        "offline_recall_at_5": 1,
-        "offline_recall_at_10": 1,
-        "offline_mrr": 0.888
+        "offline_recall_at_1": 0.6,
+        "offline_recall_at_5": 0.76,
+        "offline_recall_at_10": 0.8,
+        "offline_mrr": 0.6637142857142857
       },
       "temporal": {
         "cases": 15,
-        "offline_recall_at_1": 0.7333333333333333,
-        "offline_recall_at_5": 1,
-        "offline_recall_at_10": 1,
-        "offline_mrr": 0.8444444444444444
+        "offline_recall_at_1": 0.4,
+        "offline_recall_at_5": 0.6,
+        "offline_recall_at_10": 0.6666666666666666,
+        "offline_mrr": 0.46666666666666673
       }
     },
     "spread": {
-      "recall_at_5_min": 0.86,
-      "recall_at_5_max": 0.86,
+      "recall_at_5_min": 0.67,
+      "recall_at_5_max": 0.67,
       "runs": 3
     }
   }
