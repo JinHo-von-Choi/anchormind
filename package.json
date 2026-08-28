@@ -5,6 +5,11 @@
   "description": "Fragment-Based Memory MCP Server",
   "main": "server.js",
   "type": "module",
+  "imports": {
+    "#config/memory": "./config/memory.js",
+    "#config/*": "./config/*.js",
+    "#lib/*": "./lib/*.js"
+  },
   "bin": {
     "anchormind": "bin/memento.js",
     "memento-mcp": "bin/memento.js"

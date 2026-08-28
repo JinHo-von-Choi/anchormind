@@ -39,7 +39,7 @@ server.js  (HTTP server)
             |   +-- ContextBuilder.js     Dedicated context() logic. `build()` internally decomposes into 6 private methods: `#loadCoreMemory` / `#loadWorkingMemory` / `#loadAnchorMemory` / `#loadLearningFragments` / `#buildInjectionLines` / `#buildStructuredResponse`
             |   +-- GraphNeighborSearch.js L2.5 graph neighbor search (fragment_links 1-hop bidirectional UNION, tanh-saturated scoring + relation-type boosts)
             |   +-- HistoryReconstructor.js case_id/entity-based narrative reconstruction (ordered_timeline, causal_chains, unresolved_branches)
-            |   +-- Reranker.js           Cross-Encoder reranking (external HTTP if RERANKER_URL set, otherwise ONNX in-process; model selectable via RERANKER_MODEL: minilm/bge-m3)
+            |   +-- Reranker.js           Cross-Encoder reranking (disabled by default; enable via MEMENTO_RERANKER_ENABLED or RERANKER_URL)
             |   +-- CaseRecall.js         Dedicated caseMode: true path. Returns (goal, events[], outcome) triple per case_id
             |   +-- LinkedFragmentLoader.js Bulk linked fragment load (1-hop neighbor batch query)
             |   +-- RecallSuggestionEngine.js Analyzes recall results and generates _suggestion meta field
