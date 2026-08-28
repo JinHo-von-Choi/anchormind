@@ -77,6 +77,14 @@ export function extractAdminRoutes() {
     for (const m of flat.matchAll(/(url\.pathname|subPath)\.match\(\s*\/((?:\[[^\]]*\]|[^/\\]|\\.)+)\//g)) {
       found.add(prefixFor(m[1]) + canonicalize(m[2]));
     }
+    /** 형태 4-2: 라우트 표의 exact() / regex() 판정기 */
+    for (const m of flat.matchAll(/exact\(\s*`([^`]+)`\s*\)/g)) {
+      found.add(canonicalize(m[1]));
+    }
+    for (const m of flat.matchAll(/regex\(\s*new RegExp\(\s*`([^`]+)`\s*\)\s*\)/g)) {
+      found.add(canonicalize(m[1]));
+    }
+
     /** 형태 5: endsWith 접미 판정 */
     for (const m of flat.matchAll(/url\.pathname\.endsWith\("([^"]+)"\)/g)) {
       found.add(`${ADMIN_BASE_LITERAL}${m[1]}`);
