@@ -976,7 +976,7 @@ Generates the questions a user is likely to ask when recalling a fragment and in
 
 | Key | ENV | Default | Description |
 |-|-|-|-|
-| `enabled` | `MEMENTO_SYNTHETIC_QUERY_ENABLED` | `true` | Generation. `false` keeps the worker down and skips enqueueing |
+| `enabled` | `MEMENTO_SYNTHETIC_QUERY_ENABLED` | `false` | Generation. Off by default; set `true` to start the worker |
 | `searchEnabled` | `MEMENTO_SYNTHETIC_QUERY_SEARCH` | `true` | Search use. `false` stops querying already stored auxiliary vectors |
 | `minImportance` | `MEMENTO_SYNTHETIC_QUERY_MIN_IMPORTANCE` | `0.8` | Minimum importance for generation |
 | `types` | `MEMENTO_SYNTHETIC_QUERY_TYPES` | `error,procedure,decision` | Eligible fragment types (comma separated) |

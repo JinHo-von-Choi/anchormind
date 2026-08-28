@@ -40,8 +40,9 @@ const DRY_RUN = process.argv.includes("--dry-run");
 
 /** fragments + morpheme_dict 둘 다 갱신. ef_construction은 기본 스키마(128)와 정합 유지. */
 const TABLES = [
-  { table: "fragments",     indexName: "idx_frag_embedding",          whereClause: "WHERE embedding IS NOT NULL" },
-  { table: "morpheme_dict", indexName: "idx_morpheme_dict_embedding", whereClause: ""                            }
+  { table: "fragments",                 indexName: "idx_frag_embedding",          whereClause: "WHERE embedding IS NOT NULL" },
+  { table: "morpheme_dict",             indexName: "idx_morpheme_dict_embedding", whereClause: ""                            },
+  { table: "fragment_synthetic_query",  indexName: "idx_fsq_embedding_hnsw",      whereClause: "WHERE embedding IS NOT NULL" }
 ];
 const HNSW_M = 16;
 const HNSW_EF_CONSTRUCTION = 128;

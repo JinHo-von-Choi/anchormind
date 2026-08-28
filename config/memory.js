@@ -128,12 +128,13 @@ export const MEMORY_CONFIG = {
    * 파편 저장 시 회상 시점에 던져질 만한 질문을 LLM으로 생성해 보조 벡터로 색인한다.
    * 저장 표기와 회상 표기가 어긋나는 경우(영문 기술용어 저장 대 한국어 질의)를 겨냥한다.
    *
-   * 파편당 LLM 1회와 임베딩 2~3회가 추가되므로 대상을 좁게 시작한다.
-   * MEMENTO_SYNTHETIC_QUERY_ENABLED로 생성을, MEMENTO_SYNTHETIC_QUERY_SEARCH로
-   * 검색 반영을 각각 끌 수 있다. 생성을 꺼도 이미 쌓인 보조 벡터는 검색에 쓰인다.
+   * 파편당 LLM 1회와 임베딩 2~3회가 추가되므로 기본값은 비활성이다.
+   * MEMENTO_SYNTHETIC_QUERY_ENABLED=true로 생성을 켜고, MEMENTO_SYNTHETIC_QUERY_SEARCH로
+   * 검색 반영을 끌 수 있다. 생성을 꺼도 이미 쌓인 보조 벡터는 검색에 쓰인다.
+   * 생성을 기본 활성으로 두면 업그레이드만으로 LLM 호출 비용이 발생하므로 옵트인으로 둔다.
    */
   syntheticQuery: {
-    enabled          : process.env.MEMENTO_SYNTHETIC_QUERY_ENABLED !== "false",
+    enabled          : process.env.MEMENTO_SYNTHETIC_QUERY_ENABLED === "true",
     searchEnabled    : process.env.MEMENTO_SYNTHETIC_QUERY_SEARCH  !== "false",
     /** 적용 대상 제한. 이득이 확인되기 전에 넓히면 비용이 먼저 늘어난다. */
     minImportance    : Number(process.env.MEMENTO_SYNTHETIC_QUERY_MIN_IMPORTANCE || 0.8),

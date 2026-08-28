@@ -551,7 +551,7 @@ recall은 자체 힌트 경로를 이미 갖고 있어 `rates`에서 제외된�
 
 | 키 | ENV | 기본값 | 설명 |
 |-|-|-|-|
-| `enabled` | `MEMENTO_SYNTHETIC_QUERY_ENABLED` | `true` | 역질의 생성. `false`면 워커가 기동하지 않고 큐 적재도 하지 않는다 |
+| `enabled` | `MEMENTO_SYNTHETIC_QUERY_ENABLED` | `false` | 역질의 생성. 기본 비활성이며 `true`로 명시해야 워커가 기동한다 |
 | `searchEnabled` | `MEMENTO_SYNTHETIC_QUERY_SEARCH` | `true` | 검색 반영. `false`면 이미 쌓인 보조 벡터를 조회하지 않는다 |
 | `minImportance` | `MEMENTO_SYNTHETIC_QUERY_MIN_IMPORTANCE` | `0.8` | 생성 대상 최소 중요도 |
 | `types` | `MEMENTO_SYNTHETIC_QUERY_TYPES` | `error,procedure,decision` | 생성 대상 유형(쉼표 구분) |
@@ -563,6 +563,8 @@ recall은 자체 힌트 경로를 이미 갖고 있어 `rates`에서 제외된�
 | `llmTimeoutMs` | `MEMENTO_SYNTHETIC_QUERY_TIMEOUT_MS` | `20000` | 생성 호출 타임아웃 |
 
 두 스위치는 독립이다. 생성을 꺼도 이미 쌓인 보조 벡터는 검색에 쓰이고, 검색을 꺼도 생성은 계속된다.
+
+생성이 기본 비활성인 이유는 비용이다. 업그레이드만으로 파편 저장마다 LLM 호출이 붙으면 예고 없이 사용량이 늘어난다. 켜기 전에 대상 제한(`minImportance`, `types`)과 분당 상한(`maxCallsPerMinute`)을 함께 확인한다.
 
 동작 규약:
 
