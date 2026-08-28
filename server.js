@@ -41,8 +41,7 @@ import {
 /** 도구 (통계 저장용) */
 import { saveAccessStats } from "./lib/tools/index.js";
 import { shutdownPool, getPrimaryPool } from "./lib/tools/db.js";
-import { getMemoryEvaluator } from "./lib/memory/signals/MemoryEvaluator.js";
-import { getBatchRememberWorker } from "./lib/memory/write/BatchRememberWorker.js";
+import { drainAllWorkers } from "./lib/memory/workers/registry.js";
 
 /** 메트릭 */
 import { recordHttpRequest } from "./lib/metrics.js";
@@ -96,8 +95,6 @@ const rateLimiter = new DualRateLimiter({
 });
 setInterval(() => rateLimiter.cleanup(), 5 * 60_000).unref();
 
-/** EmbeddingWorker 인스턴스 (서버 시작 후 초기화) */
-let globalEmbeddingWorker = null;
 
 const ADMIN_BASE = "/v1/internal/model/nothing";
 
@@ -323,7 +320,6 @@ server.listen(PORT, () => {
   const embeddingWorkerRef = { current: null };
   startSchedulers({ globalEmbeddingWorkerRef: embeddingWorkerRef });
   setWorkerRefs({ embeddingWorkerRef });
-  globalEmbeddingWorker = embeddingWorkerRef.current;
 
   /** Reranker 사전 로드 (비차단 — 실패해도 서버 시작 중단 없음) */
   preloadReranker().catch(() => {});
@@ -352,30 +348,14 @@ async function gracefulShutdown(signal, { exitCode = 0 } = {}) {
   /** 2. 진행 중 워커 완료 대기 (최대 30초) */
   const drainPromises = [];
 
-  const evaluatorDrain = getMemoryEvaluator().stop();
-  if (evaluatorDrain) drainPromises.push(evaluatorDrain);
-
-  /** batch_remember 비동기 워커 drain (큐 적재분 유실 방지) */
-  const batchWorkerDrain = getBatchRememberWorker().stop();
-  if (batchWorkerDrain) drainPromises.push(batchWorkerDrain);
-
-  /** 합성 역질의 워커 drain. 진행 중 배치를 마치고 종료한다. */
-  try {
-    const { getSyntheticQueryWorker } = await import("./lib/memory/embedding/SyntheticQueryWorker.js");
-    const syntheticDrain = getSyntheticQueryWorker().stop();
-    if (syntheticDrain) drainPromises.push(syntheticDrain);
-  } catch { /* 모듈 미로드 시 drain 대상 없음 */ }
+  /** 기동한 폴링 워커는 스스로 레지스트리에 등록되어 있다. 일괄 배수한다. */
+  drainPromises.push(...drainAllWorkers());
 
   /** Phase 4: 형태소 등록 drain (미완료 morpheme fire-and-forget 작업 완료 대기) */
   try {
     const { MemoryManager } = await import("./lib/memory/MemoryManager.js");
     drainPromises.push(MemoryManager.getInstance().drainMorpheme());
   } catch { /* MemoryManager 미초기화 시 skip */ }
-
-  if (globalEmbeddingWorker) {
-    const embeddingDrain = globalEmbeddingWorker.stop();
-    if (embeddingDrain) drainPromises.push(embeddingDrain);
-  }
 
   if (drainPromises.length > 0) {
     console.log(`[Shutdown] Waiting for ${drainPromises.length} worker(s) to drain (timeout: ${DRAIN_TIMEOUT_MS}ms)...`);
