@@ -228,6 +228,8 @@ Every recovered item was an exact_symbol case where the stored text used English
 
 Running the auxiliary probe sequentially after the body search pushed p95 from 278.5ms to 531ms while Recall@5 reached only 81.7%. Running it in parallel with an adoption cap cut the latency increase to 32ms and raised Recall@5 to 86.7%. Merging auxiliary candidates without a cap displaces exact body matches in result sets that were already good.
 
+The accuracy gain actually came from ordering the auxiliary results. `id = ANY(...)` does not preserve input order, so with an adoption cap in place, taking the first few rows unsorted discards the very fragment scoring 1.0. Parallelisation and the ordering fix were applied together, and the initial write-up attributed the gain to the wrong one.
+
 ### Embedding similarity distribution
 
 The default semantic threshold of 0.40 sat above the actual similarity distribution. With text-embedding-3-small, a paraphrase pair mixing a Korean query with an English technical term measured 0.2621 cosine, while the distribution against 5000 arbitrary fragments was p50 0.228 / p95 0.335. Correct fragments were filtered out below the threshold while unrelated fragments in the 0.39 to 0.43 range were returned instead. This measurement is the basis for the intent-based threshold adjustment.
