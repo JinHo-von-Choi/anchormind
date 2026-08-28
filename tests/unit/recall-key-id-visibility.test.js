@@ -32,6 +32,7 @@ import { FragmentReader } from "../../lib/memory/read/FragmentReader.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join }  from "node:path";
+import { keyScopeCondition } from "../../lib/memory/keyScope.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = dirname(__filename);
@@ -147,20 +148,29 @@ describe("단일 keyId 케이스 — WHERE key_id = ANY($N) 조건 빌드", () =
     assert.deepStrictEqual(finalParams[2], ["K1"]);
   });
 
-  it("searchByTopic 메서드가 key_id = ANY 패턴을 포함하고 있어야 한다", () => {
+  it("searchByTopic이 키 격리 조건을 붙인다", () => {
     const src = FragmentReader.prototype.searchByTopic.toString();
     assert.ok(
-      src.includes("key_id = ANY("),
-      "searchByTopic에 key_id = ANY( 패턴이 없음"
+      src.includes("keyScopeCondition(params, \"key_id\""),
+      "searchByTopic에 키 격리 조건 생성이 없음"
     );
   });
 
-  it("searchBySemantic 메서드가 f.key_id = ANY 패턴을 포함하고 있어야 한다", () => {
+  it("searchBySemantic이 키 격리 조건을 붙인다", () => {
     const src = FragmentReader.prototype.searchBySemantic.toString();
     assert.ok(
-      src.includes("key_id = ANY("),
-      "searchBySemantic에 key_id = ANY( 패턴이 없음"
+      src.includes("keyScopeCondition(params, \"f.key_id\""),
+      "searchBySemantic에 키 격리 조건 생성이 없음"
     );
+  });
+
+  it("격리 조건 생성기가 key_id = ANY 절을 만든다", () => {
+    const params = [];
+    assert.equal(
+      keyScopeCondition(params, "key_id", ["K1"]),
+      "key_id = ANY($1::text[])"
+    );
+    assert.deepStrictEqual(params, [["K1"]]);
   });
 });
 
