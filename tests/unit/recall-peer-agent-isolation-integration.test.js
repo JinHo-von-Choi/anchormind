@@ -388,7 +388,7 @@ describe("LinkStore SQL agent/workspace 격리", () => {
 
     const { sql, params } = vectorQueries.at(-1);
     assert.doesNotMatch(sql, /f\.agent_id = \$/);
-    assert.match(sql, /f\.key_id = ANY\(\$2\)/);
+    assert.match(sql, /f\.key_id = ANY\(\$2(::text\[\])?\)/);
     assert.match(sql, /\(f\.workspace = \$3 OR f\.workspace IS NULL\)/);
     assert.deepEqual(params, [["seed"], ["key-1"], "ws-a"]);
   });
