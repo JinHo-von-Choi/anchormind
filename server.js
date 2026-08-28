@@ -359,6 +359,13 @@ async function gracefulShutdown(signal, { exitCode = 0 } = {}) {
   const batchWorkerDrain = getBatchRememberWorker().stop();
   if (batchWorkerDrain) drainPromises.push(batchWorkerDrain);
 
+  /** 합성 역질의 워커 drain. 진행 중 배치를 마치고 종료한다. */
+  try {
+    const { getSyntheticQueryWorker } = await import("./lib/memory/embedding/SyntheticQueryWorker.js");
+    const syntheticDrain = getSyntheticQueryWorker().stop();
+    if (syntheticDrain) drainPromises.push(syntheticDrain);
+  } catch { /* 모듈 미로드 시 drain 대상 없음 */ }
+
   /** Phase 4: 형태소 등록 drain (미완료 morpheme fire-and-forget 작업 완료 대기) */
   try {
     const { MemoryManager } = await import("./lib/memory/MemoryManager.js");

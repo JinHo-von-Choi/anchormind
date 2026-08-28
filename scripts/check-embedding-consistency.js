@@ -19,7 +19,7 @@ import { getSchedulerRegistry } from "../lib/scheduler-registry.js";
 import { resolveEmbeddingColumnSpec, embeddingColumnMismatch, fetchEmbeddingColumn }
   from "../lib/memory/embedding/column-spec.js";
 
-const TABLES           = ["fragments", "morpheme_dict"];
+const TABLES           = ["fragments", "morpheme_dict", "fragment_synthetic_query"];
 const SCHEMA_FOR_CHECK = "agent_memory";
 
 export async function checkEmbeddingConsistency() {
