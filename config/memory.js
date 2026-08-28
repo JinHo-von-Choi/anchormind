@@ -68,6 +68,47 @@ export const MEMORY_CONFIG = {
     graphWeightFactor     : 1.5,   // L2.5 그래프 이웃 가중치 배수
     candidateMinImportance: 0.1    // RRF 후보 저중요도 컷오프 하한 (비-앵커)
   },
+  /**
+   * 질의 의도별 검색 프로파일.
+   *
+   * classifyQueryIntent가 판정한 의도에 따라 RRF 레이어 가중, 시맨틱 임계값,
+   * 형태소 프로브 채택 조건, 랭킹 lexical 가중치를 한 번에 전환한다.
+   * ranking의 importanceWeight/recencyWeight/semanticWeight는 합계 1.0 제약이
+   * 걸려 있어 프로파일 조정 대상이 아니다.
+   * MEMENTO_QUERY_PROFILE_ENABLED=false로 전체 비활성화할 수 있다.
+   */
+  queryProfiles: {
+    enabled: true,
+    /** 코드 식별자·경로·수치 중심 질의: 키워드 경로와 정확 일치 신호를 키운다. */
+    EXACT_SYMBOL: {
+      l2WeightFactor           : 1.6,
+      l3WeightFactor           : 0.9,
+      minSimilarityDelta       : 0.0,
+      morphemeFallbackThreshold: 5,
+      exactKeywordBoost        : 0.45,
+      lexicalWeightReranked    : 0.18,
+      lexicalWeightFallback    : 0.26,
+    },
+    /** 개념·원인·절차 질의: 벡터 경로를 키우고 임계값을 낮춰 후보 진입을 넓힌다.
+     *  text-embedding-3-small 실측에서 한국어 패러프레이즈 쌍 코사인이 0.26 부근이라
+     *  기본 임계값 0.40으로는 정답이 후보에 들어오지 못한다. */
+    CONCEPT_INTENT: {
+      l2WeightFactor           : 0.9,
+      l3WeightFactor           : 1.5,
+      minSimilarityDelta       : -0.20,
+      morphemeFallbackThreshold: 12,
+      exactKeywordBoost        : 0.25,
+      lexicalWeightReranked    : 0.08,
+      lexicalWeightFallback    : 0.12,
+    },
+    /** 혼재·판정 불가 질의: 임계값만 소폭 완화하고 나머지는 기본값을 유지한다. */
+    HYBRID: {
+      l2WeightFactor           : 1.0,
+      l3WeightFactor           : 1.1,
+      minSimilarityDelta       : -0.06,
+      morphemeFallbackThreshold: 8,
+    },
+  },
   /** L2.5 그래프 이웃 검색 설정 */
   graph: {
     seedCount     : 10,       // L2 상위 N개 파편을 그래프 시드로 사용
@@ -80,6 +121,46 @@ export const MEMORY_CONFIG = {
       contradicts  : 0.3,
       superseded_by: 0.3
     }
+  },
+  /**
+   * 합성 역질의 증강.
+   *
+   * 파편 저장 시 회상 시점에 던져질 만한 질문을 LLM으로 생성해 보조 벡터로 색인한다.
+   * 저장 표기와 회상 표기가 어긋나는 경우(영문 기술용어 저장 대 한국어 질의)를 겨냥한다.
+   *
+   * 파편당 LLM 1회와 임베딩 2~3회가 추가되므로 대상을 좁게 시작한다.
+   * MEMENTO_SYNTHETIC_QUERY_ENABLED로 생성을, MEMENTO_SYNTHETIC_QUERY_SEARCH로
+   * 검색 반영을 각각 끌 수 있다. 생성을 꺼도 이미 쌓인 보조 벡터는 검색에 쓰인다.
+   */
+  syntheticQuery: {
+    enabled          : process.env.MEMENTO_SYNTHETIC_QUERY_ENABLED !== "false",
+    searchEnabled    : process.env.MEMENTO_SYNTHETIC_QUERY_SEARCH  !== "false",
+    /** 적용 대상 제한. 이득이 확인되기 전에 넓히면 비용이 먼저 늘어난다. */
+    minImportance    : Number(process.env.MEMENTO_SYNTHETIC_QUERY_MIN_IMPORTANCE || 0.8),
+    types            : (process.env.MEMENTO_SYNTHETIC_QUERY_TYPES || "error,procedure,decision")
+                         .split(",").map(t => t.trim()).filter(Boolean),
+    /** 생성 개수와 길이 상한 */
+    minQueries       : 2,
+    maxQueries       : 3,
+    maxQueryChars    : 120,
+    /** 전용 큐. 임베딩 큐와 분리해 폭주가 서로 전파되지 않게 한다. */
+    queueKey         : "memento:synthetic_query_queue",
+    intervalMs       : Number(process.env.MEMENTO_SYNTHETIC_QUERY_INTERVAL_MS || 5000),
+    batchSize        : Number(process.env.MEMENTO_SYNTHETIC_QUERY_BATCH || 5),
+    retryLimit       : 3,
+    llmTimeoutMs     : Number(process.env.MEMENTO_SYNTHETIC_QUERY_TIMEOUT_MS || 20000),
+    /** 분당 LLM 호출 상한. 0이면 무제한 */
+    maxCallsPerMinute: Number(process.env.MEMENTO_SYNTHETIC_QUERY_RPM || 20),
+    /** 보조 벡터 히트의 유사도 감쇠 계수. 본문 히트와 같은 무게로 다루지 않는다. */
+    similarityDecay  : 0.85,
+    /** 보조 벡터 검색 상한 */
+    searchLimit      : 10,
+    /** 한 검색에서 보조 경로로 합류시킬 최대 파편 수.
+     *  프로브는 본 검색과 병렬로 실행되므로 조회 비용은 지연에 거의 영향이 없지만,
+     *  무제한 합류시키면 본문 정확 일치가 후보 경쟁에서 밀린다. */
+    adoptLimit       : Number(process.env.MEMENTO_SYNTHETIC_QUERY_ADOPT || 5),
+    /** 백필 수집기가 한 번에 처리할 미생성 파편 수 */
+    backfillBatch    : Number(process.env.MEMENTO_SYNTHETIC_QUERY_BACKFILL || 20),
   },
   /** 임베딩 비동기 워커 설정 */
   embeddingWorker: {
@@ -210,6 +291,18 @@ export const MEMORY_CONFIG = {
    * 수정일: 2026-05-19
    */
   consolidate: {
+    /**
+     * 파괴 단계 안전 게이트.
+     *
+     * 시맨틱 중복 제거가 병합을 수행하기 전에 판정한다. 코사인 유사도는 수치나
+     * 식별자만 다른 문장을 구분하지 못하므로(max_connections 200과 500은 0.99 이상),
+     * 제거 대상의 변별 토큰이 승계자에 남는지 확인한 뒤에만 병합을 허용한다.
+     * enabled=false로 두면 게이트 없이 기존 동작으로 되돌아간다.
+     */
+    gate: {
+      enabled      : true,
+      maxLostTokens: 0,
+    },
     /**
      * schema-fit gate: 시간 트리거에 더해 데이터 상태 조건을 평가한다.
      *
