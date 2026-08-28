@@ -517,6 +517,81 @@ Phase 1(gate-only)에서 통과 자식 수 < `minItems`이면 DB insert 없이 �
 
 recall은 자체 힌트 경로를 이미 갖고 있어 `rates`에서 제외된다. 상한·쿨다운 카운터는 Redis(`frag:fbhint:count:*`, `frag:fbhint:cd:*`)에 보관하며, Redis 미가용 시에는 상한·쿨다운 없이 확률 판정만 적용된다(fail-open). `remember(dryRun=true)`·`forget(dryRun=true)`과 실제 갱신이 없었던 `amend`는 표집 대상이 아니다. 표집된 응답에는 `_meta.hints[0]`에 `signal: "feedback_sampled"`와 `args: {tool_name, trigger_type: "sampled"}`가 실린다.
 
+### queryProfiles (질의 의도별 검색 프로파일)
+
+질의 내용을 분석해 `EXACT_SYMBOL` / `CONCEPT_INTENT` / `HYBRID` 중 하나로 분류하고, 의도에 맞는 검색 손잡이를 한 번에 전환한다. `config/memory.js`의 `queryProfiles` 블록에서 설정한다.
+
+| 키 | 설명 |
+|-|-|
+| `enabled` | 프로파일 전체 활성화. ENV `MEMENTO_QUERY_PROFILE_ENABLED=false`로 끌 수 있다 |
+| `l2WeightFactor` | RRF에서 L2(메타데이터·키워드) 레이어 가중 배수 |
+| `l3WeightFactor` | RRF에서 L3(pgvector) 레이어 가중 배수 |
+| `minSimilarityDelta` | 시맨틱 임계값 보정치. 적용 후 0.10~0.60으로 클램프된다 |
+| `morphemeFallbackThreshold` | 형태소 보조 프로브 채택 조건(기본 L3 결과 수 상한) |
+| `exactKeywordBoost` | 키워드 정확 일치 가산 |
+| `lexicalWeightReranked` / `lexicalWeightFallback` | 최종 재정렬의 lexical 가중치 |
+
+기본값은 다음과 같다.
+
+| 프로파일 | 판정 기준 | l2 | l3 | minSimilarityDelta |
+|-|-|-|-|-|
+| `EXACT_SYMBOL` | 코드 식별자, 경로, 환경변수, 3자리 이상 수치 포함 | 1.6 | 0.9 | 0.0 |
+| `CONCEPT_INTENT` | 의문사, 원인·방법·절차 표현, 식별자 부재 | 0.9 | 1.5 | -0.20 |
+| `HYBRID` | 혼재 또는 판정 불가 | 1.0 | 1.1 | -0.06 |
+
+`CONCEPT_INTENT`의 임계값 보정이 큰 이유는 임베딩 모델의 실제 유사도 분포 때문이다. text-embedding-3-small에서 한국어 질의와 영문 기술용어가 섞인 저장문의 패러프레이즈 쌍 코사인이 0.26 부근으로 측정되었고, 임의 파편 대비 분포는 p50 0.228 / p95 0.335였다. 기본 임계값 0.40을 그대로 쓰면 정답 파편이 후보에 진입하지 못한다.
+
+`ranking`의 `importanceWeight` / `recencyWeight` / `semanticWeight`는 합계 1.0을 기동 게이트가 강제하므로 프로파일 조정 대상이 아니다.
+
+효과는 `benchmark` 서브명령으로 계측한다. 100문항 골드셋 격리 모드 기준 Recall@5는 프로파일 비활성 64%에서 활성 86%로, 운영 코퍼스 경쟁 모드에서는 50%에서 76%로 측정되었다.
+
+### syntheticQuery (합성 역질의 증강)
+
+파편 저장 시 회상 시점에 던져질 만한 질문을 생성해 보조 벡터로 색인한다. 본문 임베딩만으로는 저장 표기와 회상 표기가 어긋날 때 후보 진입에 실패하는데, 이 경로가 그 격차를 메운다. 생성은 기존 LLM 체인(`LLM_PRIMARY` + `LLM_FALLBACKS`)에 위임하며 별도 provider나 키를 두지 않는다.
+
+| 키 | ENV | 기본값 | 설명 |
+|-|-|-|-|
+| `enabled` | `MEMENTO_SYNTHETIC_QUERY_ENABLED` | `true` | 역질의 생성. `false`면 워커가 기동하지 않고 큐 적재도 하지 않는다 |
+| `searchEnabled` | `MEMENTO_SYNTHETIC_QUERY_SEARCH` | `true` | 검색 반영. `false`면 이미 쌓인 보조 벡터를 조회하지 않는다 |
+| `minImportance` | `MEMENTO_SYNTHETIC_QUERY_MIN_IMPORTANCE` | `0.8` | 생성 대상 최소 중요도 |
+| `types` | `MEMENTO_SYNTHETIC_QUERY_TYPES` | `error,procedure,decision` | 생성 대상 유형(쉼표 구분) |
+| `maxCallsPerMinute` | `MEMENTO_SYNTHETIC_QUERY_RPM` | `20` | 분당 LLM 호출 상한. `0`이면 무제한 |
+| `batchSize` | `MEMENTO_SYNTHETIC_QUERY_BATCH` | `5` | 큐에서 한 번에 꺼내는 수 |
+| `backfillBatch` | `MEMENTO_SYNTHETIC_QUERY_BACKFILL` | `20` | 큐가 비었을 때 회수할 미생성 파편 수 |
+| `adoptLimit` | `MEMENTO_SYNTHETIC_QUERY_ADOPT` | `5` | 한 검색에서 보조 경로로 합류시킬 최대 파편 수 |
+| `similarityDecay` | - | `0.85` | 보조 히트 유사도 감쇠 계수 |
+| `llmTimeoutMs` | `MEMENTO_SYNTHETIC_QUERY_TIMEOUT_MS` | `20000` | 생성 호출 타임아웃 |
+
+두 스위치는 독립이다. 생성을 꺼도 이미 쌓인 보조 벡터는 검색에 쓰이고, 검색을 꺼도 생성은 계속된다.
+
+동작 규약:
+
+- 생성 실패는 파편 저장에 영향을 주지 않는다. 큐 적재 실패도 삼키며, 누락분은 워커의 백필 수집기가 회수한다.
+- 생성된 질의는 원문의 고유명사·식별자·수치를 최소 하나 보존해야 채택된다. 원문에 없던 한자·가나가 섞이면 생성 언어가 흔들린 것으로 보고 버린다.
+- 검색 시 보조 벡터 조회는 본문 벡터 조회와 병렬로 실행된다. 순차로 붙이면 매 검색에 벡터 조회가 하나 더 얹혀 p95 지연이 배가 된다.
+- 보조 히트는 감쇠 계수를 적용한 유사도로 합류하며, 이미 본문 경로가 찾은 파편은 건너뛴다.
+
+`fragment_synthetic_query`는 `fragments`와 분리된 표다. `QuotaChecker`가 `fragments` 행 수로 `fragment_limit`을 판정하므로 같은 표에 넣으면 사용자 할당량을 잠식한다. 파생 자료이므로 유실 시 백필로 재생성한다.
+
+### consolidate.gate (정리 안전 게이트)
+
+시맨틱 중복 제거가 병합을 수행하기 전에 판정한다. 코사인 유사도는 수치나 식별자만 다른 문장을 구분하지 못하므로(`max_connections 200`과 `500`은 0.99 이상), 제거 대상이 가진 변별 토큰(수치·식별자·경로·버전)이 승계자에 남는지 확인한 뒤에만 병합을 허용한다.
+
+| 키 | 기본값 | 설명 |
+|-|-|-|
+| `enabled` | `true` | `false`면 게이트 없이 기존 동작으로 되돌아간다 |
+| `maxLostTokens` | `0` | 허용할 소실 토큰 수 |
+
+차단 사유는 세 가지다.
+
+| 사유 | 판정 |
+|-|-|
+| `distinctive_token_loss` | 제거 대상의 변별 토큰이 승계자에 없음 |
+| `survivor_shorter` | 승계자가 제거 대상보다 1.5배 이상 짧음 |
+| `cosine_below_floor` | 코사인 하한 미달 |
+
+차단·통과 건수는 `memento_consolidate_gate_blocked_total`(stage, reason 라벨)과 `memento_consolidate_gate_allowed_total`(stage 라벨)로 노출된다. 삭제 이후가 아니라 파괴 전에 판정하므로 중단 시 복구 절차가 필요 없다.
+
 ### SearchParamAdaptor (자동 검색 파라미터 학습)
 
 SearchParamAdaptor는 별도 환경변수 없이 자동으로 동작한다. `config/memory.js`의 `semanticSearch.minSimilarity` 값을 기본값으로 사용하며, 50회 이상 검색 후 key_id x query_type x hour 조합별로 학습된 값으로 대체된다.

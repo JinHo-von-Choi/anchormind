@@ -47,7 +47,7 @@ node bin/memento.js stats
 
 ### local-only (원격 접속 불가)
 
-`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import` 은 직접 DB / 프로세스에 접근하는 명령이므로 `--remote` 플래그와 함께 사용하면 에러를 반환한다.
+`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark` 는 직접 DB / 프로세스에 접근하는 명령이므로 `--remote` 플래그와 함께 사용하면 에러를 반환한다.
 
 ### 원격 지원
 
@@ -73,6 +73,7 @@ node bin/memento.js stats
 | `export [--topic x] [--type t]` | 파편 JSONL 덤프 | 아니오 |
 | `import [--input FILE]` | JSONL 흡수 (파일 또는 stdin) | 아니오 |
 | `completion <shell>` | bash/zsh 보완 스크립트 출력 | 예 |
+| `benchmark [--goldset FILE]` | 골드셋 기반 회상 품질 계측 | 아니오 |
 
 ---
 
@@ -499,4 +500,36 @@ node scripts/backfill-embeddings.js
 
 ```bash
 DATABASE_URL=$DATABASE_URL node scripts/normalize-vectors.js
+```
+
+### benchmark
+
+골드셋 (저장문, 질의) 패러프레이즈 쌍으로 회상 품질을 정량 측정한다. 저장문을 격리 스코프에 적재하고 질의를 실행해 정답 파편의 순위를 구한 뒤 Recall@k, MRR, 지연을 산출하고, 실행이 끝나면 적재분을 회수한다.
+
+```bash
+node bin/memento.js benchmark
+node bin/memento.js benchmark --repeat 3 --json
+node bin/memento.js benchmark --save-baseline scripts/baseline-recall.json
+node bin/memento.js benchmark --baseline scripts/baseline-recall.json
+```
+
+주요 옵션: `--goldset <path>`(기본 `tests/fixtures/recall-goldset.jsonl`), `--baseline <path>`, `--save-baseline <path>`, `--limit <n>`, `--repeat <n>`, `--synthetic`, `--page-size <n>`, `--key-scope isolated|corpus`, `--no-seed`, `--no-cleanup`.
+
+`--synthetic`은 적재한 파편에 합성 역질의를 생성한 뒤 평가한다. 역질의 증강의 효과를 통제 변수로 재려는 목적이며, 파편당 LLM 호출이 발생하므로 기본 실행에는 포함되지 않는다.
+
+`--baseline`으로 비교했을 때 회귀가 감지되면 종료 코드 2를 반환한다. Recall 하락 허용치는 2pp, 지연 p95 증가 허용치는 15%다. 같은 적재분 안에서는 회차 간 편차가 0이지만 적재를 다시 하면 1pp 안팎으로 움직이므로, 허용치를 그보다 좁게 잡으면 게이트가 잡음에 반응한다.
+
+측정 모드는 두 가지다.
+
+| 모드 | 후보 집합 | 재현성 | 용도 |
+|-|-|-|-|
+| `isolated` (기본) | 적재한 골드셋 파편만 | 회차 간 동일 | 변경 전후 귀속 비교 |
+| `corpus` | 운영 파편과 경쟁 | 코퍼스 변화에 따라 달라짐 | 실제 건초더미에서의 체감 확인 |
+
+`--repeat`는 한 번 적재한 뒤 평가만 반복해 중앙값과 회차 간 편차를 함께 보고한다. 적재 직후에는 형태소 등록과 자동 링크 생성이 끝나기를 기다리는 안정화 단계가 들어가며, 이 대기가 없으면 같은 코드에서도 회차마다 순위가 흔들린다.
+
+도움말:
+
+```bash
+node bin/memento.js benchmark --help
 ```

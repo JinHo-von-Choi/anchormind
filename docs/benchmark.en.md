@@ -188,3 +188,50 @@ Standalone measurement of the tokenization step in `lib/memory/embedding/Morphem
 - `results/evaluation_round_direct_k5_improved.jsonl` -- improved (temporal + abstention) evaluation
 - `results/evaluation_round_direct_k5_conv2.jsonl` -- CoN v2 evaluation
 - `results/judge_calibration.jsonl` -- Gemini vs GPT-4o calibration data
+
+## Offline goldset measurement (2026-08-28)
+
+Unlike LongMemEval-S, which requires an external dataset and a separate harness, this measurement ships with the repository so a change can be compared before and after immediately. Measurement conditions differ, so these numbers are not directly comparable to the LongMemEval figures above.
+
+| Item | Value |
+|------|-------|
+| Goldset | `tests/fixtures/recall-goldset.jsonl`, 100 entries |
+| Construction | (stored text, paraphrased query) pairs, so the expected answer is fixed by construction |
+| Query classes | exact_symbol 25, concept_intent 35, hybrid 25, temporal 15 |
+| Command | `node bin/memento.js benchmark --repeat 2` |
+
+### Intent profile, before and after
+
+| Metric | Profile off | Profile on |
+|--------|-------------|------------|
+| Recall@1 (isolated) | 52.0% | 68.0% |
+| Recall@5 (isolated) | 64.0% | 86.0% |
+| MRR (isolated) | 0.5707 | 0.7603 |
+| Misses (isolated) | 36 | 13 |
+| p95 latency (isolated) | 299ms | 316ms |
+| Recall@5 (corpus) | 50.0% | 76.0% |
+| p95 latency (corpus) | 1001ms | 996ms |
+
+### Synthetic reverse-query augmentation, before and after
+
+Reverse queries were generated for the first 30 goldset entries and the same queries were re-run. Eligibility was relaxed for measurement (importance 0.5 and up, all types), indexing 75 reverse queries across 30 fragments.
+
+| Metric | Off | On |
+|--------|-----|-----|
+| Recall@1 | 70.0% | 76.7% |
+| Recall@5 | 80.0% | 86.7% |
+| MRR | 0.7317 | 0.7983 |
+| Misses | 6 | 4 |
+| p95 latency | 278.5ms | 311ms |
+
+Every recovered item was an exact_symbol case where the stored text used English technical terms and the query was Korean, so the body vector never brought it into the candidate set.
+
+Running the auxiliary probe sequentially after the body search pushed p95 from 278.5ms to 531ms while Recall@5 reached only 81.7%. Running it in parallel with an adoption cap cut the latency increase to 32ms and raised Recall@5 to 86.7%. Merging auxiliary candidates without a cap displaces exact body matches in result sets that were already good.
+
+### Embedding similarity distribution
+
+The default semantic threshold of 0.40 sat above the actual similarity distribution. With text-embedding-3-small, a paraphrase pair mixing a Korean query with an English technical term measured 0.2621 cosine, while the distribution against 5000 arbitrary fragments was p50 0.228 / p95 0.335. Correct fragments were filtered out below the threshold while unrelated fragments in the 0.39 to 0.43 range were returned instead. This measurement is the basis for the intent-based threshold adjustment.
+
+### Reproducibility
+
+Before key-scope isolation and the post-seed settle step, two consecutive runs of identical code produced 68% and 57% Recall@5. Competing against the production corpus means the corpus keeps changing, and asynchronous link creation right after seeding means the graph layer injects different neighbours at each evaluation. With both in place the spread across runs is zero.

@@ -499,3 +499,27 @@ Normalize embedding vectors to unit length. Run once after switching providers.
 ```bash
 DATABASE_URL=$DATABASE_URL node scripts/normalize-vectors.js
 ```
+
+### benchmark
+
+Measures recall quality against a goldset of (stored text, paraphrased query) pairs. Seeds the stored texts into an isolated key scope, runs the queries, computes Recall@k / MRR / latency from the rank of the expected fragment, and removes the seeded fragments when finished.
+
+```bash
+node bin/memento.js benchmark
+node bin/memento.js benchmark --repeat 3 --json
+node bin/memento.js benchmark --save-baseline scripts/baseline-recall.json
+node bin/memento.js benchmark --baseline scripts/baseline-recall.json
+```
+
+Options: `--goldset <path>` (default `tests/fixtures/recall-goldset.jsonl`), `--baseline <path>`, `--save-baseline <path>`, `--limit <n>`, `--repeat <n>`, `--synthetic`, `--page-size <n>`, `--key-scope isolated|corpus`, `--no-seed`, `--no-cleanup`.
+
+`--synthetic` generates synthetic reverse queries for the seeded fragments before evaluating, so the augmentation can be measured as a controlled variable. It costs one LLM call per fragment and is therefore off by default.
+
+Exits with code 2 when `--baseline` comparison detects a regression. Tolerances are 2pp for recall and 15% for p95 latency. Repeated evaluations of one seeding show zero spread, but a fresh seeding moves the number by about 1pp, so a tighter tolerance would fire on noise.
+
+| Mode | Candidate set | Reproducible | Use |
+|-|-|-|-|
+| `isolated` (default) | seeded goldset only | identical across runs | attribution of a change |
+| `corpus` | competes with production fragments | varies as the corpus changes | realistic haystack check |
+
+`--repeat` seeds once and evaluates repeatedly, reporting the median and the spread across runs. Seeding is followed by a settle step that waits for morpheme registration and automatic link creation; without it, ranks shift between runs even with identical code.

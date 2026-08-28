@@ -335,7 +335,7 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 | asOf | string | - | ISO 8601. 특정 시점 기준 유효 파편만. |
 | excludeSeen | boolean | - | context()에서 이미 주입된 파편 제외. 기본 true. |
 | includeKeywords | boolean | - | 각 파편의 keywords 배열을 응답에 포함 |
-| includeContext | boolean | - | context_summary + 인접 파편 포함 |
+| includeContext | boolean | - | context_summary + 인접 파편(`nearby_context`) 포함. 조합할 재료가 있는 상위 3건에는 `stitched_context`도 함께 반환 |
 | timeRange | object | - | {from, to} 시간 범위 필터 (ISO 8601 또는 자연어) |
 | caseId | string | - | 케이스 ID 필터. 해당 케이스 파편만 반환. |
 | resolutionStatus | string | - | 해결 상태 필터 (open / resolved / abandoned) |
@@ -358,6 +358,22 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 각 반환 파편에는 `key_id` 필드가 포함된다. master key 호출 시 타 API 키 소유 파편도 반환될 수 있으며, 이 경우 `key_id` 값으로 소유 키를 식별할 수 있다. API key 호출 시에는 자신이 소유한 파편(`key_id` 일치) 또는 그룹 공유 파편만 반환된다.
 
 `affect` 필드: 해당 파편에 태그된 정서 상태. 저장 시 지정한 값과 동일하게 반환된다.
+
+`stitched_context` 필드: `includeContext=true`일 때 전후 시간 맥락과 인과 링크를 하나의 서사 구조로 묶어 반환한다. 조합할 재료가 실제로 있는 상위 3건에만 실리며, 응답 토큰 예산의 40%를 넘으면 전후 각 1건으로 축약된다.
+
+```json
+{
+  "stitched_context": {
+    "target": { "id": "frag-abc", "created_at": "2026-08-25T14:02:00.000Z" },
+    "pre":    [{ "id": "frag-pre",  "content": "...", "type": "error",     "created_at": "...", "delta_min": -4 }],
+    "post":   [{ "id": "frag-post", "content": "...", "type": "procedure", "created_at": "...", "delta_min": 8 }],
+    "causal": [{ "id": "frag-cause", "relation_type": "resolved_by", "direction": "out", "content": "..." }]
+  }
+}
+```
+
+- `pre` / `post`: 같은 `session_id`에서 기준 파편 전후 30분 이내에 저장된 파편. `delta_min`은 기준 시각 대비 분 단위 차이이며 이전 시각은 음수다.
+- `causal`: `caused_by` / `resolved_by` / `contradicts` / `part_of` 링크. 자동 생성되는 `related` / `co_retrieved` / `temporal`은 포함하지 않는다. 링크 방향과 무관하게 상대 파편을 반환하며 `direction`으로 방향을 구분한다.
 
 `_meta`: recall/context 응답 최상위의 메타데이터 래퍼.
 

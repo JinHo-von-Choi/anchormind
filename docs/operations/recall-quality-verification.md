@@ -2,6 +2,25 @@
 
 작성자: 최진호
 작성일: 2026-07-16
+수정일: 2026-08-28 (오프라인 골드셋 하네스 추가)
+
+## 0. 오프라인 골드셋 계측 (기본 절차)
+
+`benchmark` 서브명령이 100문항 골드셋(`tests/fixtures/recall-goldset.jsonl`)으로 Recall@k / MRR / 지연을 산출한다. 저장문을 격리 키 스코프에 적재하고 패러프레이즈 질의로 순위를 구한 뒤 적재분을 회수하므로 운영 파편을 오염시키지 않는다.
+
+    node bin/memento.js benchmark --repeat 2
+    node bin/memento.js benchmark --baseline scripts/baseline-recall.json
+
+합격 기준: `scripts/baseline-recall.json` 대비 회귀 없음(Recall 하락 2pp 이내, 지연 p95 증가 15% 이내). 회귀 시 종료 코드 2.
+
+검색 동작을 바꾸는 변경(랭킹 가중치, 임계값, 레이어 구성, 프로파일)은 이 명령의 전후 비교를 통과해야 한다. 기준선을 갱신할 때는 `--save-baseline`을 쓴다.
+
+측정 시 유의할 점이 둘 있다.
+
+- 기본 `isolated` 모드는 적재한 골드셋 파편만 후보로 두므로 회차 간 결과가 동일하다. `--key-scope corpus`는 운영 파편과 경쟁시켜 체감에 가깝지만 코퍼스가 계속 변하므로 회차 간 비교에 쓰지 않는다.
+- `--repeat`는 한 번 적재 후 평가만 반복한다. 적재 직후 형태소 등록과 자동 링크 생성이 끝나기를 기다리는 안정화 단계가 들어가며, 이 대기를 생략하면 같은 코드에서도 회차마다 순위가 흔들린다.
+
+2026-08-28 기준선(`scripts/baseline-recall.json`): 격리 모드 Recall@1 68.0%, Recall@5 86.0%, MRR 0.7603, p95 316ms. 운영 코퍼스 경쟁 모드 Recall@5 76.0%, p95 996ms.
 
 ## 1. text recall 0건 회복 (P1)
 

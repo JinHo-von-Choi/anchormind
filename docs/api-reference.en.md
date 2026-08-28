@@ -353,6 +353,11 @@ MCP resources for real-time queries on the current state of the memory system.
 
 Each returned fragment includes a `key_id` field. When called with a master key, fragments owned by other API keys may also be returned, identifiable by their `key_id` value. When called with an API key, only fragments owned by that key (`key_id` match) or group-shared fragments are returned.
 
+`stitched_context` field: returned when `includeContext=true`. Combines surrounding time context and causal links into a single narrative structure. Attached only to the top 3 fragments that actually have material to combine, and trimmed to one item per side when it would exceed 40% of the response token budget.
+
+- `pre` / `post`: fragments stored within 30 minutes before or after the target within the same `session_id`. `delta_min` is the signed minute offset from the target.
+- `causal`: `caused_by` / `resolved_by` / `contradicts` / `part_of` links only. Automatically generated `related` / `co_retrieved` / `temporal` links are excluded. Links are followed in both directions, with `direction` marking which way the edge points.
+
 `affect` field: The emotional state tag attached to the fragment at storage time, returned as stored.
 
 `_meta`: A metadata wrapper at the top level of recall/context responses.

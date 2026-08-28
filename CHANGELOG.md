@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unreleased]
+
+회상 품질을 정량 계측하고 질의 의도에 따라 검색 비중을 전환하는 변경.
+
+### Added
+- `benchmark` 서브명령: 100문항 골드셋(`tests/fixtures/recall-goldset.jsonl`)의 (저장문, 패러프레이즈 질의) 쌍으로 Recall@k / MRR / 지연을 산출한다. 격리 키 스코프에 적재 후 회수하며 `--baseline` 비교에서 회귀 감지 시 종료 코드 2를 반환한다. `--repeat`는 한 번 적재 후 평가만 반복해 중앙값과 회차 간 편차를 보고한다.
+- 질의 의도별 검색 프로파일(`queryProfiles`): 질의를 `EXACT_SYMBOL` / `CONCEPT_INTENT` / `HYBRID`로 분류해 RRF 레이어 가중, 시맨틱 임계값, 형태소 프로브 채택 조건, 최종 재정렬 lexical 가중치를 함께 전환한다. `MEMENTO_QUERY_PROFILE_ENABLED=false`로 비활성화할 수 있다.
+- `recall(includeContext=true)` 응답에 `stitched_context` 추가: 같은 세션의 전후 30분 파편과 인과 링크(`caused_by`/`resolved_by`/`contradicts`/`part_of`)를 하나의 서사 구조로 묶어 반환한다. 조합할 재료가 있는 상위 3건에 한정하며 응답 토큰 예산의 40%를 넘으면 축약한다.
+- 합성 역질의 증강(`syntheticQuery`): 파편 저장 시 회상 시점에 던져질 만한 질문을 기존 LLM 체인으로 생성해 `fragment_synthetic_query`(migration-043)에 보조 벡터로 색인하고, 검색 시 본문 벡터 조회와 병렬로 조회해 표기 불일치로 놓친 파편을 회수한다. 생성은 `MEMENTO_SYNTHETIC_QUERY_ENABLED`, 검색 반영은 `MEMENTO_SYNTHETIC_QUERY_SEARCH`로 각각 끌 수 있다. 대상은 기본적으로 importance 0.8 이상의 error/procedure/decision으로 제한하며 분당 호출 상한을 둔다.
+- 정리 사이클 안전 게이트(`consolidate.gate`): 시맨틱 중복 제거가 병합하기 전에 제거 대상의 변별 토큰(수치·식별자·경로·버전)이 승계자에 남는지 판정하고, 소실이 발생하면 해당 병합을 차단한다. 차단·통과 건수는 `memento_consolidate_gate_blocked_total`·`memento_consolidate_gate_allowed_total`로 노출된다.
+
+### Changed
+- 시맨틱 임계값이 질의 의도에 따라 조정된다. 개념·원인·절차 질의는 기본값에서 0.20을 낮춘 값을 사용하며 적용 후 0.10~0.60으로 클램프된다. 100문항 골드셋 격리 모드 Recall@5가 64%에서 86%로, 운영 코퍼스 경쟁 모드에서 50%에서 76%로 측정되었다.
+- 자동완성 서브명령 목록에 `session`과 `benchmark`를 반영한다.
+- LLM 체인에서 응답하지 않는 항목 3종을 제거한다. 남은 7종은 전건 응답을 확인했다.
+
+### Fixed
+- `remember` 후처리의 평가 큐 적재를 예외 격리한다. 이전에는 Redis 장애가 `remember` 응답 오류로 전파되어 파편이 저장된 상태에서 클라이언트 재시도가 중복 저장을 유발할 수 있었다.
+- 링크 관계 강등 방지: 같은 파편 쌍에 자동 생성 관계(`related`/`co_retrieved`/`temporal`)가 나중에 기록되어도 기존의 명시적 인과 관계(`caused_by`/`resolved_by`/`contradicts`/`part_of`)를 덮어쓰지 않는다. 이전에는 remember 직후의 자동 링크 생성이 사용자가 지정한 인과 관계를 되돌렸다.
+- 시간·인과 맥락 조회 경로를 전용 로더로 분리한다. 범용 링크 로더는 관계 종류와 무관하게 weight 상위 3건만 반환해 자동 생성 링크가 인과 링크를 밀어냈고, 세션 이웃 조회는 절삭될 수 있는 `source` 문자열 대신 `session_id` 컬럼을 사용한다.
+
 ## [5.7.0] - 2026-08-16
 
 workspace 스코프 체계와 세션 세그먼트를 도입한 마이너 릴리즈.
