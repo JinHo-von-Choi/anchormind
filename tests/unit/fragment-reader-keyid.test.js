@@ -111,7 +111,7 @@ describe("FragmentReader.getById — keyId SQL 격리", () => {
 
 describe("MemoryManager — keyId 격리 통합 (mock store)", () => {
 
-  it("key B가 key A의 fragment를 forget 시도하면 'Fragment not found or no permission' 반환", async () => {
+  it("key B가 key A의 fragment를 forget 시도하면 권한 오류를 반환한다", async () => {
     const { MemoryManager } = await import("../../lib/memory/MemoryManager.js");
     const mm = new MemoryManager();
 
@@ -130,6 +130,9 @@ describe("MemoryManager — keyId 격리 통합 (mock store)", () => {
       return frag;
     });
 
+    /** 존재하지만 접근 불가한 상태를 대역으로 재현한다. */
+    mm.store.probeAccess = mock.fn(async () => ({ exists: true, accessible: false }));
+
     /** deindex가 호출되면 안 됨 */
     const deindexCalled = [];
     mm.index = {
@@ -143,7 +146,7 @@ describe("MemoryManager — keyId 격리 통합 (mock store)", () => {
       _groupKeyIds  : ["key-B"]
     });
 
-    assert.strictEqual(result.error, "Fragment not found or no permission",
+    assert.strictEqual(result.error, "No permission to delete this fragment",
       `에러 메시지 불일치: ${result.error}`);
     assert.strictEqual(result.deleted, 0);
     assert.strictEqual(deindexCalled.length, 0, "권한 없는 파편의 deindex가 호출되었다");
