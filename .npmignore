@@ -1,0 +1,68 @@
+# npm 배포 제외 목록.
+#
+# .npmignore가 존재하면 npm은 .gitignore를 참조하지 않는다. 따라서 배포에서
+# 빠져야 할 항목을 여기에 전부 다시 적는다. .gitignore를 고칠 때 이 파일도
+# 함께 확인해야 한다.
+
+# 의존성과 빌드 산출물
+node_modules/
+.pnp
+.pnp.js
+dist/
+build/
+coverage/
+.nyc_output/
+test-results/
+
+# 실행 환경 설정. .env.example과 .env.example.minimal만 배포한다.
+.env
+.env.local
+.env.*.local
+.env.test
+.env.test.local
+.env.bak
+.env.bak.*
+.env.backup
+.env.backup*
+
+# 로그와 런타임 잔여물
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# 작업용 임시 디렉토리
+.tmp-*/
+
+# 편집기와 도구 설정
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+.claude/
+.serena/
+.cursor/
+.continue/
+*.swp
+
+# 내부 문서
+docs/reports/
+docs/plans/
+docs/private/
+docs/superpowers/
+
+# 도구 산출물
+.playwright-mcp/
+
+# 개발 전용 구성
+docker-compose.dev.yml
+docker-compose.test.yml
+memento-watchdog.sh
+eslint.config.js
+.github/
