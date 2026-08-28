@@ -1,0 +1,1556 @@
+{
+  "scoped": {
+    "amend": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "assertionStatus": {
+          "type": "string",
+          "enum": [
+            "inferred",
+            "observed",
+            "rejected",
+            "verified"
+          ]
+        },
+        "content": {
+          "type": "string"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "importance": {
+          "type": "number"
+        },
+        "isAnchor": {
+          "type": "boolean"
+        },
+        "keywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "outcome": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "resolutionStatus": {
+          "type": "string",
+          "enum": [
+            "abandoned",
+            "open",
+            "resolved"
+          ]
+        },
+        "supersedes": {
+          "type": "boolean"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "decision",
+            "error",
+            "fact",
+            "preference",
+            "procedure",
+            "relation"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "batch_remember": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "async": {
+          "type": "boolean"
+        },
+        "fragments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "content": {
+                "type": "string"
+              },
+              "idempotencyKey": {
+                "type": "string"
+              },
+              "importance": {
+                "type": "number"
+              },
+              "keywords": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "topic": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "decision",
+                  "episode",
+                  "error",
+                  "fact",
+                  "preference",
+                  "procedure",
+                  "relation"
+                ]
+              },
+              "workspace": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "content",
+              "topic",
+              "type"
+            ]
+          }
+        },
+        "stream": {
+          "type": "boolean"
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "fragments"
+      ]
+    },
+    "batch_status": {
+      "properties": {
+        "jobId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "jobId"
+      ]
+    },
+    "context": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "includeKeyName": {
+          "type": "boolean"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "structured": {
+          "type": "boolean"
+        },
+        "tokenBudget": {
+          "type": "number"
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "forget": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "force": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "topic": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "fragment_history": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "includePeerAgents": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "get_skill_guide": {
+      "properties": {
+        "section": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "graph_explore": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "startId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "startId"
+      ]
+    },
+    "link": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "fromId": {
+          "type": "string"
+        },
+        "relationType": {
+          "type": "string",
+          "enum": [
+            "caused_by",
+            "contradicts",
+            "part_of",
+            "related",
+            "resolved_by"
+          ]
+        },
+        "toId": {
+          "type": "string"
+        },
+        "weight": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "fromId",
+        "toId"
+      ]
+    },
+    "memory_consolidate": {
+      "properties": {
+        "stream": {
+          "type": "boolean"
+        }
+      },
+      "required": []
+    },
+    "memory_stats": {
+      "properties": {},
+      "required": []
+    },
+    "recall": {
+      "properties": {
+        "affect": {},
+        "agentId": {
+          "type": "string"
+        },
+        "asOf": {
+          "type": "string"
+        },
+        "caseId": {
+          "type": "string"
+        },
+        "caseMode": {
+          "type": "boolean"
+        },
+        "contextText": {
+          "type": "string"
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "depth": {
+          "type": "string",
+          "enum": [
+            "detail",
+            "high-level",
+            "tool-level"
+          ]
+        },
+        "excludeSeen": {
+          "type": "boolean"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "includeContext": {
+          "type": "boolean"
+        },
+        "includeKeyName": {
+          "type": "boolean"
+        },
+        "includeKeywords": {
+          "type": "boolean"
+        },
+        "includeLinks": {
+          "type": "boolean"
+        },
+        "includePeerAgents": {
+          "type": "boolean"
+        },
+        "includeSuperseded": {
+          "type": "boolean"
+        },
+        "isAnchor": {
+          "type": "boolean"
+        },
+        "keywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "linkRelationType": {
+          "type": "string",
+          "enum": [
+            "caused_by",
+            "contradicts",
+            "part_of",
+            "related",
+            "resolved_by"
+          ]
+        },
+        "maxCases": {
+          "type": "number"
+        },
+        "minImportance": {
+          "type": "number"
+        },
+        "pageSize": {
+          "type": "number"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "resolutionStatus": {
+          "type": "string",
+          "enum": [
+            "abandoned",
+            "open",
+            "resolved"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "threshold": {
+          "type": "number"
+        },
+        "timeRange": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          }
+        },
+        "tokenBudget": {
+          "type": "number"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "decision",
+            "episode",
+            "error",
+            "fact",
+            "preference",
+            "procedure",
+            "relation"
+          ]
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "reconstruct_history": {
+      "properties": {
+        "caseId": {
+          "type": "string"
+        },
+        "entity": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "number"
+        },
+        "query": {
+          "type": "string"
+        },
+        "timeRange": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          }
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "reflect": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "decisions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "errors_resolved": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "narrative_summary": {
+          "type": "string"
+        },
+        "new_procedures": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "open_questions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "summary": {},
+        "task_effectiveness": {
+          "type": "object",
+          "properties": {
+            "evaluator": {
+              "type": "string",
+              "enum": [
+                "agent",
+                "automatic",
+                "human"
+              ]
+            },
+            "evidence": {
+              "type": "string"
+            },
+            "outcome": {
+              "type": "string",
+              "enum": [
+                "abandoned",
+                "blocked",
+                "completed",
+                "partial",
+                "unknown"
+              ]
+            },
+            "overall_success": {
+              "type": "boolean"
+            },
+            "tool_highlights": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tool_pain_points": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unmet_requirements": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "remember": {
+      "properties": {
+        "affect": {
+          "type": "string",
+          "enum": [
+            "confidence",
+            "doubt",
+            "frustration",
+            "neutral",
+            "satisfaction",
+            "surprise"
+          ]
+        },
+        "agentId": {
+          "type": "string"
+        },
+        "assertionStatus": {
+          "type": "string",
+          "enum": [
+            "inferred",
+            "observed",
+            "rejected",
+            "verified"
+          ]
+        },
+        "caseId": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "contextSummary": {
+          "type": "string"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "goal": {
+          "type": "string"
+        },
+        "idempotencyKey": {
+          "type": "string"
+        },
+        "importance": {
+          "type": "number"
+        },
+        "isAnchor": {
+          "type": "boolean"
+        },
+        "keywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "linkedTo": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "outcome": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "resolutionStatus": {
+          "type": "string",
+          "enum": [
+            "abandoned",
+            "open",
+            "resolved"
+          ]
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "permanent",
+            "session"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "supersedes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "topic": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "decision",
+            "episode",
+            "error",
+            "fact",
+            "preference",
+            "procedure",
+            "relation"
+          ]
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "topic",
+        "type"
+      ]
+    },
+    "search_traces": {
+      "properties": {
+        "caseId": {
+          "type": "string"
+        },
+        "case_id": {
+          "type": "string"
+        },
+        "entityKey": {
+          "type": "string"
+        },
+        "entity_key": {
+          "type": "string"
+        },
+        "eventType": {
+          "type": "string"
+        },
+        "event_type": {
+          "type": "string"
+        },
+        "keyword": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "number"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "time_range": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          }
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "session_rotate": {
+      "properties": {
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "tool_feedback": {
+      "properties": {
+        "context": {
+          "type": "string"
+        },
+        "fragment_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "irrelevance_reason": {
+          "type": "string",
+          "enum": [
+            "not_stored",
+            "other",
+            "scope_leak",
+            "search_miss",
+            "topic_mismatch"
+          ]
+        },
+        "relevant": {
+          "type": "boolean"
+        },
+        "search_event_id": {
+          "type": "integer"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "sufficient": {
+          "type": "boolean"
+        },
+        "suggestion": {
+          "type": "string"
+        },
+        "tool_name": {
+          "type": "string"
+        },
+        "trigger_type": {
+          "type": "string",
+          "enum": [
+            "sampled",
+            "voluntary"
+          ]
+        }
+      },
+      "required": [
+        "relevant",
+        "sufficient",
+        "tool_name"
+      ]
+    }
+  },
+  "master": {
+    "amend": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "assertionStatus": {
+          "type": "string",
+          "enum": [
+            "inferred",
+            "observed",
+            "rejected",
+            "verified"
+          ]
+        },
+        "content": {
+          "type": "string"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "importance": {
+          "type": "number"
+        },
+        "isAnchor": {
+          "type": "boolean"
+        },
+        "keywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "outcome": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "resolutionStatus": {
+          "type": "string",
+          "enum": [
+            "abandoned",
+            "open",
+            "resolved"
+          ]
+        },
+        "supersedes": {
+          "type": "boolean"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "decision",
+            "error",
+            "fact",
+            "preference",
+            "procedure",
+            "relation"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "apply_update": {
+      "properties": {
+        "dryRun": {
+          "type": "boolean"
+        },
+        "step": {
+          "type": "string",
+          "enum": [
+            "fetch",
+            "install",
+            "migrate"
+          ]
+        }
+      },
+      "required": [
+        "step"
+      ]
+    },
+    "batch_remember": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "async": {
+          "type": "boolean"
+        },
+        "fragments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "content": {
+                "type": "string"
+              },
+              "idempotencyKey": {
+                "type": "string"
+              },
+              "importance": {
+                "type": "number"
+              },
+              "keywords": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "topic": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "decision",
+                  "episode",
+                  "error",
+                  "fact",
+                  "preference",
+                  "procedure",
+                  "relation"
+                ]
+              },
+              "workspace": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "content",
+              "topic",
+              "type"
+            ]
+          }
+        },
+        "stream": {
+          "type": "boolean"
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "fragments"
+      ]
+    },
+    "batch_status": {
+      "properties": {
+        "jobId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "jobId"
+      ]
+    },
+    "check_update": {
+      "properties": {
+        "force": {
+          "type": "boolean"
+        }
+      },
+      "required": []
+    },
+    "context": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "includeKeyName": {
+          "type": "boolean"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "structured": {
+          "type": "boolean"
+        },
+        "tokenBudget": {
+          "type": "number"
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "forget": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "force": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "topic": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "fragment_history": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "includePeerAgents": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "get_skill_guide": {
+      "properties": {
+        "section": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "graph_explore": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "startId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "startId"
+      ]
+    },
+    "link": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "fromId": {
+          "type": "string"
+        },
+        "relationType": {
+          "type": "string",
+          "enum": [
+            "caused_by",
+            "contradicts",
+            "part_of",
+            "related",
+            "resolved_by"
+          ]
+        },
+        "toId": {
+          "type": "string"
+        },
+        "weight": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "fromId",
+        "toId"
+      ]
+    },
+    "memory_consolidate": {
+      "properties": {
+        "stream": {
+          "type": "boolean"
+        }
+      },
+      "required": []
+    },
+    "memory_stats": {
+      "properties": {},
+      "required": []
+    },
+    "recall": {
+      "properties": {
+        "affect": {},
+        "agentId": {
+          "type": "string"
+        },
+        "asOf": {
+          "type": "string"
+        },
+        "caseId": {
+          "type": "string"
+        },
+        "caseMode": {
+          "type": "boolean"
+        },
+        "contextText": {
+          "type": "string"
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "depth": {
+          "type": "string",
+          "enum": [
+            "detail",
+            "high-level",
+            "tool-level"
+          ]
+        },
+        "excludeSeen": {
+          "type": "boolean"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "includeContext": {
+          "type": "boolean"
+        },
+        "includeKeyName": {
+          "type": "boolean"
+        },
+        "includeKeywords": {
+          "type": "boolean"
+        },
+        "includeLinks": {
+          "type": "boolean"
+        },
+        "includePeerAgents": {
+          "type": "boolean"
+        },
+        "includeSuperseded": {
+          "type": "boolean"
+        },
+        "isAnchor": {
+          "type": "boolean"
+        },
+        "keywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "linkRelationType": {
+          "type": "string",
+          "enum": [
+            "caused_by",
+            "contradicts",
+            "part_of",
+            "related",
+            "resolved_by"
+          ]
+        },
+        "maxCases": {
+          "type": "number"
+        },
+        "minImportance": {
+          "type": "number"
+        },
+        "pageSize": {
+          "type": "number"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "resolutionStatus": {
+          "type": "string",
+          "enum": [
+            "abandoned",
+            "open",
+            "resolved"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "threshold": {
+          "type": "number"
+        },
+        "timeRange": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          }
+        },
+        "tokenBudget": {
+          "type": "number"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "decision",
+            "episode",
+            "error",
+            "fact",
+            "preference",
+            "procedure",
+            "relation"
+          ]
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "reconstruct_history": {
+      "properties": {
+        "caseId": {
+          "type": "string"
+        },
+        "entity": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "number"
+        },
+        "query": {
+          "type": "string"
+        },
+        "timeRange": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          }
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "reflect": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "decisions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "errors_resolved": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "narrative_summary": {
+          "type": "string"
+        },
+        "new_procedures": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "open_questions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "summary": {},
+        "task_effectiveness": {
+          "type": "object",
+          "properties": {
+            "evaluator": {
+              "type": "string",
+              "enum": [
+                "agent",
+                "automatic",
+                "human"
+              ]
+            },
+            "evidence": {
+              "type": "string"
+            },
+            "outcome": {
+              "type": "string",
+              "enum": [
+                "abandoned",
+                "blocked",
+                "completed",
+                "partial",
+                "unknown"
+              ]
+            },
+            "overall_success": {
+              "type": "boolean"
+            },
+            "tool_highlights": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tool_pain_points": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unmet_requirements": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "remember": {
+      "properties": {
+        "affect": {
+          "type": "string",
+          "enum": [
+            "confidence",
+            "doubt",
+            "frustration",
+            "neutral",
+            "satisfaction",
+            "surprise"
+          ]
+        },
+        "agentId": {
+          "type": "string"
+        },
+        "assertionStatus": {
+          "type": "string",
+          "enum": [
+            "inferred",
+            "observed",
+            "rejected",
+            "verified"
+          ]
+        },
+        "caseId": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "contextSummary": {
+          "type": "string"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "goal": {
+          "type": "string"
+        },
+        "idempotencyKey": {
+          "type": "string"
+        },
+        "importance": {
+          "type": "number"
+        },
+        "isAnchor": {
+          "type": "boolean"
+        },
+        "keywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "linkedTo": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "outcome": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "resolutionStatus": {
+          "type": "string",
+          "enum": [
+            "abandoned",
+            "open",
+            "resolved"
+          ]
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "permanent",
+            "session"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "supersedes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "topic": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "decision",
+            "episode",
+            "error",
+            "fact",
+            "preference",
+            "procedure",
+            "relation"
+          ]
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "topic",
+        "type"
+      ]
+    },
+    "search_traces": {
+      "properties": {
+        "caseId": {
+          "type": "string"
+        },
+        "case_id": {
+          "type": "string"
+        },
+        "entityKey": {
+          "type": "string"
+        },
+        "entity_key": {
+          "type": "string"
+        },
+        "eventType": {
+          "type": "string"
+        },
+        "event_type": {
+          "type": "string"
+        },
+        "keyword": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "number"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "time_range": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          }
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "session_rotate": {
+      "properties": {
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "tool_feedback": {
+      "properties": {
+        "context": {
+          "type": "string"
+        },
+        "fragment_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "irrelevance_reason": {
+          "type": "string",
+          "enum": [
+            "not_stored",
+            "other",
+            "scope_leak",
+            "search_miss",
+            "topic_mismatch"
+          ]
+        },
+        "relevant": {
+          "type": "boolean"
+        },
+        "search_event_id": {
+          "type": "integer"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "sufficient": {
+          "type": "boolean"
+        },
+        "suggestion": {
+          "type": "string"
+        },
+        "tool_name": {
+          "type": "string"
+        },
+        "trigger_type": {
+          "type": "string",
+          "enum": [
+            "sampled",
+            "voluntary"
+          ]
+        }
+      },
+      "required": [
+        "relevant",
+        "sufficient",
+        "tool_name"
+      ]
+    }
+  }
+}

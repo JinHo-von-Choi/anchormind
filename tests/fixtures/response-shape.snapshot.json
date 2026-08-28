@@ -1,0 +1,32 @@
+{
+  "remember": {
+    "conflicts": "array<empty>",
+    "id": "string",
+    "keywords": "array<string>",
+    "scope": "string",
+    "success": "boolean",
+    "ttl_tier": "string"
+  },
+  "recall": {
+    "_meta": "object",
+    "count": "number",
+    "fragments": "array<object>",
+    "searchPath": "undefined",
+    "success": "boolean",
+    "totalTokens": "undefined"
+  },
+  "context": {
+    "_meta": "object",
+    "core": "array<object>",
+    "success": "boolean",
+    "summary": "string",
+    "working": "array<empty>"
+  },
+  "reflect": {
+    "_meta": "object",
+    "episodeId": "string",
+    "links": "array<empty>",
+    "stored": "number",
+    "success": "boolean"
+  }
+}

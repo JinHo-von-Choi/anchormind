@@ -1,0 +1,56 @@
+{
+  "registered": [
+    "backfill",
+    "benchmark",
+    "cleanup",
+    "completion",
+    "export",
+    "health",
+    "import",
+    "inspect",
+    "migrate",
+    "recall",
+    "remember",
+    "serve",
+    "session",
+    "stats",
+    "update"
+  ],
+  "localOnly": [
+    "backfill",
+    "benchmark",
+    "cleanup",
+    "export",
+    "health",
+    "import",
+    "migrate",
+    "serve",
+    "update"
+  ],
+  "help": {
+    "commands": [
+      "backfill",
+      "benchmark",
+      "cleanup",
+      "completion",
+      "export",
+      "health",
+      "import",
+      "inspect",
+      "migrate",
+      "recall",
+      "remember",
+      "serve",
+      "session",
+      "stats",
+      "update"
+    ],
+    "options": [
+      "--help",
+      "--json",
+      "--key",
+      "--remote",
+      "--timeout"
+    ]
+  }
+}
