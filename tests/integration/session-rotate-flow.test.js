@@ -44,7 +44,7 @@ function fakeRes() {
 
 function makeReq({
   sessionId,
-  authToken  = "test-master-key",
+  authToken  = process.env.MEMENTO_ACCESS_KEY || "test-master-key",
   bodyObj    = {},
   origin     = null,
   remoteAddr = "127.0.0.1",
@@ -140,14 +140,14 @@ describe("시나리오 2: rate-limit", () => {
     /** 5회 rotate — 각 요청마다 새 세션 필요 */
     for (let i = 0; i < 5; i++) {
       const { sid } = await createSession();
-      const req = makeReq({ sessionId: sid, remoteAddr: "10.10.10.10" });
+      const req = makeReq({ sessionId: sid, remoteAddr: "10.10.10.10", origin: "http://localhost" });
       const res = fakeRes();
       await handleSessionRotate(req, res);
       assert.strictEqual(res.statusCode, 200, `${i + 1}번째 요청 실패: ${res._body}`);
     }
 
     /** 6번째 — 세션 없어도 rate-limit이 먼저 적용됨 */
-    const req6 = makeReq({ sessionId: "dummy-session-id", remoteAddr: "10.10.10.10" });
+    const req6 = makeReq({ sessionId: "dummy-session-id", remoteAddr: "10.10.10.10", origin: "http://localhost" });
     const res6 = fakeRes();
     await handleSessionRotate(req6, res6);
 

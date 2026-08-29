@@ -19,8 +19,26 @@
  */
 
 import "./_cleanup.js";
-import { describe, it, before, after } from "node:test";
+import { describe, it, before, after, mock } from "node:test";
 import assert                          from "node:assert/strict";
+
+/**
+ * atomic 경로는 getPrimaryPool()을 모듈에서 직접 부른다. 이 시험은 TDZ 회귀
+ * 가드이며 실제 DB를 필요로 하지 않는다고 선언하고 있으므로, 커넥션 획득도
+ * 대역으로 막아 선언과 구현을 맞춘다.
+ */
+const stubClient = {
+  query  : async () => ({ rows: [], rowCount: 0 }),
+  release: () => {}
+};
+mock.module("../../lib/tools/db.js", {
+  namedExports: {
+    getPrimaryPool      : () => ({ connect: async () => stubClient, query: stubClient.query }),
+    getBatchPool        : () => ({ connect: async () => stubClient, query: stubClient.query }),
+    queryWithAgentVector: async () => ({ rows: [], rowCount: 0 }),
+    withTransaction     : async (fn) => fn(stubClient)
+  }
+});
 
 describe("R12 reflect 큰 페이로드 TDZ 회귀 가드", () => {
   let prevAtomic;
