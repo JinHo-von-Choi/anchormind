@@ -47,6 +47,19 @@ mock.module("../../lib/memory/MemoryManager.js", {
   defaultExport: { getInstance: () => managerStub }
 });
 
+/**
+ * 피드백 힌트 표집은 Math.random을 쓴다. 표집이 걸린 호출에만 `_meta`가 붙으므로
+ * 막지 않으면 같은 코드가 회차에 따라 다른 키 집합을 낸다. 계약 시험이 확률에
+ * 흔들리면 회귀와 잡음을 구분할 수 없다.
+ */
+mock.module("../../lib/memory/signals/FeedbackSampler.js", {
+  namedExports: {
+    maybeFeedbackHint: async () => null,
+    shouldSample     : () => false,
+    buildFeedbackHint: () => null
+  }
+});
+
 /** 파편 부가 로딩은 DB를 탄다. 계약 시험이 DB 상태에 흔들리지 않도록 대역으로 막는다. */
 mock.module("../../lib/memory/read/LinkedFragmentLoader.js", {
   namedExports: { fetchLinkedFragments: async () => new Map() }

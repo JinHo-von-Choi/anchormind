@@ -21,7 +21,35 @@ mock.module("../../lib/memory/embedding/MorphemeIndex.js", {
   },
 });
 
+/**
+ * 에피소드 milestone 연결은 fire-and-forget으로 DB를 탄다. 시험이 끝난 뒤에도
+ * 소켓이 남아 handle 누수로 잡힌다. 이 시험의 관심사가 아니므로 막는다.
+ */
+mock.module("../../lib/memory/processors/EpisodeContinuityService.js", {
+  namedExports: { linkEpisodeMilestone: async () => null }
+});
+
 const { ReflectProcessor }  = await import("../../lib/memory/processors/ReflectProcessor.js");
+
+/**
+ * reflect는 만든 파편을 임베딩 우선순위 큐에 넣는다. 스텁 클라이언트라도 쓰기가
+ * 발생하면 시험 종료 시점에 소켓이 남아 handle 누수로 잡힌다. 저장소가 제공하는
+ * 주입 훅으로 큐 연산을 메모리 대역으로 바꾼다.
+ */
+const { __setRedisClientForTest } = await import("../../lib/redis.js");
+__setRedisClientForTest({
+  status: "stub",
+  async lpush() { return 1; },
+  async rpush() { return 1; },
+  async rpop()  { return null; },
+  async lpop()  { return null; },
+  async llen()  { return 0; },
+  async set()   { return "OK"; },
+  async get()   { return null; },
+  async del()   { return 1; },
+  async expire(){ return 1; },
+  async incr()  { return 1; }
+});
 const { teardownTestResources, assertCleanShutdown } = await import("../_lifecycle.js");
 
 /**
@@ -32,9 +60,19 @@ const { teardownTestResources, assertCleanShutdown } = await import("../_lifecyc
  * MEMENTO_METRICS_DEFAULT=off (CP2) 적용 후 prom-client collectDefaultMetrics
  * timer가 비활성화되므로 assertCleanShutdown이 active handle 0을 검증할 수 있다.
  */
+/** 시험이 만든 처리기를 모아 둔다. 종료 시 진행 중 작업을 실제로 배수해야 한다. */
+const madeProcessors = new Set();
+
 after(async () => {
-  /** mock stub이라 즉시 settle되지만 _morphemePromises finally 콜백은
-   *  microtask queue에 적재되므로 setImmediate로 한 tick 비워 drain한다. */
+  /**
+   * 형태소 등록은 fire-and-forget이라 시험 본문이 끝나도 진행 중일 수 있다.
+   * setImmediate 한 틱만 비우면 부하가 높을 때 남은 작업이 소켓을 물고 있어
+   * handle 누수로 잡힌다. 진행 중 프라미스를 전부 기다린다.
+   */
+  for (const p of madeProcessors) {
+    const pending = [...(p._morphemePromises ?? [])];
+    if (pending.length > 0) await Promise.allSettled(pending);
+  }
   await new Promise(r => setImmediate(r));
   await teardownTestResources();
   await assertCleanShutdown();
@@ -86,6 +124,7 @@ describe("ReflectProcessor - summary", () => {
   it("문자열 summary를 fact 파편으로 변환", async () => {
     const deps      = createMockDeps();
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     const result = await processor.process({
       summary: "세션 요약 텍스트",
@@ -102,6 +141,7 @@ describe("ReflectProcessor - summary", () => {
   it("배열 summary를 각각 fact 파편으로 변환", async () => {
     const deps      = createMockDeps();
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     const result = await processor.process({
       summary: ["요약 1", "요약 2", "요약 3"],
@@ -115,6 +155,7 @@ describe("ReflectProcessor - summary", () => {
   it("빈 문자열 summary 항목은 필터링", async () => {
     const deps      = createMockDeps();
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     const result = await processor.process({
       summary: ["유효", "", "  "],
@@ -130,6 +171,7 @@ describe("ReflectProcessor - decisions", () => {
   it("decisions 배열을 decision 파편으로 변환", async () => {
     const deps      = createMockDeps();
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     const result = await processor.process({
       decisions: ["TypeScript를 프로젝트 공식 언어로 채택하고 tsconfig strict 모드 활성화", "PostgreSQL 16을 주 데이터베이스로 선택하고 pgvector 확장 활성화"],
@@ -150,6 +192,7 @@ describe("ReflectProcessor - errors_resolved", () => {
   it("errors_resolved를 [해결됨] prefix 포함 error 파편으로 변환", async () => {
     const deps      = createMockDeps();
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     const result = await processor.process({
       errors_resolved: ["NPE 발생 원인인 null 미검증 경로를 Optional 체이닝으로 수정 완료"],
@@ -169,6 +212,7 @@ describe("ReflectProcessor - new_procedures", () => {
   it("new_procedures를 procedure 파편으로 변환", async () => {
     const deps      = createMockDeps();
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     const result = await processor.process({
       new_procedures: ["배포 절차 v2: 스테이징 환경 검증 후 프로덕션 롤아웃 순서 확정"],
@@ -187,6 +231,7 @@ describe("ReflectProcessor - open_questions", () => {
   it("open_questions를 [미해결] prefix 포함 fact 파편으로 변환", async () => {
     const deps      = createMockDeps();
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     const result = await processor.process({
       open_questions: ["Redis 클러스터 이슈"],
@@ -222,6 +267,7 @@ describe("ReflectProcessor - session consolidation", () => {
       },
     });
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     const result = await processor.process({
       sessionId: "sess-1",
@@ -253,6 +299,7 @@ describe("ReflectProcessor - session consolidation", () => {
       },
     });
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     await processor.process({ sessionId: "sess-1", agentId: "test-agent" });
 
@@ -265,6 +312,7 @@ describe("ReflectProcessor - session consolidation", () => {
   it("sessionId 없으면 evict 미호출", async () => {
     const deps      = createMockDeps();
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     await processor.process({ summary: "테스트", agentId: "test-agent" });
 
@@ -274,6 +322,7 @@ describe("ReflectProcessor - session consolidation", () => {
   it("sessionId 있으나 소비된 WM이 없으면 evict 미호출", async () => {
     const deps      = createMockDeps();
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     await processor.process({ sessionId: "sess-2", agentId: "test-agent" });
 
@@ -309,6 +358,7 @@ describe("ReflectProcessor - combined", () => {
   it("모든 항목 동시 입력 시 각 breakdown 정확히 집계", async () => {
     const deps      = createMockDeps();
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     const result = await processor.process({
       summary        : ["요약 A", "요약 B"],
@@ -333,6 +383,7 @@ describe("ReflectProcessor - resolutionStatus", () => {
   it("errors_resolved 파편에 resolutionStatus='resolved' 세팅", async () => {
     const deps      = createMockDeps();
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     await processor.process({
       errors_resolved: ["NPE 수정 완료: 사용자 입력 null 체크 로직을 서비스 레이어에 추가"],
@@ -347,6 +398,7 @@ describe("ReflectProcessor - resolutionStatus", () => {
   it("open_questions 파편에 resolutionStatus='open' 세팅", async () => {
     const deps      = createMockDeps();
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     await processor.process({
       open_questions: ["캐시 전략 미확정: L2 캐시를 Redis Cluster로 교체할지 로컬 Caffeine 유지할지 결정 보류"],
@@ -364,6 +416,7 @@ describe("ReflectProcessor - sessionId propagation", () => {
   it("sessionId가 모든 섹션의 factory.create()에 전파됨", async () => {
     const deps      = createMockDeps();
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     await processor.process({
       summary        : ["요약"],
@@ -389,6 +442,7 @@ describe("ReflectProcessor - keyId and workspace propagation", () => {
   it("_keyId와 workspace가 파편에 전파됨", async () => {
     const deps      = createMockDeps();
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     await processor.process({
       summary  : "테스트",
@@ -417,6 +471,7 @@ describe("ReflectProcessor - insert failure handling", () => {
       },
     });
     const processor = new ReflectProcessor(deps);
+    madeProcessors.add(processor);
 
     const result = await processor.process({
       summary: ["성공 1", "실패할 항목", "성공 2"],
