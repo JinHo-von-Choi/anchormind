@@ -103,6 +103,28 @@ LongMemEval-S가 외부 데이터셋과 별도 하네스를 요구하는 것과 
 
 측정 모드는 둘이다. `isolated`는 적재한 골드셋 파편만 후보로 두어 회차 간 결과가 동일하고, `corpus`는 운영 파편과 경쟁시켜 실제 건초더미에서의 체감을 본다.
 
+### 재현 절차
+
+저장소에 골드셋과 기준선이 함께 있으므로 외부 자산 없이 같은 수치를 낼 수 있다.
+
+```
+npm ci
+cp .env.example .env       # POSTGRES_* 와 MEMENTO_ACCESS_KEY 를 채운다
+npm run migrate
+node bin/memento.js benchmark --repeat 3
+node bin/memento.js benchmark --key-scope corpus --repeat 3
+```
+
+| 자산 | 경로 |
+|-|-|
+| 골드셋 100문항 | `tests/fixtures/recall-goldset.jsonl` |
+| 기준선 수치 | `scripts/baseline-recall.json` |
+| 계측 구현 | `lib/memory/signals/RecallBenchmark.js` |
+
+기준선과 비교하려면 `--baseline scripts/baseline-recall.json`을 붙인다. 회귀 판정은 이 비교로 한다.
+
+`isolated`는 적재한 골드셋 파편만 후보로 두므로 회차 간 결과가 동일하다. 회귀 판정에는 이 모드를 쓴다. `corpus`는 운영 데이터가 계속 변하므로 실행 시점에 따라 3포인트 안팎으로 흔들린다. 절대 수치를 인용할 때는 실행 시각과 반복 횟수를 함께 적는다.
+
 ### 질의 의도 프로파일 적용 전후
 
 | 지표 | 프로파일 비활성 | 프로파일 활성 |

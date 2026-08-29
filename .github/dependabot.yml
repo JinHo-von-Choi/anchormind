@@ -1,0 +1,24 @@
+# 의존성 갱신 제안 설정
+#
+# 작성자: 최진호
+# 작성일: 2026-08-29
+
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    # 런타임 의존성과 개발 의존성을 나눠 올린다. 런타임 쪽이 우선순위가 높다.
+    groups:
+      runtime:
+        dependency-type: "production"
+      development:
+        dependency-type: "development"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3

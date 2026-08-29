@@ -19,6 +19,12 @@ jobs:
       - run: npm ci
       - name: Lint
         run: npm run lint
+      # 런타임 의존성에 알려진 취약점이 있으면 여기서 막는다. 개발 의존성은
+      # 배포물에 실리지 않으므로 분리해 본다.
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=moderate
+      - name: Audit all dependencies (report only)
+        run: npm audit --audit-level=high || true
       - name: All unit tests (Jest + node:test)
         run: npm test
       # 통합시험은 외부 서비스 없이 도는 것을 전제로 작성돼 있다. 실제로 그런지
