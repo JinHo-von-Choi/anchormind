@@ -3,6 +3,7 @@
 ### 런타임
 
 - Node.js 20 이상 (ESM, top-level await)
+  - 서버 실행은 20 이상에서 동작한다. 개발용 단위시험은 `--experimental-test-module-mocks`를 쓰며 이 기능은 24에서만 안정적이다.
 - PostgreSQL 14 이상 + pgvector 확장
   - HNSW 인덱스: pgvector 0.5.0 이상 필요
   - `halfvec(N)` 지원(3073차원 이상 모델): pgvector 0.7.0 이상 필요
@@ -11,7 +12,7 @@
 ### npm 패키지
 
 - `@huggingface/transformers` 3.8.1 (이미 설치됨)
-  - `EMBEDDING_PROVIDER=transformers` 또는 `RERANKER_ENABLED=true` 또는 `NLI_SERVICE_URL` 미설정 시 활성화
+  - `EMBEDDING_PROVIDER=transformers` 또는 `MEMENTO_RERANKER_ENABLED=true` 또는 `NLI_SERVICE_URL` 미설정 시 활성화
   - 별도 설치 없이 `node_modules`에 포함됨
 
 ### 메모리 요구사항 (추가 모델 기준)

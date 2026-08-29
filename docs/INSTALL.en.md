@@ -104,6 +104,22 @@ Verify with `\dx` in psql. The HNSW index requires pgvector 0.5.0 or later.
 **Fresh install:**
 
 ```bash
+npm run migrate
+```
+
+One command is enough even on an empty database. The runner detects a missing
+base schema, applies `lib/memory/memory-schema.sql` first, and then runs the
+migrations in order.
+
+The only prerequisite is the `vector` extension, which requires superuser rights.
+
+```bash
+psql -U postgres -d $POSTGRES_DB -c "CREATE EXTENSION IF NOT EXISTS vector"
+```
+
+Applying the base schema by hand still works, but is not required.
+
+```bash
 psql -U $POSTGRES_USER -d $POSTGRES_DB -f lib/memory/memory-schema.sql
 ```
 

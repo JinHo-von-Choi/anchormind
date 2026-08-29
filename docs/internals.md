@@ -332,7 +332,7 @@ RRF 병합 이후 상위 30건을 cross-encoder로 재정렬하고 15건만 남�
 | `minilm` (기본값) | Xenova/ms-marco-MiniLM-L-6-v2 | ~80MB | 영어 전용 | 영어 사용자 |
 | `bge-m3` | onnx-community/bge-reranker-v2-m3-ONNX | ~280MB (q4) | 100+ 언어 (한국어 포함) | GPU 기반 외부 서비스 |
 
-> **비영어권 사용자는 `RERANKER_MODEL=bge-m3` 사용을 권장한다.** ms-marco-MiniLM-L-6-v2는 영어 MS MARCO 데이터셋으로만 학습되어 한국어 등 비영어 쿼리-문서 쌍의 관련성 판단 능력이 없다. bge-m3는 동일한 ONNX in-process 방식으로 동작하며, 첫 실행 시 HuggingFace Hub에서 자동 다운로드된다.
+> **in-process 리랭커는 기본 비활성이다.** ms-marco-MiniLM-L-6-v2는 영어 MS MARCO 데이터셋으로만 학습되어 한국어 등 비영어 질의-문서 쌍의 관련성 판단 능력이 없다. bge-m3는 다국어를 다루지만 CPU에서 30건 재정렬에 수 초가 걸려 회상 지연 예산을 크게 넘는다. 따라서 in-process로는 어느 쪽도 권장하지 않으며, 필요하면 GPU 기반 외부 서비스를 `RERANKER_URL`로 붙인다.
 
 **외부 서비스 장애 시 정책 (`RERANKER_EXTERNAL_FALLBACK`):** 연속 3회 실패 시 두 가지 정책 중 하나가 적용된다.
 - `skip` (기본): in-process로 전환하지 않고 `RERANKER_EXTERNAL_COOLDOWN_MS`(기본 60초) 동안 external 호출 자체를 생략하며, `rerank()`는 RRF 원순서(candidates)를 그대로 반환한다. CPU 부하가 큰 in-process 모델로의 전환이 트래픽 폭주 상황에서 오히려 병목을 전이시키는 것을 방지한다. 쿨다운 만료 후 다음 recall이 external을 1건 재시도하여 성공 시 정상 복귀, 실패 시 다시 쿨다운에 진입한다.

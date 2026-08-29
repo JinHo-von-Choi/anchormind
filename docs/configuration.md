@@ -35,7 +35,8 @@
 | DEDUP_MIN_FRAGMENTS | 5 | dedup 최소 파편 수. 이 수 미만이면 중복 제거를 건너뛴다 |
 | COMPRESS_AGE_DAYS | 30 | 기억 압축 대상 비활성 일수 |
 | COMPRESS_MIN_GROUP | 3 | 압축 그룹 최소 크기. 이 수 미만이면 압축하지 않는다 |
-| RERANKER_MODEL | minilm | in-process 모드 ONNX 모델 선택. `minilm` (기본값, ~80MB, 영어 전용) 또는 `bge-m3` (~280MB, 다국어). **비영어권 사용자는 `bge-m3` 권장** — minilm은 영어 MS MARCO 데이터셋으로만 학습되어 한국어 등 비영어 파편 재순위화 품질이 저하됨. `RERANKER_ENABLED`는 별도 환경변수로 존재하지 않음. ONNX 모델 preload 성공 여부(또는 `RERANKER_URL` 설정 여부)로 자동 활성화된다 |
+| MEMENTO_RERANKER_ENABLED | false | in-process 교차 인코더 리랭커 활성화. 기본은 비활성이다. 기본 모델이 영어 전용이라 한국어 코퍼스에서는 끄는 쪽이 낫다. 절제 실험 기준 Recall@1 74%에서 85%, MRR 0.827에서 0.890, p50 561ms에서 126ms로 개선된다. `RERANKER_URL`로 지정한 외부 리랭커는 이 스위치와 무관하게 동작한다 |
+| RERANKER_MODEL | minilm | in-process 리랭커가 활성일 때 쓰는 ONNX 모델. `minilm` (기본값, ~80MB, 영어 전용) 또는 `bge-m3` (~280MB, 다국어). bge-m3는 비영어 판정이 훨씬 낫지만 CPU에서 30건 재정렬에 수 초가 걸리므로 GPU 기반 외부 서비스 뒤에서만 쓴다 |
 | RERANKER_EXTERNAL_FALLBACK | skip | external 리랭커 3회 연속 실패 시 정책. `skip`(기본): in-process 전환 없이 `RERANKER_EXTERNAL_COOLDOWN_MS` 동안 external 호출 자체를 생략하고 원점수(RRF 순서)를 그대로 반환. `inprocess`: ONNX in-process 모드로 전환(opt-in, 이전 동작) |
 | RERANKER_EXTERNAL_COOLDOWN_MS | 60000 | `RERANKER_EXTERNAL_FALLBACK=skip`일 때의 쿨다운 유지 시간(ms). 창 만료 후 다음 recall이 external을 1건 재시도하며, 성공 시 정상 복귀·실패 시 쿨다운 재진입 |
 | QUOTA_NEAR_LIMIT_MARGIN | 10 | `QuotaChecker.check()`가 FOR UPDATE 정밀 검사로 전환하는 잔여 할당량 임계치. `remaining`이 이 값 이하일 때만 트랜잭션 락을 획득하며, 그 이상이면 10초 TTL 캐시(getUsage) 결과로 락 없이 통과한다 |

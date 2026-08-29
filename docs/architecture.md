@@ -101,7 +101,7 @@ server.js  (HTTP 서버)
 ```
 lib/
 ├── config.js          환경변수를 상수로 노출. AUTH_DISABLED(MEMENTO_AUTH_DISABLED), OAUTH_TOKEN_TTL_SECONDS, OAUTH_REFRESH_TTL_SECONDS, ENABLE_OPENAPI, SSE_HEARTBEAT_INTERVAL_MS 포함
-├── auth.js            Bearer 토큰 검증. `validateAuthentication(req, msg)` — 실제 진입점. `MEMENTO_ACCESS_KEY` 미설정 시 모든 요청을 master 권한으로 통과시킨다. `resolveAuthConfig(accessKey, authDisabled)` — 인증 설정 해석 순수 함수. `buildAuthDecision(accessKey, authDisabled, bearerToken)` — 테스트 대상 순수 함수 (OAuth/DB API 키 검증 제외)
+├── auth.js            Bearer 토큰 검증. `validateAuthentication(req, msg)`: 실제 진입점. `MEMENTO_ACCESS_KEY` 미설정 시 `buildAuthDecision`에 위임하며, `MEMENTO_AUTH_DISABLED=true`가 없으면 거부한다(서버는 기동 단계에서 이미 멈춘다). `resolveAuthConfig(accessKey, authDisabled)`: 인증 설정 해석 순수 함수. `buildAuthDecision(accessKey, authDisabled, bearerToken)`: 테스트 대상 순수 함수 (OAuth/DB API 키 검증 제외)
 ├── oauth.js           OAuth 2.0 PKCE 인가/토큰 처리
 ├── sessions.js        Streamable/Legacy SSE 세션 생명주기
 ├── redis.js           ioredis 클라이언트 (Sentinel 지원)

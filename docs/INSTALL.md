@@ -97,7 +97,22 @@ CUDA 11이 설치된 시스템에서 `@huggingface/transformers`의 의존성인
 ## PostgreSQL 스키마 적용
 
 ```bash
-# 최초 설치
+npm run migrate
+```
+
+빈 데이터베이스에서도 이 한 줄이면 된다. 러너가 기반 스키마 부재를 감지해
+`lib/memory/memory-schema.sql`을 먼저 적용한 뒤 마이그레이션을 순서대로 실행한다.
+
+선행 조건은 `vector` 확장뿐이며, 이는 슈퍼유저 권한을 요구한다.
+
+```bash
+psql -U postgres -d $POSTGRES_DB -c "CREATE EXTENSION IF NOT EXISTS vector"
+```
+
+기반 스키마를 직접 적용하고 싶으면 아래를 쓸 수 있다. `npm run migrate`가
+같은 파일을 멱등하게 적용하므로 필수는 아니다.
+
+```bash
 psql -U $POSTGRES_USER -d $POSTGRES_DB -f lib/memory/memory-schema.sql
 ```
 
