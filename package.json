@@ -43,7 +43,7 @@
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
     "@node-rs/jieba": "^2.0.1",
-    "dotenv": "^16.0.0",
+    "dotenv": "^17.4.2",
     "garu-ko": "^0.9.1",
     "ioredis": "^5.9.3",
     "js-tiktoken": "^1.0.21",
