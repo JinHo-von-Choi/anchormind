@@ -5,18 +5,13 @@
   "description": "Fragment-Based Memory MCP Server",
   "main": "server.js",
   "type": "module",
-  "imports": {
-    "#config/memory": "./config/memory.js",
-    "#config/*": "./config/*.js",
-    "#lib/*": "./lib/*.js"
-  },
   "bin": {
     "anchormind": "bin/memento.js",
     "memento-mcp": "bin/memento.js"
   },
   "scripts": {
     "start": "node server.js",
-    "test": "DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false node --experimental-test-module-mocks --test 'tests/unit/*.test.js' 'tests/unit/**/*.test.js'",
+    "test": "DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false node --experimental-test-module-mocks --test tests/unit/*.test.js tests/unit/*/*.test.js",
     "test:integration": "node --test tests/integration/*.test.js tests/e2e/*.test.js",
     "test:integration:llm": "MEMENTO_METRICS_DEFAULT=off node --test --test-concurrency=1 tests/integration/llm-cli-smoke.test.js tests/integration/llm-timeout.test.js tests/integration/morpheme-llm-real.test.js tests/integration/llm-chain-real.test.js",
     "test:e2e": "node --test --test-concurrency=1 tests/e2e/*.test.js",
@@ -56,5 +51,8 @@
     "body-parser": "^2.3.0",
     "sharp": "^0.35.3",
     "ip-address": "^10.3.1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

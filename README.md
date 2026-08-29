@@ -62,6 +62,8 @@ AI에게 무언가를 기억시키고, 다음 세션에서 꺼내 보는 흐름�
 
 필수: Node.js 20+, PostgreSQL (pgvector 확장)
 
+> 서버 실행은 Node.js 20 이상에서 동작한다. 다만 개발용 단위시험은 `--experimental-test-module-mocks`를 쓰며 이 기능은 Node.js 24에서만 안정적이다. 시험을 돌리려면 Node.js 24를 쓴다.
+
 ```bash
 cp .env.example.minimal .env
 # .env 값을 편집한 뒤 셸에 반영

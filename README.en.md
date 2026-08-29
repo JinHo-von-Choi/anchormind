@@ -62,6 +62,8 @@ No more repeating yourself every session.
 
 Requirements: Node.js 20+, PostgreSQL (pgvector extension)
 
+> The server runs on Node.js 20 or later. The development unit test suite relies on `--experimental-test-module-mocks`, which is only stable on Node.js 24, so use Node.js 24 to run the tests.
+
 ```bash
 cp .env.example.minimal .env
 # Edit .env, then export to shell

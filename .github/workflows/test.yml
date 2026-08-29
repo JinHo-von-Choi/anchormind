@@ -22,6 +22,32 @@ jobs:
       - name: All unit tests (Jest + node:test)
         run: npm test
 
+  runtime-matrix:
+    name: Runtime Boot (Node 20/22/24)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["20", "22", "24"]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      # 단위시험은 --experimental-test-module-mocks에 의존하며 이 기능은 Node 24에서만
+      # 안정적이다. 여기서는 런타임이 선언한 지원 범위에서 실제로 뜨는지만 본다.
+      - name: Module graph loads
+        run: node -e "import('./lib/tools/index.js').then(m => { if (m.getToolsDefinition(null).length < 18) process.exit(1); })"
+      - name: Startup gate rejects missing key
+        run: |
+          set +e
+          MEMENTO_ACCESS_KEY="" MEMENTO_AUTH_DISABLED="" node server.js
+          code=$?
+          set -e
+          test "$code" -eq 78
+
   e2e:
     name: E2E Tests (with DB)
     runs-on: ubuntu-latest
