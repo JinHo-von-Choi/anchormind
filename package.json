@@ -41,7 +41,7 @@
     "cli": "node bin/memento.js"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.8.1",
+    "@huggingface/transformers": "^4.2.0",
     "@node-rs/jieba": "^2.0.2",
     "dotenv": "^17.4.2",
     "garu-ko": "^0.9.16",
