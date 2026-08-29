@@ -45,7 +45,7 @@
     "@node-rs/jieba": "^2.0.1",
     "dotenv": "^17.4.2",
     "garu-ko": "^0.9.1",
-    "ioredis": "^5.9.3",
+    "ioredis": "^6.0.0",
     "js-tiktoken": "^1.0.21",
     "kuromoji": "^0.1.2",
     "natural": "^8.1.1",
