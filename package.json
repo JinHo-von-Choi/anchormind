@@ -30,7 +30,6 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
-    "@modelcontextprotocol/sdk": "^1.30.0",
     "@node-rs/jieba": "^2.0.1",
     "dotenv": "^16.0.0",
     "garu-ko": "^0.9.1",
