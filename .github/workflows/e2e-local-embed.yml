@@ -19,7 +19,7 @@ jobs:
           cache: npm
 
       - name: Cache HuggingFace model
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/huggingface
           key: hf-e5-small-${{ runner.os }}
