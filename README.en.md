@@ -319,7 +319,7 @@ AnchorMind is optimized for fact caching. When narrative context matters:
 
 - L1 Redis cache supports API key-based isolation only. Agent-level isolation in multi-agent deployments is enforced at L2/L3.
 - Automatic quality evaluation targets decision, preference, and relation types only. fact, procedure, and error types are excluded from the evaluation queue.
-- Authentication is disabled when MEMENTO_ACCESS_KEY is not set. Always configure it for externally exposed deployments.
+- The server refuses to start when MEMENTO_ACCESS_KEY is not set. To run without authentication you must also set MEMENTO_AUTH_DISABLED=true.
 - ALLOWED_ORIGINS — Whitelist for browser-based MCP clients. When unset, only same-origin requests pass.
   Desktop/CLI/IDE clients (Claude Code, Cursor, Windsurf, Continue, Cline, Zed, gemini CLI, etc.)
   do not send Origin headers and need no whitelist entry.

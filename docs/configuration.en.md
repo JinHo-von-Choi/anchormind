@@ -9,7 +9,7 @@
 | Variable | Default | Description |
 |----------|---------|-------------|
 | PORT | 57332 | HTTP listen port |
-| MEMENTO_ACCESS_KEY | (none) | Bearer authentication key. When unset, the server logs "Authentication: DISABLED" and processes all requests with master privileges. Set `MEMENTO_AUTH_DISABLED=true` alongside for an explicit opt-out declaration |
+| MEMENTO_ACCESS_KEY | (none) | Bearer authentication key. With it unset the server refuses to start and exits with code 78. To run without authentication you must also set `MEMENTO_AUTH_DISABLED=true` |
 | MEMENTO_AUTH_DISABLED | false | When `true`, completely disables authentication and processes all requests with master privileges. Development/testing only. Only effective when `MEMENTO_ACCESS_KEY` is unset |
 | SESSION_TTL_MINUTES | 43200 | Session TTL (minutes). Default 30 days. Sliding window: TTL resets on every tool call |
 | LOG_DIR | ./logs | Winston log file directory |

@@ -277,7 +277,7 @@ migration-034-v2.16.0-bundle 인덱스 적용 확인:
 
 > **migration-009, 010**: co_retrieved 링크 타입이 없으면 Hebbian 링킹이 DB 제약 에러로 조용히 실패하고, ema_activation 컬럼이 없으면 incrementAccess SQL 오류가 발생한다. 반드시 실행 후 서버를 시작해야 한다.
 
-> **MEMENTO_ACCESS_KEY**: 설정하지 않으면 서버가 시작 시 경고를 출력하며 인증 없이 동작한다. 개발/테스트 환경에서 의도적으로 인증을 비활성화하려면 `.env`에 `MEMENTO_AUTH_DISABLED=true`를 추가한다.
+> **MEMENTO_ACCESS_KEY**: 설정하지 않으면 서버가 기동하지 않고 종료 코드 78로 멈춘다. 키 없이 뜨는 서버는 모든 도구와 master 범위를 무인증으로 열기 때문이다. 개발이나 시험 목적으로 인증 없이 운용하려면 `.env`에 `MEMENTO_AUTH_DISABLED=true`를 명시해야 한다.
 
 ```bash
 # 기본 임베딩(1536차원) 사용 시: migration-007 불필요

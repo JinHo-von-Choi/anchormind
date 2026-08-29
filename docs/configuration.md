@@ -9,8 +9,8 @@
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
 | PORT | 57332 | HTTP 리슨 포트 |
-| MEMENTO_ACCESS_KEY | (없음) | Bearer 인증 키. 미설정 시 서버는 "Authentication: DISABLED" 로그를 출력하고 모든 요청을 master 권한으로 처리한다. 명시적 비활성화 선언을 위해 `MEMENTO_AUTH_DISABLED=true`를 병기할 수 있다 |
-| MEMENTO_AUTH_DISABLED | false | `true`로 설정 시 인증을 완전히 비활성화하여 모든 요청을 master 권한으로 처리. 개발/테스트 전용. `MEMENTO_ACCESS_KEY`가 비어 있을 때만 유효 |
+| MEMENTO_ACCESS_KEY | (없음) | Bearer 인증 키. 미설정 상태로는 서버가 기동하지 않고 종료 코드 78로 멈춘다. 인증 없이 운용하려면 `MEMENTO_AUTH_DISABLED=true`를 함께 지정해야 한다 |
+| MEMENTO_AUTH_DISABLED | false | `true`로 설정 시 인증을 완전히 비활성화하여 모든 요청을 master 권한으로 처리. 개발·시험 전용이며 이 선언이 없으면 키 없는 기동 자체가 거부된다. `MEMENTO_ACCESS_KEY`가 비어 있을 때만 유효 |
 | SESSION_TTL_MINUTES | 43200 | 세션 유효 시간 (분). 기본값 30일. 슬라이딩 윈도우 방식으로 도구 사용 시마다 갱신 |
 | LOG_DIR | ./logs | Winston 로그 파일 저장 디렉토리 |
 | ALLOWED_ORIGINS | (없음) | 허용할 Origin 목록. 쉼표로 구분. 미설정 시 모든 Origin 허용 (MCP 클라이언트 호환성 우선) |
