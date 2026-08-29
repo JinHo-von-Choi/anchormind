@@ -4,6 +4,23 @@
   "license": "Apache-2.0",
   "description": "Fragment-Based Memory MCP Server",
   "main": "server.js",
+  "files": [
+    "bin/",
+    "lib/",
+    "config/",
+    "scripts/",
+    "assets/admin/",
+    "assets/images/",
+    "server.js",
+    "setup.sh",
+    "SKILL.md",
+    "README.md",
+    "README.en.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    ".env.example",
+    ".env.example.minimal"
+  ],
   "type": "module",
   "bin": {
     "anchormind": "bin/memento.js",
