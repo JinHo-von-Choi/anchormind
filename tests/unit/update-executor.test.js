@@ -83,7 +83,7 @@ describe("UpdateExecutor", () => {
     it("install uses npm install -g", async () => {
       const ex = new UpdateExecutor({ installType: "npm-global", targetVersion: "v2.3.0", projectRoot: "/usr/local", execCommand: () => Promise.resolve("ok") });
       const r = await ex.executeStep("install", { dryRun: true });
-      assert.ok(r.commands.some(c => c.cmd === "npm" && c.args.includes("memento-mcp@2.3.0")));
+      assert.ok(r.commands.some(c => c.cmd === "npm" && c.args.includes("anchormind-mcp@2.3.0")));
     });
   });
 });
