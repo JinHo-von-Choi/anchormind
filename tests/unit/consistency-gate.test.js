@@ -96,6 +96,10 @@ describe("Consistency Gate — morpheme_indexed SQL 조건 검증", () => {
     assert.ok(capturedSql.length > 0, "SQL이 캡처되어야 함");
     assert.ok(!capturedSql.includes("morpheme_indexed"),
       "morphemeOnly=false 시 morpheme_indexed 조건 미포함");
+    /** 자리표시자 개수와 바인딩 개수가 어긋나면 실행 시점에 터진다. */
+    const placeholders = new Set(capturedSql.match(/\$\d+/g) ?? []);
+    assert.ok(capturedParams.length >= placeholders.size,
+      `바인딩 ${capturedParams.length}건이 자리표시자 ${placeholders.size}개보다 적다`);
   });
 
   test("morphemeOnly=true → SQL에 morpheme_indexed = true 조건 포함", async () => {

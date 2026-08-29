@@ -52,14 +52,14 @@ export async function fetchMetricsSummary(opts = {}) {
  */
 function renderCardGrid(cards, timeseries) {
   const CARD_DEFS = [
-    { key: "activeSessions",        label: "ACTIVE SESSIONS",       unit: "",      icon: "groups",               warn: (v) => false,       critical: (v) => false,  sparklineKey: "activeSessions"  },
+    { key: "activeSessions",        label: "ACTIVE SESSIONS",       unit: "",      icon: "groups",               warn: (_v) => false,       critical: (_v) => false,  sparklineKey: "activeSessions"  },
     { key: "rpcLatencyP50",         label: "RPC LATENCY P50",       unit: "ms",    icon: "speed",                warn: (v) => v > 200,     critical: (v) => v > 500,  sparklineKey: "httpRps"         },
     { key: "rpcLatencyP99",         label: "RPC LATENCY P99",       unit: "ms",    icon: "timer",                warn: (v) => v > 500,     critical: (v) => v > 1000, sparklineKey: "toolLatencyP95"  },
     { key: "toolErrorRate5m",       label: "TOOL ERROR RATE 5m",    unit: "%",     icon: "error_outline",        warn: (v) => v > 0.01,    critical: (v) => v > 0.05 },
     { key: "authDeniedRate5m",      label: "AUTH DENIED RATE 5m",   unit: "%",     icon: "lock",                 warn: (v) => v > 0.05,    critical: (v) => v > 0.2 },
     { key: "rbacDeniedRate5m",      label: "RBAC DENIED RATE 5m",   unit: "%",     icon: "admin_panel_settings", warn: (v) => v > 0.02,    critical: (v) => v > 0.1 },
     { key: "tenantBlockedTotal",    label: "TENANT BLOCKED",        unit: "",      icon: "block",                warn: (v) => v > 0,       critical: (v) => v > 10 },
-    { key: "oauthTokensIssuedRate1h", label: "OAUTH TOKENS /1h",   unit: "",      icon: "key",                  warn: (v) => false,       critical: (v) => false },
+    { key: "oauthTokensIssuedRate1h", label: "OAUTH TOKENS /1h",   unit: "",      icon: "key",                  warn: (_v) => false,       critical: (_v) => false },
     { key: "symbolicGateBlocked",   label: "SYMBOLIC BLOCKED",      unit: "",      icon: "filter_alt_off",       warn: (v) => v > 0,       critical: (v) => v > 5 }
   ];
 

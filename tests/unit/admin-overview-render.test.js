@@ -6,7 +6,7 @@
  * 수정일: 2026-04-19 (ESM 모듈 직접 import 방식으로 전환)
  */
 
-import { test, describe, beforeEach } from "node:test";
+import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { setupDom, flatQuery } from "./admin-test-helper.js";
 

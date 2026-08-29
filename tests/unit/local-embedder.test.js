@@ -8,7 +8,7 @@
  * init/embed 동작 및 싱글톤 캐싱을 검증한다.
  */
 
-import { test, describe, mock, beforeEach } from "node:test";
+import { test, describe, beforeEach } from "node:test";
 import assert                               from "node:assert/strict";
 
 /**
@@ -18,7 +18,7 @@ import assert                               from "node:assert/strict";
  * @param {number} dims - 반환할 벡터 차원 수
  * @param {boolean} [fail] - true이면 reject
  */
-function makeMockPipeline(dims, fail = false) {
+function _makeMockPipeline(dims, fail = false) {
   return async (_task, _model, _opts) => {
     /** 반환되는 pipeline 함수 */
     return async (_text, _opts) => {
@@ -40,13 +40,14 @@ describe("LocalTransformersEmbedder", () => {
     const embedder = new LocalTransformersEmbedder({ modelId: "test-model", dimensions: 4 });
 
     /** pipeline mock 주입 */
-    let initCalled   = false;
-    embedder._pipeline = async (text, opts) => {
+    let initCalled = false;
+    embedder._pipeline = async (_text, _opts) => {
       initCalled = true;
       return { data: new Float32Array(4).fill(0.1) };
     };
 
     const vec = await embedder.embed("hello");
+    assert.strictEqual(initCalled, true, "주입한 pipeline이 호출되지 않았다");
     assert.strictEqual(vec.length, 4, "벡터 차원은 4이어야 한다");
     assert.ok(vec.every(v => typeof v === "number"), "모든 요소는 숫자여야 한다");
   });
@@ -89,7 +90,7 @@ describe("LocalTransformersEmbedder", () => {
     let   loadCount   = 0;
 
     /** init()을 실제로 실행시키기 위해 _pipeline을 null로 유지하되 init 내부를 패치 */
-    const origInit = embedder.init.bind(embedder);
+    const _origInit = embedder.init.bind(embedder);
     embedder.init = async () => {
       if (embedder._pipeline) return;
       loadCount++;

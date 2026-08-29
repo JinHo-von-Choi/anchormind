@@ -12,7 +12,7 @@
  *  - GET /metrics-summary 403: master 키 없는 요청 거부
  */
 
-import { describe, it, before, afterEach } from "node:test";
+import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 
 /* ------------------------------------------------------------------ */
@@ -42,12 +42,12 @@ const mh = (name, help, labelNames, buckets) =>
 const gaugeStreamable = mg("mcp_active_sessions_streamable", "streamable");
 const gaugeLegacy     = mg("mcp_active_sessions_legacy",     "legacy");
 
-const cntAuthDenied    = mc("memento_auth_denied_total",             "auth denied",    ["reason"]);
-const cntRbacDenied    = mc("memento_rbac_denied_total",             "rbac denied",    ["tool", "reason"]);
-const cntTenant        = mc("memento_tenant_isolation_blocked_total","tenant blocked", ["component"]);
-const cntErrors        = mc("mcp_errors_total",                      "errors",         ["type", "code"]);
-const cntSymbolic      = mc("memento_symbolic_gate_blocked_total",   "symbolic gate",  ["phase", "reason"]);
-const cntOAuth         = mc("mcp_oauth_tokens_issued_total",         "oauth issued",   ["grant_type"]);
+const _cntAuthDenied    = mc("memento_auth_denied_total",             "auth denied",    ["reason"]);
+const _cntRbacDenied    = mc("memento_rbac_denied_total",             "rbac denied",    ["tool", "reason"]);
+const _cntTenant        = mc("memento_tenant_isolation_blocked_total","tenant blocked", ["component"]);
+const _cntErrors        = mc("mcp_errors_total",                      "errors",         ["type", "code"]);
+const _cntSymbolic      = mc("memento_symbolic_gate_blocked_total",   "symbolic gate",  ["phase", "reason"]);
+const _cntOAuth         = mc("mcp_oauth_tokens_issued_total",         "oauth issued",   ["grant_type"]);
 const cntToolExec      = mc("mcp_tool_executions_total",             "tool exec",      ["tool", "success"]);
 
 const histRpcDur  = mh("mcp_rpc_method_duration_seconds",       "rpc dur",  ["method"],

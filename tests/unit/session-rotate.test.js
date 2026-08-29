@@ -14,7 +14,7 @@
  *  7. POST /session/rotate — 인증된 요청 → 200, 응답 shape 검증
  */
 
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { Readable }  from "node:stream";
 
@@ -63,7 +63,7 @@ async function rotateSessionLocal(oldSessionId, {
   createNewSession   = null,  /** (id, ctx) => Promise<void> */
   deleteOldSession   = null,  /** (id) => Promise<void> */
   sessionTtlMs       = 30 * 24 * 3600 * 1000,
-  reason             = "explicit_rotate"
+  _reason             = "explicit_rotate"
 } = {}) {
   const existing = sessionsMap.get(oldSessionId);
 
@@ -329,7 +329,7 @@ describe("POST /session/rotate — HTTP 핸들러", () => {
 
     await routeSessionRotate(req, res, {
       validateAuthFn  : async () => ({ valid: true, keyId: "key-789" }),
-      rotateSessionFn : async (id, opts) => ({
+      rotateSessionFn : async (id, _opts) => ({
         oldSessionId : id,
         newSessionId : newSid,
         expiresAt    : now + 60_000,

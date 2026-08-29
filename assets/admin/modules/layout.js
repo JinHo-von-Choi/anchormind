@@ -47,7 +47,7 @@ const NAV_ITEMS = [
  * @param {HTMLElement} container - 뷰 컨테이너 엘리먼트
  * @param {string}      viewId    - 뷰 이름 ("sessions" | "logs" 등)
  */
-export function renderScaffold(container, viewId) { // eslint-disable-line no-unused-vars
+export function renderScaffold(container, viewId) {
   container.textContent = "";
   const wrap = document.createElement("div");
   wrap.className = "space-y-6";

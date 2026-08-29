@@ -138,7 +138,7 @@ function makeStore(pool) {
   };
 
   /** getEdgesByEvents */
-  store.getEdgesByEvents = async function (eventIds, keyId = null) {
+  store.getEdgesByEvents = async function (eventIds, _keyId = null) {
     if (!eventIds || eventIds.length === 0) return [];
     if (!pool) return [];
     const { rows } = await pool.query(`SELECT * FROM agent_memory.case_event_edges WHERE from_event_id = ANY($1)`, [eventIds]);
@@ -146,7 +146,7 @@ function makeStore(pool) {
   };
 
   /** getEvidenceByEvent */
-  store.getEvidenceByEvent = async function (eventId, keyId = null) {
+  store.getEvidenceByEvent = async function (eventId, _keyId = null) {
     if (!pool) return [];
     const { rows } = await pool.query(`SELECT * FROM agent_memory.fragment_evidence WHERE event_id = $1`, [eventId]);
     return rows;

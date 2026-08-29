@@ -20,7 +20,7 @@
  *  10. skipConflictDetection=true — detectConflicts 미호출
  */
 
-import { describe, it, mock, beforeEach } from "node:test";
+import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 
 // ---------------------------------------------------------------------------
@@ -315,6 +315,7 @@ describe("supersedes — conflictResolver.supersede 호출", async () => {
      *  `if (oldId === id) continue;` 라인으로 보장된다.
      *  여기서는 other-id에 대해 정확히 1회 호출됨을 검증한다. */
     assert.strictEqual(supersedeFn.mock.calls.length, 1);
+    assert.ok(generatedId, "파편 id가 생성되지 않았다");
   });
 });
 

@@ -175,7 +175,7 @@ describe("MemoryRememberer._runPolicyGate — workspace 게이트 배선", () =>
     return { rememberer: null, store, factory, getHardGate, policyRules };
   }
 
-  async function buildRememberer({ policyRules, getHardGate, workspace }) {
+  async function buildRememberer({ policyRules, getHardGate, _workspace }) {
     const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
     const { store, factory }   = makeRememberer(policyRules, getHardGate);
 

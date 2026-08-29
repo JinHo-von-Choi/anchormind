@@ -97,17 +97,17 @@ describe("session-audit: sha256 해시 처리 로직", () => {
 
   it("logSessionRotate가 올바른 NDJSON 필드를 stdout에 출력한다", async () => {
     /** LOG_DIR이 존재하지 않는 경로면 mkdir 실패 → stdout 폴백 */
-    const { logSessionRotate } = await import("../../lib/session-audit.js");
+    await import("../../lib/session-audit.js");
 
     const lines = [];
     const origWrite = process.stdout.write.bind(process.stdout);
-    process.stdout.write = (chunk, ...rest) => {
+    process.stdout.write = (chunk, ..._rest) => {
       lines.push(String(chunk));
       return true;
     };
 
     /** /proc/nonexistent 는 실제로 접근 불가 — mkdir이 실패하여 stdout 폴백 유도 */
-    const origAppendFile = (await import("node:fs")).promises.appendFile;
+    const _origAppendFile = (await import("node:fs")).promises.appendFile;
 
     /** lib/session-audit.js는 fsp를 직접 import하므로 강제로 throw할 수 없다.
      *  대신 LOG_DIR 환경변수를 쓰기 불가 경로로 설정한다.

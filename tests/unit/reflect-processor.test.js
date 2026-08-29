@@ -9,7 +9,7 @@
  * 세션 통합, episode 생성을 검증한다.
  */
 
-import { describe, it, mock, beforeEach, after } from "node:test";
+import { describe, it, mock, after } from "node:test";
 import assert from "node:assert/strict";
 
 mock.module("../../lib/memory/embedding/MorphemeIndex.js", {
@@ -66,7 +66,7 @@ function createMockDeps(overrides = {}) {
       source   : opts.source,
       agent_id : opts.agentId,
     })),
-    splitAndCreate: mock.fn((text, opts) => [{ content: text }]),
+    splitAndCreate: mock.fn((text, _opts) => [{ content: text }]),
     ...overrides.factory,
   };
 

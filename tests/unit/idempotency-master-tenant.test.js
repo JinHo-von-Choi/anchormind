@@ -11,7 +11,7 @@
  * 4. FragmentReader.findByIdempotencyKey SQL 분기 검증 (쿼리 파라미터 구조)
  */
 
-import { describe, it, mock, beforeEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 // ---------------------------------------------------------------------------
@@ -34,7 +34,7 @@ describe("FragmentReader.findByIdempotencyKey — SQL 파라미터 분기 검증
 
     /** module mock 없이 인스턴스 메서드를 직접 교체 */
     const reader = new FragmentReader();
-    const originalFn = reader.findByIdempotencyKey.bind(reader);
+    const _originalFn = reader.findByIdempotencyKey.bind(reader);
 
     /** 내부 queryWithAgentVector를 인터셉트하기 위해
      *  실제 메서드를 wrapping하여 SQL/params 추출 */

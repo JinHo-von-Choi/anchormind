@@ -15,7 +15,7 @@
  * - getStats: pool을 null로 만들어 빈 객체 반환 경로 검증
  */
 
-import { describe, it, beforeEach }  from "node:test";
+import { describe, it }  from "node:test";
 import assert                         from "node:assert/strict";
 
 import {
@@ -215,8 +215,8 @@ describe("MemoryConsolidator._resolveContradiction — 시간 논리", () => {
     };
 
     /** queryWithAgentVector를 차단하기 위해 내부 import를 임시 패치 */
-    const origResolve = c._resolveContradiction.bind(c);
-    c._resolveContradiction = async (newFrag, candidate, reasoning) => {
+    const _origResolve = c._resolveContradiction.bind(c);
+    c._resolveContradiction = async (newFrag, candidate, _reasoning) => {
       /** 간소화된 검증: createLink 호출 패턴만 확인 */
       await c.store.createLink(newFrag.id, candidate.id, "contradicts", "system");
 

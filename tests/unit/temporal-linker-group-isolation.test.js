@@ -8,7 +8,7 @@
  * cross-tenant temporal 링크 미생성 및 그룹 내 링크 생성 검증.
  */
 
-import { describe, it, beforeEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 /**
@@ -169,7 +169,7 @@ describe("TemporalLinker — cross-tenant 링크 미생성 검증", () => {
     };
 
     const mockLinkStore = {
-      createLink: async (fromId, toId, type, agentId, weight) => {
+      createLink: async (fromId, toId, _type, _agentId, _weight) => {
         linksCreated.push({ fromId, toId });
       }
     };

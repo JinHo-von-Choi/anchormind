@@ -14,7 +14,7 @@
  *  7. _injectSample이 buffer에 정확히 반영
  */
 
-import { describe, it, beforeEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 /* ------------------------------------------------------------------ */

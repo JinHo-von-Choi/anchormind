@@ -169,7 +169,7 @@ describe("McpClient", () => {
     let closeServer;
 
     before(async () => {
-      const mock = createMockServer((toolName, toolArgs) => {
+      const mock = createMockServer((toolName, _toolArgs) => {
         if (toolName === "recall") {
           return {
             fragments : [

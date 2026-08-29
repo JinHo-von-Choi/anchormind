@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 
 /** 공통 mock 팩토리 */
 function makeRememberer(overrides = {}) {
-  const { MemoryRememberer } = overrides._class ?? {};
+  overrides._class ?? {};
   const store = {
     getById                       : mock.fn(async () => null),
     findByIdempotencyKey          : mock.fn(async () => null),

@@ -17,7 +17,7 @@
  *   4. cursor="0"이 즉시 반환되면 단 1회 SCAN으로 종료된다.
  */
 
-import { describe, it, beforeEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 /** ── 테스트 전용 getUnreflectedSessions 추출 ──────────────────────────
@@ -71,7 +71,7 @@ function makeInfiniteScanMock(totalPages) {
   return {
     status: "ready",
     scanCallCount: () => callCount,
-    scan: async (_cursor, ...args) => {
+    scan: async (_cursor, ..._args) => {
       callCount++;
       const page = callCount;
       /** cursor가 "0"이 되면 루프가 끝나므로, 마지막 페이지에서만 "0"을 반환한다.
@@ -88,7 +88,7 @@ function makeDeepUnreflectedMock(targetPage, sessionId) {
   let callCount = 0;
   return {
     status: "ready",
-    scan: async (_cursor, ...args) => {
+    scan: async (_cursor, ..._args) => {
       callCount++;
       if (callCount === targetPage) {
         return [String(callCount * 1000), [`${KEY_PREFIX}${sessionId}`]];

@@ -15,7 +15,7 @@ import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 
 /** rotate 성공 시 반환되는 mock 결과 */
-const MOCK_ROTATE_RESULT = {
+const _MOCK_ROTATE_RESULT = {
   oldSessionId : "aaaaaaaa-old-0000-0000-000000000001",
   newSessionId : "bbbbbbbb-new-0000-0000-000000000002",
   expiresAt    : Date.now() + 3_600_000,
@@ -58,11 +58,11 @@ describe("CLI session rotate", () => {
   });
 
   it("로컬 모드: rotateSession 호출 시 --reason 전달됨", async () => {
-    const { default: session } = sessionModule;
+    const { default: _session } = sessionModule;
 
-    let capturedReason = null;
+    let _capturedReason = null;
     /** lib/sessions.js mock — 실제 DB/Redis 없이 */
-    const origImport = globalThis._origImport;
+    const _origImport = globalThis._origImport;
 
     /** node:test mock.module은 ESM 정적 분석 대상이므로 사용 불가.
      *  대신 rotateSession 직접 mock을 위해 stub 모듈 교체 패턴을 사용한다.
@@ -76,7 +76,7 @@ describe("CLI session rotate", () => {
      *  여기서는 --reason 파싱 로직만 직접 단위 검증한다. */
 
     /** cmdRotate 내부 reason 파싱 추출 — args에서 올바르게 읽히는지만 확인 */
-    const argsWithReason = {
+    const _argsWithReason = {
       _      : ["rotate", "some-session-id"],
       reason : "  suspected_leak  ",  /** 앞뒤 공백 포함 */
       remote : null,

@@ -5,7 +5,7 @@
  * 작성일: 2026-04-18
  */
 
-import { describe, it, beforeEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 /** ModeRegistry는 파일 시스템 기반이므로 직접 import (실제 JSON 사용) */

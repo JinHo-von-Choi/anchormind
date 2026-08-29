@@ -15,7 +15,7 @@
  * 8. linkFragment: superseded_by → valid_to UPDATE 쿼리 실행 확인
  */
 
-import { describe, it, mock, beforeEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { keyScopeClause } from "../../lib/memory/keyScope.js";
 

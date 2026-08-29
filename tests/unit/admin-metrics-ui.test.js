@@ -5,7 +5,7 @@
  * 작성일: 2026-04-20
  */
 
-import { test, describe, beforeEach } from "node:test";
+import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { setupDom, flatQuery } from "./admin-test-helper.js";
 
@@ -110,7 +110,7 @@ describe("renderMetricsView — 카드 grid", () => {
 
   test("tenantBlockedTotal=0 이면 경고 카드가 없다", () => {
     const container = makeContainer();
-    const zeroData  = {
+    const _zeroData  = {
       ...SAMPLE_DATA,
       cards: { ...SAMPLE_DATA.cards, tenantBlockedTotal: 0, tenantBlockedTotal_: 0 }
     };

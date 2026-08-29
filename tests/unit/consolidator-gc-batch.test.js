@@ -1,4 +1,4 @@
-import { describe, it, mock } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 describe("ConsolidatorGC.compressOldFragments 배치 병렬화", () => {

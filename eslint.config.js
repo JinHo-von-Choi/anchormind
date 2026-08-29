@@ -31,7 +31,13 @@ export default [
       }
     },
     rules: {
-      "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_", "caughtErrorsIgnorePattern": "^_" }],
+      /**
+       * 미사용 변수를 실패로 다룬다.
+       *
+       * 경고로 두면 130건까지 쌓여도 CI가 통과하고, 그 안에 섞인 실제 결함이
+       * 묻힌다. 의도적으로 쓰지 않는 인자와 catch 변수는 밑줄 접두로 표시한다.
+       */
+      "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_", "caughtErrorsIgnorePattern": "^_" }],
       "no-empty": ["error", { "allowEmptyCatch": true }],
       "no-undef": "error"
     }

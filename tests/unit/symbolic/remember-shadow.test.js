@@ -17,7 +17,7 @@
  *  - config/symbolic.js 는 node:test mock.module 로 플래그 조합 제어
  */
 
-import { test, describe, beforeEach, afterEach, after, mock } from "node:test";
+import { test, describe, beforeEach, after, mock } from "node:test";
 import assert from "node:assert/strict";
 import { teardownTestResources } from "../../_lifecycle.js";
 

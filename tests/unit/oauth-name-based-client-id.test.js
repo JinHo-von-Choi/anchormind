@@ -149,7 +149,7 @@ describe("/register — Authorization 헤더 없음 (backward compat)", () => {
  * @param {string|null}  opts.byIdKeyId      - validateApiKeyById.keyId
  * @returns {{ isApiKeyClient: boolean, boundKeyId: string|null }}
  */
-function simulateAuthorizeBoundKeyPath({ clientId, clientName, clientFound, byIdValid, byIdKeyId }) {
+function simulateAuthorizeBoundKeyPath({ _clientId, clientName, clientFound, byIdValid, byIdKeyId }) {
   let isApiKeyClient = false;
   let boundKeyId     = null;
 

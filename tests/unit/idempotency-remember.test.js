@@ -10,7 +10,7 @@
  * 3. 첫 번째 호출(DB miss)에서 fragment.idempotency_key가 삽입 파라미터에 포함됨
  */
 
-import { describe, it, mock, beforeEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 // ---------------------------------------------------------------------------

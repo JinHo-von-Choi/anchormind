@@ -177,7 +177,7 @@ function makeDeps(overrides = {}) {
 describe("ReflectProcessor 인라인 — narrative_summary 자동 생성", () => {
   it("타입별 prefix 포함 자동 서사 생성", async () => {
     const deps      = makeDeps();
-    const result    = await runProcess({
+    const _result    = await runProcess({
       decisions      : ["TypeScript 채택"],
       errors_resolved: ["NPE 수정"],
       agentId        : "agent-1",

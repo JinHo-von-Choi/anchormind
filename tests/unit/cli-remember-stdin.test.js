@@ -5,7 +5,7 @@
  * 작성일: 2026-04-20
  */
 
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 /** readStdin 유닛 테스트를 위한 모킹 헬퍼 */

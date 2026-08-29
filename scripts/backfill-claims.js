@@ -44,7 +44,7 @@
  *  - MEMENTO_SYMBOLIC_ENABLED 등 런타임 플래그와 무관하게 스크립트 자체가 결정.
  */
 
-import path from "node:path";
+import _path from "node:path";
 import dotenv from "dotenv";
 
 dotenv.config();

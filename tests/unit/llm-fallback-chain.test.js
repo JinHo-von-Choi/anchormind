@@ -9,7 +9,7 @@
  * 작성일: 2026-04-16
  */
 
-import { describe, it, before, after } from "node:test";
+import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 
 import { LlmProvider } from "../../lib/llm/LlmProvider.js";
@@ -37,7 +37,7 @@ function createMockProvider(name, shouldFail, responseText = '{"ok":true}') {
     async isCircuitOpen() { return false; },
     async recordSuccess() {},
     async recordFailure() {},
-    async callText(prompt) {
+    async callText(_prompt) {
       this.callCount++;
       if (shouldFail) {
         throw new Error(`${name}: simulated failure`);

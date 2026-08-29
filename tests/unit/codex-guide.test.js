@@ -16,7 +16,7 @@ describe("issue #21: deferred tool discovery 가이드 — Task 1", () => {
       capabilities    : {},
       clientInfo      : { name: "test-client", version: "1.0" }
     });
-    const instructions = result?.serverInfo ? null : result?.instructions;
+    const _instructions = result?.serverInfo ? null : result?.instructions;
     // handleInitialize가 { capabilities, serverInfo, instructions, ... } 구조를 반환
     const instr = result?.instructions ?? "";
     assert.match(

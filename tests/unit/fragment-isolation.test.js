@@ -13,10 +13,10 @@
  * 모든 DB/Redis 의존성은 mock 처리. 실 DB 호출 없음.
  */
 
-import { describe, it, mock, before, after, beforeEach } from "node:test";
+import { describe, it, mock, after } from "node:test";
 import assert from "node:assert/strict";
 
-import { FragmentWriter, sanitizeInsertImportance } from "../../lib/memory/write/FragmentWriter.js";
+import { FragmentWriter } from "../../lib/memory/write/FragmentWriter.js";
 import { BatchRememberProcessor }                   from "../../lib/memory/write/BatchRememberProcessor.js";
 import { disconnectRedis }                          from "../../lib/redis.js";
 
@@ -32,7 +32,7 @@ after(async () => { await disconnectRedis().catch(() => {}); });
  *
  * dupIds: dedup SELECT에서 반환할 row(id 목록) — 기본 빈 배열(중복 없음)
  */
-function buildQueryMock(capturedQueries, dupIds = []) {
+function _buildQueryMock(capturedQueries, dupIds = []) {
   return async function mockQuery(agentId, sql, params, mode) {
     capturedQueries.push({ agentId, sql, params, mode });
 
@@ -118,8 +118,8 @@ function makeMockFactory() {
 describe("FragmentWriter — content_hash 테넌트 격리", () => {
 
   it("dedup SELECT가 key_id IS NOT DISTINCT FROM 조건을 포함한다", async () => {
-    const captured = [];
-    const writer   = new FragmentWriter();
+    const _captured = [];
+    const _writer   = new FragmentWriter();
 
     // queryWithAgentVector를 직접 모킹할 수 없으므로
     // db.js 모듈 단위에서 실제 pool 미사용 경로를 확인:
@@ -136,8 +136,8 @@ describe("FragmentWriter — content_hash 테넌트 격리", () => {
   });
 
   it("insert(): keyId=null → ON CONFLICT (content_hash) WHERE key_id IS NULL", async () => {
-    const captured = [];
-    const writer   = new FragmentWriter();
+    const _captured = [];
+    const _writer   = new FragmentWriter();
 
     // ON CONFLICT 분기 로직이 소스에 포함돼 있는지 확인
     const src = FragmentWriter.toString();
@@ -422,7 +422,7 @@ class IsolatedContradictionDetector {
     this.warnings = warnings;
   }
 
-  async resolveContradiction(newFrag, candidate, reasoning) {
+  async resolveContradiction(newFrag, candidate, _reasoning) {
     const nk = newFrag.key_id   ?? null;
     const ck = candidate.key_id ?? null;
     if (nk !== ck) {

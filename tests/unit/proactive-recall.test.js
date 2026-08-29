@@ -13,7 +13,7 @@
  * mode별 상세 게이트 시나리오는 proactive-recall-gate.test.js 참조.
  */
 
-import { describe, it, mock, beforeEach, after } from "node:test";
+import { describe, it, mock, after } from "node:test";
 import assert from "node:assert/strict";
 
 import { teardownTestResources } from "../_lifecycle.js";
@@ -65,7 +65,7 @@ function createMockDeps(overrides = {}) {
 let RememberPostProcessor;
 
 /* pushToQueue를 no-op로 대체 */
-const originalPushToQueue = (await import("../../lib/redis.js")).pushToQueue;
+const _originalPushToQueue = (await import("../../lib/redis.js")).pushToQueue;
 
 describe("RememberPostProcessor -- ProactiveRecall", async () => {
   /* RememberPostProcessor를 로드 */

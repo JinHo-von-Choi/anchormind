@@ -84,7 +84,7 @@ function makeSlowSearch({ l2Rows, l3Rows, delayMs }) {
     searchByKeywords: async () => l2Rows.map(r => ({ ...r })),
     searchByTopic   : async () => [],
     getByIds        : async () => [],
-    searchBySemantic: async (...args) => {
+    searchBySemantic: async (..._args) => {
       semanticCalls.push({ kind: "semantic" });
       await new Promise(resolve => setTimeout(resolve, delayMs));
       return l3Rows.map(r => ({ ...r }));

@@ -8,7 +8,7 @@
  * 작성일: 2026-04-20
  */
 
-import { describe, it, before, after } from "node:test";
+import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 
 /** prom-client default metrics 이름 패턴 (node.js 공통 접두사) */

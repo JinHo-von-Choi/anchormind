@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 let _queryMock = mock.fn(async () => ({ rows: [] }));
 
 /** FragmentReader를 import하기 전에 db 모듈을 스텁으로 대체 */
-const mockModule = {
+const _mockModule = {
   queryWithAgentVector: (...args) => _queryMock(...args)
 };
 
@@ -34,8 +34,8 @@ describe("FragmentReader.getById — keyId SQL 격리", () => {
     };
 
     /** _query를 사용하도록 임시 패치 */
-    const origQuery = (await import("../../lib/tools/db.js")).queryWithAgentVector;
-    const { queryWithAgentVector } = await import("../../lib/tools/db.js");
+    const _origQuery = (await import("../../lib/tools/db.js")).queryWithAgentVector;
+    await import("../../lib/tools/db.js");
 
     let capturedSql    = "";
     let capturedParams = [];
@@ -183,7 +183,7 @@ describe("MemoryManager — keyId 격리 통합 (mock store)", () => {
     const { MemoryManager } = await import("../../lib/memory/MemoryManager.js");
     const mm = new MemoryManager();
 
-    mm.store.getById = mock.fn(async (id, agentId, keyId, groupKeyIds) => {
+    mm.store.getById = mock.fn(async (id, agentId, keyId, _groupKeyIds) => {
       /** keyId=null이면 필터 없이 반환 */
       if (keyId === null) {
         return { id, key_id: "key-A", ttl_tier: "warm", keywords: [], topic: "test", type: "fact" };

@@ -7,7 +7,7 @@
  * DB 없이 mock pool로 COUNT 결과를 주입하여 gate 평가 로직을 검증한다.
  */
 
-import { describe, it, before, after } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 /**

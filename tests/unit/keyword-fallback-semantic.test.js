@@ -80,7 +80,7 @@ function makeSearch({ l2Rows, l3Rows }) {
     searchByKeywords: async () => l2Rows.map(r => ({ ...r })),
     searchByTopic   : async () => [],
     getByIds        : async () => [],
-    searchBySemantic: async (...args) => {
+    searchBySemantic: async (..._args) => {
       semanticCalls.push({ kind: "semantic" });
       return l3Rows.map(r => ({ ...r }));
     },

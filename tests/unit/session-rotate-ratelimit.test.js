@@ -12,7 +12,7 @@
  *  5. MEMENTO_ROTATE_RATE_LIMIT_PER_MIN 환경변수 오버라이드
  */
 
-import { describe, it, before, beforeEach, after } from "node:test";
+import { describe, it, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
 /** 테스트용 fake req — remoteAddress와 x-forwarded-for 설정 가능 */

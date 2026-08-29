@@ -28,7 +28,7 @@ const SOURCE_PATH = path.resolve(__dirname, "../../lib/memory/read/FragmentSearc
 const source      = readFileSync(SOURCE_PATH, "utf8");
 
 /** 소스에서 정규식 패턴이 최소 N회 등장하는지 확인한다. */
-function countMatches(src, regex) {
+function _countMatches(src, regex) {
   return (src.match(regex) || []).length;
 }
 

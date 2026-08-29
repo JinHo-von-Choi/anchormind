@@ -170,7 +170,7 @@ describe("SymbolicOrchestrator", () => {
         candidates: [{ id: "f1" }],
         ctx       : { searchPath: ["L2:1"] }
       });
-    } catch (err) {
+    } catch (_err) {
       threw = true;
     }
 

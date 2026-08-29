@@ -71,7 +71,7 @@ function makeFragment(overrides = {}) {
 describe("H2 Sparse Fieldsets — pickFields 로직 검증", () => {
 
   it("fields 미지정(전체 필드) 경로: guard 조건 Array.isArray && length>0 이 false 여서 pick 안 함", () => {
-    const frag   = makeFragment();
+    const _frag   = makeFragment();
     const fields = undefined;
 
     /** guard: Array.isArray(fields) && fields.length > 0 */

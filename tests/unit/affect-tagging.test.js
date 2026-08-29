@@ -15,7 +15,7 @@
  * 8. 테넌트 격리: affect 추가가 기존 key_id 격리를 침범하지 않음
  */
 
-import { describe, it, mock, beforeEach, after } from "node:test";
+import { describe, it, mock, after } from "node:test";
 import assert from "node:assert/strict";
 
 import { teardownTestResources } from "../_lifecycle.js";

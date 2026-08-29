@@ -14,7 +14,7 @@
  * 작성일: 2026-04-18
  */
 
-import { describe, it, before, after, afterEach } from "node:test";
+import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 
 // ---------------------------------------------------------------------------

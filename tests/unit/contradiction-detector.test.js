@@ -19,7 +19,7 @@
  * 12. resetCheckedPairs: 카운터 초기화 확인
  */
 
-import { describe, it, mock, beforeEach } from "node:test";
+import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 
 import { ContradictionDetector, MAX_CONTRADICTION_DEPTH } from "../../lib/memory/link/ContradictionDetector.js";
@@ -157,7 +157,7 @@ describe("ContradictionDetector — NLI & 에스컬레이션 경로 단위 검�
     const d = makeDetector();
 
     /* geminiCLIJson를 mock할 수 없으므로 메서드 직접 교체 */
-    const origMethod = d.askGeminiContradiction.bind(d);
+    const _origMethod = d.askGeminiContradiction.bind(d);
     d.askGeminiContradiction = mock.fn(async () => ({ contradicts: false, reasoning: "Gemini CLI 응답 파싱 실패" }));
 
     const result = await d.askGeminiContradiction("A 내용", "B 내용");

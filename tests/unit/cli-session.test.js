@@ -5,7 +5,7 @@
  * 작성일: 2026-04-20
  */
 
-import { describe, it, before, after, mock } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { teardownTestResources, assertCleanShutdown } from "../_lifecycle.js";
 
@@ -83,7 +83,7 @@ describe("session CLI: list subcommand", () => {
   it("list --format json returns sessions array", async () => {
     /** sessions.js listAllSessions 을 mock으로 주입 */
     const sessionsMod = await import("../../lib/sessions.js");
-    const origList    = sessionsMod.listAllSessions;
+    const _origList    = sessionsMod.listAllSessions;
 
     // node:test mock.method 대신 직접 교체 (ESM module object는 writable=false일 수 있음)
     // → 로컬 모드 대신 args 조작으로 remoteUrl 없이 테스트
@@ -195,7 +195,7 @@ describe("session CLI: delete subcommand", () => {
     const sessionsMod       = await import("../../lib/sessions.js");
     const { streamableSessions } = sessionsMod;
     const target = MOCK_SESSIONS[0];
-    let   closeCalled = false;
+    let closeCalled = false;
 
     streamableSessions.set(target.sessionId, {
       ...target,
@@ -229,6 +229,8 @@ describe("session CLI: delete subcommand", () => {
     const out = captured3.join("\n");
     const obj = JSON.parse(out);
     assert.strictEqual(obj.ok, true, "result.ok should be true");
+    assert.strictEqual(closeCalled, true, "세션 close가 호출되지 않았다");
+    assert.strictEqual(streamableSessions.has(target.sessionId), false, "세션이 제거되지 않았다");
   });
 });
 
