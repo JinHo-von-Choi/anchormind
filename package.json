@@ -41,7 +41,7 @@
     "cli": "node bin/memento.js"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.8.1",
+    "@huggingface/transformers": "^4.2.0",
     "@node-rs/jieba": "^2.0.2",
     "dotenv": "^17.4.2",
     "garu-ko": "^0.9.16",
@@ -67,7 +67,8 @@
     "tar": "^7.5.22",
     "body-parser": "^2.3.0",
     "sharp": "^0.35.3",
-    "ip-address": "^10.3.1"
+    "ip-address": "^10.3.1",
+    "adm-zip": "^0.6.0"
   },
   "engines": {
     "node": ">=20.0.0"
