@@ -37,8 +37,8 @@ describe("FragmentReader.getById — keyId SQL 격리", () => {
     const _origQuery = (await import("../../lib/tools/db.js")).queryWithAgentVector;
     await import("../../lib/tools/db.js");
 
-    let capturedSql    = "";
-    let capturedParams = [];
+    let capturedSql;
+    let capturedParams;
 
     /** 모듈 캐시 없이 직접 SQL 검증 — getById 로직을 인라인으로 재현 */
     const SCHEMA = "agent_memory";

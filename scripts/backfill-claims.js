@@ -207,7 +207,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 async function processFragment(fragment, keyId) {
   counters.examined++;
 
-  let claims = [];
+  let claims;
   try {
     claims = await extractor.extract(fragment.content, fragment.topic);
   } catch {
