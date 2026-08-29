@@ -32,6 +32,7 @@ mock.module("../../lib/logger.js", {
 const {
   getAllowedWorkspaces,
   checkWorkspaceAllowed,
+  WORKSPACE_LOOKUP_FAILED,
   invalidateAllowedWorkspacesCache
 } = await import("../../lib/admin/ApiKeyStore.js");
 
@@ -63,12 +64,34 @@ describe("ApiKeyStore.getAllowedWorkspaces", () => {
     assert.deepStrictEqual(result, ["memento-mcp", "docs-mcp"]);
   });
 
-  it("DB 오류 시 fail-open으로 null 반환", async () => {
+  it("DB 오류는 무제한 허용과 구분되는 표식을 반환한다", async () => {
+    /**
+     * null은 "허용 집합 미지정", 즉 제한 없음이라는 확정 판정이다. 조회 실패를
+     * 같은 값으로 돌려주면 DB가 흔들릴 때마다 격리가 조용히 풀린다.
+     */
     invalidateAllowedWorkspacesCache("key-db-error");
     mockQuery.mock.mockImplementationOnce(() => Promise.reject(new Error("connection lost")));
 
     const result = await getAllowedWorkspaces("key-db-error");
-    assert.strictEqual(result, null);
+    assert.strictEqual(result, WORKSPACE_LOOKUP_FAILED);
+    assert.notStrictEqual(result, null);
+  });
+
+  it("조회 실패 상태에서 workspace 주장은 위반으로 판정된다", async () => {
+    invalidateAllowedWorkspacesCache("key-db-error-2");
+    mockQuery.mock.mockImplementationOnce(() => Promise.reject(new Error("connection lost")));
+
+    const v = await checkWorkspaceAllowed("key-db-error-2", "some-workspace");
+    assert.ok(v, "위반이 반환되지 않았다");
+    assert.strictEqual(v.rule, "workspaceLookupFailed");
+    assert.strictEqual(v.severity, "high");
+  });
+
+  it("workspace 미기입은 조회 실패와 무관하게 통과한다", async () => {
+    invalidateAllowedWorkspacesCache("key-db-error-3");
+    mockQuery.mock.mockImplementationOnce(() => Promise.reject(new Error("connection lost")));
+
+    assert.strictEqual(await checkWorkspaceAllowed("key-db-error-3", null), null);
   });
 
 });
