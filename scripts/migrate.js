@@ -45,6 +45,40 @@ if (!DB_URL) {
   process.exit(1);
 }
 
+/**
+ * 기반 스키마가 없으면 먼저 적용한다.
+ *
+ * migration-001의 첫 구문이 `ALTER TABLE agent_memory.fragments`라 빈 DB에서는
+ * 즉시 실패한다. 문서만 고치면 같은 실패가 반복되므로 러너가 스스로 처리한다.
+ *
+ * memory-schema.sql은 CREATE ... IF NOT EXISTS로 작성돼 있어 이미 적용된
+ * DB에서 다시 실행해도 무해하지만, 불필요한 실행을 피하려고 존재 여부를 먼저 본다.
+ *
+ * @param {import("pg").PoolClient} client
+ * @returns {Promise<boolean>} 적용했으면 true
+ */
+async function applyBaseSchemaIfMissing(client) {
+  const { rows } = await client.query("SELECT to_regclass($1) AS t", ["agent_memory.fragments"]);
+  if (rows[0]?.t) return false;
+
+  const schemaPath = path.join(import.meta.dirname, "..", "lib", "memory", "memory-schema.sql");
+  if (!fs.existsSync(schemaPath)) {
+    throw new Error(`기반 스키마 파일을 찾을 수 없습니다: ${schemaPath}`);
+  }
+
+  console.log("Base schema not found. Applying memory-schema.sql first...");
+  await client.query("BEGIN");
+  try {
+    await client.query(fs.readFileSync(schemaPath, "utf8"));
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  }
+  console.log("Base schema applied.");
+  return true;
+}
+
 async function migrate() {
   const pool   = new pg.Pool({ connectionString: DB_URL });
   const client  = await pool.connect();
@@ -54,6 +88,8 @@ async function migrate() {
   console.log("Migration lock acquired");
 
   try {
+    await applyBaseSchemaIfMissing(client);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS agent_memory.schema_migrations (
         filename   TEXT PRIMARY KEY,

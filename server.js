@@ -290,6 +290,19 @@ server.on("connection", (socket) => {
   socket.setNoDelay(true);
 });
 
+/**
+ * 인증 구성을 기동 시점에 검사한다.
+ *
+ * 키 없이 뜨는 서버는 모든 도구와 master 범위를 무인증으로 연다. 이 실수를
+ * 첫 요청이 아니라 기동에서 드러낸다. 무인증 운용이 필요하면 그 의사를
+ * 명시적으로 밝혀야 한다.
+ */
+if (!ACCESS_KEY && !AUTH_DISABLED) {
+  console.error("[Startup] MEMENTO_ACCESS_KEY가 설정되지 않았습니다.");
+  console.error("[Startup] 무인증으로 운용하려면 MEMENTO_AUTH_DISABLED=true를 명시하십시오.");
+  process.exit(78);
+}
+
 server.listen(PORT, () => {
   validateMemoryConfig(MEMORY_CONFIG);
   console.log(`Memento MCP HTTP server listening on port ${PORT}`);
@@ -299,7 +312,7 @@ server.listen(PORT, () => {
   if (ACCESS_KEY) {
     console.log("Authentication: ENABLED");
   } else {
-    console.log("Authentication: DISABLED (set MEMENTO_ACCESS_KEY to enable)");
+    console.log("Authentication: DISABLED (MEMENTO_AUTH_DISABLED=true로 명시된 운용)");
   }
 
   console.log(`Session TTL: ${SESSION_TTL_MS / 60000} minutes`);
