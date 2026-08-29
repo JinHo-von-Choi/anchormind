@@ -283,7 +283,16 @@ const server = http.createServer(async (req, res) => {
 
 server.keepAliveTimeout = Number(process.env.KEEP_ALIVE_TIMEOUT_MS  || 75000);
 server.headersTimeout   = Number(process.env.HEADERS_TIMEOUT_MS    || 76000);
-server.requestTimeout   = Number(process.env.REQUEST_TIMEOUT_MS    || 0);
+/**
+ * 요청 수신 시간 상한.
+ *
+ * 0은 무제한이며 느린 연결이 커넥션을 무기한 점유한다. 이 값은 본문을 다 받는
+ * 데 걸리는 시간을 제한할 뿐 처리 시간을 제한하지 않는다. 처리 시간은
+ * 질의 계층의 statement_timeout이 따로 맡는다.
+ *
+ * 본문 상한이 2MiB이므로 60초면 정상 요청에 충분하다.
+ */
+server.requestTimeout   = Number(process.env.REQUEST_TIMEOUT_MS    || 60000);
 
 server.on("connection", (socket) => {
   socket.setKeepAlive(true, 60000);
