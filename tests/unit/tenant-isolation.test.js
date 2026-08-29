@@ -11,7 +11,7 @@ const ROOT      = path.resolve(__dirname, "../..");
 describe("Tenant Isolation — key_id 격리 회귀 방지", () => {
 
   it("lib/ 내에 'key_id IS NULL OR key_id' 패턴이 없어야 함", () => {
-    let matches = "";
+    let matches;
     try {
       matches = execFileSync("grep", ["-rn", "key_id IS NULL OR key_id", "lib/"], {
         cwd:      ROOT,
@@ -27,7 +27,7 @@ describe("Tenant Isolation — key_id 격리 회귀 방지", () => {
   });
 
   it("lib/ 내에 'key_id' 대상 '::text IS NULL OR' 패턴이 없어야 함 (타입 불일치 방지)", () => {
-    let matches = "";
+    let matches;
     try {
       matches = execFileSync("grep", ["-rn", "::text IS NULL OR.*key_id", "lib/"], {
         cwd:      ROOT,
