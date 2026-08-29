@@ -116,8 +116,8 @@ describe("FragmentFactory.create — affect 필드", async () => {
 describe("FragmentWriter.insert — affect SQL 파라미터", async () => {
 
   it("INSERT SQL에 affect 컬럼이 포함되어야 한다", async () => {
-    let capturedSql    = "";
-    let capturedParams = [];
+    let capturedSql;
+    let capturedParams;
 
     /**
      * queryWithAgentVector를 가로채기 위해 동적 import 전에 모듈 캐시를 초기화할 수 없으므로,

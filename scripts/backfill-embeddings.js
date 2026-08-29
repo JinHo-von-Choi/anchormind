@@ -46,7 +46,6 @@ async function main() {
     );
 
     if (rows.length === 0) {
-      hasMore = false;
       break;
     }
 

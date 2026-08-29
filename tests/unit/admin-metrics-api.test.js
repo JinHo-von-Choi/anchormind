@@ -246,7 +246,7 @@ describe("admin-metrics buildMetricsSummary logic", () => {
       };
 
       /** 첫 호출 */
-      let cache = null;
+      let cache;
       const nowMs = Date.now();
       const data1 = await fakeGetMetrics();
       cache = { ts: nowMs, value: data1 };
@@ -257,7 +257,6 @@ describe("admin-metrics buildMetricsSummary logic", () => {
         data2 = cache.value;
       } else {
         data2 = await fakeGetMetrics();
-        cache = { ts: Date.now(), value: data2 };
       }
 
       assert.strictEqual(callCount, 1,   "TTL 내 두 번째 호출은 fakeGetMetrics를 실행하지 않아야 한다");

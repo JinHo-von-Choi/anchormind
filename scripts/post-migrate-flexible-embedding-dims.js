@@ -93,7 +93,7 @@ async function migrateTable(pool, { table, indexName, whereClause }, spec) {
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
-    throw new Error(`${table} 변환 실패(롤백됨): ${err.message}`);
+    throw new Error(`${table} 변환 실패(롤백됨): ${err.message}`, { cause: err });
   } finally {
     client.release();
   }
