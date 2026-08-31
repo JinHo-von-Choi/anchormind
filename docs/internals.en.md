@@ -100,6 +100,8 @@ recall(query)
 
 `pickFields` removes fields outside the 19-item whitelist (`id, content, type, importance, topic, ..., key_id, key_name`). It is not applied to cache stages (L1 warm hits, RRF intermediate objects) to preserve cache efficiency.
 
+**Deterministic ranking contract:** Search, RRF, reranker, graph, and context injection preserve each path's existing descending primary score. Only ties use `created_at DESC NULLS LAST, id ASC`. Unranked Redis Set candidates contribute equal RRF scores, and hydration candidates use the same comparator, so cold DB and warm-cache results have the same ID order. Working Memory uses its stored `added_at DESC, id ASC` shape. A `recall` cursor contains the `(score, created_at, id)` tuple plus a fixed `anchorTime`, which also anchors the reranker recency boost; the next page applies the inverse comparator. Legacy offset cursors remain readable, while newly issued cursors use tuples.
+
 **SearchScope contract:** The `SearchScope.fromQuery(sq)` static factory creates a scope instance from the normalized sq returned by `_buildSearchQuery()`. The `scope.applyTo(fragment)` method checks workspace, caseId, resolutionStatus, phase, and affect simultaneously and returns false to exclude a fragment from results. HotCache, L3, and graph call sites all reference the same instance, ensuring consistent filtering across layers. `_executeSearch()` performs no separate post-processing correction step.
 
 ---

@@ -99,6 +99,8 @@ recall(query)
 
 `pickFields`는 19개 화이트리스트(`id, content, type, importance, topic, ..., key_id, key_name`) 외 필드를 제거한다. 캐시 단계(L1 warm hit, RRF 병합 중간 객체)에는 적용하지 않아 캐시 효율을 보존한다.
 
+**결정적 랭킹 계약:** 검색·RRF·reranker·graph·context 주입은 각 경로의 기존 primary score를 내림차순으로 유지하고, 점수가 같을 때만 `created_at DESC NULLS LAST, id ASC`를 적용한다. rank가 없는 Redis Set 후보는 RRF에 동일 점수로 기여하고, hydration 후보도 같은 comparator로 정규화하므로 cold DB와 warm cache의 ID 순서가 같다. Working Memory는 저장 shape의 `added_at DESC, id ASC`를 사용한다. `recall`의 cursor는 `(score, created_at, id)` 튜플과 고정 `anchorTime`을 담고, reranker recency boost까지 그 시각에 고정한다. 다음 페이지는 동일 comparator의 역조건으로 선택한다. 이전 offset cursor도 읽을 수 있지만 새 응답은 튜플 cursor만 발급한다.
+
 **SearchScope 계약:** `SearchScope.fromQuery(sq)` 정적 팩토리가 `_buildSearchQuery()` 반환 sq에서 scope 인스턴스를 생성한다. `scope.applyTo(fragment)` 메서드는 workspace, caseId, resolutionStatus, phase, affect, type, topic 7개 필드를 동시 검사하여 false를 반환하는 경우 해당 파편을 결과에서 제외한다. HotCache·L3·Graph 호출 사이트가 모두 동일 인스턴스를 참조하므로 레이어별 파편 결과의 정합성이 보장된다. `_executeSearch()`는 별도의 후처리 보정을 수행하지 않는다.
 
 ---

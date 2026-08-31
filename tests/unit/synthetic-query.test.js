@@ -20,6 +20,7 @@ import {
   selectNewCandidates,
   normalizeKeyList,
   isSyntheticSearchEnabled,
+  rankHydratedSyntheticRows,
 } from "../../lib/memory/read/SyntheticQuerySearch.js";
 import { RateLimiter } from "../../lib/memory/embedding/SyntheticQueryWorker.js";
 import { MEMORY_CONFIG } from "../../config/memory.js";
@@ -186,6 +187,30 @@ describe("selectNewCandidates", () => {
   test("전부 중복이면 빈 배열", () => {
     const agg = new Map([["a", 0.9]]);
     assert.deepEqual(selectNewCandidates(agg, new Set(["a"]), 5), []);
+  });
+});
+
+describe("rankHydratedSyntheticRows", () => {
+  test("ANY hydration 순서를 100회 셔플해도 similarity/created_at/id 순서가 같다", () => {
+    const rows = [
+      { id: "null", created_at: null },
+      { id: "b", created_at: "2026-01-01" },
+      { id: "new", created_at: "2026-02-01" },
+      { id: "a", created_at: "2026-01-01" },
+      { id: "high", created_at: "2020-01-01" }
+    ];
+    const similarities = new Map([
+      ["null", 0.5], ["b", 0.5], ["new", 0.5], ["a", 0.5], ["high", 0.9]
+    ]);
+    for (let seed = 0; seed < 100; seed++) {
+      const pivot = seed % rows.length;
+      const shuffled = [...rows.slice(pivot), ...rows.slice(0, pivot)];
+      if (seed % 2 === 1) shuffled.reverse();
+      assert.deepEqual(
+        rankHydratedSyntheticRows(shuffled, similarities).map(row => row.id),
+        ["high", "new", "a", "b", "null"]
+      );
+    }
   });
 });
 

@@ -346,7 +346,7 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 | depth | string | - | 검색 깊이 필터. "high-level" / "detail" / "tool-level". 상세 설명은 아래 참조. |
 | workspace | string | - | 검색 범위 제한. 지정 시 해당 workspace + 전역(NULL) 파편만 반환. |
 | contextText | string | - | 현재 대화 맥락 텍스트. 관련 파편을 선제적으로 활성화 (ENABLE_SPREADING_ACTIVATION=true 시). |
-| cursor | string | - | 페이지네이션 커서 |
+| cursor | string | - | 결정 정렬 `(score, created_at, id)` 경계를 담은 불투명 페이지네이션 커서 |
 | pageSize | number | - | 기본 20, 최대 50 |
 | agentId | string | - | 에이전트 ID |
 | minImportance | number | - | 최소 중요도 필터 (0~1). 이 값 이상의 importance를 가진 파편만 반환. |
