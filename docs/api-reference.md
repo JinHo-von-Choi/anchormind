@@ -882,6 +882,10 @@ Core Memory + Working Memory + session_reflect를 분리 로드한다. 세션 �
 | structured | boolean | - | true 시 계층적 트리 구조 반환, false/미지정 시 기존 flat list (기본값: false) |
 | includeKeyName | boolean | - | true 시 fragments 각 항목에 key_id와 key_name(액세스 키 라벨)을 포함한다. 같은 키 그룹 스코프의 정보만 노출되며, structured=true 트리 응답에는 적용되지 않는다. 기본 false. |
 
+### Anchor 선택 메타
+
+응답의 `_meta.anchorSelection`은 `totalLimit`, `workspaceReserve`, `reserveApplied`와 함께 `candidates`, `selected`, `excluded`의 workspace/global/total 수를 제공한다. `selected.reservedWorkspace`는 예약 단계에서 먼저 포함된 workspace anchor 수다. effective workspace가 있으면 workspace 상위 예약분을 먼저 선택한 뒤, 남은 슬롯을 잔여 workspace와 전역 anchor의 통합 importance 순으로 채운다. workspace가 없으면 reserve를 적용하지 않고 전역 anchor만 전체 상한까지 선택한다.
+
 ---
 
 ## MCP 도구 — tool_feedback

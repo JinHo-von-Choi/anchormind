@@ -66,14 +66,15 @@ function applyRecallMeta(result, args, fragments) {
  * v3.1.0 tool_context 응답 조립 로직 (destructure로 내부 필드를 응답 shape에서 분리).
  */
 function applyContextMeta(result) {
-  const { _memento_hint, _searchEventId, _suggestion, ...restResult } = result;
+  const { _memento_hint, _searchEventId, _suggestion, _anchorSelection, ...restResult } = result;
   return {
     success: true,
     ...restResult,
     _meta: {
       searchEventId: _searchEventId ?? null,
       hints        : _memento_hint ? [_memento_hint] : [],
-      suggestion   : _suggestion ?? undefined
+      suggestion   : _suggestion ?? undefined,
+      anchorSelection: _anchorSelection
     }
   };
 }
@@ -224,5 +225,20 @@ describe("v3.1.0 _meta 단일 경로 — context 응답", () => {
     const res2 = applyContextMeta({ fragments: [], totalTokens: 0, _suggestion: suggestion });
     assert.deepEqual(res2._meta.suggestion, suggestion);
     assert.ok(!("_suggestion" in res2));
+  });
+
+  it("anchor 선택 통계는 top-level이 아니라 _meta.anchorSelection으로만 전달", () => {
+    const selection = {
+      totalLimit: 20,
+      workspaceReserve: 10,
+      reserveApplied: true,
+      candidates: { workspace: 15, global: 12, total: 27 },
+      selected: { workspace: 12, global: 8, reservedWorkspace: 10, total: 20 },
+      excluded: { workspace: 3, global: 4, total: 7 }
+    };
+    const res = applyContextMeta({ fragments: [], totalTokens: 0, _anchorSelection: selection });
+    assert.deepEqual(res._meta.anchorSelection, selection);
+    assert.ok(!("_anchorSelection" in res));
+    assert.ok(!("anchorSelection" in res));
   });
 });

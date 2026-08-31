@@ -816,6 +816,10 @@ Loads Core Memory + Working Memory + session_reflect separately. Injects prefere
 | structured | boolean | - | When true, returns hierarchical tree structure; when false/omitted, returns existing flat list (default: false) |
 | includeKeyName | boolean | - | When true, each fragment carries key_id and key_name (the access key label). Only information within the same key group scope is exposed, and it does not apply to the structured=true tree response. Default false. |
 
+### Anchor selection metadata
+
+`_meta.anchorSelection` reports `totalLimit`, `workspaceReserve`, and `reserveApplied`, plus workspace/global/total counts under `candidates`, `selected`, and `excluded`. `selected.reservedWorkspace` is the number of workspace anchors admitted during the reservation phase. With an effective workspace, its top reserved anchors are selected first and the remaining slots are filled by a combined importance ranking of leftover workspace and global anchors. Without a workspace, the reserve is not applied and only global anchors are selected up to the total limit.
+
 ---
 
 ## MCP Tool — tool_feedback

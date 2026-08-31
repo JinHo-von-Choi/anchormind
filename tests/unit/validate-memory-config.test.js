@@ -27,6 +27,34 @@ describe("validateMemoryConfig", () => {
     assert.throws(() => validateMemoryConfig(bad), /rankWeights.*sum.*1\.0/i);
   });
 
+  it("workspace anchor reserve가 음수이면 에러", () => {
+    const bad = structuredClone(MEMORY_CONFIG);
+    bad.contextInjection.workspaceAnchorReserve = -1;
+    assert.throws(() => validateMemoryConfig(bad), /workspaceAnchorReserve.*between 0.*maxAnchorFragments/i);
+  });
+
+  it("workspace anchor reserve가 total보다 크면 에러", () => {
+    const bad = structuredClone(MEMORY_CONFIG);
+    bad.contextInjection.maxAnchorFragments = 5;
+    bad.contextInjection.workspaceAnchorReserve = 6;
+    assert.throws(() => validateMemoryConfig(bad), /workspaceAnchorReserve.*between 0.*maxAnchorFragments/i);
+  });
+
+  it("total을 기본 reserve보다 낮추면 reserve도 함께 낮춰야 한다", () => {
+    const bad = structuredClone(MEMORY_CONFIG);
+    bad.contextInjection.maxAnchorFragments = 5;
+    assert.throws(() => validateMemoryConfig(bad), /workspaceAnchorReserve.*between 0.*maxAnchorFragments/i);
+
+    bad.contextInjection.workspaceAnchorReserve = 5;
+    assert.doesNotThrow(() => validateMemoryConfig(bad));
+  });
+
+  it("workspace anchor reserve가 정수가 아니면 에러", () => {
+    const bad = structuredClone(MEMORY_CONFIG);
+    bad.contextInjection.workspaceAnchorReserve = 1.5;
+    assert.throws(() => validateMemoryConfig(bad), /workspaceAnchorReserve.*integer/i);
+  });
+
   it("minSimilarity가 0~1 범위 밖이면 에러", () => {
     const bad = structuredClone(MEMORY_CONFIG);
     bad.semanticSearch.minSimilarity = 1.5;

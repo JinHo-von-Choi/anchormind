@@ -24,6 +24,19 @@ function envBool(name, def) {
   return raw;
 }
 
+/**
+ * 환경 변수를 정수로 파싱하되 잘못된 값을 보존한다.
+ *
+ * 범위가 다른 설정값과의 관계로 결정되는 경우(예: reserve <= total)는 여기서
+ * 클램프하지 않고 NaN/범위 밖 값을 런타임 검증기로 넘겨 fail-fast한다.
+ */
+function envStrictInt(name, def) {
+  const raw = process.env[name];
+  if (raw == null || raw.trim() === "") return def;
+  if (!/^[+-]?\d+$/.test(raw.trim())) return Number.NaN;
+  return Number(raw.trim());
+}
+
 export const MEMORY_CONFIG = {
   /** 복합 랭킹 가중치 (합계 1.0) */
   ranking: {
@@ -188,7 +201,8 @@ export const MEMORY_CONFIG = {
   },
   /** 컨텍스트 주입 설정 */
   contextInjection: {
-    maxAnchorFragments : envInt("MEMENTO_CONTEXT_ANCHOR_LIMIT", 10, 1, 30),
+    maxAnchorFragments      : envInt("MEMENTO_CONTEXT_ANCHOR_LIMIT", 20, 1, 30),
+    workspaceAnchorReserve  : envStrictInt("MEMENTO_CONTEXT_WORKSPACE_ANCHOR_RESERVE", 10),
     maxCoreFragments   : 15,
     maxWmFragments     : 10,
     typeSlots          : {
