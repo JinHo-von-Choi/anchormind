@@ -137,7 +137,7 @@ memory_consolidate 도구가 실행되거나 서버 내부 스케줄러(6시간 
 10. `retro_link` — GraphLinker.retroLink()로 고립 파편(임베딩 있음, 링크 없음) 최대 20건 소급 자동 링크
 11. `utility_score_update` — `importance * (1 + ln(max(access_count,1))) / age_months^0.3` 공식 갱신
 12. `requeue_high_ema` — ema_activation>0.3 AND importance<0.4 파편을 MemoryEvaluator 재평가 큐에 등록
-13. `promote_anchors` — access_count >= 10 + importance >= 0.8 파편을 `is_anchor=true`로 승격
+13. `promote_anchors` — access_count >= 10 + importance >= 0.8 파편을 `is_anchor=true`로 승격. `MEMENTO_AUTO_PROMOTE_ANCHORS=false`이면 이 stage만 `disabled_by_config` 사유로 건너뛴다(기본 true).
 14. `detect_contradictions` — 3단계 하이브리드 모순 탐지. pgvector cosine > 0.85 후보 추출 → mDeBERTa NLI → Gemini CLI 에스컬레이션. 결과는 `nliResolvedDirectly`, `nliSkippedAsNonContra`로 분리 반환
 15. `detect_supersessions` — 임베딩 유사도 0.7~0.85 구간 파편 쌍에 대해 Gemini CLI로 대체 관계 판단. GraphLinker의 0.85 이상 구간과 상보적으로 동작
 16. `process_pending_contradictions` — Gemini CLI 가용 시 Redis pending 큐에서 최대 10건 꺼내 재판정

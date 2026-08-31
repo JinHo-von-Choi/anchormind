@@ -15,6 +15,15 @@ function envInt(name, def, min, max) {
   return Math.min(max, Math.max(min, raw));
 }
 
+/** 환경 변수를 엄격한 boolean으로 파싱한다. 오타는 조용히 반대값이 되지 않게 즉시 거부한다. */
+function envBool(name, def) {
+  const raw = process.env[name];
+  if (raw === undefined) return def;
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  throw new Error(`${name} must be "true" or "false" (got ${raw})`);
+}
+
 export const MEMORY_CONFIG = {
   /** 복합 랭킹 가중치 (합계 1.0) */
   ranking: {
@@ -292,6 +301,8 @@ export const MEMORY_CONFIG = {
    * 수정일: 2026-05-19
    */
   consolidate: {
+    /** 기존 자동 앵커 승격 동작을 유지하되 운영자가 명시적으로 끌 수 있다. */
+    autoPromoteAnchors: envBool("MEMENTO_AUTO_PROMOTE_ANCHORS", true),
     /**
      * 파괴 단계 안전 게이트.
      *
