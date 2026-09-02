@@ -80,6 +80,14 @@ describe("FragmentReader includePeerAgents", () => {
     assert.doesNotMatch(lastSql(), AGENT_COND);
   });
 
+  it("getByIds는 기존 accessed_at 2차 순위를 보존하고 결정 동점 키만 덧붙인다", async () => {
+    await reader.getByIds(["f1", "f2"], "a1");
+    assert.match(
+      lastSql(),
+      /ORDER BY importance DESC, accessed_at DESC NULLS LAST, created_at DESC, id ASC/
+    );
+  });
+
   it("searchByTimeRange includePeerAgents=true면 격리 완화", async () => {
     await reader.searchByTimeRange("2026-01-01", "2026-02-01", { agentId: "a1", includePeerAgents: true });
     assert.doesNotMatch(lastSql(), AGENT_COND);

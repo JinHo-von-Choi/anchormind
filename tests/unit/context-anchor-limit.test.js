@@ -89,7 +89,7 @@ describe("ContextBuilder 앵커 주입", () => {
 
     assert.ok(captured, "anchor 쿼리가 실행되어야 한다");
     assert.match(captured.sql, /LIMIT \$\d+/);
-    assert.match(captured.sql, /ORDER BY importance DESC, created_at DESC NULLS LAST, id ASC/);
+    assert.match(captured.sql, /ORDER BY importance DESC, created_at DESC, id ASC/);
     assert.equal(
       captured.params[captured.params.length - 1],
       MEMORY_CONFIG.contextInjection.maxAnchorFragments

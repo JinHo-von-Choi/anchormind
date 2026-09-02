@@ -188,6 +188,19 @@ describe("selectNewCandidates", () => {
     const agg = new Map([["a", 0.9]]);
     assert.deepEqual(selectNewCandidates(agg, new Set(["a"]), 5), []);
   });
+
+  test("거리 동점 후보는 SQL 도착 순서와 무관하게 id 순으로 선택한다", () => {
+    const forward = new Map([["b", 0.8], ["a", 0.8]]);
+    const reverse = new Map([["a", 0.8], ["b", 0.8]]);
+    assert.deepEqual(selectNewCandidates(forward, new Set(), 2), [
+      { id: "a", similarity: 0.8 },
+      { id: "b", similarity: 0.8 }
+    ]);
+    assert.deepEqual(selectNewCandidates(reverse, new Set(), 2), [
+      { id: "a", similarity: 0.8 },
+      { id: "b", similarity: 0.8 }
+    ]);
+  });
 });
 
 describe("rankHydratedSyntheticRows", () => {
@@ -208,7 +221,7 @@ describe("rankHydratedSyntheticRows", () => {
       if (seed % 2 === 1) shuffled.reverse();
       assert.deepEqual(
         rankHydratedSyntheticRows(shuffled, similarities).map(row => row.id),
-        ["high", "new", "a", "b", "null"]
+        ["high", "null", "new", "a", "b"]
       );
     }
   });

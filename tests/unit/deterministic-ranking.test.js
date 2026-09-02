@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
@@ -10,6 +10,12 @@ import {
 import { mergeHydratedCandidates, mergeRRF } from "../../lib/memory/read/FragmentSearch.js";
 import { MemoryRecaller } from "../../lib/memory/processors/MemoryRecaller.js";
 import { applyRerankerScores } from "../../lib/memory/read/Reranker.js";
+import { teardownTestResources, assertCleanShutdown } from "../_lifecycle.js";
+
+after(async () => {
+  await teardownTestResources();
+  await assertCleanShutdown();
+});
 
 const scoreOf = fragment => fragment.score;
 
@@ -33,14 +39,19 @@ describe("결정적 랭킹 공통 계약", () => {
     { id: "a", score: 1, created_at: "2026-01-01T00:00:00.000Z" },
     { id: "n", score: 1, created_at: "2026-02-01T00:00:00.000Z" }
   ];
-  const expected = ["z", "n", "a", "b", "c", "d"];
+  const expected = ["z", "c", "d", "n", "a", "b"];
 
-  it("SQL ORDER BY와 JS comparator가 같은 golden 결과 계약을 표현한다", () => {
+  it("SQL ORDER BY와 JS comparator가 유효 created_at의 같은 golden 계약을 표현한다", () => {
     assert.equal(
       deterministicOrderBy("score DESC"),
-      "ORDER BY score DESC, created_at DESC NULLS LAST, id ASC"
+      "ORDER BY score DESC, created_at DESC, id ASC"
     );
     assert.deepEqual([...golden].sort(byDescendingScore(scoreOf)).map(f => f.id), expected);
+  });
+
+  it("SQL created_at 선두 정렬은 기존 DESC 인덱스 정의와 동일하다", () => {
+    assert.equal(deterministicOrderBy(), "ORDER BY created_at DESC, id ASC");
+    assert.doesNotMatch(deterministicOrderBy(), /NULLS LAST/);
   });
 
   it("primary score가 다른 항목의 상대 순서는 바꾸지 않는다", () => {
@@ -56,6 +67,17 @@ describe("결정적 랭킹 공통 계약", () => {
       const ids = shuffle(golden, seed).sort(byDescendingScore(scoreOf)).map(f => f.id);
       assert.deepEqual(ids, expected, `seed=${seed}`);
     }
+  });
+
+  it("비유한 score는 유한 score 뒤에서 결정적으로 정렬된다", () => {
+    const rows = [
+      { id: "nan-b", score: NaN, created_at: "2026-01-01" },
+      { id: "finite", score: 1, created_at: "2025-01-01" },
+      { id: "nan-a", score: NaN, created_at: "2026-01-01" }
+    ].sort(byDescendingScore(scoreOf));
+
+    assert.deepEqual(rows.map(row => row.id), ["finite", "nan-a", "nan-b"]);
+
   });
 });
 
@@ -80,7 +102,7 @@ describe("RRF와 Redis hydration 결정성", () => {
       { name: "two", results: [{ id: "a", created_at: "2026-01-01", content: "a" }] },
       { name: "three", results: [{ id: "c", created_at: null, content: "c" }] }
     ];
-    const expected = ["a", "b", "c"];
+    const expected = ["c", "a", "b"];
     for (let seed = 0; seed < 100; seed++) {
       assert.deepEqual(mergeRRF(shuffle(layers, seed)).map(f => f.id), expected);
     }
@@ -98,12 +120,12 @@ describe("RRF와 Redis hydration 결정성", () => {
       []
     );
     const warm = mergeHydratedCandidates([direct], shuffle(hydration, 17));
-    assert.deepEqual(cold.map(f => f.id), ["direct", "h1", "h2", "h3"]);
+    assert.deepEqual(cold.map(f => f.id), ["direct", "h3", "h1", "h2"]);
     assert.deepEqual(warm.map(f => f.id), cold.map(f => f.id));
   });
 });
 
-describe("랭킹 튜플 cursor", () => {
+describe("결정 정렬 + offset cursor", () => {
   it("페이지 경계에 완전 동점 항목이 몰려도 중복·누락 없이 이어진다", () => {
     const anchorTime = Date.parse("2026-08-31T00:00:00.000Z");
     const all = Array.from({ length: 13 }, (_, i) => ({
@@ -115,14 +137,13 @@ describe("랭킹 튜플 cursor", () => {
     const collected = [];
     let cursor = null;
     do {
-      const page = paginateRankedFragments(all, { cursor, pageSize: 5, anchorTime, scoreOf });
+      const page = paginateRankedFragments(all, { cursor, pageSize: 5, anchorTime });
       collected.push(...page.fragments.map(f => f.id));
       cursor = page.nextCursor;
       if (cursor) {
         const decoded = decodeRankingCursor(cursor);
         assert.equal(decoded.anchorTime, anchorTime);
-        assert.equal(decoded.score, 0.5);
-        assert.equal(decoded.created_at, Date.parse("2026-01-01T00:00:00.000Z"));
+        assert.equal(decoded.offset, collected.length);
       }
     } while (cursor);
 
@@ -130,18 +151,17 @@ describe("랭킹 튜플 cursor", () => {
     assert.equal(new Set(collected).size, all.length);
   });
 
-  it("cursor 항목이 사라져도 tuple 역조건으로 다음 경계를 찾는다", () => {
-    const rows = ["a", "b", "c", "d"].map(id => ({
+  it("기존 offset cursor를 읽고 같은 형식으로 이어간다", () => {
+    const rows = ["a", "b", "c", "d", "e"].map(id => ({
       id, score: 1, created_at: "2026-01-01"
     }));
-    const first = paginateRankedFragments(rows, {
-      cursor: null, pageSize: 2, anchorTime: 1, scoreOf
+    const legacyCursor = Buffer.from(JSON.stringify({ offset: 2, anchorTime: 10 })).toString("base64url");
+    const page = paginateRankedFragments(rows, {
+      cursor: legacyCursor, pageSize: 2, anchorTime: 10
     });
-    const withoutBoundary = rows.filter(row => row.id !== "b");
-    const second = paginateRankedFragments(withoutBoundary, {
-      cursor: first.nextCursor, pageSize: 2, anchorTime: 1, scoreOf
-    });
-    assert.deepEqual(second.fragments.map(f => f.id), ["c", "d"]);
+
+    assert.deepEqual(page.fragments.map(row => row.id), ["c", "d"]);
+    assert.equal(decodeRankingCursor(page.nextCursor).offset, 4);
   });
 
   it("MemoryRecaller가 cursor의 anchorTime을 검색과 다음 페이지에 재사용한다", async () => {
@@ -205,5 +225,24 @@ describe("랭킹 튜플 cursor", () => {
 
     assert.deepEqual([...first.fragments, ...second.fragments].map(fragment => fragment.id), ["a", "b", "c", "d"]);
     assert.deepEqual(scoreRuns[0], scoreRuns[1]);
+  });
+});
+
+describe("reranker score 유효성", () => {
+  const candidates = [
+    { id: "a", created_at: "2026-01-01" },
+    { id: "b", created_at: "2026-01-02" }
+  ];
+
+  it("점수 배열이 짧으면 일부 NaN을 만들지 않고 전체 폴백한다", () => {
+    const result = applyRerankerScores(candidates, [0.5], Date.parse("2026-01-03"));
+    assert.equal(result, candidates);
+    assert.ok(result.every(candidate => candidate.rerankerScore === undefined));
+  });
+
+  it("비유한 점수가 있으면 전체 폴백한다", () => {
+    const result = applyRerankerScores(candidates, [0.5, NaN], Date.parse("2026-01-03"));
+    assert.equal(result, candidates);
+    assert.ok(result.every(candidate => candidate.rerankerScore === undefined));
   });
 });
