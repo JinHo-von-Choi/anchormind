@@ -48,10 +48,19 @@ describe("mcp-handler batch_remember routing", () => {
     const req = { method: "POST", headers: { accept: "application/json, text/event-stream" } };
     const res = { setHeader: mock.fn(), end: mock.fn(), statusCode: 200, writable: true, destroyed: false };
 
-    await handleToolCallForTest(req, res, msg, "sess-1", null, null);
+    await handleToolCallForTest(req, res, msg, "sess-1", "key-a", null, {
+      groupKeyIds: ["key-a"], permissions: ["write"], defaultWorkspace: "workspace-a",
+      isMaster: false
+    });
 
     assert.equal(sendJSONFn.mock.callCount(), 1, "표준 JSON 응답 경로 사용");
     assert.equal(writeSSEEventFn.mock.callCount(), 0, "커스텀 SSE 프레임 미사용");
+    const sessionData = dispatchJsonRpcFn.mock.calls[0].arguments[1];
+    assert.deepEqual(sessionData.groupKeyIds, ["key-a"]);
+    assert.deepEqual(sessionData.permissions, ["write"]);
+    assert.equal(sessionData.defaultWorkspace, "workspace-a");
+    assert.equal(sessionData.authenticated, true);
+    assert.equal(sessionData.isMaster, false);
   });
 });
 

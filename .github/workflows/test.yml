@@ -49,7 +49,7 @@ jobs:
       # 단위시험은 --experimental-test-module-mocks에 의존하며 이 기능은 Node 24에서만
       # 안정적이다. 여기서는 런타임이 선언한 지원 범위에서 실제로 뜨는지만 본다.
       - name: Module graph loads
-        run: node -e "import('./lib/tools/index.js').then(m => { if (m.getToolsDefinition(null).length < 18) process.exit(1); })"
+        run: node -e "import('./lib/tools/index.js').then(m => { if (m.getToolsDefinition(null, true).length < 18) process.exit(1); })"
       - name: Startup gate rejects missing key
         run: |
           set +e
