@@ -167,7 +167,7 @@ See [integration guides](docs/getting-started/) for platform-specific setup.
 |---------|-------------|
 | `remember` | Decomposes important information into atomic fragments and stores them. With `MEMENTO_REMEMBER_ATOMIC=true`, the quota check and the INSERT run as a single atomic transaction. |
 | `recall` | Returns only relevant memories via keyword + semantic 3-tier search. `SearchScope` consistently applies workspace/caseId/affect and other scope filters across all L1-L3 layers. |
-| `context` | Automatically restores key context at session start |
+| `context` | Restores key context. `agentId=X` returns `X + default`; omission returns shared `default` memory only. |
 | Auto-cleanup | Duplicate merging, contradiction detection, importance decay, TTL-based forgetting |
 | Storage adapter layer | `lib/storage/` holds the storage abstraction. The `getStorage()` factory returns `PgVectorStore` (default) or `SqliteVecStore` (stub, not yet implemented) based on the `MEMENTO_STORAGE` environment variable. |
 | **Link Reconsolidation** | `tool_feedback` signals update fragment_links weight/confidence in real time (ReconsolidationEngine). Contradicting links are automatically quarantined. |
@@ -185,6 +185,14 @@ See [integration guides](docs/getting-started/) for platform-specific setup.
 | Migration lint | `npm run lint:migrations` checks new migration files for numbering conflicts and convention violations before commit. |
 
 See [SKILL.md](SKILL.md) for the full list of MCP tools.
+
+### Agent scope
+
+`agent_id='default'` is shared within the same key/workspace; any other value is private to that agent. API keys currently have no trusted specific-agent binding, so they may only omit `agentId` or use `default`. Specific-agent scope and `includePeerAgents=true` are restricted to master-key administration and never widen key or workspace boundaries. Before normalizing legacy anchors, run `memento-mcp anchor-scope --classifications <file>` (dry-run by default). Add `--include-non-anchors` to inventory all legacy fragments. Execution requires migration-046 plus the bare `--execute --approve-shared` flags.
+
+If clients cannot be migrated immediately, `MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE=true` temporarily restores non-default `agentId` claims. This mode cannot authenticate agents that share an API key and must be disabled after migration.
+
+For upgrades, apply migration-046 (nullable columns), roll the new code to every instance and confirm all old writers have stopped, inspect counts with `memento-mcp anchor-scope --backfill-snapshots`, then run `--backfill-snapshots --execute --approve-backfill`. Backfill uses short batches, only snapshots rows whose source fragment still exists, and fails if any backfillable rows remain so it can be rerun. Source-less or deleted-source legacy case events remain quarantined as NULL and may be omitted from non-peer timelines rather than being misattributed.
 
 ## CLI
 

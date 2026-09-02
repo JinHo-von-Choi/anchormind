@@ -267,6 +267,8 @@ POSTGRES_* 접두어가 DB_* 접두어보다 우선한다. 두 형식을 혼용�
 | REDIS_PORT | 6379 | Redis 서버 포트 |
 | REDIS_PASSWORD | (없음) | Redis 인증 비밀번호 |
 | REDIS_DB | 0 | Redis 데이터베이스 번호 |
+| MEMENTO_REDIS_SESSION_FAIL_CLOSED | false | true이면 Redis 세션 저장 실패 시 요청을 실패 처리. false이면 경고 후 in-memory 세션으로 계속 동작 |
+| MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE | false | 이관 기간에만 일반 API key의 기존 non-default agentId 주장을 임시 허용. 같은 key 안의 agent 격리를 보장하지 못하므로 이관 후 해제 권장 |
 | REDIS_MASTER_NAME | mymaster | Sentinel 마스터 이름 |
 | REDIS_SENTINELS | localhost:26379, localhost:26380, localhost:26381 | Sentinel 노드 목록. 쉼표로 구분된 host:port 형식 |
 

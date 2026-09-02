@@ -245,7 +245,7 @@ SSE 스트림이 닫히면(`res.on('close')`) 서버는 SSE 응답 객체만 제
 
 1. **bound_key_id 경로 (1순위)**: 토큰의 `bound_key_id` 필드가 있으면 `validateApiKeyById(bound_key_id)`로 UUID 직접 조회. name-based client_id 바인딩 방식이 이 경로를 사용한다. 성공 시 `keyId`/`groupKeyIds`/`permissions` 반환. `mcp_oauth_bound_client_authenticated_total` 카운터 증가.
 2. **is_api_key=true 경로 (2순위)**: `client_id`가 원본 API 키 문자열인 경우 `validateApiKeyFromDB(client_id)`로 조회. bound_key_id 조회 실패 시에도 이 경로로 낙하.
-3. **non-API-key OAuth (3순위)**: `MCP_REJECT_NONAPIKEY_OAUTH=true`(기본)이면 `{ valid: false, error: "non-API-key OAuth denied" }` 반환. `mcp_oauth_nonapikey_rejected_total` + `memento_tenant_isolation_blocked_total{component="oauth_nonapikey_denied"}` 카운터 증가. `false`이면 하위 호환 동작 (`keyId=null` 세션 — 운영 환경에서 절대 사용하지 말 것).
+3. **non-API-key OAuth (3순위)**: `MCP_REJECT_NONAPIKEY_OAUTH=true`(기본)이면 `{ valid: false, error: "non-API-key OAuth denied" }` 반환. `mcp_oauth_nonapikey_rejected_total` + `memento_tenant_isolation_blocked_total{component="oauth_nonapikey_denied"}` 카운터 증가. `false`여도 세션은 `isMaster=false`이며, key/permission identity가 없으므로 memory tool과 resource read는 fail-closed로 거부된다. 현재 API key/OAuth 스키마는 non-default agent identity 바인딩을 지원하지 않는다.
 
 ### OAuth name-based client_id 바인딩
 

@@ -1,5 +1,6 @@
 {
   "registered": [
+    "anchor-scope",
     "backfill",
     "benchmark",
     "cleanup",
@@ -17,6 +18,7 @@
     "update"
   ],
   "localOnly": [
+    "anchor-scope",
     "backfill",
     "benchmark",
     "cleanup",
@@ -29,6 +31,7 @@
   ],
   "help": {
     "commands": [
+      "anchor-scope",
       "backfill",
       "benchmark",
       "cleanup",

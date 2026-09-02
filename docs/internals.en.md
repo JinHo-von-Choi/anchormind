@@ -234,6 +234,10 @@ Trigger condition: `(now - session.lastAccessedAt) > idleThresholdMs` AND (`sess
 
 When an SSE stream closes (`res.on('close')`), the server removes only the SSE response object; the session itself is kept alive. The session persists until its Redis TTL expires, allowing a reconnecting client to resume the same session.
 
+### OAuth identities without a keyId are not master
+
+Authentication preserves an explicit `isMaster` decision instead of inferring master access from `keyId=null`. Direct access-key and explicit auth-disabled sessions are master; API-key-bound OAuth sessions carry their key, group, workspace, and permissions. A generic non-API-key OAuth session remains `isMaster=false`. Even when compatibility mode permits that authentication, the missing key/permission identity causes memory tools and resource reads to fail closed. The current API-key/OAuth schema does not support binding a non-default agent identity.
+
 ### OAuth refresh_token is_api_key Propagation
 
 When refreshing a token via `POST /token` with `grant_type=refresh_token`, the `is_api_key` flag from the original token is propagated to the newly issued access_token and refresh_token. API key-based clients retain the same isolation context after a refresh.

@@ -1029,7 +1029,7 @@ fragment_ids를 지정하고 ENABLE_RECONSOLIDATION=true인 경우: relevant=fal
 
 ### memory_stats
 
-기억 시스템 통계. 파라미터 없음.
+기억 시스템 전역 통계. master key 전용, 파라미터 없음.
 
 ### memory_consolidate
 
@@ -1086,6 +1086,7 @@ id가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permissio
 | query | string | - | content 키워드 추가 필터 |
 | limit | number | 100 | 최대 반환 파편 수 (최대 500) |
 | workspace | string | - | 워크스페이스 필터 |
+| allWorkspaces | boolean | false | master 전용. true이면 timeline·event·evidence·인과 링크의 workspace 필터를 제거 |
 
 반환값:
 - `ordered_timeline`: 시간순 파편 배열 (각 항목에 agent_id 포함 — 멀티에이전트 케이스에서 기여 에이전트 식별용)
@@ -1116,6 +1117,7 @@ id가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permissio
 | session_id | string | - | 특정 세션 필터 |
 | time_range | object | - | { from: ISO8601, to: ISO8601 } |
 | workspace | string | - | 워크스페이스 필터. 지정 시 해당 workspace + 전역(NULL) 파편만 대상 |
+| allWorkspaces | boolean | false | master 전용. true이면 trace의 workspace 필터를 제거 |
 | limit | number | 20 | 최대 반환 수 (최대 100) |
 
 snake_case 파라미터에는 camelCase alias가 있다: `eventType`, `entityKey`, `caseId`, `sessionId`. 두 표기 중 어느 쪽을 보내도 동일하게 처리된다.
@@ -1131,7 +1133,7 @@ snake_case 파라미터에는 camelCase alias가 있다: `eventType`, `entityKey
 
 **목적**: 현재 세션을 종료하고 새 `sessionId`를 발급한다. 토큰 탈취 의심 시 또는 주기적 로테이션에 사용한다.
 
-**언제 사용**: 키 노출이 의심되거나 스케줄된 회전 시점에서 동일 `bound_key_id` / `workspace` / `permissions`로 새 세션을 발급받을 때.
+**언제 사용**: 키 노출이 의심되거나 스케줄된 회전 시점에서 credential의 `bound_key_id` / key group / `permissions`를 재검증하고, 기존 세션의 `defaultWorkspace` / `mode`를 유지한 새 세션을 발급받을 때.
 
 | 파라미터 | 타입 | 기본값 | 설명 |
 |---|---|---|---|

@@ -267,6 +267,8 @@ This feature operates asynchronously only when `REDIS_ENABLED=true`. When `REDIS
 | REDIS_PORT | 6379 | Redis server port |
 | REDIS_PASSWORD | (none) | Redis authentication password |
 | REDIS_DB | 0 | Redis database number |
+| MEMENTO_REDIS_SESSION_FAIL_CLOSED | false | Fail the request when Redis session persistence fails. When false, warn and continue with the in-memory session |
+| MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE | false | Temporarily allow an API key to claim a legacy non-default agentId during migration. This cannot isolate agents sharing that key; disable it after migration |
 | REDIS_MASTER_NAME | mymaster | Sentinel master name |
 | REDIS_SENTINELS | localhost:26379, localhost:26380, localhost:26381 | Sentinel node list. Comma-separated host:port format |
 

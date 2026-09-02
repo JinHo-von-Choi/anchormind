@@ -96,7 +96,7 @@ X-RateLimit-Resource: fragments
 - master key (`MEMENTO_ACCESS_KEY`): `permissions=null`로 처리되며 모든 도구를 호출할 수 있다.
 - API key (`mmcp_xxx`): 키 생성 시 지정된 `permissions` 배열 기준으로 도구 접근이 제한된다. 배열에 필요한 권한이 없으면 즉시 거부된다.
 - `TOOL_PERMISSIONS` 맵에 등록된 도구는 해당 권한 레벨이 요구된다. 맵에 등록되지 않은 도구명은 `required=null`로 간주되어 권한 검사를 통과한다. 도구를 RBAC 경계에 편입하려면 `TOOL_PERMISSIONS` 맵에 명시적으로 등록해야 한다.
-- 권한 레벨은 세 가지다: `read`(recall/context/memory_stats 등), `write`(remember/forget/amend 등), `admin`(memory_consolidate/apply_update 등). `admin` 권한을 가진 키는 모든 레벨을 호출할 수 있다.
+- 권한 레벨은 세 가지다: `read`(recall/context 등), `write`(remember/forget/amend 등), `admin`(memory_consolidate/apply_update 등). `admin` 권한만으로 master 전용 도구를 우회할 수는 없다.
 - 권한이 없는 도구를 호출하면 JSON-RPC 오류 `-32600`이 반환되며 `message`는 `Internal error`다. 거부 사유(`Permission denied: '<도구>' requires '<레벨>' permission`)는 서버 로그에만 남는다. 따라서 클라이언트는 응답만으로 권한 부족과 서버 오류를 구분할 수 없으므로, 재시도 정책을 세울 때 이 점을 감안해야 한다. `memory_consolidate`와 `apply_update`, `check_update`가 이 경로에 해당한다.
 - 타 테넌트(다른 API 키)가 소유한 파편에 forget/amend/link 요청 시 `"Fragment not found"` 에러가 반환된다. SQL 레벨에서 `key_id` 조건으로 격리되므로 존재 여부조차 노출되지 않는다.
 
@@ -917,7 +917,7 @@ Anchor + Core + Learning + Working Memory와 session_reflect를 분리 로드한
 
 ## MCP 도구 — memory_stats
 
-파편 기억 시스템 통계 조회. 전체 파편 수, TTL 분포, 유형별 통계를 반환한다.
+master key 전용 파편 기억 시스템 통계 조회. 전체 파편 수, TTL 분포, 유형별 통계를 반환한다. 테넌트별 scope가 없는 전역 집계이므로 일반 API key에는 노출하지 않는다.
 
 ### 파라미터
 
@@ -977,7 +977,7 @@ workspace 기입 현황과 세션당 파편 분포를 반환한다.
 
 ## MCP 도구 — session_rotate
 
-현재 세션을 종료하고 새 `sessionId`를 발급한다. 토큰 탈취 의심 시 또는 주기적 로테이션에 사용한다. 동일 `bound_key_id` / `workspace` / `permissions`가 새 세션으로 이관된다.
+현재 세션을 종료하고 새 `sessionId`를 발급한다. 토큰 탈취 의심 시 또는 주기적 로테이션에 사용한다. 회전 시 현재 credential을 다시 검증하여 `bound_key_id` / key group / `permissions`를 최신 값으로 갱신하고, 기존 세션에서 선택된 `defaultWorkspace`와 `mode`는 그대로 유지한다.
 
 ### 파라미터
 
@@ -1040,6 +1040,7 @@ case_id 또는 entity 기반으로 작업 히스토리를 시간순으로 재구
 | query | string | - | 추가 키워드 필터 |
 | limit | number | - | 기본 100, 최대 500 |
 | workspace | string | - | 워크스페이스 필터. 지정 시 해당 workspace + 전역(NULL) 파편만 대상. |
+| allWorkspaces | boolean | - | master 전용. true이면 timeline·event·evidence·인과 링크의 workspace 필터를 제거한다. |
 
 ### 반환값
 
@@ -1068,6 +1069,7 @@ fragments를 정확 매칭으로 탐색한다 (recall의 시맨틱 검색과 달
 | time_range | object | - | 시간 범위 필터. from(시작 시각, ISO 8601), to(종료 시각, ISO 8601) 포함. |
 | limit | number | - | 기본 20, 최대 100 |
 | workspace | string | - | 워크스페이스 필터. 지정 시 해당 workspace + 전역(NULL) 파편만 대상. |
+| allWorkspaces | boolean | - | master 전용. true이면 trace의 workspace 필터를 제거한다. |
 
 ---
 
