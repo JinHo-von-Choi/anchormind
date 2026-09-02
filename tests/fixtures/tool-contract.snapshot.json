@@ -427,6 +427,9 @@
         "agentId": {
           "type": "string"
         },
+        "allWorkspaces": {
+          "type": "boolean"
+        },
         "caseId": {
           "type": "string"
         },
@@ -674,6 +677,9 @@
       "properties": {
         "agentId": {
           "type": "string"
+        },
+        "allWorkspaces": {
+          "type": "boolean"
         },
         "caseId": {
           "type": "string"
@@ -1256,6 +1262,9 @@
         "agentId": {
           "type": "string"
         },
+        "allWorkspaces": {
+          "type": "boolean"
+        },
         "caseId": {
           "type": "string"
         },
@@ -1503,6 +1512,9 @@
       "properties": {
         "agentId": {
           "type": "string"
+        },
+        "allWorkspaces": {
+          "type": "boolean"
         },
         "caseId": {
           "type": "string"

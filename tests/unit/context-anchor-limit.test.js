@@ -299,8 +299,8 @@ describe("ContextBuilder anchor 조회와 응답", () => {
     assert.ok(workspaceCall);
     assert.ok(globalCall);
     assert.match(workspaceCall.sql, /key_id = ANY\(\$\d+::text\[\]\)/);
-    assert.deepEqual(workspaceCall.params, [["key-a", "key-shared"], "workspace-a", 20]);
-    assert.deepEqual(globalCall.params, [["key-a", "key-shared"], 20]);
+    assert.deepEqual(workspaceCall.params, ["default", ["key-a", "key-shared"], "workspace-a", 20]);
+    assert.deepEqual(globalCall.params, ["default", ["key-a", "key-shared"], 20]);
     for (const call of calls) {
       assert.match(call.sql, /ORDER BY importance DESC, created_at DESC NULLS LAST, id COLLATE "C" ASC/);
       assert.match(call.sql, /LIMIT \$\d+/);
@@ -316,6 +316,45 @@ describe("ContextBuilder anchor 조회와 응답", () => {
     await builder.build({ _defaultWorkspace: "workspace-default" });
     assert.equal(calls.length, 2);
     assert.ok(calls.some(call => call.params.includes("workspace-default")));
+  });
+
+  it("agentId 지정 시 own + default 조건을 모든 anchor 후보 조회에 적용한다", async () => {
+    const calls = [];
+    const builder = makeBuilder(async (sql, params) => {
+      calls.push({ sql, params });
+      return { rows: [] };
+    });
+
+    await builder.build({ agentId: "agent-a", workspace: "workspace-a" });
+
+    assert.equal(calls.length, 2);
+    for (const call of calls) {
+      assert.match(call.sql, /\(agent_id = \$1 OR agent_id = 'default'\)/);
+      assert.equal(call.params[0], "agent-a");
+    }
+  });
+
+  it("peer 조회는 agent 조건만 완화하고 key/workspace 경계를 유지한다", async () => {
+    const calls = [];
+    const builder = makeBuilder(async (sql, params) => {
+      calls.push({ sql, params });
+      return { rows: [] };
+    });
+
+    await builder.build({
+      agentId: "agent-a",
+      includePeerAgents: true,
+      _keyId: "key-a",
+      _groupKeyIds: ["key-a", "key-b"],
+      workspace: "workspace-a"
+    });
+
+    assert.equal(calls.length, 2);
+    for (const call of calls) {
+      assert.match(call.sql, /peer-agent: no agent_id filter/);
+      assert.match(call.sql, /key_id = ANY\(\$\d+::text\[\]\)/);
+      assert.equal(call.params[0], "agent-a");
+    }
   });
 
   it("workspace가 없으면 전역(NULL) 후보만 단일 조회한다", async () => {

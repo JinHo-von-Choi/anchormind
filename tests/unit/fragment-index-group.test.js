@@ -453,3 +453,40 @@ describe("getRecent", () => {
     assert.ok(result.length <= 3, `count=3인데 ${result.length}개 반환됨`);
   });
 });
+
+describe("strict cache consistency", () => {
+  it("실제 Redis가 ready가 아니면 index/deindex를 실패 처리한다", async () => {
+    const redis = newRedis();
+    redis.status = "reconnecting";
+    const idx = new FragmentIndex();
+    await assert.rejects(
+      idx.index(makeFragment("strict-a", "topic-a", "fact"), null, "key-a", { strict: true }),
+      /Redis index unavailable/
+    );
+    await assert.rejects(
+      idx.deindex("strict-a", [], "topic-a", "fact", "key-a", { strict: true }),
+      /Redis index unavailable/
+    );
+  });
+
+  it("pipeline 개별 오류도 strict 모드에서 실패 처리한다", async () => {
+    const redis = newRedis();
+    redis.pipeline = () => {
+      const pipeline = {
+        sadd: () => pipeline,
+        zadd: () => pipeline,
+        expire: () => pipeline,
+        srem: () => pipeline,
+        zrem: () => pipeline,
+        del: () => pipeline,
+        exec: async () => [[new Error("synthetic cache failure"), null]]
+      };
+      return pipeline;
+    };
+    const idx = new FragmentIndex();
+    await assert.rejects(
+      idx.index(makeFragment("strict-b", "topic-b", "fact"), null, "key-b", { strict: true }),
+      /synthetic cache failure/
+    );
+  });
+});

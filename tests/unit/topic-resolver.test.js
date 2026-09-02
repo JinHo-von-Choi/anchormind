@@ -114,9 +114,27 @@ describe("suggestTopics", () => {
       "anchormind-mcp"
     );
 
-    assert.match(calls[0].sql, /key_id IS NOT DISTINCT FROM \$2/);
-    assert.match(calls[0].sql, /key_id = ANY\(\$3::text\[\]\)/);
-    assert.deepEqual(calls[0].params, ["anchormind-mcp", "key-1", ["key-1", "key-2"]]);
+    assert.match(calls[0].sql, /agent_id = \$2/);
+    assert.match(calls[0].sql, /key_id IS NOT DISTINCT FROM \$3/);
+    assert.match(calls[0].sql, /key_id = ANY\(\$4::text\[\]\)/);
+    assert.deepEqual(calls[0].params, ["anchormind-mcp", "default", "key-1", ["key-1", "key-2"]]);
+  });
+
+  it("peer topic 제안도 key/workspace 경계를 유지한다", async () => {
+    const { pool, calls } = stubPool([{ topic: "synthetic-topic-v2", count: 2 }]);
+
+    await suggestTopics(
+      { pool },
+      {
+        keyId: "key-a", groupKeyIds: ["key-a"], agentId: "agent-a",
+        includePeerAgents: true, workspace: "workspace-a"
+      },
+      "synthetic-topic"
+    );
+
+    assert.match(calls[0].sql, /peer-agent: no agent_id filter/);
+    assert.match(calls[0].sql, /key_id IS NOT DISTINCT FROM \$3/);
+    assert.match(calls[0].sql, /workspace = \$5/);
   });
 
   it("입력 topic의 형태소 벡터를 얻지 못하면 어휘 폴백으로 후보를 고른다", async () => {

@@ -32,6 +32,6 @@ describe("fragment history", () => {
     });
 
     assert.equal(result.current.id, "frag-peer");
-    assert.deepEqual(captured[4], { includePeerAgents: true });
+    assert.deepEqual(captured[4], { includePeerAgents: true, workspace: null });
   });
 });

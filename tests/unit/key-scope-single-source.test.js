@@ -44,7 +44,6 @@ const ALLOWED = {
   "memory/signals/SearchParamAdaptor.js": 1,
   "memory/write/FragmentWriter.js": 4,
   "symbolic/ClaimStore.js": 4,
-  "tools/resources.js": 2,
 };
 
 /** 격리 조건을 직접 쓴 것으로 보이는 줄인지 판정한다. */
