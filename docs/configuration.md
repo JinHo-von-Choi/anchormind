@@ -473,7 +473,7 @@ LLM 재작성이 수반되어 파편 내용을 변경할 수 있는 3개 stage�
 
 ### consolidate.autoPromoteAnchors
 
-`MEMENTO_AUTO_PROMOTE_ANCHORS`는 자동 앵커 승격 stage의 opt-out 설정이다. 기본값은 `true`라 기존 동작을 유지한다. `false`이면 `promote_anchors` stage가 `status="skipped"`, `reason="disabled_by_config"`로 종료하며 승격 UPDATE를 실행하지 않는다. 기존 앵커를 강등하거나 다른 consolidation stage를 끄지는 않는다. 설정 변경은 서버 재시작 뒤 적용된다.
+`MEMENTO_AUTO_PROMOTE_ANCHORS`는 자동 앵커 승격 stage의 opt-out 설정이다. 미설정 또는 빈 문자열이면 기본값 `true`로 기존 동작을 유지한다. `false`이면 `promote_anchors` stage가 `status="skipped"`, `reason="disabled_by_config"`로 종료하며 승격 UPDATE를 실행하지 않는다. 그 밖의 비어 있지 않은 값은 설정 오류로 거부한다. 기존 앵커를 강등하거나 다른 consolidation stage를 끄지는 않는다. 설정 변경은 서버 재시작 뒤 적용된다.
 
 플래그가 `false`인 stage는 실행 시 `status: "skipped"` 이벤트를 emit하고 다음 stage로 진행한다. `compressOldFragments`는 원본 파편 내용을 변경하므로 기본값이 `false`다.
 

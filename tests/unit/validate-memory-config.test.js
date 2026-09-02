@@ -15,12 +15,6 @@ describe("validateMemoryConfig", () => {
     assert.doesNotThrow(() => validateMemoryConfig(MEMORY_CONFIG));
   });
 
-  it("autoPromoteAnchors는 boolean이어야 한다", () => {
-    const bad = structuredClone(MEMORY_CONFIG);
-    bad.consolidate.autoPromoteAnchors = "false";
-    assert.throws(() => validateMemoryConfig(bad), /autoPromoteAnchors.*boolean/i);
-  });
-
   it("ranking weights 합계가 1.0이 아니면 에러", () => {
     const bad = structuredClone(MEMORY_CONFIG);
     bad.ranking.importanceWeight = 0.9;

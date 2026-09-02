@@ -439,7 +439,7 @@ Individual activation flags for the 3 stages that involve LLM rewriting and can 
 
 ### consolidate.autoPromoteAnchors
 
-`MEMENTO_AUTO_PROMOTE_ANCHORS` is an opt-out for the automatic anchor-promotion stage. It defaults to `true`, preserving the existing behavior. When set to `false`, `promote_anchors` returns `status="skipped"` with `reason="disabled_by_config"` and performs no promotion UPDATE. It does not demote existing anchors or disable any other consolidation stage. Restart the server after changing the setting.
+`MEMENTO_AUTO_PROMOTE_ANCHORS` is an opt-out for the automatic anchor-promotion stage. When unset or empty it defaults to `true`, preserving the existing behavior. When set to `false`, `promote_anchors` returns `status="skipped"` with `reason="disabled_by_config"` and performs no promotion UPDATE. Other non-empty values are rejected as configuration errors. It does not demote existing anchors or disable any other consolidation stage. Restart the server after changing the setting.
 
 A stage with its flag set to `false` emits `status: "skipped"` and proceeds to the next stage. `compressOldFragments` defaults to `false` because it modifies original fragment content.
 

@@ -1,4 +1,4 @@
-import { describe, it, mock } from "node:test";
+import { after, describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -6,7 +6,7 @@ import path from "node:path";
 
 import { MEMORY_CONFIG } from "../../config/memory.js";
 import { MemoryConsolidator } from "../../lib/memory/consolidate/MemoryConsolidator.js";
-import { anchorAutoPromotionEnabled } from "../../lib/metrics.js";
+import { teardownTestResources, assertCleanShutdown } from "../_lifecycle.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -22,6 +22,26 @@ function loadToggle(envValue) {
   ], { env, encoding: "utf8" }).trim();
 }
 
+function loadStartupMetric(envValue) {
+  const env = { ...process.env, MEMENTO_METRICS_DEFAULT: "off" };
+  delete env.MEMENTO_AUTO_PROMOTE_ANCHORS;
+  if (envValue !== undefined) env.MEMENTO_AUTO_PROMOTE_ANCHORS = envValue;
+  return execFileSync(process.execPath, [
+    "--input-type=module",
+    "-e",
+    `import { MEMORY_CONFIG } from "${path.join(ROOT, "config", "memory.js")}";` +
+      `import { anchorAutoPromotionEnabled, setAnchorAutoPromotionEnabled } from "${path.join(ROOT, "lib", "metrics.js")}";` +
+      "setAnchorAutoPromotionEnabled(MEMORY_CONFIG.consolidate.autoPromoteAnchors);" +
+      "const metric = await anchorAutoPromotionEnabled.get();" +
+      "console.log(metric.values[0].value);"
+  ], { env, encoding: "utf8" }).trim();
+}
+
+after(async () => {
+  await teardownTestResources();
+  await assertCleanShutdown();
+});
+
 describe("MEMENTO_AUTO_PROMOTE_ANCHORS 설정", () => {
   it("미지정/true는 기존 활성 동작을 유지한다", () => {
     assert.equal(loadToggle(undefined), "true");
@@ -32,9 +52,16 @@ describe("MEMENTO_AUTO_PROMOTE_ANCHORS 설정", () => {
     assert.equal(loadToggle("false"), "false");
   });
 
-  it("잘못된 boolean은 조용히 반대값으로 처리하지 않는다", () => {
-    assert.throws(() => loadToggle(""), /MEMENTO_AUTO_PROMOTE_ANCHORS must be.*true.*false/s);
+  it("빈 문자열은 미설정으로 취급하고 잘못된 값은 거부한다", () => {
+    assert.equal(loadToggle(""), "true");
+    assert.equal(loadToggle("   "), "true");
     assert.throws(() => loadToggle("yes"), /MEMENTO_AUTO_PROMOTE_ANCHORS must be.*true.*false/s);
+  });
+
+  it("MemoryConsolidator 생성 전에도 metric이 설정값을 정확히 노출한다", () => {
+    assert.equal(loadStartupMetric(undefined), "1");
+    assert.equal(loadStartupMetric(""), "1");
+    assert.equal(loadStartupMetric("false"), "0");
   });
 });
 
@@ -52,24 +79,22 @@ describe("promote_anchors stage opt-out", () => {
       consolidator._promoteAnchors = mock.fn(async () => 7);
       consolidator._updateUtilityScores = mock.fn(async () => 3);
       const results = { anchorsPromoted: 99, utilityUpdated: 0 };
+      const progressEvents = [];
       const defs = consolidator._enrichmentStages({}, results)
         .filter(stage => ["utility_score_update", "promote_anchors"].includes(stage.name));
 
-      const stages = await consolidator._executeStages(defs, results, () => {});
+      const stages = await consolidator._executeStages(defs, results, event => progressEvents.push(event));
 
       assert.equal(consolidator._promoteAnchors.mock.callCount(), 0);
       assert.equal(consolidator._updateUtilityScores.mock.callCount(), 1);
       assert.equal(results.utilityUpdated, 3);
       assert.equal(results.anchorsPromoted, 0);
-      assert.deepEqual(stages[1], {
-        name: "promote_anchors",
-        durationMs: stages[1].durationMs,
-        affected: 0,
-        status: "skipped",
-        reason: "disabled_by_config"
-      });
-      const metric = await anchorAutoPromotionEnabled.get();
-      assert.equal(metric.values[0].value, 0);
+      assert.equal(stages[1].name, "promote_anchors");
+      assert.equal(stages[1].affected, 0);
+      assert.equal(stages[1].status, "skipped");
+      assert.equal(stages[1].reason, "disabled_by_config");
+      assert.equal(typeof stages[1].durationMs, "number");
+      assert.equal(progressEvents[1].skipped, 0, "기존 진행 이벤트 계약을 유지해야 한다");
     });
   });
 
@@ -87,8 +112,6 @@ describe("promote_anchors stage opt-out", () => {
       assert.equal(results.anchorsPromoted, 7);
       assert.equal(stages[0].status, "ok");
       assert.equal(stages[0].affected, 7);
-      const metric = await anchorAutoPromotionEnabled.get();
-      assert.equal(metric.values[0].value, 1);
     });
   });
 });

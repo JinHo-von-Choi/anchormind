@@ -15,10 +15,10 @@ function envInt(name, def, min, max) {
   return Math.min(max, Math.max(min, raw));
 }
 
-/** 환경 변수를 엄격한 boolean으로 파싱한다. 오타는 조용히 반대값이 되지 않게 즉시 거부한다. */
+/** 환경 변수를 엄격한 boolean으로 파싱한다. 빈 값은 미설정으로 취급한다. */
 function envBool(name, def) {
-  const raw = process.env[name];
-  if (raw === undefined) return def;
+  const raw = process.env[name]?.trim();
+  if (!raw) return def;
   if (raw === "true") return true;
   if (raw === "false") return false;
   throw new Error(`${name} must be "true" or "false" (got ${raw})`);

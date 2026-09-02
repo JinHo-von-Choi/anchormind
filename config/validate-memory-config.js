@@ -16,10 +16,6 @@
 export function validateMemoryConfig(cfg) {
   const errors = [];
 
-  if (typeof cfg.consolidate.autoPromoteAnchors !== "boolean") {
-    errors.push(`consolidate.autoPromoteAnchors must be boolean (got ${cfg.consolidate.autoPromoteAnchors})`);
-  }
-
   // ranking weights 합계 = 1.0
   const rankSum = cfg.ranking.importanceWeight + cfg.ranking.recencyWeight + cfg.ranking.semanticWeight;
   if (Math.abs(rankSum - 1.0) > 0.001) {

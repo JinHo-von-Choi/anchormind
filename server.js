@@ -44,7 +44,7 @@ import { shutdownPool, getPrimaryPool } from "./lib/tools/db.js";
 import { drainAllWorkers } from "./lib/memory/workers/registry.js";
 
 /** 메트릭 */
-import { recordHttpRequest } from "./lib/metrics.js";
+import { recordHttpRequest, setAnchorAutoPromotionEnabled } from "./lib/metrics.js";
 
 /** 스케줄러 */
 import { startSchedulers } from "./lib/scheduler.js";
@@ -311,6 +311,8 @@ if (!ACCESS_KEY && !AUTH_DISABLED) {
   console.error("[Startup] 무인증으로 운용하려면 MEMENTO_AUTH_DISABLED=true를 명시하십시오.");
   process.exit(78);
 }
+
+setAnchorAutoPromotionEnabled(MEMORY_CONFIG.consolidate.autoPromoteAnchors);
 
 server.listen(PORT, () => {
   validateMemoryConfig(MEMORY_CONFIG);
