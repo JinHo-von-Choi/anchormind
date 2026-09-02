@@ -29,6 +29,7 @@
 - case mode 이벤트 조회가 nullable `source_fragment_id`를 활성 파편과 내부 조인해 source 없는 이벤트와 supersede·GC된 source의 과거 이벤트를 누락하던 회귀를 막았다. API 키 요청은 동일 case ID 충돌에 따른 교차 테넌트 노출을 막기 위해 현재 키 그룹의 이벤트만 허용하며, `key_id IS NULL`인 레거시·master 이벤트는 master 조회에서만 반환된다.
 - 업그레이드 전 Redis 세션에 `isMaster` 필드가 없을 때 현재 요청의 인증과 세션 key가 일치하면 master 여부를 안전하게 재앵커링한다. 인증정보가 없거나 key가 다르면 일반 권한으로 유지한다.
 - global-only 빈 결과 안내를 CLI의 table·CSV·JSON 출력에 노출하고, `topic_mismatch`가 함께 감지되더라도 workspace 재검색 안내를 유지한다.
+- 한 배치에 같은 내용의 파편이 둘 이상 들어오면 `reflect`와 `batch_remember`가 통째로 실패하던 문제를 고쳤다. 다중행 삽입 전에 충돌 키가 같은 항목을 하나로 접고, 접힌 항목에도 대표와 같은 파편 식별자를 돌려준다. 접는 규칙은 항목을 하나씩 넣었을 때와 결과가 같도록 importance는 최대값, is_anchor는 논리합, 나머지 열은 첫 항목 값을 따른다.
 
 ## [5.9.0] - 2026-08-29
 
