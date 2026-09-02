@@ -37,7 +37,6 @@ const ALLOWED = {
   "memory/CaseEventStore.js": 2,
   "memory/consolidate/MemoryConsolidator.js": 2,
   "memory/link/ContradictionDetector.js": 2,
-  "memory/processors/EpisodeContinuityService.js": 1,
   "memory/read/FragmentReader.js": 1,
   "memory/read/GraphNeighborSearch.js": 1,
   "memory/read/RecallSuggestionEngine.js": 2,

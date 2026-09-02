@@ -130,7 +130,9 @@ CREATE TABLE IF NOT EXISTS agent_memory.fragment_versions (
     type         TEXT,
     importance   REAL,
     amended_at   TIMESTAMPTZ DEFAULT NOW(),
-    amended_by   TEXT -- agent_id
+    amended_by   TEXT, -- 수정 주체 agent_id
+    agent_id     TEXT, -- 수정 전 소유 agent_id; legacy row backfill 전에는 NULL 가능
+    workspace    TEXT  -- 수정 전 workspace
 );
 
 CREATE INDEX IF NOT EXISTS idx_ver_frag ON agent_memory.fragment_versions(fragment_id);
