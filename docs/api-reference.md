@@ -884,7 +884,7 @@ Core Memory + Working Memory + session_reflect를 분리 로드한다. 세션 �
 
 ### Anchor 선택 메타
 
-응답의 `_meta.anchorSelection`은 `totalLimit`, `workspaceReserve`, `reserveApplied`와 함께 `candidates`, `selected`, `excluded`의 workspace/global/total 수를 제공한다. `selected.reservedWorkspace`는 예약 단계에서 먼저 포함된 workspace anchor 수다. effective workspace가 있으면 workspace 상위 예약분을 먼저 선택한 뒤, 남은 슬롯을 잔여 workspace와 전역 anchor의 통합 importance 순으로 채운다. workspace가 없으면 reserve를 적용하지 않고 전역 anchor만 전체 상한까지 선택한다.
+응답의 `_meta.anchorSelection`은 `totalLimit`, `workspaceReserve`, `reserveApplied`와 함께 `candidates`, `selected`, `excluded`의 workspace/global/unscoped/total 수를 제공한다. `selected.reservedWorkspace`는 예약 단계에서 먼저 포함된 workspace anchor 수다. `loadStatus`는 각 후보 범위의 조회 성공 여부(적용하지 않은 범위는 `null`)를 나타내고, 하나라도 실패하면 `partial=true`이며 알 수 없는 후보·제외 수는 `null`이다. effective workspace가 있으면 workspace 상위 예약분을 먼저 선택한 뒤, 남은 슬롯을 잔여 workspace와 전역 anchor의 통합 importance 순으로 채운다. workspace가 없으면 reserve 없이 접근 가능한 전체 workspace의 상위 anchor를 선택하며, 그 수를 `unscoped`로 보고한다. workspace 미지정 조회의 격리 정책은 이 선택 규칙과 독립적으로 적용된다.
 
 ---
 

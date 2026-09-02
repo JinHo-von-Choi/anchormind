@@ -441,7 +441,7 @@ AnchorMind는 MCP(Model Context Protocol) 기반의 장기 기억 서버다. AI 
 ```
 context() 호출
 -> core_memory: 앵커 + 고중요도 파편 (preference, error, procedure)
-   (앵커는 전체 최대 20개가 항상 포함된다. effective workspace가 있으면 기본 10개를 workspace 상위 anchor에 먼저 예약하고, 나머지는 잔여 workspace/global 통합 중요도순으로 채운다. `MEMENTO_CONTEXT_ANCHOR_LIMIT`, `MEMENTO_CONTEXT_WORKSPACE_ANCHOR_RESERVE`로 설정)
+   (앵커는 기본 최대 20개가 항상 포함된다. effective workspace가 있으면 기본 10개를 workspace 상위 anchor에 먼저 예약하고, 나머지는 잔여 workspace/global 통합 중요도순으로 채운다. total만 바꾸면 reserve는 total/2 내림, 최대 10으로 유도된다. `MEMENTO_CONTEXT_ANCHOR_LIMIT`, `MEMENTO_CONTEXT_WORKSPACE_ANCHOR_RESERVE`로 설정)
 -> working_memory: 현재 세션의 워킹 메모리
 -> system_hints: 미반영 세션 경고, 시스템 알림
 ```

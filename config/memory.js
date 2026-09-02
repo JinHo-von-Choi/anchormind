@@ -37,6 +37,11 @@ function envStrictInt(name, def) {
   return Number(raw.trim());
 }
 
+const contextAnchorLimit = envInt("MEMENTO_CONTEXT_ANCHOR_LIMIT", 20, 1, 30);
+// 기본 20/10 비율을 유지한다. total만 낮춘 기존 배포도 기동 실패하지 않고,
+// 예약분이 전체 슬롯을 자동으로 독점하지 않도록 미설정 reserve를 total의 절반으로 유도한다.
+const defaultWorkspaceAnchorReserve = Math.min(10, Math.floor(contextAnchorLimit / 2));
+
 export const MEMORY_CONFIG = {
   /** 복합 랭킹 가중치 (합계 1.0) */
   ranking: {
@@ -201,8 +206,11 @@ export const MEMORY_CONFIG = {
   },
   /** 컨텍스트 주입 설정 */
   contextInjection: {
-    maxAnchorFragments      : envInt("MEMENTO_CONTEXT_ANCHOR_LIMIT", 20, 1, 30),
-    workspaceAnchorReserve  : envStrictInt("MEMENTO_CONTEXT_WORKSPACE_ANCHOR_RESERVE", 10),
+    maxAnchorFragments      : contextAnchorLimit,
+    workspaceAnchorReserve  : envStrictInt(
+      "MEMENTO_CONTEXT_WORKSPACE_ANCHOR_RESERVE",
+      defaultWorkspaceAnchorReserve
+    ),
     maxCoreFragments   : 15,
     maxWmFragments     : 10,
     typeSlots          : {

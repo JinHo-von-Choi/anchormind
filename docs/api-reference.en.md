@@ -818,7 +818,7 @@ Loads Core Memory + Working Memory + session_reflect separately. Injects prefere
 
 ### Anchor selection metadata
 
-`_meta.anchorSelection` reports `totalLimit`, `workspaceReserve`, and `reserveApplied`, plus workspace/global/total counts under `candidates`, `selected`, and `excluded`. `selected.reservedWorkspace` is the number of workspace anchors admitted during the reservation phase. With an effective workspace, its top reserved anchors are selected first and the remaining slots are filled by a combined importance ranking of leftover workspace and global anchors. Without a workspace, the reserve is not applied and only global anchors are selected up to the total limit.
+`_meta.anchorSelection` reports `totalLimit`, `workspaceReserve`, and `reserveApplied`, plus workspace/global/unscoped/total counts under `candidates`, `selected`, and `excluded`. `selected.reservedWorkspace` is the number of workspace anchors admitted during the reservation phase. `loadStatus` reports whether each candidate scope loaded successfully (or `null` when not applicable). If any load fails, `partial=true` and unknown candidate/excluded counts are `null`. With an effective workspace, its top reserved anchors are selected first and the remaining slots are filled by a combined importance ranking of leftover workspace and global anchors. Without a workspace, it applies no reserve and selects the top accessible anchors across all workspaces, reporting them as `unscoped`. The isolation policy for workspace-omitted reads is applied independently of this selection rule.
 
 ---
 
