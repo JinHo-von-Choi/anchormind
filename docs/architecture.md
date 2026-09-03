@@ -39,7 +39,7 @@ server.js  (HTTP 서버)
             ├── read/                     검색 레이어 모듈
             │   ├── FragmentSearch.js     3계층 검색 조율 (구조적: L1→L2, 시맨틱: L1→L2‖L3 RRF 병합). `_executeSearch`는 `_buildTextRRF` (text 파라미터 있을 때 L2+L3 병렬 RRF) / `_buildFallbackCombined` (text 없을 때 L1+L2, keywords 존재 시 합성 텍스트 L3 시맨틱 보조를 병렬 결합해 `L3kw:N` 세그먼트로 병합) 두 내부 메서드로 분해
             │   ├── FragmentReader.js     파편 읽기. `getById(id, agentId, keyId, groupKeyIds)` — groupKeyIds 파라미터로 그룹 소속 키의 파편도 단일 호출로 조회. `getByIds`, `getHistory`, `searchByKeywords`, `searchBySemantic`, `findCaseIdBySessionTopic`, `findErrorFragmentsBySessionTopic`
-            │   ├── ContextBuilder.js     context() 로직 전담. 후보를 anchor > core > learning > working 순으로 ID 중복 제거하고, 앵커와 비앵커 최소 슬롯을 보장한 공통 토큰 선택 결과로 flat/structured/injectionText를 조립
+            │   ├── ContextBuilder.js     context() 로직 전담. effective workspace의 Anchor 예약분을 우선 선택한 뒤 후보를 anchor > core > learning > working 순으로 ID 중복 제거하고, 앵커와 비앵커 최소 슬롯을 보장한 공통 토큰 선택 결과로 flat/structured/injectionText를 조립
             │   ├── GraphNeighborSearch.js L2.5 그래프 이웃 검색 (fragment_links 1-hop 양방향 UNION, tanh 포화 스코어링 + 관계 유형별 부스트)
             │   ├── HistoryReconstructor.js case_id/entity 기반 서사 재구성 (ordered_timeline, causal_chains, unresolved_branches)
             │   ├── Reranker.js           Cross-Encoder 재정렬 (기본 비활성; MEMENTO_RERANKER_ENABLED 또는 RERANKER_URL로 활성)
@@ -873,7 +873,7 @@ case_id로 파편을 묶어 과거 유사 사례를 구조화 검색하고 인�
 
 ### CaseRecall
 
-recall 도구에 `caseMode: true`를 전달하면 CaseRecall 경로가 활성화된다. case_id별로 `(goal, events[], outcome)` 트리플을 반환하여 유사 사례의 전체 해결 흐름을 한 번에 복원한다. `isAnchor`가 지정되면 대표 파편·상태·파편 수와 source fragment가 있는 events에도 같은 true/false 필터를 적용한다.
+recall 도구에 `caseMode: true`를 전달하면 CaseRecall 경로가 활성화된다. case_id별로 `(goal, events[], outcome)` 트리플을 반환하여 현재 키 그룹에서 볼 수 있는 유사 사례의 해결 흐름을 한 번에 복원한다. `isAnchor`가 지정되면 현재 대표 파편과 여기서 파생되는 goal/outcome/status에 true/false 필터를 적용한다. `fragment_count`는 현재 키 그룹·workspace·유효 상태·`isAnchor` 필터를 모두 통과해 대표값 후보가 된 파편 수이며 케이스의 전체 누적 파편 수가 아니다. events는 source 파편의 현재 앵커 상태와 무관한 독립 이력이며, 현재 키 그룹에서 볼 수 있는 항목을 케이스당 최대 20건 반환한다.
 
 ### CaseRewardBackprop
 
@@ -1276,7 +1276,7 @@ lib/memory/
 
 `lib/memory/read/SearchScope.js`. 검색 레이어 간 필터 조건을 단일 객체로 캡슐화한다.
 
-캡슐화 필드: `workspace`, `caseId`, `resolutionStatus`, `phase`, `affect`, `keyId`.
+캡슐화 필드: `workspace`, `caseId`, `resolutionStatus`, `phase`, `affect`, `type`, `topic`, `isAnchor`, `keyId`.
 
 `SearchScope.fromQuery(sq)` 정적 팩토리로 `_buildSearchQuery()` 반환값에서 생성한다. `applyTo(fragment) → boolean`으로 fragment 단위 정합 검사를 수행한다.
 

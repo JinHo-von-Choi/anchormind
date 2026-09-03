@@ -26,6 +26,7 @@ AnchorMind의 주요 모듈을 한 페이지로 정리한 ledger. 새 모듈 추
 |`MemoryReflector` (`lib/memory/processors/MemoryReflector.js`)|session reflect params|batchRemember 결과 + episode 생성|상속 (batch)|—|상속|—|
 |`dispatchChain` (`lib/llm/index.js`)|provider chain + prompt + options + deps|첫 성공 provider 응답|429 cooldown, semaphore timeout, chain deadline|`LLM_PRIMARY`, `LLM_FALLBACKS`, `LLM_CHAIN_TIMEOUT_MS`, `LLM_CONCURRENCY_*`|`llm_provider_calls_total`, `llm_provider_latency_ms`, `llm_provider_concurrency_*`, `llm_provider_429_total`, `llm_fallback_triggered_total`|—|
 |`SessionLinker` (`lib/memory/link/SessionLinker.js`)|session_id + 시간 인접 파편|temporal 링크|deadlock 회피 위해 sortedKey 정렬|`SESSION_LINKER_ENABLED`|`memento_session_link_total`|—|
+|`DeterministicRanking` (`lib/memory/read/DeterministicRanking.js`)|검색 결과와 기존 primary score|`created_at DESC, id ASC` 동점 정렬 및 offset cursor 페이지|동적 후보 집합에서는 페이지 간 snapshot을 보장하지 않음; ANN은 선택 후보 내부 동점만 정렬|—|—|—|
 |`SearchScope` (`lib/memory/read/SearchScope.js`)|sq (검색 쿼리 파라미터 객체)|검색 레이어별 scope 정합 객체 `(workspace, caseId, resolutionStatus, phase, affect, type, topic, isAnchor, keyId)`|없음 (순수 변환)|—|—|—|
 |`SearchSideEffects` (`lib/memory/read/SearchSideEffects.js`)|검색 결과 배열 + ctx|searchEventId, co_retrieved 업데이트, EMA 갱신|DB 장애 시 soft fail. topic 정확일치로 0건인 검색은 SearchParamAdaptor 학습에서 제외(search_events 기록은 유지)|—|`memento_search_event_total`|migration-027|
 |`TopicResolver` (`lib/memory/read/TopicResolver.js`)|store + 키 스코프 + 요청 topic|근접 topic 후보 `[{topic, count}]`. recall `_meta.hints`의 `topic_mismatch` 재료|후보 없으면 빈 배열 → 힌트 미발행|—|—|—|

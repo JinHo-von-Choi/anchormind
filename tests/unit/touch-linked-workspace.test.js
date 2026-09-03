@@ -56,6 +56,7 @@ describe("FragmentSearch touchLinked scope propagation", () => {
     search._executeSearch = async () => ({
       combined: [{
         id: "fragment-a", content: "synthetic", workspace: "ws-a",
+        agent_id: "default",
         created_at: "2026-01-01T00:00:00Z"
       }],
       searchPath: [],

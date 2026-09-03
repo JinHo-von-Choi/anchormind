@@ -16,12 +16,14 @@ import {
   buildContextHint,
   buildRankedInjection,
   collectGuaranteedContextFragments,
-  deduplicateContextSections
+  deduplicateContextSections,
+  seedGuaranteed,
+  selectGuaranteedCoreFragments
 } from "../../lib/memory/read/ContextBuilder.js";
 
 /* ── 헬퍼: 파편 팩토리 ── */
 function frag(id, type, content, extra = {}) {
-  return { id, type, content, importance: 0.5, ...extra };
+  return { id, type, content, importance: 0.5, workspace: null, ...extra };
 }
 
 /* ── buildContextHint 단위 테스트 ── */
@@ -135,6 +137,35 @@ describe("deduplicateContextSections", () => {
     );
   });
 
+  it("앵커가 core 버킷의 상위 ID를 차지하면 차순위가 최소 슬롯을 승계한다", () => {
+    const anchor = frag("shared", "fact", "anchor owner");
+    const next = frag("next", "fact", "next core");
+    const typeFragMap = new Map([["fact", [anchor, next]]]);
+
+    assert.deepEqual(
+      selectGuaranteedCoreFragments(["fact"], typeFragMap, [anchor]).map(item => item.id),
+      ["next"]
+    );
+  });
+
+  it("core provenance 버킷 간 중복 ID는 문자 예산을 이중 계산하지 않는다", () => {
+    const shared = frag("shared", "fact", "a".repeat(40));
+    const fallback = frag("fallback", "fact", "b".repeat(30));
+    const result = seedGuaranteed(
+      ["fact", "session_reflect"],
+      new Map([
+        ["fact", [shared]],
+        ["session_reflect", [shared, fallback]]
+      ])
+    );
+
+    assert.equal(result.usedChars, 70);
+    assert.deepEqual(
+      [...result.guaranteed.values()].flat().map(item => item.id),
+      ["shared", "fallback"]
+    );
+  });
+
   it("ID 없는 동일 객체 참조는 한 번만 유지하고 서로 다른 객체는 보존한다", () => {
     const shared = { type: "fact", content: "shared temporary fragment" };
     const distinct = { type: "fact", content: "shared temporary fragment" };
@@ -237,8 +268,11 @@ describe("ContextBuilder.build()", () => {
       assert.equal(call.arguments[0].allWorkspaces, false);
     }
     const sourceArgs = storeMock.searchBySource.mock.calls[0].arguments;
-    assert.equal(sourceArgs[4], "ws-a");
-    assert.equal(sourceArgs[5], false);
+    assert.deepEqual(sourceArgs[4], {
+      workspace: "ws-a",
+      allWorkspaces: false,
+      isAnchor: false
+    });
   });
 
   it("working memory에서 다른 workspace와 legacy entry를 제외", async () => {
@@ -361,6 +395,7 @@ describe("ContextBuilder.build()", () => {
     );
     assert.deepEqual(storeMock.searchBySource.mock.calls[0].arguments[4], {
       workspace: "synthetic-workspace",
+      allWorkspaces: false,
       isAnchor: false
     });
   });
@@ -409,6 +444,32 @@ describe("ContextBuilder.build()", () => {
     assert.match(result.injectionText, /\[CORE MEMORY\]/);
     assert.match(result.injectionText, /\[LEARNING MEMORY\]/);
     assert.match(result.injectionText, /\[WORKING MEMORY\]/);
+  });
+
+  it("앵커와 core 상위 ID가 겹쳐도 tiny budget에서 차순위 core를 보존한다", async () => {
+    recallMock = mock.fn(async (params) => {
+      if (params.topic === "session_reflect") return { fragments: [] };
+      return {
+        fragments: [
+          frag("shared", params.type, "shared core", { importance: 1 }),
+          frag("core-fallback", params.type, "fallback core", { importance: 0.8 })
+        ]
+      };
+    });
+    builder = new ContextBuilder({
+      recall: recallMock,
+      store: storeMock,
+      index: indexMock,
+      getPool: () => ({
+        query: async () => ({
+          rows: [frag("shared", "fact", "anchor owner", { is_anchor: true, importance: 1 })]
+        })
+      })
+    });
+
+    const result = await builder.build({ structured: true, types: ["fact"], tokenBudget: 1 });
+    assert.deepEqual(result.fragments.map(item => item.id), ["shared", "core-fallback"]);
+    assert.deepEqual(result.rankedInjection.items.map(item => item.id), ["shared", "core-fallback"]);
   });
 
   it("flat 응답도 같은 토큰 선택을 적용해 추가 후보를 절삭한다", async () => {

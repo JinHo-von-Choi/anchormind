@@ -376,11 +376,17 @@ describe("Semantic 실제 결과 isAnchor 3상태 정합", () => {
   it("true는 앵커만 반환한다", async () => {
     const results = await runSemantic(true);
     assert.deepEqual(new Set(results.map(row => row.id)), new Set(["semantic-anchor"]));
+    const syntheticQuery = graphQueries.find(({ sql }) => sql.includes("fragment_synthetic_query"));
+    assert.match(syntheticQuery.sql, /f\.is_anchor = \$/);
+    assert.ok(syntheticQuery.params.includes(true));
   });
 
   it("false는 비앵커만 반환한다", async () => {
     const results = await runSemantic(false);
     assert.deepEqual(new Set(results.map(row => row.id)), new Set(["semantic-non-anchor"]));
+    const syntheticQuery = graphQueries.find(({ sql }) => sql.includes("fragment_synthetic_query"));
+    assert.match(syntheticQuery.sql, /f\.is_anchor = \$/);
+    assert.ok(syntheticQuery.params.includes(false));
   });
 
   it("미지정은 앵커와 비앵커를 모두 반환한다", async () => {
@@ -609,6 +615,37 @@ describe("LinkStore SQL agent/workspace 격리", () => {
     assert.doesNotMatch(sql, /f\.valid_to IS NULL/);
     assert.equal((sql.match(/valid_to/g) || []).length, 3);
   });
+
+  it("opts=null은 기본 옵션으로 안전하게 처리한다", async () => {
+    const store = new LinkStore();
+    await assert.doesNotReject(() => store.getLinkedFragments(
+      ["seed"],
+      null,
+      "agent-a",
+      ["key-1"],
+      null
+    ));
+
+    const { sql, params } = vectorQueries.at(-1);
+    assert.equal((sql.match(/f\.valid_to IS NULL/g) || []).length, 2);
+    assert.doesNotMatch(sql, /f\.is_anchor = \$/);
+    assert.deepEqual(params, [["seed"], ["key-1"], "agent-a"]);
+  });
+
+  it("opts.isAnchor=null은 미지정으로 정규화한다", async () => {
+    const store = new LinkStore();
+    await store.getLinkedFragments(
+      ["seed"],
+      null,
+      "agent-a",
+      ["key-1"],
+      { isAnchor: null }
+    );
+
+    const { sql, params } = vectorQueries.at(-1);
+    assert.doesNotMatch(sql, /f\.is_anchor = \$/);
+    assert.ok(!params.includes(null));
+  });
 });
 
 function createRecaller(linkedFragments, capturedCalls) {
@@ -694,6 +731,7 @@ describe("MemoryRecaller 기본 includeLinks 최종 병합 격리", () => {
     assert.deepEqual(idsOf(result), new Set(["base", "linked-non-anchor"]));
     assert.deepEqual(calls[0][4], {
       workspace        : "ws-a",
+      allWorkspaces    : false,
       includePeerAgents: false,
       isAnchor          : false
     });
@@ -730,6 +768,7 @@ describe("MemoryRecaller 기본 includeLinks 최종 병합 격리", () => {
 
     assert.deepEqual(calls[0][4], {
       workspace         : "ws-a",
+      allWorkspaces     : false,
       includePeerAgents : false,
       includeSuperseded : true
     });

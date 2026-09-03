@@ -114,8 +114,8 @@ describe("SearchScope type/topic 사후 필터", () => {
 
 describe("isAnchor 3상태 검색 계약", () => {
   it("SearchScope true/false/미지정을 구분한다", () => {
-    const anchor    = { is_anchor: true };
-    const nonAnchor = { is_anchor: false };
+    const anchor    = { is_anchor: true, workspace: null };
+    const nonAnchor = { is_anchor: false, workspace: null };
 
     assert.equal(new SearchScope({ isAnchor: true }).applyTo(anchor), true);
     assert.equal(new SearchScope({ isAnchor: true }).applyTo(nonAnchor), false);
@@ -127,12 +127,14 @@ describe("isAnchor 3상태 검색 계약", () => {
     assert.equal(SearchScope.fromQuery({ isAnchor: false }).isAnchor, false);
   });
 
-  it("문자열 true/false는 경계에서 불리언으로 정규화하고 잘못된 값은 거부한다", () => {
+  it("null/문자열 true/false를 3상태로 정규화하고 잘못된 값은 거부한다", () => {
+    assert.equal(new SearchScope({ isAnchor: null }).isAnchor, undefined);
+    assert.equal(new SearchScope({ isAnchor: null }).isNoop(), false);
     assert.equal(new SearchScope({ isAnchor: "true" }).isAnchor, true);
     assert.equal(new SearchScope({ isAnchor: " false " }).isAnchor, false);
     assert.throws(
       () => new SearchScope({ isAnchor: "yes" }),
-      /isAnchor must be a boolean/
+      /isAnchor must be null, a boolean/
     );
   });
 
@@ -176,5 +178,13 @@ describe("isAnchor 3상태 검색 계약", () => {
 
     assert.doesNotMatch(capturedSql, /valid_to IS NULL/);
     assert.match(capturedSql, /workspace, valid_to,/);
+  });
+
+  it("ID hydration도 includeSuperseded=true이면 만료 파편을 SQL 후보에 포함한다", async () => {
+    capturedSql = "";
+    await new FragmentReader().getByIds(
+      ["synthetic-id"], "synthetic-agent", null, [], { includeSuperseded: true }
+    );
+    assert.doesNotMatch(capturedSql, /valid_to IS NULL/);
   });
 });

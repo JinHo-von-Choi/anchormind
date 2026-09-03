@@ -27,8 +27,8 @@ beforeEach(() => {
   capturedOptions.length = 0;
 });
 
-describe("MemoryRecaller caseMode isAnchor 전달", () => {
-  async function recall(isAnchor) {
+describe("MemoryRecaller caseMode 검색 범위 전달", () => {
+  async function recall(isAnchor, requestContext = {}) {
     const search = {
       search: async () => ({
         fragments: [{
@@ -45,7 +45,7 @@ describe("MemoryRecaller caseMode isAnchor 전달", () => {
       })
     };
     const recaller = new MemoryRecaller({ search, store: {} });
-    const params = { caseMode: true, includeLinks: false };
+    const params = { caseMode: true, includeLinks: false, ...requestContext };
     if (isAnchor !== undefined) params.isAnchor = isAnchor;
     await recaller.recall(params);
     return capturedOptions.at(-1);
@@ -61,5 +61,19 @@ describe("MemoryRecaller caseMode isAnchor 전달", () => {
 
   it("미지정은 isAnchor 옵션을 생성하지 않는다", async () => {
     assert.equal(Object.hasOwn(await recall(undefined), "isAnchor"), false);
+  });
+
+  it("null도 미지정으로 정규화해 isAnchor 옵션을 생성하지 않는다", async () => {
+    assert.equal(Object.hasOwn(await recall(null), "isAnchor"), false);
+  });
+
+  it("case 대표 파편과 이벤트 확장에 현재 키 그룹 전체를 전달한다", async () => {
+    const options = await recall(undefined, {
+      _keyId      : "synthetic-key-a",
+      _groupKeyIds: ["synthetic-key-a", "synthetic-key-b"]
+    });
+
+    assert.deepEqual(options.groupKeyIds, ["synthetic-key-a", "synthetic-key-b"]);
+    assert.equal(options.keyId, "synthetic-key-a");
   });
 });

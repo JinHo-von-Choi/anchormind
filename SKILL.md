@@ -17,7 +17,7 @@ AnchorMind 서버는 AI 에이전트의 세션 간 장기 기억을 파편(Fragm
 - recall/context 응답에서 `_meta.serverTime.display_kst` 또는 `_meta.serverTime.iso`로 현재 시점을 재확인하고 파편의 `created_at`·`age_days`와 대조하여 stale 여부를 판단한다. 응답 메타에 명시된 서버 시각이 자체 추정 시각과 다르면 서버 시각이 정답이다.
 - 긴 파편 자동 분할(`splitLongFragments`)은 자식 파편에 본문 기반 keywords를 부여하므로 분할된 내용도 키워드 검색으로 회수된다. 자식 합집합이 원문의 수치 앵커(날짜·금액·비율)를 모두 담지 못하면 분할을 중단하고 원문을 그대로 유지하며, 자식이 남아 있는 원문은 GC 물리 삭제 대상에서 제외된다.
 - `lib/storage/` 어댑터 계층이 `getStorage()` 팩토리 형태로 존재하며, `MEMENTO_STORAGE` 환경변수로 storage 백엔드를 선택한다.
-- 검색 레이어는 `lib/memory/read/SearchScope.js`를 통해 `(workspace, caseId, resolutionStatus, phase, affect, type, topic, keyId)` scope를 처음부터 정합 적용한다.
+- 검색 레이어는 `lib/memory/read/SearchScope.js`를 통해 `(workspace, caseId, resolutionStatus, phase, affect, type, topic, isAnchor, keyId)` scope를 처음부터 정합 적용한다.
 - 실제 로직은 `lib/memory/processors/` 4개 클래스(MemoryRememberer·MemoryRecaller·MemoryReflector·MemoryLinker)와 `lib/memory/` 하위 6개 서브디렉토리(`read/`, `write/`, `link/`, `consolidate/`, `embedding/`, `signals/`)로 구성된다.
 
 ### LLM 동시성 제어
@@ -907,10 +907,12 @@ async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기�
 | caseMode | boolean | - | true 시 CBR 모드. case_id별 (goal, events, outcome) 트리플로 반환 |
 | maxCases | number | - | caseMode 최대 케이스 수 (기본 5, 상한 10) |
 | minImportance | number | - | 최소 중요도 필터 (0~1). 이 값 이상의 importance만 반환. |
-| isAnchor | boolean | - | true 시 앵커(고정) 파편만 반환 |
+| isAnchor | boolean | - | 앵커 필터. true는 앵커만, false는 비앵커만 반환하며 미지정 시 둘 다 반환 |
 | depth | string | - | 검색 깊이. high-level(decision/episode), detail(전체), tool-level(procedure/error/fact) |
 | affect | string/string[] | - | 감정 태그 필터. neutral / frustration / confidence / surprise / doubt / satisfaction. 배열 또는 단일 문자열 지원 |
 | fields | string[] | - | 응답에 포함할 파편 필드 목록(sparse fields). 미지정 시 전체 반환. 지원 키: id, content, type, topic, keywords, importance, created_at, access_count, confidence, linked, explanations, workspace, context_summary, case_id, valid_to, affect, ema_activation, key_id, key_name |
+
+`caseMode=true` 응답의 `fragment_count`는 현재 키 그룹·workspace·유효 상태·`isAnchor` 필터를 통과해 해당 케이스의 대표값 후보가 된 파편 수다. 케이스에 평생 누적된 전체 파편 수를 뜻하지 않는다. 이벤트는 source 파편의 현재 앵커 상태로 필터링하지 않으며, 현재 키 그룹에서 볼 수 있는 이력을 케이스당 최대 20건 반환한다.
 
 ### forget
 

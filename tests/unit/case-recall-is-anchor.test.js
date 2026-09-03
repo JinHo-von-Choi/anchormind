@@ -19,7 +19,7 @@ const representativeRows = [
     resolution_status: "resolved",
     phase            : "verification",
     is_anchor        : true,
-    fragment_count   : "1"
+    fragment_count   : "2"
   },
   {
     case_id          : "synthetic-case",
@@ -28,7 +28,7 @@ const representativeRows = [
     resolution_status: "open",
     phase            : "debugging",
     is_anchor        : false,
-    fragment_count   : "1"
+    fragment_count   : "3"
   }
 ];
 const eventRows = [
@@ -63,7 +63,10 @@ mock.module("../../lib/tools/db.js", {
           : {
               rows: representativeRows
                 .filter(row => requestedAnchor === undefined || row.is_anchor === requestedAnchor)
-                .map(row => ({ ...row }))
+                .map(row => ({
+                  ...row,
+                  fragment_count: requestedAnchor === undefined ? "5" : row.fragment_count
+                }))
             };
       }
     })
@@ -98,7 +101,7 @@ describe("CaseRecall isAnchor 3상태", () => {
     assert.equal(cases[0].goal, "anchor goal");
     assert.equal(cases[0].outcome, "anchor outcome");
     assert.equal(cases[0].resolution_status, "resolved");
-    assert.equal(cases[0].fragment_count, 1);
+    assert.equal(cases[0].fragment_count, 2);
     assert.deepEqual(cases[0].events.map(event => event.summary), [
       "first historical event",
       "second historical event",
@@ -107,6 +110,7 @@ describe("CaseRecall isAnchor 3상태", () => {
     assert.ok(queries[0].params.includes(true));
     assert.ok(!queries[1].params.includes(true));
     assert.match(queries[0].sql, /is_anchor = \$/);
+    assert.match(queries[0].sql, /COUNT\(\*\) OVER \(PARTITION BY case_id\) AS fragment_count/);
     assert.doesNotMatch(queries[1].sql, /JOIN .*fragments f ON/);
   });
 
@@ -116,7 +120,7 @@ describe("CaseRecall isAnchor 3상태", () => {
     assert.equal(cases[0].goal, "non-anchor goal");
     assert.equal(cases[0].outcome, "non-anchor outcome");
     assert.equal(cases[0].resolution_status, "open");
-    assert.equal(cases[0].fragment_count, 1);
+    assert.equal(cases[0].fragment_count, 3);
     assert.deepEqual(cases[0].events.map(event => event.summary), [
       "first historical event",
       "second historical event",
@@ -130,12 +134,21 @@ describe("CaseRecall isAnchor 3상태", () => {
     const cases = await build(undefined);
     assert.equal(cases.length, 1);
     assert.equal(cases[0].goal, "anchor goal");
+    assert.equal(cases[0].fragment_count, 5);
     assert.deepEqual(
       cases[0].events.map(event => event.summary),
       ["first historical event", "second historical event", "case-level event without source fragment"]
     );
     assert.doesNotMatch(queries[0].sql, /is_anchor = \$/);
     assert.doesNotMatch(queries[1].sql, /JOIN .*fragments f ON/);
+  });
+
+  it("null은 미지정과 같은 혼합 조회이며 fragment_count는 필터 적용 후보 수다", async () => {
+    const cases = await build(null);
+
+    assert.equal(cases[0].fragment_count, 5);
+    assert.doesNotMatch(queries[0].sql, /is_anchor = \$/);
+    assert.ok(!queries[0].params.includes(null));
   });
 
   it("includeSuperseded=true는 대표 파편의 valid_to 조건을 제거하며 event 이력에는 영향을 주지 않는다", async () => {
@@ -146,19 +159,32 @@ describe("CaseRecall isAnchor 3상태", () => {
     assert.doesNotMatch(queries[1].sql, /JOIN .*fragments f ON/);
   });
 
-  it("isAnchor 미지정 event 조회도 case_id와 함께 key_id를 격리한다", async () => {
-    await build(undefined, { keyId: "synthetic-key" });
+  it("대표 파편과 event 조회를 같은 키 그룹으로 격리한다", async () => {
+    const groupKeyIds = ["synthetic-key-a", "synthetic-key-b"];
+    await build(undefined, { groupKeyIds });
 
-    assert.match(queries[1].sql, /ce\.key_id = \$/);
-    assert.ok(queries[1].params.includes("synthetic-key"));
+    assert.match(queries[0].sql, /key_id = ANY\(\$\d+::text\[\]\)/);
+    assert.match(queries[1].sql, /ce\.key_id = ANY\(\$\d+::text\[\]\)/);
+    assert.deepEqual(queries[0].params.at(-1), groupKeyIds);
+    assert.deepEqual(queries[1].params.at(-1), groupKeyIds);
   });
 
-  it("isAnchor 지정 여부와 무관하게 event 조회는 case_events 자체 key_id로 격리한다", async () => {
-    await build(true, { keyId: "synthetic-key" });
+  it("기존 직접 호출의 keyId는 단일 원소 키 그룹으로 안전하게 유지한다", async () => {
+    await build(undefined, { keyId: "synthetic-key" });
 
-    assert.match(queries[1].sql, /ce\.key_id = \$/);
-    assert.doesNotMatch(queries[1].sql, /f\.key_id = \$/);
-    assert.ok(queries[1].params.includes("synthetic-key"));
+    assert.match(queries[0].sql, /key_id = ANY\(\$\d+::text\[\]\)/);
+    assert.match(queries[1].sql, /ce\.key_id = ANY\(\$\d+::text\[\]\)/);
+    assert.deepEqual(queries[0].params.at(-1), ["synthetic-key"]);
+    assert.deepEqual(queries[1].params.at(-1), ["synthetic-key"]);
+  });
+
+  it("isAnchor 지정 여부와 무관하게 event 조회는 case_events 자체 키 그룹으로 격리한다", async () => {
+    const groupKeyIds = ["synthetic-key-a", "synthetic-key-b"];
+    await build(true, { groupKeyIds });
+
+    assert.match(queries[1].sql, /ce\.key_id = ANY\(\$\d+::text\[\]\)/);
+    assert.doesNotMatch(queries[1].sql, /f\.key_id/);
+    assert.deepEqual(queries[1].params.at(-1), groupKeyIds);
   });
 
   it("같은 case의 앵커/비앵커 대표 선택이 바뀌어도 과거 event 타임라인은 안정적이다", async () => {

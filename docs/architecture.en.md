@@ -36,7 +36,7 @@ server.js  (HTTP server)
             +-- read/                     Search layer modules
             |   +-- FragmentSearch.js     3-layer search orchestration (structural: L1->L2, semantic: L1->L2||L3 RRF merge). `_executeSearch` decomposes into `_buildTextRRF` (L2+L3 parallel RRF when text parameter present) / `_buildFallbackCombined` (L1+L2 only when no text)
             |   +-- FragmentReader.js     Fragment reads. `getById(id, agentId, keyId, groupKeyIds)` -- groupKeyIds parameter enables single-call lookup of fragments belonging to same-group keys. `getByIds`, `getHistory`, `searchByKeywords`, `searchBySemantic`, `findCaseIdBySessionTopic`, `findErrorFragmentsBySessionTopic`
-            |   +-- ContextBuilder.js     Dedicated context() logic. Deduplicates candidates by ID in anchor > core > learning > working order, guarantees anchors plus minimum non-anchor slots, and uses one token-selected set for flat/structured/injectionText outputs
+            |   +-- ContextBuilder.js     Dedicated context() logic. Reserves effective-workspace anchor slots first, deduplicates candidates by ID in anchor > core > learning > working order, guarantees anchors plus minimum non-anchor slots, and uses one token-selected set for flat/structured/injectionText outputs
             |   +-- GraphNeighborSearch.js L2.5 graph neighbor search (fragment_links 1-hop bidirectional UNION, tanh-saturated scoring + relation-type boosts)
             |   +-- HistoryReconstructor.js case_id/entity-based narrative reconstruction (ordered_timeline, causal_chains, unresolved_branches)
             |   +-- Reranker.js           Cross-Encoder reranking (disabled by default; enable via MEMENTO_RERANKER_ENABLED or RERANKER_URL)
@@ -870,7 +870,7 @@ Evidence join table linking fragments to case events. The `fragment_id + event_i
 
 ### CaseRecall
 
-Passing `caseMode: true` to the recall tool activates the CaseRecall path. It returns `(goal, events[], outcome)` triples per case_id, restoring the complete resolution flow of similar cases in a single call. When `isAnchor` is specified, the same true/false filter applies to representative fragments, status, fragment counts, and events with source fragments.
+Passing `caseMode: true` to the recall tool activates the CaseRecall path. It returns `(goal, events[], outcome)` triples per case_id, restoring in one call the resolution flow of similar cases visible to the current key group. When `isAnchor` is specified, the true/false filter applies to current representative fragments and the goal, outcome, and status derived from them. `fragment_count` is the number of representative candidates remaining after current key-group, workspace, validity, and `isAnchor` filters; it is not the case's lifetime fragment total. Events are independent historical records and return up to 20 entries per case within the current key-group scope, regardless of a source fragment's current anchor status.
 
 ### CaseRewardBackprop
 
@@ -1195,7 +1195,7 @@ autoLinkSessionFragments returns a `linkSuggestions[]` array; ReflectProcessor p
 
 `lib/memory/read/SearchScope.js`. Encapsulates filter conditions across all search layers in a single object.
 
-Encapsulated fields: `workspace`, `caseId`, `resolutionStatus`, `phase`, `affect`, `keyId`.
+Encapsulated fields: `workspace`, `caseId`, `resolutionStatus`, `phase`, `affect`, `type`, `topic`, `isAnchor`, `keyId`.
 
 `SearchScope.fromQuery(sq)` static factory creates an instance from the normalized query returned by `_buildSearchQuery()`. `applyTo(fragment) -> boolean` performs per-fragment coherence checking.
 

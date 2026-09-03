@@ -475,6 +475,8 @@ When `caseMode=true`, a `cases` array is additionally returned alongside the reg
 }
 ```
 
+`fragment_count` is the number of representative candidates for the case after current key-group, workspace, validity, and `isAnchor` filters; it is not the case's lifetime fragment total. `events` are not filtered by a source fragment's current anchor status and return up to 20 historical entries per case within the current key-group scope.
+
 #### event_type enum
 
 | Value | Description |

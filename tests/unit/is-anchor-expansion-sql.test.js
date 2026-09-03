@@ -17,6 +17,19 @@ mock.module("../../lib/tools/db.js", {
     getPrimaryPool: () => ({
       query: async (sql, params) => {
         queries.push({ sql, params });
+        if (sql.includes("fragment_synthetic_query")) {
+          return { rows: [{ fragment_id: "synthetic-fragment", similarity: 0.9 }] };
+        }
+        if (sql.includes("f.id = ANY($1::text[])")) {
+          return {
+            rows: [{
+              id        : "synthetic-fragment",
+              content   : "synthetic content",
+              is_anchor : false,
+              valid_to  : null
+            }]
+          };
+        }
         return { rows: [] };
       }
     })
@@ -28,6 +41,7 @@ const {
   fetchCausalLinks,
   fetchSessionNeighbors
 } = await import("../../lib/memory/read/StitchSourceLoader.js");
+const { searchSyntheticQueries } = await import("../../lib/memory/read/SyntheticQuerySearch.js");
 
 beforeEach(() => {
   queries.length = 0;
@@ -91,6 +105,28 @@ describe("isAnchor 확장 SQL", () => {
 
     for (const { sql } of queries) {
       assert.doesNotMatch(sql, /f\.valid_to IS NULL/);
+    }
+  });
+
+  it("synthetic 후보와 hydration은 LIMIT 전에 같은 isAnchor 필터를 적용한다", async () => {
+    await searchSyntheticQueries([0.1, 0.2], { isAnchor: false });
+
+    assert.equal(queries.length, 2);
+    for (const { sql, params } of queries) {
+      assert.match(sql, /f\.is_anchor = \$/);
+      assert.ok(params.includes(false));
+      assert.match(sql, /f\.valid_to IS NULL/);
+    }
+    assert.ok(queries[0].sql.indexOf("f.is_anchor") < queries[0].sql.indexOf("LIMIT"));
+  });
+
+  it("synthetic includeSuperseded=true는 후보와 hydration의 valid_to 조건을 제거한다", async () => {
+    await searchSyntheticQueries([0.1, 0.2], { includeSuperseded: true });
+
+    assert.equal(queries.length, 2);
+    for (const { sql } of queries) {
+      assert.doesNotMatch(sql, /f\.valid_to IS NULL/);
+      assert.doesNotMatch(sql, /f\.is_anchor = \$/);
     }
   });
 });
