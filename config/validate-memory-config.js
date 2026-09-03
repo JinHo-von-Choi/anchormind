@@ -67,6 +67,12 @@ export function validateMemoryConfig(cfg) {
     }
   }
 
+  // 자동 앵커 승격은 미지정 시 활성이고, 명시할 때만 boolean이어야 한다.
+  const autoPromoteAnchors = cfg.consolidate?.autoPromoteAnchors;
+  if (autoPromoteAnchors !== undefined && typeof autoPromoteAnchors !== "boolean") {
+    errors.push(`consolidate.autoPromoteAnchors must be true or false (got ${autoPromoteAnchors})`);
+  }
+
   if (errors.length > 0) {
     throw new Error(`MEMORY_CONFIG validation failed:\n  - ${errors.join("\n  - ")}`);
   }

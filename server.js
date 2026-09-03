@@ -312,10 +312,10 @@ if (!ACCESS_KEY && !AUTH_DISABLED) {
   process.exit(78);
 }
 
-setAnchorAutoPromotionEnabled(MEMORY_CONFIG.consolidate.autoPromoteAnchors);
+validateMemoryConfig(MEMORY_CONFIG);
+setAnchorAutoPromotionEnabled(MEMORY_CONFIG.consolidate?.autoPromoteAnchors !== false);
 
 server.listen(PORT, () => {
-  validateMemoryConfig(MEMORY_CONFIG);
   console.log(`Memento MCP HTTP server listening on port ${PORT}`);
   console.log("Streamable HTTP endpoints: POST/GET/DELETE /mcp");
   console.log("Legacy SSE endpoints: GET /sse, POST /message");

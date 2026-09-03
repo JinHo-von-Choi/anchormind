@@ -43,7 +43,6 @@ mock.module("../../config/memory.js", {
         MEMORY_CONFIG: {
             gc: { utilityThreshold: 0.15 },
             dedup: {},
-            consolidate: { autoPromoteAnchors: true },
         },
     },
 });

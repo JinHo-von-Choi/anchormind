@@ -1,40 +1,26 @@
 import { after, describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
 
 import { MEMORY_CONFIG } from "../../config/memory.js";
+import { validateMemoryConfig } from "../../config/validate-memory-config.js";
 import { MemoryConsolidator } from "../../lib/memory/consolidate/MemoryConsolidator.js";
+import { anchorAutoPromotionEnabled, setAnchorAutoPromotionEnabled } from "../../lib/metrics.js";
 import { teardownTestResources, assertCleanShutdown } from "../_lifecycle.js";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+let configImportSequence = 0;
 
-function loadToggle(envValue) {
-  const env = { ...process.env, MEMENTO_METRICS_DEFAULT: "off" };
-  delete env.MEMENTO_AUTO_PROMOTE_ANCHORS;
-  if (envValue !== undefined) env.MEMENTO_AUTO_PROMOTE_ANCHORS = envValue;
-  return execFileSync(process.execPath, [
-    "--input-type=module",
-    "-e",
-    `import { MEMORY_CONFIG } from "${path.join(ROOT, "config", "memory.js")}";` +
-      "console.log(MEMORY_CONFIG.consolidate.autoPromoteAnchors);"
-  ], { env, encoding: "utf8" }).trim();
-}
-
-function loadStartupMetric(envValue) {
-  const env = { ...process.env, MEMENTO_METRICS_DEFAULT: "off" };
-  delete env.MEMENTO_AUTO_PROMOTE_ANCHORS;
-  if (envValue !== undefined) env.MEMENTO_AUTO_PROMOTE_ANCHORS = envValue;
-  return execFileSync(process.execPath, [
-    "--input-type=module",
-    "-e",
-    `import { MEMORY_CONFIG } from "${path.join(ROOT, "config", "memory.js")}";` +
-      `import { anchorAutoPromotionEnabled, setAnchorAutoPromotionEnabled } from "${path.join(ROOT, "lib", "metrics.js")}";` +
-      "setAnchorAutoPromotionEnabled(MEMORY_CONFIG.consolidate.autoPromoteAnchors);" +
-      "const metric = await anchorAutoPromotionEnabled.get();" +
-      "console.log(metric.values[0].value);"
-  ], { env, encoding: "utf8" }).trim();
+async function loadConfig(envValue) {
+  const name = "MEMENTO_AUTO_PROMOTE_ANCHORS";
+  const previous = process.env[name];
+  try {
+    if (envValue === undefined) delete process.env[name];
+    else process.env[name] = envValue;
+    const mod = await import(`../../config/memory.js?auto-promote-test=${configImportSequence++}`);
+    return mod.MEMORY_CONFIG;
+  } finally {
+    if (previous === undefined) delete process.env[name];
+    else process.env[name] = previous;
+  }
 }
 
 after(async () => {
@@ -43,25 +29,32 @@ after(async () => {
 });
 
 describe("MEMENTO_AUTO_PROMOTE_ANCHORS 설정", () => {
-  it("미지정/true는 기존 활성 동작을 유지한다", () => {
-    assert.equal(loadToggle(undefined), "true");
-    assert.equal(loadToggle("true"), "true");
+  it("미지정/true는 기존 활성 동작을 유지한다", async () => {
+    assert.equal((await loadConfig(undefined)).consolidate.autoPromoteAnchors, true);
+    assert.equal((await loadConfig("true")).consolidate.autoPromoteAnchors, true);
   });
 
-  it("false는 자동 승격을 비활성화한다", () => {
-    assert.equal(loadToggle("false"), "false");
+  it("false는 자동 승격을 비활성화한다", async () => {
+    assert.equal((await loadConfig("false")).consolidate.autoPromoteAnchors, false);
   });
 
-  it("빈 문자열은 미설정으로 취급하고 잘못된 값은 거부한다", () => {
-    assert.equal(loadToggle(""), "true");
-    assert.equal(loadToggle("   "), "true");
-    assert.throws(() => loadToggle("yes"), /MEMENTO_AUTO_PROMOTE_ANCHORS must be.*true.*false/s);
+  it("빈 문자열은 미설정으로 취급하고 잘못된 값은 기동 검증에서 거부한다", async () => {
+    assert.equal((await loadConfig("")).consolidate.autoPromoteAnchors, true);
+    assert.equal((await loadConfig("   ")).consolidate.autoPromoteAnchors, true);
+    const invalid = await loadConfig("yes");
+    assert.throws(
+      () => validateMemoryConfig(invalid),
+      /MEMORY_CONFIG validation failed:.*consolidate\.autoPromoteAnchors must be true or false.*yes/s
+    );
   });
 
-  it("MemoryConsolidator 생성 전에도 metric이 설정값을 정확히 노출한다", () => {
-    assert.equal(loadStartupMetric(undefined), "1");
-    assert.equal(loadStartupMetric(""), "1");
-    assert.equal(loadStartupMetric("false"), "0");
+  it("MemoryConsolidator 생성 전에도 metric이 설정값을 정확히 노출한다", async () => {
+    for (const [envValue, expected] of [[undefined, 1], ["", 1], ["false", 0]]) {
+      const config = await loadConfig(envValue);
+      setAnchorAutoPromotionEnabled(config.consolidate.autoPromoteAnchors);
+      const metric = await anchorAutoPromotionEnabled.get();
+      assert.equal(metric.values[0].value, expected);
+    }
   });
 });
 
@@ -113,5 +106,25 @@ describe("promote_anchors stage opt-out", () => {
       assert.equal(stages[0].status, "ok");
       assert.equal(stages[0].affected, 7);
     });
+  });
+
+  it("consolidate 설정 블록이 없더라도 기존 승격 동작을 유지한다", async () => {
+    const original = MEMORY_CONFIG.consolidate;
+    delete MEMORY_CONFIG.consolidate;
+    try {
+      const consolidator = new MemoryConsolidator();
+      consolidator._promoteAnchors = mock.fn(async () => 2);
+      const results = { anchorsPromoted: 0 };
+      const def = consolidator._enrichmentStages({}, results)
+        .find(stage => stage.name === "promote_anchors");
+
+      const stages = await consolidator._executeStages([def], results, () => {});
+
+      assert.equal(consolidator._promoteAnchors.mock.callCount(), 1);
+      assert.equal(results.anchorsPromoted, 2);
+      assert.equal(stages[0].status, "ok");
+    } finally {
+      MEMORY_CONFIG.consolidate = original;
+    }
   });
 });
