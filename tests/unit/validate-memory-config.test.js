@@ -51,4 +51,19 @@ describe("validateMemoryConfig", () => {
     bad.embeddingWorker.batchSize = 0;
     assert.throws(() => validateMemoryConfig(bad), /positive integer/i);
   });
+
+  it("자동 앵커 승격의 잘못된 값은 일관된 설정 오류로 보고한다", () => {
+    const bad = structuredClone(MEMORY_CONFIG);
+    bad.consolidate.autoPromoteAnchors = "yes";
+    assert.throws(
+      () => validateMemoryConfig(bad),
+      /MEMORY_CONFIG validation failed:.*consolidate\.autoPromoteAnchors must be true or false.*yes/s
+    );
+  });
+
+  it("consolidate 블록이 없으면 자동 승격 기본값을 사용할 수 있다", () => {
+    const compatible = structuredClone(MEMORY_CONFIG);
+    delete compatible.consolidate;
+    assert.doesNotThrow(() => validateMemoryConfig(compatible));
+  });
 });

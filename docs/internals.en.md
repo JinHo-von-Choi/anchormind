@@ -138,7 +138,7 @@ Stages are declared as a `stageDefs` array. Adding a new stage requires only a s
 10. `retro_link` — GraphLinker.retroLink() retroactively links up to 20 orphan fragments (have embedding, no links)
 11. `utility_score_update` — updates scores with `importance * (1 + ln(max(access_count,1))) / age_months^0.3`
 12. `requeue_high_ema` — registers ema_activation>0.3 AND importance<0.4 fragments for MemoryEvaluator re-evaluation
-13. `promote_anchors` — promotes fragments with access_count >= 10 + importance >= 0.8 to `is_anchor=true`
+13. `promote_anchors` — promotes fragments with access_count >= 10 + importance >= 0.8 to `is_anchor=true`. `MEMENTO_AUTO_PROMOTE_ANCHORS=false` skips only this stage with reason `disabled_by_config` (default: true).
 14. `detect_contradictions` — 3-stage hybrid contradiction detection. pgvector cosine > 0.85 candidate extraction -> mDeBERTa NLI -> Gemini CLI escalation. Results returned as separate `nliResolvedDirectly` and `nliSkippedAsNonContra` counts
 15. `detect_supersessions` — Gemini CLI judges supersession relationships for fragment pairs with embedding similarity 0.7~0.85. Operates complementarily to GraphLinker's >= 0.85 range
 16. `process_pending_contradictions` — when Gemini CLI is available, dequeues up to 10 items from Redis pending queue for re-evaluation

@@ -44,7 +44,7 @@ import { shutdownPool, getPrimaryPool } from "./lib/tools/db.js";
 import { drainAllWorkers } from "./lib/memory/workers/registry.js";
 
 /** 메트릭 */
-import { recordHttpRequest } from "./lib/metrics.js";
+import { recordHttpRequest, setAnchorAutoPromotionEnabled } from "./lib/metrics.js";
 
 /** 스케줄러 */
 import { startSchedulers } from "./lib/scheduler.js";
@@ -312,8 +312,10 @@ if (!ACCESS_KEY && !AUTH_DISABLED) {
   process.exit(78);
 }
 
+validateMemoryConfig(MEMORY_CONFIG);
+setAnchorAutoPromotionEnabled(MEMORY_CONFIG.consolidate?.autoPromoteAnchors !== false);
+
 server.listen(PORT, () => {
-  validateMemoryConfig(MEMORY_CONFIG);
   console.log(`Memento MCP HTTP server listening on port ${PORT}`);
   console.log("Streamable HTTP endpoints: POST/GET/DELETE /mcp");
   console.log("Legacy SSE endpoints: GET /sse, POST /message");

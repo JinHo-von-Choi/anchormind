@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- 자동 앵커 승격만 비활성화할 수 있는 `MEMENTO_AUTO_PROMOTE_ANCHORS` 설정을 추가했다. 기본값과 빈 값은 기존 동작을 유지하는 `true`이며, 비활성 상태는 정리 결과·로그·`mcp_anchor_auto_promotion_enabled` 메트릭에서 확인할 수 있다.
+
 ### Changed
 
 - 검색·캐시·그래프·컨텍스트의 기존 주 점수 의미는 유지하면서 동점 결과를 `created_at DESC, id ASC`로 결정적으로 정렬한다. 기존 내림차순 인덱스와 offset cursor 계약은 유지하며, ANN 검색은 인덱스가 고른 후보 집합 안에서만 동점을 정렬한다.

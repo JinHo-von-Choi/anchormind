@@ -21,6 +21,7 @@
 | RATE_LIMIT_PER_IP | 30 | Per-IP requests per minute (unauthenticated) |
 | RATE_LIMIT_PER_KEY | 100 | Per-API-key requests per minute (authenticated) |
 | CONSOLIDATE_INTERVAL_MS | 21600000 | Auto-maintenance (consolidate) interval (ms). Default 6 hours |
+| MEMENTO_AUTO_PROMOTE_ANCHORS | true | When `false`, skips only automatic anchor promotion; existing anchors and other stages are unchanged |
 | EVALUATOR_MAX_QUEUE | 100 | MemoryEvaluator queue size cap (older jobs dropped on overflow) |
 | OAUTH_TRUSTED_ORIGINS | (none) | Additional OAuth redirect_uri trusted domains (comma-separated, origin level). Added on top of default trusted domains (claude.ai, chatgpt.com, platform.openai.com, copilot.microsoft.com, gemini.google.com). Only specify additional origins to allow |
 | MCP_STRICT_ORIGIN | false | When `true`, enables strict Origin header validation (DNS rebinding defense). Requests from Origins not in the allowlist (`OAUTH_TRUSTED_ORIGINS` + `ALLOWED_ORIGINS` + default trusted domains) are rejected with 403. Requests without an Origin header (CLI/curl) are always allowed. **opt-in** — defaults to `false` to preserve existing behavior |
@@ -435,6 +436,10 @@ Individual activation flags for the 3 stages that involve LLM rewriting and can 
 | `splitLongFragments` | `MEMENTO_CONSOLIDATE_SPLIT_LONG` | `true` | stage 5 | Splits long fragments into 2–3 atomic fragments. LLM determines split boundaries |
 | `detectContradictions` | `MEMENTO_CONSOLIDATE_DETECT_CONTRADICT` | `true` | stage 14 | NLI + LLM hybrid contradiction detection and contradicts link creation |
 | `compressOldFragments` | `MEMENTO_CONSOLIDATE_COMPRESS_OLD` | `false` | stage 8 | LLM-based compression summary of old fragment groups. Disabled by default |
+
+### consolidate.autoPromoteAnchors
+
+`MEMENTO_AUTO_PROMOTE_ANCHORS` is an opt-out for the automatic anchor-promotion stage. When unset or empty it defaults to `true`, preserving the existing behavior. When set to `false`, `promote_anchors` returns `status="skipped"` with `reason="disabled_by_config"` and performs no promotion UPDATE. Other non-empty values are rejected as configuration errors. It does not demote existing anchors or disable any other consolidation stage. Restart the server after changing the setting.
 
 A stage with its flag set to `false` emits `status: "skipped"` and proceeds to the next stage. `compressOldFragments` defaults to `false` because it modifies original fragment content.
 

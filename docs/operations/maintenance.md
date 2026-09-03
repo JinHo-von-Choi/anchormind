@@ -200,8 +200,9 @@ MCP `memory_consolidate` 도구는 `admin` 권한을 요구하며, 권한이 없
 | semanticDedupMerged | 1 |
 | utilityUpdated | 13211 |
 | anchorsPromoted | 47 |
+| anchorPromotionEnabled | true |
 
-`anchorsPromoted`가 발생하면 해당 파편이 permanent 계층으로 올라가므로, 이후 `forget`은 `force: true` 없이는 삭제하지 못한다. 점검용 파편을 만들었다면 정리 사이클을 돌리기 전에 회수하는 편이 낫다.
+`anchorPromotionEnabled`는 `MEMENTO_AUTO_PROMOTE_ANCHORS`의 적용 상태다. `false`이면 `promote_anchors` 단계만 `disabled_by_config` 사유로 건너뛴다. `anchorsPromoted`가 발생하면 해당 파편이 permanent 계층으로 올라가므로, 이후 `forget`은 `force: true` 없이는 삭제하지 못한다. 점검용 파편을 만들었다면 정리 사이클을 돌리기 전에 회수하는 편이 낫다.
 
 시맨틱 중복 제거 단계의 차단 건수는 `memento_consolidate_gate_blocked_total`로 노출된다. 라벨이 붙은 카운터라 첫 차단이 발생하기 전에는 값이 출력되지 않는다.
 
