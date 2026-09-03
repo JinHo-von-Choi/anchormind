@@ -547,6 +547,8 @@ reflect 규칙:
 - reflect도 workspace를 받는다. 멀티 프로젝트 환경에서는 reflect에 workspace를 반드시 지정해 세션 요약이 다른 프로젝트 context에 주입되는 것을 방지한다.
 - 전역 기억(모든 workspace에서 조회)으로 저장하려면 workspace를 의도적으로 비우고, 키에도 default_workspace가 없어야 한다. 의도치 않은 미기입과 의도된 전역 저장은 구분해서 판단한다.
 - 검색 시 workspace를 지정하면 해당 workspace 파편과 workspace=NULL(전역) 파편이 함께 반환된다.
+- `default_workspace`가 없는 공유 키에서 쓰기마다 workspace를 명시했다면 recall/context에도 같은 workspace를 반드시 명시한다. 생략하면 전역(NULL) 범위만 조회되며, 빈 결과의 `_meta.hints[0]`가 workspace를 지정한 재검색을 안내한다.
+- 업그레이드 전 Redis Working Memory 항목처럼 workspace 필드가 없는 데이터는 scoped/global-only context에서 제외된다. master의 `allWorkspaces=true` 조회에서만 범위를 안전하게 넓혀 포함할 수 있다.
 
 #### workspace 활용 예시
 

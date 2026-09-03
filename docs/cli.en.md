@@ -227,7 +227,7 @@ Options:
 | `--workspace <name>` | Search that workspace plus global (NULL) fragments |
 | `--all-workspaces` | Master-only explicit cross-workspace search |
 
-Without a workspace or key default, recall searches global (NULL) fragments only. Use `--all-workspaces` explicitly for the former master-wide behavior.
+Without a workspace or key default, recall searches global (NULL) fragments only. If writes used an explicit workspace, pass that same `--workspace` when reading; an empty-result hint calls out this scope difference. Use `--all-workspaces` explicitly for the former master-wide behavior.
 
 Help:
 

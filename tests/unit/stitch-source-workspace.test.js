@@ -1,5 +1,11 @@
-import { describe, it, mock } from "node:test";
+import { after, describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { teardownTestResources, assertCleanShutdown } from "../_lifecycle.js";
+
+after(async () => {
+  await teardownTestResources();
+  await assertCleanShutdown();
+});
 
 const queries = [];
 const pool = {
@@ -22,21 +28,18 @@ describe("StitchSourceLoader scope", () => {
   const scope = {
     keyId: "key-a",
     groupKeyIds: ["key-a"],
-    workspace: "ws-a",
-    agentId: "agent-a",
-    includePeerAgents: false
+    workspace: "ws-a"
   };
 
-  it("causal link에 key/workspace/agent 조건 적용", async () => {
+  it("causal link에 key/workspace 조건 적용", async () => {
     queries.length = 0;
     await fetchCausalLinks(["fragment-a"], scope);
     const { sql } = queries[0];
     assert.match(sql, /f\.key_id/);
     assert.match(sql, /\(f\.workspace = \$\d+ OR f\.workspace IS NULL\)/);
-    assert.match(sql, /\(f\.agent_id = \$\d+ OR f\.agent_id = 'default'\)/);
   });
 
-  it("session neighbor에도 key/workspace/agent 조건 적용", async () => {
+  it("session neighbor에도 key/workspace 조건 적용", async () => {
     queries.length = 0;
     await fetchSessionNeighbors([
       { id: "fragment-a", session_id: "session-a", created_at: "2026-01-01T00:00:00Z" }
@@ -44,6 +47,5 @@ describe("StitchSourceLoader scope", () => {
     const { sql } = queries[0];
     assert.match(sql, /f\.key_id/);
     assert.match(sql, /\(f\.workspace = \$\d+ OR f\.workspace IS NULL\)/);
-    assert.match(sql, /\(f\.agent_id = \$\d+ OR f\.agent_id = 'default'\)/);
   });
 });

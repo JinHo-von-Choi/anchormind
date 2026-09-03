@@ -1,5 +1,11 @@
-import { describe, it, mock } from "node:test";
+import { after, describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { teardownTestResources, assertCleanShutdown } from "../_lifecycle.js";
+
+after(async () => {
+  await teardownTestResources();
+  await assertCleanShutdown();
+});
 
 const queries = [];
 const graphCalls = [];
@@ -31,6 +37,14 @@ mock.module("../../lib/memory/write/FragmentFactory.js", {
   }
 });
 
+/** 프로덕션의 baseline timer 동작은 유지하되 이 테스트의 10분 캐시 timer만 unref한다. */
+const realSetTimeout = globalThis.setTimeout;
+mock.method(globalThis, "setTimeout", (fn, delay, ...args) => {
+  const timer = realSetTimeout(fn, delay, ...args);
+  timer.unref?.();
+  return timer;
+});
+
 const { activateByContext } = await import("../../lib/memory/signals/SpreadingActivation.js");
 
 async function flushActivationQueue() {
@@ -49,8 +63,7 @@ describe("SpreadingActivation effective workspace", () => {
     assert.match(queries.at(-1).sql, /workspace IS NULL/);
     assert.deepEqual(graphCalls[0][4], {
       workspace: null,
-      allWorkspaces: false,
-      includePeerAgents: false
+      allWorkspaces: false
     });
   });
 

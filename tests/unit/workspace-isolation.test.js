@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import {
   appendWorkspaceCondition,
   assertAllWorkspacesAuthorized,
-  resolveWorkspaceScope
+  resolveWorkspaceScope,
+  workspaceCondition
 } from "../../lib/memory/read/WorkspaceScope.js";
 
 describe("workspace 우선순위 해석", () => {
@@ -31,13 +32,20 @@ describe("workspace 우선순위 해석", () => {
   });
 
   it("allWorkspaces=true는 명시 전체 조회 모드", () => {
-    const result = resolveWorkspaceScope({ allWorkspaces: true });
+    const result = resolveWorkspaceScope({ allWorkspaces: true, _isMaster: true });
     assert.equal(result.allWorkspaces, true);
     assert.equal(result.mode, "all_workspaces");
   });
 });
 
 describe("workspace 검색 필터 조건 생성", () => {
+  it("단일 workspace 조건 문자열과 바인딩을 직접 반환", () => {
+    const params = ["seed"];
+    const condition = workspaceCondition(params, { workspace: "ws-a" }, "f.workspace");
+    assert.equal(condition, "(f.workspace = $2 OR f.workspace IS NULL)");
+    assert.deepEqual(params, ["seed", "ws-a"]);
+  });
+
   it("workspace 지정 시 OR IS NULL 조건 생성", () => {
     const conditions = [];
     const params = ["a", "b"];
@@ -69,6 +77,13 @@ describe("allWorkspaces 권한", () => {
   it("일반 API key 요청은 명시적 권한 오류", () => {
     assert.throws(
       () => assertAllWorkspacesAuthorized({ allWorkspaces: true, _isMaster: false }),
+      err => err.code === "WORKSPACE_SCOPE_FORBIDDEN"
+    );
+  });
+
+  it("하위 스코프 해석 계층도 일반 직접 호출을 거부", () => {
+    assert.throws(
+      () => resolveWorkspaceScope({ allWorkspaces: true }),
       err => err.code === "WORKSPACE_SCOPE_FORBIDDEN"
     );
   });

@@ -1,5 +1,11 @@
 import { after, before, describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { teardownTestResources, assertCleanShutdown } from "../_lifecycle.js";
+
+after(async () => {
+  await teardownTestResources();
+  await assertCleanShutdown();
+});
 
 const activationCalls = [];
 
@@ -52,8 +58,7 @@ describe("MemoryRecaller spreading workspace propagation", () => {
     await createRecaller().recall({ contextText: "context", includeLinks: false });
     assert.deepEqual(activationCalls[0][4], {
       workspace: null,
-      allWorkspaces: false,
-      includePeerAgents: false
+      allWorkspaces: false
     });
   });
 
@@ -68,7 +73,7 @@ describe("MemoryRecaller spreading workspace propagation", () => {
   it("master allWorkspaces scope 전달", async () => {
     activationCalls.length = 0;
     await createRecaller().recall({
-      contextText: "context", allWorkspaces: true, includeLinks: false
+      contextText: "context", allWorkspaces: true, _isMaster: true, includeLinks: false
     });
     assert.equal(activationCalls[0][4].allWorkspaces, true);
   });

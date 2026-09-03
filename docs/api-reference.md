@@ -380,7 +380,9 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 `_meta`: recall/context 응답 최상위의 메타데이터 래퍼.
 
 - `searchEventId`: 검색 이벤트 식별자. 후속 `tool_feedback` 호출 시 FK로 사용.
-- `hints`: 검색 결과 신호 배열(`no_results`, `topic_mismatch`, `contradiction_pending`, `stale_results`, `active_errors` 등). `topic_mismatch`는 지정한 topic으로 0건이면서 키 스코프 내에 유사 topic이 존재할 때 발화하며 제안된 topic으로의 재검색을 권고한다. `contradiction_pending`은 반환 파편에 미해결 contradicts 링크가 있을 때 발화하며 amend 정리를 권고한다.
+- `hints`: 검색 결과 신호 배열(`no_results`, `topic_mismatch`, `contradiction_pending`, `stale_results`, `active_errors` 등). `topic_mismatch`는 지정한 topic으로 0건이면서 키 스코프 내에 유사 topic이 존재할 때 발화하며 제안된 topic으로의 재검색을 권고한다. `contradiction_pending`은 반환 파편에 미해결 contradicts 링크가 있을 때 발화하며 amend 정리를 권고한다. workspace와 key default를 모두 생략한 global-only 조회가 0건이면 `no_results`의 제안은 해당 workspace를 지정해 재검색하도록 안내한다.
+
+`default_workspace`가 없는 공유 키에서 저장 시 workspace를 명시했다면 recall/context에도 같은 workspace를 전달해야 한다. 생략한 조회는 전역(NULL) 파편만 대상으로 하므로 저장된 workspace 파편이 사라진 것처럼 보일 수 있다. 업그레이드 전 Redis Working Memory 항목은 workspace 필드가 없어 scoped/global-only context에서 제외되며, master의 `allWorkspaces=true`에서만 포함된다.
 - `suggestion`: 사용 패턴 기반 도구 제안.
 - `serverTime`: 응답 생성 시점의 서버 시각. LLM 클라이언트의 학습 시점 시간 고착을 방지하기 위해 모든 recall/context 응답에 일관되게 포함된다. `iso`(UTC ISO 8601), `epoch_ms`(Unix ms), `display_kst`(Asia/Seoul 한국어 표기), `timezone` 4필드 구성.
 
@@ -886,7 +888,7 @@ Core Memory + Working Memory + session_reflect를 분리 로드한다. 세션 �
 
 ### Anchor 선택 메타
 
-응답의 `_meta.anchorSelection`은 `totalLimit`, `workspaceReserve`, `reserveApplied`와 함께 `candidates`, `selected`, `excluded`의 workspace/global/unscoped/total 수를 제공한다. `selected.reservedWorkspace`는 예약 단계에서 먼저 포함된 workspace anchor 수다. `loadStatus`는 각 후보 범위의 조회 성공 여부(적용하지 않은 범위는 `null`)를 나타내고, 하나라도 실패하면 `partial=true`이며 알 수 없는 후보·제외 수는 `null`이다. effective workspace가 있으면 workspace 상위 예약분을 먼저 선택한 뒤, 남은 슬롯을 잔여 workspace와 전역 anchor의 통합 importance 순으로 채운다. workspace가 없으면 reserve 없이 접근 가능한 전체 workspace의 상위 anchor를 선택하며, 그 수를 `unscoped`로 보고한다. workspace 미지정 조회의 격리 정책은 이 선택 규칙과 독립적으로 적용된다.
+응답의 `_meta.anchorSelection`은 `totalLimit`, `workspaceReserve`, `reserveApplied`와 함께 `candidates`, `selected`, `excluded`의 workspace/global/unscoped/total 수를 제공한다. `selected.reservedWorkspace`는 예약 단계에서 먼저 포함된 workspace anchor 수다. `loadStatus`는 각 후보 범위의 조회 성공 여부(적용하지 않은 범위는 `null`)를 나타내고, 하나라도 실패하면 `partial=true`이며 알 수 없는 후보·제외 수는 `null`이다. effective workspace가 있으면 workspace 상위 예약분을 먼저 선택한 뒤, 남은 슬롯을 잔여 workspace와 전역 anchor의 통합 importance 순으로 채운다. effective workspace가 없으면 reserve 없이 현재 허용된 단일 후보 범위의 상위 anchor를 선택하고 그 수를 `unscoped`로 보고한다. 일반 호출에서는 전역(NULL) anchor만 해당하며, 서버가 인증한 master의 `allWorkspaces=true` 호출에서만 전체 workspace 후보를 포함한다.
 
 ---
 

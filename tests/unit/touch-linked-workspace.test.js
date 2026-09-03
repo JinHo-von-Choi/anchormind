@@ -1,5 +1,11 @@
-import { describe, it, mock } from "node:test";
+import { after, describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { teardownTestResources, assertCleanShutdown } from "../_lifecycle.js";
+
+after(async () => {
+  await teardownTestResources();
+  await assertCleanShutdown();
+});
 
 let captured = null;
 
@@ -26,19 +32,18 @@ describe("touchLinked workspace side-effect scope", () => {
     assert.match(captured.sql, /workspace IS NULL/);
   });
 
-  it("명시 workspace와 agent를 UPDATE 대상에 적용", async () => {
+  it("명시 workspace를 UPDATE 대상에 적용", async () => {
     await new FragmentWriter().touchLinked(
       ["fragment-a"], "agent-a", "key-a", { workspace: "ws-a" }
     );
     assert.match(captured.sql, /\(workspace = \$\d+ OR workspace IS NULL\)/);
-    assert.match(captured.sql, /\(agent_id = \$\d+ OR agent_id = 'default'\)/);
     assert.ok(captured.params.includes("ws-a"));
   });
 
   it("allWorkspaces=true만 workspace 조건을 제거", async () => {
     await new FragmentWriter().touchLinked(
       ["fragment-a"], "agent-a", null,
-      { allWorkspaces: true, includePeerAgents: true }
+      { allWorkspaces: true }
     );
     assert.doesNotMatch(captured.sql, /workspace (?:=|IS NULL)/);
   });
@@ -67,8 +72,7 @@ describe("FragmentSearch touchLinked scope propagation", () => {
 
     assert.deepEqual(touchArgs[3], {
       workspace: "ws-a",
-      allWorkspaces: false,
-      includePeerAgents: false
+      allWorkspaces: false
     });
   });
 });

@@ -18,6 +18,14 @@
 ### 업그레이드 주의
 
 - master 키로 workspace를 생략해 전체 기억을 조회하던 관리 호출은 `allWorkspaces=true`를 추가해야 한다. 명시 workspace와 API key `default_workspace`의 의미는 유지된다.
+- `default_workspace`가 없는 공유 키로 저장할 때 workspace를 명시해 왔다면, `recall`과 `context`에도 같은 workspace를 명시해야 한다. 생략하면 이제 전역(`workspace IS NULL`) 범위만 조회하며, 빈 결과 힌트는 workspace를 지정한 재검색을 안내한다.
+- 업그레이드 전에 Redis Working Memory에 들어간 항목은 workspace 필드가 없어 scoped/global-only context에서 안전하게 판정할 수 없으므로 제외된다. master의 `allWorkspaces=true`에서는 조회할 수 있으며, 그 밖에는 해당 WM 목록이 만료·퇴출·삭제될 때까지 남을 수 있다(명목 TTL 24시간, 쓰기 시 갱신).
+
+### Fixed
+
+- case mode 이벤트 조회가 nullable `source_fragment_id`를 활성 파편과 내부 조인해 source 없는 이벤트와 supersede·GC된 source의 과거 이벤트를 누락하던 회귀를 막았다. API 키 요청은 동일 case ID 충돌에 따른 교차 테넌트 노출을 막기 위해 현재 키 그룹의 이벤트만 허용하며, `key_id IS NULL`인 레거시·master 이벤트는 master 조회에서만 반환된다.
+- 업그레이드 전 Redis 세션에 `isMaster` 필드가 없을 때 현재 요청의 인증과 세션 key가 일치하면 master 여부를 안전하게 재앵커링한다. 인증정보가 없거나 key가 다르면 일반 권한으로 유지한다.
+- global-only 빈 결과 안내를 CLI의 table·CSV·JSON 출력에 노출하고, `topic_mismatch`가 함께 감지되더라도 workspace 재검색 안내를 유지한다.
 
 ## [5.9.0] - 2026-08-29
 

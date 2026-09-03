@@ -1,5 +1,11 @@
-import { describe, it, mock } from "node:test";
+import { after, describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { teardownTestResources, assertCleanShutdown } from "../_lifecycle.js";
+
+after(async () => {
+  await teardownTestResources();
+  await assertCleanShutdown();
+});
 
 const queries = [];
 const pool = {

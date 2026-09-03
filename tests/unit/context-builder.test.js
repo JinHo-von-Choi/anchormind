@@ -32,6 +32,13 @@ describe("buildContextHint", () => {
     assert.equal(hint.trigger, "remember");
   });
 
+  it("global-only 빈 컨텍스트는 workspace 재조회 안내", () => {
+    const hint = buildContextHint([], { mode: "global_only" });
+    assert.equal(hint.signal, "empty_context");
+    assert.equal(hint.trigger, "context");
+    assert.match(hint.suggestion, /전역\(workspace 없음\).*workspace를 지정/);
+  });
+
   it("error 없고 파편 존재 시 null 반환", () => {
     const hint = buildContextHint([frag("1", "fact", "ok")]);
     assert.equal(hint, null);
@@ -181,13 +188,20 @@ describe("ContextBuilder.build()", () => {
   it("allWorkspaces=true이면 모든 신규 working memory entry를 허용", async () => {
     indexMock.getWorkingMemory = mock.fn(async () => [
       { id: "a", content: "a", type: "fact", workspace: "ws-a" },
-      { id: "b", content: "b", type: "fact", workspace: "ws-b" }
+      { id: "b", content: "b", type: "fact", workspace: "ws-b" },
+      { id: "legacy", content: "legacy", type: "fact" }
     ]);
 
-    const result = await builder.build({ sessionId: "session-all", allWorkspaces: true });
+    const result = await builder.build({
+      sessionId: "session-all", allWorkspaces: true, _isMaster: true
+    });
     const ids = new Set(result.fragments.map(f => f.id));
     assert.ok(ids.has("a"));
     assert.ok(ids.has("b"));
+    assert.ok(ids.has("legacy"));
+    for (const call of recallMock.mock.calls) {
+      assert.equal(call.arguments[0]._isMaster, true);
+    }
   });
 
   it("중복 ID 파편은 첫 등장만 유지", async () => {

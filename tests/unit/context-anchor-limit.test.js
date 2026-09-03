@@ -348,7 +348,9 @@ describe("ContextBuilder anchor 조회와 응답", () => {
       calls.push({ sql, params });
       return { rows: candidateRows(unscoped).slice(0, params.at(-1)) };
     });
-    const result = await builder.build({ tokenBudget: 1, allWorkspaces: true });
+    const result = await builder.build({
+      tokenBudget: 1, allWorkspaces: true, _isMaster: true
+    });
     assert.equal(calls.length, 1);
     assert.doesNotMatch(calls[0].sql, /AND workspace(?: IS NULL| =)/);
     assert.equal(result.anchorCount, 20);
