@@ -90,7 +90,9 @@ describe("_searchL2 ID 보충 조회 scope 정합", () => {
     return {
       searchByKeywords: async () => [],
       searchByTopic   : async () => [],
-      getByIds        : async () => fetchedRows,
+      searchByTimeRange: async () => fetchedRows.map(row => ({ workspace: null, ...row })),
+      /** 실제 FragmentReader SELECT는 workspace 컬럼을 항상 반환한다. */
+      getByIds        : async () => fetchedRows.map(row => ({ workspace: null, ...row })),
     };
   }
 
@@ -106,6 +108,19 @@ describe("_searchL2 ID 보충 조회 scope 정합", () => {
     );
 
     assert.deepEqual(results, []);
+  });
+
+  it("조건 없는 조회는 L1 recent가 scope에서 소진돼도 DB fallback을 사용한다", async () => {
+    const rows = [
+      { id: "global-old", content: "global", created_at: "2026-01-01T00:00:00Z" }
+    ];
+    const results = await FragmentSearch.prototype._searchL2.call(
+      { store: makeStore(rows) },
+      { keywords: [], workspace: null, allWorkspaces: false },
+      [], "default", null, null
+    );
+
+    assert.deepEqual(results.map(r => r.id), ["global-old"]);
   });
 
   it("topic 일치 파편만 통과한다", async () => {

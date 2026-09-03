@@ -269,6 +269,7 @@ describe("POST /search", () => {
     assert.equal(name, "recall");
     assert.equal(params._keyId, "a");
     assert.deepEqual(params._groupKeyIds, ["a", "b"]);
+    assert.equal(params.allWorkspaces, true);
   });
 
   it("경로·메서드 불일치면 false 반환", async () => {

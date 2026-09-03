@@ -154,6 +154,9 @@
         "agentId": {
           "type": "string"
         },
+        "allWorkspaces": {
+          "type": "boolean"
+        },
         "includeKeyName": {
           "type": "boolean"
         },
@@ -285,6 +288,9 @@
         "affect": {},
         "agentId": {
           "type": "string"
+        },
+        "allWorkspaces": {
+          "type": "boolean"
         },
         "asOf": {
           "type": "string"
@@ -953,6 +959,9 @@
         "agentId": {
           "type": "string"
         },
+        "allWorkspaces": {
+          "type": "boolean"
+        },
         "includeKeyName": {
           "type": "boolean"
         },
@@ -1084,6 +1093,9 @@
         "affect": {},
         "agentId": {
           "type": "string"
+        },
+        "allWorkspaces": {
+          "type": "boolean"
         },
         "asOf": {
           "type": "string"

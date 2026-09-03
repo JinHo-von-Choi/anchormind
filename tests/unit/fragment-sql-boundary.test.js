@@ -51,7 +51,7 @@ const ALLOWED = {
   "memory/link/TemporalLinker.js": 1,
   "memory/processors/EpisodeContinuityService.js": 1,
   "memory/processors/MemoryRecaller.js": 1,
-  "memory/read/CaseRecall.js": 1,
+  "memory/read/CaseRecall.js": 2,
   "memory/read/ContextBuilder.js": 1,
   "memory/read/FragmentReader.js": 13,
   "memory/read/HistoryReconstructor.js": 1,

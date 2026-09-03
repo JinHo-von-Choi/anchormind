@@ -58,18 +58,19 @@ describe("searchByTimeRange 스코프", () => {
 describe("SearchScope type/topic 사후 필터", () => {
   it("type 불일치 파편을 걸러낸다", () => {
     const scope = new SearchScope({ type: "decision" });
-    assert.equal(scope.applyTo({ type: "decision", topic: "x" }), true);
-    assert.equal(scope.applyTo({ type: "fact", topic: "x" }), false);
+    assert.equal(scope.applyTo({ type: "decision", topic: "x", workspace: null }), true);
+    assert.equal(scope.applyTo({ type: "fact", topic: "x", workspace: null }), false);
   });
 
   it("topic 불일치 파편을 걸러낸다", () => {
     const scope = new SearchScope({ topic: "infra" });
-    assert.equal(scope.applyTo({ type: "fact", topic: "infra" }), true);
-    assert.equal(scope.applyTo({ type: "fact", topic: "hr" }), false);
+    assert.equal(scope.applyTo({ type: "fact", topic: "infra", workspace: null }), true);
+    assert.equal(scope.applyTo({ type: "fact", topic: "hr", workspace: null }), false);
   });
 
-  it("미지정 scope는 no-op으로 판정된다", () => {
-    assert.equal(new SearchScope({}).isNoop(), true);
+  it("미지정 scope는 global-only이고 allWorkspaces만 no-op이다", () => {
+    assert.equal(new SearchScope({}).isNoop(), false);
+    assert.equal(new SearchScope({ allWorkspaces: true }).isNoop(), true);
     assert.equal(new SearchScope({ type: "fact" }).isNoop(), false);
     assert.equal(new SearchScope({ topic: "infra" }).isNoop(), false);
   });

@@ -149,8 +149,9 @@ mock.module("../../lib/redis.js", {
 });
 
 const { handleMcpPost }                         = await import("../../lib/handlers/mcp-handler.js");
-const { streamableSessions }                    = await import("../../lib/sessions.js");
+const { streamableSessions, createStreamableSessionWithId } = await import("../../lib/sessions.js");
 const { protocolVersionReanchoredTotal }        = await import("../../lib/metrics.js");
+const { MemoryManager }                         = await import("../../lib/memory/MemoryManager.js");
 
 const MASTER_KEY   = process.env.MEMENTO_ACCESS_KEY;
 const rateLimiter  = { allow: () => true };
@@ -215,6 +216,16 @@ async function callToolsList(sessionId, headers = {}) {
   return { res, body: parseBody(res) };
 }
 
+async function callRecall(sessionId, args, headers = {}) {
+  const req = makeReq(
+    { jsonrpc: "2.0", id: ++_seq, method: "tools/call", params: { name: "recall", arguments: args } },
+    { "mcp-session-id": sessionId, "mcp-protocol-version": "2025-03-26", ...headers }
+  );
+  const res = makeRes();
+  await handleMcpPost(req, res, process.hrtime.bigint(), rateLimiter);
+  return { res, body: parseBody(res) };
+}
+
 /* ==================================================================== */
 /*  테스트                                                                */
 /* ==================================================================== */
@@ -231,6 +242,42 @@ describe("MCP protocol-version 자가치유 — 실제 핸들러 통합 테스�
      */
     streamableSessions.clear();
     _store.clear();
+  });
+
+  it("비master 세션은 위조한 _isMaster와 allWorkspaces 요청을 실제 도구 경계에서 거부", async () => {
+    const sessionId = `non-master-${++_seq}`;
+    await createStreamableSessionWithId(
+      sessionId,
+      true,
+      "key-a",
+      ["key-a"],
+      ["read"],
+      null,
+      null,
+      "2025-03-26",
+      false
+    );
+
+    const mgr = MemoryManager.getInstance();
+    const originalRecall = mgr.recall;
+    const recallSpy = mock.fn(async () => {
+      throw new Error("recall must not be reached");
+    });
+    mgr.recall = recallSpy;
+
+    try {
+      const { res, body } = await callRecall(sessionId, {
+        keywords: ["synthetic"], allWorkspaces: true, _isMaster: true
+      });
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(body?.result?.isError, true);
+      const payload = JSON.parse(body.result.content[0].text);
+      assert.strictEqual(payload.success, false);
+      assert.strictEqual(payload.error, "allWorkspaces requires master authentication");
+      assert.strictEqual(recallSpy.mock.callCount(), 0, "권한 거부 전에 recall을 실행하면 안 된다");
+    } finally {
+      mgr.recall = originalRecall;
+    }
   });
 
   it("I3 (핵심 회귀): negotiatedVersion=2025-03-26 세션에 헤더 2025-06-18로 tools/call → 200 (구 400 mismatch 폐기, R1)", async () => {
@@ -253,6 +300,22 @@ describe("MCP protocol-version 자가치유 — 실제 핸들러 통합 테스�
 
     const { res, body } = await callToolsList(sessionId, { "mcp-protocol-version": "2025-06-18" });
     assert.strictEqual(res.statusCode, 200, `재기동 후 세션 복원 실패: ${JSON.stringify(body)}`);
+  });
+
+  it("구 Redis master 세션은 현재 인증으로 isMaster를 안전하게 재앵커링", async () => {
+    const { sessionId } = await initializeSession({ protocolVersion: "2025-03-26" });
+
+    const legacy = await fakeRedisModule.getSession(sessionId);
+    delete legacy.isMaster;
+    await fakeRedisModule.saveSession(sessionId, legacy, 3600);
+    streamableSessions.delete(sessionId);
+
+    const { res, body } = await callToolsList(sessionId, {
+      "mcp-protocol-version": "2025-03-26"
+    });
+    assert.strictEqual(res.statusCode, 200, JSON.stringify(body));
+    assert.strictEqual(streamableSessions.get(sessionId)?.isMaster, true);
+    assert.strictEqual((await fakeRedisModule.getSession(sessionId))?.isMaster, true);
   });
 
   it("I13: Redis에 stale negotiatedVersion(null)이 저장돼 있어도 복원 시 요청 헤더로 즉시 재앵커링된다 (R2)", async () => {

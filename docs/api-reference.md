@@ -344,7 +344,8 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 | caseMode | boolean | - | CBR 모드. 유사 파편을 case_id별로 그루핑하여 (goal, events, outcome) 트리플로 반환. 과거 유사 작업 해결 사례 참조 시 사용. |
 | maxCases | number | - | caseMode에서 반환할 최대 케이스 수. 기본 5, 상한 10. |
 | depth | string | - | 검색 깊이 필터. "high-level" / "detail" / "tool-level". 상세 설명은 아래 참조. |
-| workspace | string | - | 검색 범위 제한. 지정 시 해당 workspace + 전역(NULL) 파편만 반환. |
+| workspace | string | - | 검색 범위 제한. 지정 시 해당 workspace + 전역(NULL), 미지정 시 key default + 전역(NULL), 둘 다 없으면 전역(NULL)만 반환. |
+| allWorkspaces | boolean | - | master 전용 전체 workspace 조회. 일반 API key가 true를 요청하면 권한 오류. |
 | contextText | string | - | 현재 대화 맥락 텍스트. 관련 파편을 선제적으로 활성화 (ENABLE_SPREADING_ACTIVATION=true 시). |
 | cursor | string | - | 정렬 위치와 고정 `anchorTime`을 담은 기존 호환 불투명 페이지네이션 커서 |
 | pageSize | number | - | 기본 20, 최대 50 |
@@ -379,7 +380,9 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 `_meta`: recall/context 응답 최상위의 메타데이터 래퍼.
 
 - `searchEventId`: 검색 이벤트 식별자. 후속 `tool_feedback` 호출 시 FK로 사용.
-- `hints`: 검색 결과 신호 배열(`no_results`, `topic_mismatch`, `contradiction_pending`, `stale_results`, `active_errors` 등). `topic_mismatch`는 지정한 topic으로 0건이면서 키 스코프 내에 유사 topic이 존재할 때 발화하며 제안된 topic으로의 재검색을 권고한다. `contradiction_pending`은 반환 파편에 미해결 contradicts 링크가 있을 때 발화하며 amend 정리를 권고한다.
+- `hints`: 검색 결과 신호 배열(`no_results`, `topic_mismatch`, `contradiction_pending`, `stale_results`, `active_errors` 등). `topic_mismatch`는 지정한 topic으로 0건이면서 키 스코프 내에 유사 topic이 존재할 때 발화하며 제안된 topic으로의 재검색을 권고한다. `contradiction_pending`은 반환 파편에 미해결 contradicts 링크가 있을 때 발화하며 amend 정리를 권고한다. workspace와 key default를 모두 생략한 global-only 조회가 0건이면 `no_results`의 제안은 해당 workspace를 지정해 재검색하도록 안내한다.
+
+`default_workspace`가 없는 공유 키에서 저장 시 workspace를 명시했다면 recall/context에도 같은 workspace를 전달해야 한다. 생략한 조회는 전역(NULL) 파편만 대상으로 하므로 저장된 workspace 파편이 사라진 것처럼 보일 수 있다. 업그레이드 전 Redis Working Memory 항목은 workspace 필드가 없어 scoped/global-only context에서 제외되며, master의 `allWorkspaces=true`에서만 포함된다.
 - `suggestion`: 사용 패턴 기반 도구 제안.
 - `serverTime`: 응답 생성 시점의 서버 시각. LLM 클라이언트의 학습 시점 시간 고착을 방지하기 위해 모든 recall/context 응답에 일관되게 포함된다. `iso`(UTC ISO 8601), `epoch_ms`(Unix ms), `display_kst`(Asia/Seoul 한국어 표기), `timezone` 4필드 구성.
 
@@ -878,13 +881,14 @@ Core Memory + Working Memory + session_reflect를 분리 로드한다. 세션 �
 | types | string[] | - | 로드할 유형 목록 (기본: preference, error, procedure) |
 | sessionId | string | - | 세션 ID (Working Memory 로드용) |
 | agentId | string | - | 에이전트 ID |
-| workspace | string | - | 워크스페이스 필터. 지정 시 해당 workspace 파편 + 전역(NULL) 파편만 반환. 미지정 시 키의 default_workspace 적용. |
+| workspace | string | - | 워크스페이스 필터. 지정 시 해당 workspace + 전역(NULL), 미지정 시 key default + 전역(NULL), 둘 다 없으면 전역(NULL)만 반환. |
+| allWorkspaces | boolean | - | master 전용 전체 workspace context 조회. anchor/core/learning/working memory에 동일 적용. |
 | structured | boolean | - | true 시 계층적 트리 구조 반환, false/미지정 시 기존 flat list (기본값: false) |
 | includeKeyName | boolean | - | true 시 fragments 각 항목에 key_id와 key_name(액세스 키 라벨)을 포함한다. 같은 키 그룹 스코프의 정보만 노출되며, structured=true 트리 응답에는 적용되지 않는다. 기본 false. |
 
 ### Anchor 선택 메타
 
-응답의 `_meta.anchorSelection`은 `totalLimit`, `workspaceReserve`, `reserveApplied`와 함께 `candidates`, `selected`, `excluded`의 workspace/global/unscoped/total 수를 제공한다. `selected.reservedWorkspace`는 예약 단계에서 먼저 포함된 workspace anchor 수다. `loadStatus`는 각 후보 범위의 조회 성공 여부(적용하지 않은 범위는 `null`)를 나타내고, 하나라도 실패하면 `partial=true`이며 알 수 없는 후보·제외 수는 `null`이다. effective workspace가 있으면 workspace 상위 예약분을 먼저 선택한 뒤, 남은 슬롯을 잔여 workspace와 전역 anchor의 통합 importance 순으로 채운다. workspace가 없으면 reserve 없이 접근 가능한 전체 workspace의 상위 anchor를 선택하며, 그 수를 `unscoped`로 보고한다. workspace 미지정 조회의 격리 정책은 이 선택 규칙과 독립적으로 적용된다.
+응답의 `_meta.anchorSelection`은 `totalLimit`, `workspaceReserve`, `reserveApplied`와 함께 `candidates`, `selected`, `excluded`의 workspace/global/unscoped/total 수를 제공한다. `selected.reservedWorkspace`는 예약 단계에서 먼저 포함된 workspace anchor 수다. `loadStatus`는 각 후보 범위의 조회 성공 여부(적용하지 않은 범위는 `null`)를 나타내고, 하나라도 실패하면 `partial=true`이며 알 수 없는 후보·제외 수는 `null`이다. effective workspace가 있으면 workspace 상위 예약분을 먼저 선택한 뒤, 남은 슬롯을 잔여 workspace와 전역 anchor의 통합 importance 순으로 채운다. effective workspace가 없으면 reserve 없이 현재 허용된 단일 후보 범위의 상위 anchor를 선택하고 그 수를 `unscoped`로 보고한다. 일반 호출에서는 전역(NULL) anchor만 해당하며, 서버가 인증한 master의 `allWorkspaces=true` 호출에서만 전체 workspace 후보를 포함한다.
 
 ---
 

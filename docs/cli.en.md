@@ -224,6 +224,10 @@ Options:
 | `--type <t>` | Fragment type filter (fact, error, procedure, decision, preference, episode) |
 | `--limit <n>` | Maximum results to return (default: 10) |
 | `--time-range from,to` | Date range filter (ISO 8601) |
+| `--workspace <name>` | Search that workspace plus global (NULL) fragments |
+| `--all-workspaces` | Master-only explicit cross-workspace search |
+
+Without a workspace or key default, recall searches global (NULL) fragments only. If writes used an explicit workspace, pass that same `--workspace` when reading; an empty-result hint calls out this scope difference. Use `--all-workspaces` explicitly for the former master-wide behavior.
 
 Help:
 

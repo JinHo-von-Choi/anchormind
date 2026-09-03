@@ -100,11 +100,11 @@ describe("SearchScope.applyTo", () => {
     };
   }
 
-  it("빈 scope(no-op)는 모든 fragment를 통과시켜야 한다", () => {
+  it("빈 scope는 전역(NULL) fragment만 통과시켜야 한다", () => {
     const scope = new SearchScope({});
-    assert.strictEqual(scope.isNoop(), true);
+    assert.strictEqual(scope.isNoop(), false);
     assert.strictEqual(scope.applyTo(makeFragment()), true);
-    assert.strictEqual(scope.applyTo(makeFragment({ workspace: "any", case_id: "x" })), true);
+    assert.strictEqual(scope.applyTo(makeFragment({ workspace: "any", case_id: "x" })), false);
   });
 
   it("null fragment는 false를 반환해야 한다", () => {
@@ -114,9 +114,17 @@ describe("SearchScope.applyTo", () => {
   });
 
   describe("workspace 필터", () => {
-    it("scope.workspace가 null이면 모든 workspace를 통과시킨다", () => {
+    it("scope.workspace가 null이면 전역만 통과시킨다", () => {
       const scope = new SearchScope({ workspace: null });
+      assert.strictEqual(scope.applyTo(makeFragment({ workspace: "ws-A" })), false);
+      assert.strictEqual(scope.applyTo(makeFragment({ workspace: null })), true);
+    });
+
+    it("allWorkspaces=true일 때만 모든 workspace를 통과시킨다", () => {
+      const scope = new SearchScope({ allWorkspaces: true });
+      assert.strictEqual(scope.isNoop(), true);
       assert.strictEqual(scope.applyTo(makeFragment({ workspace: "ws-A" })), true);
+      assert.strictEqual(scope.applyTo(makeFragment({ workspace: "ws-B" })), true);
       assert.strictEqual(scope.applyTo(makeFragment({ workspace: null })), true);
     });
 
@@ -130,7 +138,7 @@ describe("SearchScope.applyTo", () => {
 
   describe("caseId 필터", () => {
     it("scope.caseId가 undefined이면 모든 case_id를 통과시킨다", () => {
-      const scope = new SearchScope({});
+      const scope = new SearchScope({ allWorkspaces: true });
       assert.strictEqual(scope.applyTo(makeFragment({ case_id: "any" })), true);
     });
 
@@ -176,7 +184,7 @@ describe("SearchScope.applyTo", () => {
     });
 
     it("scope.affect가 미지정이면 모든 affect를 통과시킨다", () => {
-      const scope = new SearchScope({});
+      const scope = new SearchScope({ allWorkspaces: true });
       assert.strictEqual(scope.applyTo(makeFragment({ affect: "frustration" })), true);
       assert.strictEqual(scope.applyTo(makeFragment({ affect: null })), true);
     });

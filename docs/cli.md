@@ -226,6 +226,10 @@ MEMENTO_CLI_REMOTE=https://memento.anchormind.net/mcp MEMENTO_CLI_KEY=mmcp_xxx \
 | `--type <t>` | 파편 유형 필터 (fact, error, procedure, decision, preference, episode) |
 | `--limit <n>` | 반환 건수 상한 (기본: 10) |
 | `--time-range from,to` | 날짜 범위 필터 (ISO 8601) |
+| `--workspace <name>` | 해당 workspace + 전역(NULL) 파편 검색 |
+| `--all-workspaces` | master 전용 전체 workspace 검색 |
+
+workspace와 key default를 모두 생략하면 전역(NULL) 파편만 검색한다. 저장할 때 workspace를 명시했다면 조회에도 같은 `--workspace`를 전달해야 한다. 빈 결과 힌트는 이 범위 차이를 안내한다. 종전 master 전체 검색 동작이 필요하면 `--all-workspaces`를 명시한다.
 
 도움말:
 
