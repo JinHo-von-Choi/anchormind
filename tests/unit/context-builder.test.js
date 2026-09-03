@@ -11,11 +11,19 @@
 import { describe, it, mock, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
-import { ContextBuilder, buildContextHint, buildRankedInjection } from "../../lib/memory/read/ContextBuilder.js";
+import {
+  ContextBuilder,
+  buildContextHint,
+  buildRankedInjection,
+  collectGuaranteedContextFragments,
+  deduplicateContextSections,
+  seedGuaranteed,
+  selectGuaranteedCoreFragments
+} from "../../lib/memory/read/ContextBuilder.js";
 
 /* ── 헬퍼: 파편 팩토리 ── */
 function frag(id, type, content, extra = {}) {
-  return { id, type, content, importance: 0.5, ...extra };
+  return { id, type, content, importance: 0.5, workspace: null, ...extra };
 }
 
 /* ── buildContextHint 단위 테스트 ── */
@@ -71,6 +79,101 @@ describe("buildRankedInjection", () => {
     const result = buildRankedInjection(anchors, others, 100, weights);
     assert.equal(result.items.length, 1);
     assert.equal(result.items[0].id, "o1");
+  });
+
+  it("앵커가 예산을 소진해도 비앵커 최소 슬롯을 유지한다", () => {
+    const anchors = [frag("a1", "anchor", "a".repeat(400), { importance: 1.0 })];
+    const core    = frag("core-1", "fact", "core context", { importance: 0.8 });
+    const result  = buildRankedInjection(anchors, [core], 10, weights, null, [core]);
+
+    assert.deepEqual(result.items.map(item => item.id), ["a1", "core-1"]);
+    assert.ok(result.totalTokens > 10);
+  });
+});
+
+describe("deduplicateContextSections", () => {
+  it("anchor > core > learning > working 순으로 동일 ID의 섹션 소유권을 정한다", () => {
+    const duplicate = id => frag("shared-id", "fact", `${id} content`);
+    const result = deduplicateContextSections({
+      anchor  : [duplicate("anchor")],
+      core    : [duplicate("core"), frag("core-only", "fact", "core only")],
+      learning: [duplicate("learning"), frag("learning-only", "fact", "learning only")],
+      working : [duplicate("working"), frag("working-only", "fact", "working only")]
+    });
+
+    assert.deepEqual(result.anchor.map(item => item.content), ["anchor content"]);
+    assert.deepEqual(result.core.map(item => item.id), ["core-only"]);
+    assert.deepEqual(result.learning.map(item => item.id), ["learning-only"]);
+    assert.deepEqual(result.working.map(item => item.id), ["working-only"]);
+  });
+
+  it("core 유형별 하나와 learning/working 하나씩을 최소 슬롯으로 고른다", () => {
+    const sections = {
+      core: [
+        frag("fact-1", "fact", "first fact"),
+        frag("fact-2", "fact", "second fact"),
+        frag("error-1", "error", "first error")
+      ],
+      learning: [frag("learning-1", "fact", "learning")],
+      working : [frag("working-1", "fact", "working")]
+    };
+
+    assert.deepEqual(
+      collectGuaranteedContextFragments(sections).map(item => item.id),
+      ["fact-1", "error-1", "learning-1", "working-1"]
+    );
+  });
+
+  it("여러 provenance 버킷이 같은 core ID를 가리켜도 최소 슬롯을 중복 계산하지 않는다", () => {
+    const retained = frag("shared-core", "fact", "shared");
+    const duplicateProvenance = frag("shared-core", "fact", "same persisted fragment");
+
+    assert.deepEqual(
+      collectGuaranteedContextFragments(
+        { core: [retained], learning: [], working: [] },
+        [retained, duplicateProvenance]
+      ).map(item => item.id),
+      ["shared-core"]
+    );
+  });
+
+  it("앵커가 core 버킷의 상위 ID를 차지하면 차순위가 최소 슬롯을 승계한다", () => {
+    const anchor = frag("shared", "fact", "anchor owner");
+    const next = frag("next", "fact", "next core");
+    const typeFragMap = new Map([["fact", [anchor, next]]]);
+
+    assert.deepEqual(
+      selectGuaranteedCoreFragments(["fact"], typeFragMap, [anchor]).map(item => item.id),
+      ["next"]
+    );
+  });
+
+  it("core provenance 버킷 간 중복 ID는 문자 예산을 이중 계산하지 않는다", () => {
+    const shared = frag("shared", "fact", "a".repeat(40));
+    const fallback = frag("fallback", "fact", "b".repeat(30));
+    const result = seedGuaranteed(
+      ["fact", "session_reflect"],
+      new Map([
+        ["fact", [shared]],
+        ["session_reflect", [shared, fallback]]
+      ])
+    );
+
+    assert.equal(result.usedChars, 70);
+    assert.deepEqual(
+      [...result.guaranteed.values()].flat().map(item => item.id),
+      ["shared", "fallback"]
+    );
+  });
+
+  it("ID 없는 동일 객체 참조는 한 번만 유지하고 서로 다른 객체는 보존한다", () => {
+    const shared = { type: "fact", content: "shared temporary fragment" };
+    const distinct = { type: "fact", content: "shared temporary fragment" };
+    const result = deduplicateContextSections({
+      anchor: [], core: [], learning: [shared, shared, distinct], working: []
+    });
+
+    assert.deepEqual(result.learning, [shared, distinct]);
   });
 });
 
@@ -165,8 +268,11 @@ describe("ContextBuilder.build()", () => {
       assert.equal(call.arguments[0].allWorkspaces, false);
     }
     const sourceArgs = storeMock.searchBySource.mock.calls[0].arguments;
-    assert.equal(sourceArgs[4], "ws-a");
-    assert.equal(sourceArgs[5], false);
+    assert.deepEqual(sourceArgs[4], {
+      workspace: "ws-a",
+      allWorkspaces: false,
+      isAnchor: false
+    });
   });
 
   it("working memory에서 다른 workspace와 legacy entry를 제외", async () => {
@@ -230,6 +336,194 @@ describe("ContextBuilder.build()", () => {
     assert.ok(result.learning);
     assert.ok(result.rankedInjection);
     assert.equal(typeof result.count, "number");
+  });
+
+  it("structured 출력의 모든 표현과 통계가 dedup 이후 ID 집합을 공유한다", async () => {
+    const shared = "shared-id";
+    recallMock = mock.fn(async (params) => {
+      if (params.topic === "session_reflect") return { fragments: [] };
+      return { fragments: [frag(shared, params.type, "core duplicate")] };
+    });
+    indexMock.getWorkingMemory = mock.fn(async () => [
+      frag(shared, "fact", "working duplicate"),
+      frag("working-only", "fact", "working only")
+    ]);
+    storeMock.searchBySource = mock.fn(async () => [
+      frag(shared, "fact", "learning duplicate", { source: "learning_extraction", is_anchor: false }),
+      frag("learning-only", "fact", "learning only", { source: "learning_extraction", is_anchor: false })
+    ]);
+    const pool = {
+      query: mock.fn(async () => ({
+        rows: [frag(shared, "fact", "anchor owner", { is_anchor: true })]
+      }))
+    };
+    builder = new ContextBuilder({
+      recall: recallMock,
+      store : storeMock,
+      index : indexMock,
+      getPool: () => pool
+    });
+
+    const result = await builder.build({
+      structured : true,
+      sessionId  : "synthetic-session",
+      workspace  : "synthetic-workspace",
+      types      : ["fact"],
+      tokenBudget: 2000
+    });
+
+    const fragmentIds = result.fragments.map(item => item.id);
+    const treeIds = [
+      ...result.anchors.permanent,
+      ...Object.values(result.core).flat(),
+      ...result.learning.recent,
+      ...result.working.current_session
+    ].map(item => item.id);
+    const rankedIds = result.rankedInjection.items.map(item => item.id);
+
+    assert.deepEqual(new Set(fragmentIds), new Set(treeIds));
+    assert.deepEqual(new Set(fragmentIds), new Set(rankedIds));
+    assert.equal(fragmentIds.length, new Set(fragmentIds).size);
+    assert.equal(treeIds.length, new Set(treeIds).size);
+    assert.equal(result.fragments.find(item => item.id === shared).content, "anchor owner");
+    assert.equal((result.injectionText.match(/anchor owner/g) || []).length, 1);
+    assert.doesNotMatch(result.injectionText, /core duplicate|learning duplicate|working duplicate/);
+    assert.equal(result.count, fragmentIds.length);
+    assert.equal(
+      result.totalTokens,
+      result.anchorTokens + result.coreTokens + result.learningTokens + result.wmTokens
+    );
+    assert.deepEqual(storeMock.searchBySource.mock.calls[0].arguments[4], {
+      workspace: "synthetic-workspace",
+      allWorkspaces: false,
+      isAnchor: false
+    });
+  });
+
+  it("앵커가 structured 예산을 넘겨도 비앵커 섹션 최소 슬롯을 함께 보존한다", async () => {
+    recallMock = mock.fn(async (params) => {
+      if (params.topic === "session_reflect") return { fragments: [] };
+      return { fragments: [frag("core-only", params.type, "c".repeat(80))] };
+    });
+    indexMock.getWorkingMemory = mock.fn(async () => [
+      frag("working-only", "fact", "w".repeat(80))
+    ]);
+    storeMock.searchBySource = mock.fn(async () => [
+      frag("learning-only", "fact", "l".repeat(80), { source: "learning_extraction" })
+    ]);
+    builder = new ContextBuilder({
+      recall: recallMock,
+      store : storeMock,
+      index : indexMock,
+      getPool: () => ({
+        query: async () => ({
+          rows: Array.from({ length: 10 }, (_, index) =>
+            frag(`anchor-${index}`, "fact", "a".repeat(900), { is_anchor: true })
+          )
+        })
+      })
+    });
+
+    const result = await builder.build({
+      structured : true,
+      sessionId  : "synthetic-session",
+      types      : ["fact"],
+      tokenBudget: 2000
+    });
+
+    const fragmentIds = result.fragments.map(item => item.id);
+    assert.equal(result.anchors.permanent.length, 10);
+    assert.deepEqual(fragmentIds.slice(-3), ["core-only", "learning-only", "working-only"]);
+    assert.deepEqual(result.rankedInjection.items.map(item => item.id), fragmentIds);
+    assert.equal(result.rankedInjection.totalTokens, result.totalTokens);
+    assert.equal(result.count, 13);
+    assert.ok(result.totalTokens > 2000);
+    assert.ok(result.coreTokens > 0);
+    assert.ok(result.learningTokens > 0);
+    assert.ok(result.wmTokens > 0);
+    assert.match(result.injectionText, /\[CORE MEMORY\]/);
+    assert.match(result.injectionText, /\[LEARNING MEMORY\]/);
+    assert.match(result.injectionText, /\[WORKING MEMORY\]/);
+  });
+
+  it("앵커와 core 상위 ID가 겹쳐도 tiny budget에서 차순위 core를 보존한다", async () => {
+    recallMock = mock.fn(async (params) => {
+      if (params.topic === "session_reflect") return { fragments: [] };
+      return {
+        fragments: [
+          frag("shared", params.type, "shared core", { importance: 1 }),
+          frag("core-fallback", params.type, "fallback core", { importance: 0.8 })
+        ]
+      };
+    });
+    builder = new ContextBuilder({
+      recall: recallMock,
+      store: storeMock,
+      index: indexMock,
+      getPool: () => ({
+        query: async () => ({
+          rows: [frag("shared", "fact", "anchor owner", { is_anchor: true, importance: 1 })]
+        })
+      })
+    });
+
+    const result = await builder.build({ structured: true, types: ["fact"], tokenBudget: 1 });
+    assert.deepEqual(result.fragments.map(item => item.id), ["shared", "core-fallback"]);
+    assert.deepEqual(result.rankedInjection.items.map(item => item.id), ["shared", "core-fallback"]);
+  });
+
+  it("flat 응답도 같은 토큰 선택을 적용해 추가 후보를 절삭한다", async () => {
+    recallMock = mock.fn(async (params) => {
+      if (params.topic === "session_reflect") return { fragments: [] };
+      return {
+        fragments: [
+          frag("core-guaranteed", params.type, "g".repeat(400), { importance: 0.9 }),
+          frag("core-extra", params.type, "x".repeat(400), { importance: 0.8 })
+        ]
+      };
+    });
+    builder = new ContextBuilder({ recall: recallMock, store: storeMock, index: indexMock, getPool: () => null });
+
+    const result = await builder.build({ types: ["fact"], tokenBudget: 100 });
+
+    assert.deepEqual(result.fragments.map(item => item.id), ["core-guaranteed"]);
+    assert.match(result.injectionText, /g{100}/);
+    assert.doesNotMatch(result.injectionText, /x{100}/);
+    assert.equal(result.totalTokens, 100);
+  });
+
+  it("ID 없는 추가 후보도 ranked 선택에서 빠지면 flat/structured 출력에서 제외한다", async () => {
+    recallMock = mock.fn(async (params) => {
+      if (params.topic === "session_reflect") return { fragments: [] };
+      return {
+        fragments: [
+          frag("core-guaranteed", params.type, "g".repeat(400), { importance: 0.9 }),
+          { type: params.type, content: "x".repeat(400), importance: 0.8 }
+        ]
+      };
+    });
+    builder = new ContextBuilder({ recall: recallMock, store: storeMock, index: indexMock, getPool: () => null });
+
+    const result = await builder.build({ structured: true, types: ["fact"], tokenBudget: 100 });
+
+    assert.equal(result.fragments.length, 1);
+    assert.deepEqual(result.rankedInjection.items.map(item => item.id), ["core-guaranteed"]);
+    assert.doesNotMatch(result.injectionText, /x{100}/);
+  });
+
+  it("session_reflect 버킷은 일반 fact와 type이 같아도 별도 최소 슬롯을 유지한다", async () => {
+    recallMock = mock.fn(async (params) => {
+      if (params.topic === "session_reflect") {
+        return { fragments: [frag("reflect-guaranteed", "fact", "r".repeat(400))] };
+      }
+      return { fragments: [frag("fact-guaranteed", "fact", "f".repeat(400))] };
+    });
+    builder = new ContextBuilder({ recall: recallMock, store: storeMock, index: indexMock, getPool: () => null });
+
+    const result = await builder.build({ types: ["fact"], tokenBudget: 100 });
+
+    assert.deepEqual(result.fragments.map(item => item.id), ["fact-guaranteed", "reflect-guaranteed"]);
+    assert.ok(result.totalTokens > 100);
   });
 
   it("파편이 비어 있으면 _memento_hint에 empty_context 포함", async () => {

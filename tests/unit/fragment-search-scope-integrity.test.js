@@ -75,6 +75,14 @@ describe("_searchL1 명시 필터 교집합 계약", () => {
     assert.equal(result.isFallback, true);
   });
 
+  it("isAnchor 단독 조건은 recent 후보를 hydration 대상으로 유지한다", async () => {
+    const index  = fakeIndex({ recent: ["anchor-candidate", "non-anchor-candidate"] });
+    const result = await searchL1(index, { isAnchor: false });
+
+    assert.deepEqual(result.ids, ["anchor-candidate", "non-anchor-candidate"]);
+    assert.equal(result.isFallback, false);
+  });
+
   it("keyword hit + topic hit → 교집합 정상 동작", async () => {
     const index  = fakeIndex({ keywords: ["a", "b", "c"], topic: ["b", "c", "d"] });
     const result = await searchL1(index, { keywords: ["release"], topic: "memento-mcp" });
@@ -90,16 +98,15 @@ describe("_searchL2 ID 보충 조회 scope 정합", () => {
     return {
       searchByKeywords: async () => [],
       searchByTopic   : async () => [],
-      searchByTimeRange: async () => fetchedRows.map(row => ({ workspace: null, ...row })),
-      /** 실제 FragmentReader SELECT는 workspace 컬럼을 항상 반환한다. */
-      getByIds        : async () => fetchedRows.map(row => ({ workspace: null, ...row })),
+      searchByTimeRange: async () => fetchedRows,
+      getByIds        : async () => fetchedRows,
     };
   }
 
   it("보충 조회 결과에서 topic 불일치 파편이 걸러진다", async () => {
     const rows = [
-      { id: "f1", content: "x", topic: "memento-mcp",   type: "fact", created_at: "2026-08-01T00:00:00Z" },
-      { id: "f2", content: "y", topic: "session_reflect", type: "fact", created_at: "2026-08-01T00:00:00Z" },
+      { id: "f1", content: "x", topic: "memento-mcp",   type: "fact", created_at: "2026-08-01T00:00:00Z", workspace: null },
+      { id: "f2", content: "y", topic: "session_reflect", type: "fact", created_at: "2026-08-01T00:00:00Z", workspace: null },
     ];
     const results = await FragmentSearch.prototype._searchL2.call(
       { store: makeStore(rows) },
@@ -112,7 +119,7 @@ describe("_searchL2 ID 보충 조회 scope 정합", () => {
 
   it("조건 없는 조회는 L1 recent가 scope에서 소진돼도 DB fallback을 사용한다", async () => {
     const rows = [
-      { id: "global-old", content: "global", created_at: "2026-01-01T00:00:00Z" }
+      { id: "global-old", content: "global", created_at: "2026-01-01T00:00:00Z", workspace: null }
     ];
     const results = await FragmentSearch.prototype._searchL2.call(
       { store: makeStore(rows) },
@@ -125,8 +132,8 @@ describe("_searchL2 ID 보충 조회 scope 정합", () => {
 
   it("topic 일치 파편만 통과한다", async () => {
     const rows = [
-      { id: "f1", content: "x", topic: "memento-mcp", type: "fact", created_at: "2026-08-01T00:00:00Z" },
-      { id: "f2", content: "y", topic: "arcana",      type: "fact", created_at: "2026-08-01T00:00:00Z" },
+      { id: "f1", content: "x", topic: "memento-mcp", type: "fact", created_at: "2026-08-01T00:00:00Z", workspace: null },
+      { id: "f2", content: "y", topic: "arcana",      type: "fact", created_at: "2026-08-01T00:00:00Z", workspace: null },
     ];
     const results = await FragmentSearch.prototype._searchL2.call(
       { store: makeStore(rows) },
@@ -139,8 +146,8 @@ describe("_searchL2 ID 보충 조회 scope 정합", () => {
 
   it("type 필터도 보충 조회에 적용된다", async () => {
     const rows = [
-      { id: "f1", content: "x", topic: "t", type: "error",     created_at: "2026-08-01T00:00:00Z" },
-      { id: "f2", content: "y", topic: "t", type: "procedure", created_at: "2026-08-01T00:00:00Z" },
+      { id: "f1", content: "x", topic: "t", type: "error",     created_at: "2026-08-01T00:00:00Z", workspace: null },
+      { id: "f2", content: "y", topic: "t", type: "procedure", created_at: "2026-08-01T00:00:00Z", workspace: null },
     ];
     const results = await FragmentSearch.prototype._searchL2.call(
       { store: makeStore(rows) },
@@ -153,8 +160,8 @@ describe("_searchL2 ID 보충 조회 scope 정합", () => {
 
   it("timeRange가 보충 조회에 적용된다", async () => {
     const rows = [
-      { id: "old", content: "x", created_at: "2026-01-01T00:00:00Z" },
-      { id: "new", content: "y", created_at: "2026-08-10T00:00:00Z" },
+      { id: "old", content: "x", created_at: "2026-01-01T00:00:00Z", workspace: null },
+      { id: "new", content: "y", created_at: "2026-08-10T00:00:00Z", workspace: null },
     ];
     const results = await FragmentSearch.prototype._searchL2.call(
       { store: makeStore(rows) },
@@ -164,6 +171,67 @@ describe("_searchL2 ID 보충 조회 scope 정합", () => {
     );
 
     assert.deepEqual(results.map(r => r.id), ["new"]);
+  });
+
+  it("isAnchor 단독 조건은 L2 DB 경로에서 true/false를 필터링한다", async () => {
+    const rows = [
+      { id: "anchor", content: "a", is_anchor: true },
+      { id: "non-anchor", content: "b", is_anchor: false }
+    ];
+    const calls = [];
+    const store = {
+      searchByKeywords : async () => [],
+      searchByTopic    : async () => [],
+      searchByTimeRange: async (from, to, options) => {
+        calls.push({ from, to, options });
+        return rows.filter(row => row.is_anchor === options.isAnchor);
+      },
+      getByIds: async () => []
+    };
+
+    for (const isAnchor of [true, false]) {
+      const results = await FragmentSearch.prototype._searchL2.call(
+        { store },
+        { isAnchor },
+        [], "default", null, null
+      );
+      assert.deepEqual(results.map(row => row.is_anchor), [isAnchor]);
+    }
+    assert.deepEqual(calls.map(call => call.options.isAnchor), [true, false]);
+  });
+
+  it("isAnchor 단독 + includeSuperseded=true는 true/false 각각 만료 파편을 보존한다", async () => {
+    const rows = [
+      { id: "anchor-active", is_anchor: true, valid_to: null },
+      { id: "anchor-expired", is_anchor: true, valid_to: "2026-01-01T00:00:00Z" },
+      { id: "non-anchor-active", is_anchor: false, valid_to: null },
+      { id: "non-anchor-expired", is_anchor: false, valid_to: "2026-01-01T00:00:00Z" }
+    ];
+    const calls = [];
+    const store = {
+      searchByKeywords : async () => [],
+      searchByTopic    : async () => [],
+      searchByTimeRange: async (_from, _to, options) => {
+        calls.push(options);
+        return rows.filter(row =>
+          row.is_anchor === options.isAnchor &&
+          (options.includeSuperseded || !row.valid_to)
+        );
+      },
+      getByIds: async () => []
+    };
+
+    for (const isAnchor of [true, false]) {
+      const results = await FragmentSearch.prototype._searchL2.call(
+        { store },
+        { isAnchor, includeSuperseded: true },
+        [], "default", null, null
+      );
+      assert.equal(results.length, 2);
+      assert.ok(results.some(row => row.valid_to));
+      assert.ok(results.every(row => row.is_anchor === isAnchor));
+    }
+    assert.deepEqual(calls.map(options => options.includeSuperseded), [true, true]);
   });
 });
 
@@ -200,5 +268,28 @@ describe("mergeRRF ID-only 항목 승격", () => {
 
     const ghost = merged.find(f => f.id === "ghost");
     assert.equal(ghost.content, undefined);
+  });
+});
+
+describe("_searchTemporal includeSuperseded 전달", () => {
+  it("temporal reader에 includeSuperseded=true를 전달한다", async () => {
+    let capturedOptions;
+    const store = {
+      searchByTimeRange: async (_from, _to, options) => {
+        capturedOptions = options;
+        return [];
+      }
+    };
+    await FragmentSearch.prototype._searchTemporal.call(
+      { store },
+      {
+        timeRange: { from: null, to: null },
+        agentId: "synthetic-agent",
+        keyId: null,
+        workspace: null,
+        includeSuperseded: true
+      }
+    );
+    assert.equal(capturedOptions.includeSuperseded, true);
   });
 });

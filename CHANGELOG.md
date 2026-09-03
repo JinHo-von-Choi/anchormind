@@ -10,6 +10,9 @@
 
 - 검색·캐시·그래프·컨텍스트의 기존 주 점수 의미는 유지하면서 동점 결과를 `created_at DESC, id ASC`로 결정적으로 정렬한다. 기존 내림차순 인덱스와 offset cursor 계약은 유지하며, ANN 검색은 인덱스가 고른 후보 집합 안에서만 동점을 정렬한다.
 - context anchor 기본 상한을 10개에서 20개로 변경한다. effective workspace에 기본 10개를 예약하면서도 나머지 10개를 잔여 workspace/global 통합 순위에 남기기 위한 의도적인 주입량 변경이다. Anchor는 `tokenBudget` 절삭 대상이 아니므로 최악 주입량이 종전의 2배가 될 수 있으며, 기존 주입량이 필요한 배포는 `MEMENTO_CONTEXT_ANCHOR_LIMIT=10`으로 유지할 수 있다. Reserve를 따로 지정하지 않으면 total/2를 내림한 값(최대 10)으로 유도해 total만 낮춘 기존 배포의 기동 실패와 workspace 예약분의 자동 독점을 피한다.
+- `recall.isAnchor`의 true/false/미지정 계약을 캐시·그래프·링크·케이스 확장까지 일관되게 적용한다. 검색 진입점과 링크 조회의 null도 미지정으로 정규화한다. case event 타임라인은 source 파편의 현재 앵커 상태와 분리해 과거 이력을 보존한다. `caseMode.fragment_count`는 키 그룹·workspace·유효 상태·앵커 필터를 적용한 대표 후보 수로 정의한다.
+- API 키로 `caseMode`를 호출하면 대표 파편과 이벤트를 현재 키 그룹 범위로 제한한다. master가 기록해 `key_id IS NULL`인 이벤트는 API 키 응답에서 제외되며, master 호출은 종전처럼 전체 이벤트를 조회한다.
+- `context`는 fragment ID 중복을 제거하고 Anchor/Core/Learning/Working의 최소 슬롯을 보장한 뒤, flat·structured·주입 텍스트·순위 목록에 같은 선택 집합과 토큰 통계를 사용한다. 최소 보장 슬롯 때문에 `tokenBudget`은 soft target으로 동작할 수 있다.
 
 ### Security
 

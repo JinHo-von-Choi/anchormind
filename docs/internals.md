@@ -17,7 +17,7 @@ MemoryManager는 thin facade다. 비즈니스 로직은 `lib/memory/processors/`
 
 | 모듈 | 위임 대상 | 역할 |
 |------|----------|------|
-| `ContextBuilder` | `context()` | Core/Working/Anchor Memory 조합, rankedInjection, 컨텍스트 힌트 생성 |
+| `ContextBuilder` | `context()` | Anchor/Core/Learning/Working 후보 ID dedup, 최소 슬롯 보장 토큰 선택, 공통 flat/structured/rankedInjection 조립, 컨텍스트 힌트 생성 |
 | `ReflectProcessor` | `reflect()` | summary/decisions/errors_resolved/new_procedures/open_questions 파편 변환·저장, episode 생성, Working Memory 정리 |
 | `BatchRememberProcessor` | `batchRemember()` | Phase A(유효성 검증) → Phase B(트랜잭션 INSERT) → Phase C(후처리) 3단계 일괄 저장. Redis 가용 시 Phase B를 `_enqueueAsync()`로 위임하여 비동기 큐(BatchRememberWorker)에서 처리. DB 풀은 `getBatchPool()`(배치 전용 풀) 사용 |
 | `QuotaChecker` | `remember()` 진입 시 | API 키별 파편 할당량(fragment_limit) 검사 |
@@ -28,7 +28,7 @@ MemoryManager는 thin facade다. 비즈니스 로직은 `lib/memory/processors/`
 | 모듈 | 역할 |
 |------|------|
 | `FragmentSearch` (`lib/memory/read/FragmentSearch.js`) | L1~L4 검색 파이프라인 조율 |
-| `SearchScope` (`lib/memory/read/SearchScope.js`) | workspace·caseId·resolutionStatus·phase·affect·type·topic 7개 필드를 모든 검색 레이어에 일관 전달하는 정합 필터 계약 객체 |
+| `SearchScope` (`lib/memory/read/SearchScope.js`) | workspace·caseId·resolutionStatus·phase·affect·type·topic·isAnchor 필드를 모든 검색 레이어에 일관 전달하는 정합 필터 계약 객체 |
 | `SearchSideEffects` (`lib/memory/read/SearchSideEffects.js`) | 검색 결과 확정 후 부작용(검색 이벤트 영속화, SearchParamAdaptor 학습 신호)을 단일 모듈로 격리 |
 
 검색 관련 모듈은 `lib/memory/read/`에 위치하며, 임포트 경로는 실제 파일 위치를 그대로 따른다.
@@ -81,8 +81,8 @@ recall(query)
   ├── L3 PostgreSQL 전문 검색 (형태소; MorphemeTokenizer 로컬 CPU 분석기 → morpheme_dict → tsquery)
   ├── L4 Cross-Encoder Reranker (RRF 상위 30건)
   ├── RRF 병합 (k=60)
-  ├── SearchScope.applyTo() 필터 — workspace·caseId·resolutionStatus·phase·affect·type·topic 정합
-  │     _executeSearch() 내 각 레이어가 SearchScope 인스턴스를 공유하여 후처리 보정 불필요
+  ├── SearchScope.applyTo() 필터 — workspace·caseId·resolutionStatus·phase·affect·type·topic·isAnchor 정합
+  │     각 레이어의 사전 필터 뒤 search()가 같은 SearchScope 계약으로 최종 검증
   ├── 토큰 예산 절단 (tokenBudget)
   ├── valid_to 필터
   ├── explanations (ExplanationBuilder.annotate)
@@ -93,15 +93,15 @@ recall(query)
   │     L1/L2/RRF 캐시 단계는 전체 필드 유지, 최종 반환 직전에만 pick
   └── commitSearchSideEffects() → _meta.searchEventId 반환
         SearchSideEffects 모듈에 위임. 검색 이벤트 영속화 + SearchParamAdaptor 학습 신호.
-        _executeSearch() 후처리에서 SearchScope 필터가 이미 적용되었으므로
-        이 단계에서 별도 보정 없이 searchEventId만 반환한다.
+        search()는 랭킹·토큰 절삭 전에 SearchScope 최종 공통 필터를 적용하며,
+        이 단계에서는 검색 이벤트를 기록하고 searchEventId만 반환한다.
 ```
 
 `pickFields`는 19개 화이트리스트(`id, content, type, importance, topic, ..., key_id, key_name`) 외 필드를 제거한다. 캐시 단계(L1 warm hit, RRF 병합 중간 객체)에는 적용하지 않아 캐시 효율을 보존한다.
 
 **결정적 랭킹 계약:** 검색·RRF·reranker·graph·context 주입은 각 경로의 기존 primary score를 내림차순으로 유지하고, 점수가 같을 때만 `created_at DESC, id ASC`를 적용한다. `created_at`은 쓰기 경로의 기본값으로 채워지며, PostgreSQL의 기존 내림차순 인덱스와 일치하도록 명시적 `NULLS LAST`를 사용하지 않는다. 예외적인 NULL 값도 PostgreSQL 기본값과 같은 `NULLS FIRST`로 비교해 SQL과 JS 순서를 맞춘다. rank가 없는 Redis Set 후보는 RRF에 동일 점수로 기여하고, hydration 후보도 같은 comparator로 정규화하므로 cold DB와 warm cache의 ID 순서가 같다. Working Memory는 기존 저장 shape 계약에 따라 `added_at DESC NULLS LAST, id ASC`를 유지한다. `recall`은 롤링 배포와 동적 reranker 후보 집합의 기존 의미를 보존하기 위해 offset cursor를 유지하며, cursor의 고정 `anchorTime`을 reranker recency boost에도 재사용한다. ANN 벡터 검색은 인덱스 사용을 위해 SQL에서 거리 표현식 하나로 후보를 제한하고, 선택된 후보 집합 내부의 거리 동점만 JS에서 결정적으로 정렬한다.
 
-**SearchScope 계약:** `SearchScope.fromQuery(sq)` 정적 팩토리가 `_buildSearchQuery()` 반환 sq에서 scope 인스턴스를 생성한다. `scope.applyTo(fragment)` 메서드는 workspace, caseId, resolutionStatus, phase, affect, type, topic 7개 필드를 동시 검사하여 false를 반환하는 경우 해당 파편을 결과에서 제외한다. HotCache·L3·Graph 호출 사이트가 모두 동일 인스턴스를 참조하므로 레이어별 파편 결과의 정합성이 보장된다. `_executeSearch()`는 별도의 후처리 보정을 수행하지 않는다.
+**SearchScope 계약:** `SearchScope.fromQuery(sq)` 정적 팩토리가 `_buildSearchQuery()` 반환 sq에서 scope 인스턴스를 생성한다. `scope.applyTo(fragment)` 메서드는 workspace, caseId, resolutionStatus, phase, affect, type, topic, isAnchor를 동시 검사하여 false를 반환하는 경우 해당 파편을 결과에서 제외한다. HotCache·L3·Graph 호출 사이트의 사전 필터와 `search()`의 최종 공통 필터가 동일 인스턴스 계약을 사용하므로 hydration·보조 검색을 포함한 레이어별 결과의 정합성이 보장된다.
 
 ---
 

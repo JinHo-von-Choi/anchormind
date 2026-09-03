@@ -351,7 +351,7 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 | pageSize | number | - | 기본 20, 최대 50 |
 | agentId | string | - | 에이전트 ID |
 | minImportance | number | - | 최소 중요도 필터 (0~1). 이 값 이상의 importance를 가진 파편만 반환. |
-| isAnchor | boolean | - | true 시 앵커(고정) 파편만 반환. 핵심 지식 조회에 유용. |
+| isAnchor | boolean | - | 앵커 필터. `true`는 앵커만, `false`는 비앵커만 반환하며 미지정 시 둘 다 반환. |
 | affect | string \| string[] | - | 정서 태그 필터. 단일 문자열 또는 배열. 해당 affect 값을 가진 파편만 반환. 유효값: neutral, frustration, confidence, surprise, doubt, satisfaction |
 | fields | string[] | - | 응답에 포함할 파편 필드 목록. 미지정 시 전체 필드 반환. 지원 키: id / content / type / topic / keywords / importance / created_at / access_count / confidence / linked / explanations / workspace / context_summary / case_id / valid_to / affect / ema_activation |
 
@@ -494,6 +494,8 @@ reason code 목록 (최대 3개):
   "caseCount": 1
 }
 ```
+
+`fragment_count`는 현재 키 그룹·workspace·유효 상태·`isAnchor` 필터를 모두 통과해 해당 케이스의 대표값 후보가 된 파편 수다. 케이스의 전체 누적 파편 수가 아니다. `events`는 source 파편의 현재 앵커 상태로 필터링하지 않으며, 현재 키 그룹에서 볼 수 있는 이력을 케이스당 최대 20건 반환한다.
 
 #### event_type enum
 
@@ -871,13 +873,13 @@ violations 있는 경우 (soft gate — 저장됨):
 
 ## MCP 도구 — context
 
-Core Memory + Working Memory + session_reflect를 분리 로드한다. 세션 시작 시 preference, error, procedure, decision 파편을 주입하여 맥락 유지.
+Anchor + Core + Learning + Working Memory와 session_reflect를 분리 로드한다. ID 중복 제거 후 flat/structured 응답과 injectionText에 같은 파편 집합을 사용한다. 앵커와 core 유형별·learning·working의 최소 1건은 맥락 소실 방지를 위해 우선 보장한다.
 
 ### 파라미터
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| tokenBudget | number | - | 최대 토큰 수 (기본 2000) |
+| tokenBudget | number | - | 주입 토큰 목표치(기본 2000). 앵커와 비앵커 최소 보장 슬롯 때문에 합계가 목표치를 넘을 수 있고, 나머지 후보는 점수순으로 절삭된다. |
 | types | string[] | - | 로드할 유형 목록 (기본: preference, error, procedure) |
 | sessionId | string | - | 세션 ID (Working Memory 로드용) |
 | agentId | string | - | 에이전트 ID |

@@ -346,7 +346,7 @@ MCP resources for real-time queries on the current state of the memory system.
 | pageSize | number | - | Default 20, max 50 |
 | agentId | string | - | Agent ID |
 | minImportance | number | - | Minimum importance filter (0-1). Only fragments with importance at or above this value are returned. |
-| isAnchor | boolean | - | When true, returns only anchor (pinned) fragments. Useful for querying core knowledge. |
+| isAnchor | boolean | - | Anchor filter. `true` returns anchors only, `false` returns non-anchors only, and omission returns both. |
 | affect | string \| string[] | - | Affect tag filter. Single string or array. Returns only fragments with the matching affect value. Valid values: neutral, frustration, confidence, surprise, doubt, satisfaction |
 | fields | string[] | - | Fragment fields to include in the response. Returns all fields if not specified. Supported keys: id / content / type / topic / keywords / importance / created_at / access_count / confidence / linked / explanations / workspace / context_summary / case_id / valid_to / affect / ema_activation |
 
@@ -474,6 +474,8 @@ When `caseMode=true`, a `cases` array is additionally returned alongside the reg
   "caseCount": 1
 }
 ```
+
+`fragment_count` is the number of representative candidates for the case after current key-group, workspace, validity, and `isAnchor` filters; it is not the case's lifetime fragment total. `events` are not filtered by a source fragment's current anchor status and return up to 20 historical entries per case within the current key-group scope.
 
 #### event_type enum
 
@@ -805,13 +807,13 @@ When `sessionId` is provided, session fragments are synthesized separately per w
 
 ## MCP Tool — context
 
-Loads Core Memory + Working Memory + session_reflect separately. Injects preference, error, procedure, decision fragments at session start to maintain context.
+Loads Anchor, Core, Learning, and Working Memory plus session_reflect separately. After ID deduplication, flat/structured responses and injectionText use the same fragment set. Anchors and one minimum slot for each core type, Learning, and Working Memory are guaranteed to prevent context loss.
 
 ### Parameters
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| tokenBudget | number | - | Maximum token count (default 2000) |
+| tokenBudget | number | - | Injection token target (default 2000). Anchors and minimum non-anchor slots may make the total exceed the target; remaining candidates are trimmed by score. |
 | types | string[] | - | Types to load (default: preference, error, procedure) |
 | sessionId | string | - | Session ID (for Working Memory loading) |
 | agentId | string | - | Agent ID |

@@ -36,7 +36,7 @@ server.js  (HTTP server)
             +-- read/                     Search layer modules
             |   +-- FragmentSearch.js     3-layer search orchestration (structural: L1->L2, semantic: L1->L2||L3 RRF merge). `_executeSearch` decomposes into `_buildTextRRF` (L2+L3 parallel RRF when text parameter present) / `_buildFallbackCombined` (L1+L2 only when no text)
             |   +-- FragmentReader.js     Fragment reads. `getById(id, agentId, keyId, groupKeyIds)` -- groupKeyIds parameter enables single-call lookup of fragments belonging to same-group keys. `getByIds`, `getHistory`, `searchByKeywords`, `searchBySemantic`, `findCaseIdBySessionTopic`, `findErrorFragmentsBySessionTopic`
-            |   +-- ContextBuilder.js     Dedicated context() logic. `build()` internally decomposes into 6 private methods: `#loadCoreMemory` / `#loadWorkingMemory` / `#loadAnchorMemory` / `#loadLearningFragments` / `#buildInjectionLines` / `#buildStructuredResponse`. Anchor selection first guarantees the effective workspace reserve, then fills remaining slots from a combined ranking of leftover workspace and global anchors
+            |   +-- ContextBuilder.js     Dedicated context() logic. Reserves effective-workspace anchor slots first, deduplicates candidates by ID in anchor > core > learning > working order, guarantees anchors plus minimum non-anchor slots, and uses one token-selected set for flat/structured/injectionText outputs
             |   +-- GraphNeighborSearch.js L2.5 graph neighbor search (fragment_links 1-hop bidirectional UNION, tanh-saturated scoring + relation-type boosts)
             |   +-- HistoryReconstructor.js case_id/entity-based narrative reconstruction (ordered_timeline, causal_chains, unresolved_branches)
             |   +-- Reranker.js           Cross-Encoder reranking (disabled by default; enable via MEMENTO_RERANKER_ENABLED or RERANKER_URL)
@@ -44,7 +44,7 @@ server.js  (HTTP server)
             |   +-- LinkedFragmentLoader.js Bulk linked fragment load (1-hop neighbor batch query)
             |   +-- RecallSuggestionEngine.js Analyzes recall results and generates _suggestion meta field
             |   +-- assistant-query.js    Assistant-side query helper
-            |   +-- SearchScope.js        Search coherence filter contract. Encapsulates workspace/caseId/resolutionStatus/phase/affect/keyId. applyTo(fragment) -> boolean. Each call site (L1 HotCache, L2, L3, Graph) filters individually; _executeSearch performs no separate post-processing correction
+            |   +-- SearchScope.js        Search coherence filter contract. Encapsulates workspace/caseId/resolutionStatus/phase/affect/type/topic/isAnchor/keyId. applyTo(fragment) -> boolean. L1 HotCache, L2, L3, and Graph prefilters are backed by a final common filter in search()
             |   +-- SearchSideEffects.js  Search side-effect isolation module. commitSearchSideEffects() synchronously returns searchEventId; fire-and-forgets SearchParamAdaptor.recordOutcome()
             +-- write/                    Write layer modules
             |   +-- FragmentWriter.js     Fragment writes (insert, update, delete, incrementAccess, touchLinked)
@@ -870,7 +870,7 @@ Evidence join table linking fragments to case events. The `fragment_id + event_i
 
 ### CaseRecall
 
-Passing `caseMode: true` to the recall tool activates the CaseRecall path. It returns `(goal, events[], outcome)` triples per case_id, restoring the complete resolution flow of similar cases in a single call.
+Passing `caseMode: true` to the recall tool activates the CaseRecall path. It returns `(goal, events[], outcome)` triples per case_id, restoring in one call the resolution flow of similar cases visible to the current key group. When `isAnchor` is specified, the true/false filter applies to current representative fragments and the goal, outcome, and status derived from them. `fragment_count` is the number of representative candidates remaining after current key-group, workspace, validity, and `isAnchor` filters; it is not the case's lifetime fragment total. Events are independent historical records and return up to 20 entries per case within the current key-group scope, regardless of a source fragment's current anchor status.
 
 ### CaseRewardBackprop
 
@@ -1195,11 +1195,11 @@ autoLinkSessionFragments returns a `linkSuggestions[]` array; ReflectProcessor p
 
 `lib/memory/read/SearchScope.js`. Encapsulates filter conditions across all search layers in a single object.
 
-Encapsulated fields: `workspace`, `caseId`, `resolutionStatus`, `phase`, `affect`, `keyId`.
+Encapsulated fields: `workspace`, `caseId`, `resolutionStatus`, `phase`, `affect`, `type`, `topic`, `isAnchor`, `keyId`.
 
 `SearchScope.fromQuery(sq)` static factory creates an instance from the normalized query returned by `_buildSearchQuery()`. `applyTo(fragment) -> boolean` performs per-fragment coherence checking.
 
-Each call site (L1 HotCache, L2, L3, Graph) calls `scope.applyTo(fragment)` directly. `_executeSearch` performs no separate workspace/affect post-processing correction.
+Each call site (L1 HotCache, L2, L3, Graph) prefilters candidates with `scope.applyTo(fragment)`, and `search()` applies the same contract once more before token trimming.
 
 ## SearchSideEffects Side-Effect Isolation
 
