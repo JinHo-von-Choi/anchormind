@@ -8,10 +8,15 @@ import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 
 let capturedSql = "";
+let capturedParams = [];
 mock.module("../../lib/tools/db.js", {
   exports: {
     getPrimaryPool      : () => ({ query: async () => ({ rows: [] }) }),
-    queryWithAgentVector: async (_agent, sql) => { capturedSql = sql; return { rows: [] }; }
+    queryWithAgentVector: async (_agent, sql, params) => {
+      capturedSql = sql;
+      capturedParams = params;
+      return { rows: [] };
+    }
   }
 });
 
@@ -53,6 +58,31 @@ describe("searchByTimeRange 스코프", () => {
     await new FragmentReader().searchByTimeRange("2026-01-01", "2026-02-01", { agentId: "a1" }).catch(() => {});
     assert.ok(!capturedSql.includes("type = $"));
   });
+
+  for (const isAnchor of [true, false]) {
+    it(`isAnchor=${isAnchor} + includeSuperseded=true면 만료 파편도 SQL 후보에 포함한다`, async () => {
+      capturedSql = "";
+      capturedParams = [];
+      await new FragmentReader().searchByTimeRange(null, null, {
+        agentId: "synthetic-agent",
+        isAnchor,
+        includeSuperseded: true
+      });
+
+      assert.match(capturedSql, /is_anchor = \$/);
+      assert.doesNotMatch(capturedSql, /valid_to IS NULL/);
+      assert.ok(capturedParams.includes(isAnchor));
+    });
+  }
+
+  it("includeSuperseded 미지정 시 기존 valid_to 필터를 유지한다", async () => {
+    capturedSql = "";
+    await new FragmentReader().searchByTimeRange(null, null, {
+      agentId: "synthetic-agent",
+      isAnchor: false
+    });
+    assert.match(capturedSql, /valid_to IS NULL/);
+  });
 });
 
 describe("SearchScope type/topic 사후 필터", () => {
@@ -79,5 +109,48 @@ describe("SearchScope type/topic 사후 필터", () => {
     const scope = SearchScope.fromQuery({ type: "error", topic: "nginx" });
     assert.equal(scope.type, "error");
     assert.equal(scope.topic, "nginx");
+  });
+});
+
+describe("isAnchor 3상태 검색 계약", () => {
+  it("SearchScope true/false/미지정을 구분한다", () => {
+    const anchor    = { is_anchor: true };
+    const nonAnchor = { is_anchor: false };
+
+    assert.equal(new SearchScope({ isAnchor: true }).applyTo(anchor), true);
+    assert.equal(new SearchScope({ isAnchor: true }).applyTo(nonAnchor), false);
+    assert.equal(new SearchScope({ isAnchor: false }).applyTo(anchor), false);
+    assert.equal(new SearchScope({ isAnchor: false }).applyTo(nonAnchor), true);
+    assert.equal(new SearchScope({}).applyTo(anchor), true);
+    assert.equal(new SearchScope({}).applyTo(nonAnchor), true);
+    assert.equal(new SearchScope({ isAnchor: false }).isNoop(), false);
+    assert.equal(SearchScope.fromQuery({ isAnchor: false }).isAnchor, false);
+  });
+
+  it("keyword/topic/semantic/time/source SQL에 false도 명시 필터로 전달한다", async () => {
+    const reader = new FragmentReader();
+    const calls = [
+      () => reader.searchByKeywords(["synthetic"], { isAnchor: false }),
+      () => reader.searchByTopic("synthetic", { isAnchor: false }),
+      () => reader.searchBySemantic([0.1, 0.2], { isAnchor: false }),
+      () => reader.searchByTimeRange("2026-01-01", "2026-02-01", { isAnchor: false }),
+      () => reader.searchBySource("synthetic-source", "synthetic-agent", null, 5, { isAnchor: false })
+    ];
+
+    for (const call of calls) {
+      capturedSql = "";
+      capturedParams = [];
+      await call();
+      assert.match(capturedSql, /(?:f\.)?is_anchor = \$/);
+      assert.ok(capturedParams.includes(false));
+    }
+  });
+
+  it("isAnchor 미지정 SQL은 앵커 조건을 추가하지 않는다", async () => {
+    capturedSql = "";
+    capturedParams = [];
+    await new FragmentReader().searchByTopic("synthetic", {});
+    assert.doesNotMatch(capturedSql, /(?:f\.)?is_anchor = \$/);
+    assert.ok(!capturedParams.includes(true) && !capturedParams.includes(false));
   });
 });

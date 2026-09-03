@@ -351,7 +351,7 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 | pageSize | number | - | 기본 20, 최대 50 |
 | agentId | string | - | 에이전트 ID |
 | minImportance | number | - | 최소 중요도 필터 (0~1). 이 값 이상의 importance를 가진 파편만 반환. |
-| isAnchor | boolean | - | true 시 앵커(고정) 파편만 반환. 핵심 지식 조회에 유용. |
+| isAnchor | boolean | - | 앵커 필터. `true`는 앵커만, `false`는 비앵커만 반환하며 미지정 시 둘 다 반환. |
 | affect | string \| string[] | - | 정서 태그 필터. 단일 문자열 또는 배열. 해당 affect 값을 가진 파편만 반환. 유효값: neutral, frustration, confidence, surprise, doubt, satisfaction |
 | fields | string[] | - | 응답에 포함할 파편 필드 목록. 미지정 시 전체 필드 반환. 지원 키: id / content / type / topic / keywords / importance / created_at / access_count / confidence / linked / explanations / workspace / context_summary / case_id / valid_to / affect / ema_activation |
 

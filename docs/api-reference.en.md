@@ -346,7 +346,7 @@ MCP resources for real-time queries on the current state of the memory system.
 | pageSize | number | - | Default 20, max 50 |
 | agentId | string | - | Agent ID |
 | minImportance | number | - | Minimum importance filter (0-1). Only fragments with importance at or above this value are returned. |
-| isAnchor | boolean | - | When true, returns only anchor (pinned) fragments. Useful for querying core knowledge. |
+| isAnchor | boolean | - | Anchor filter. `true` returns anchors only, `false` returns non-anchors only, and omission returns both. |
 | affect | string \| string[] | - | Affect tag filter. Single string or array. Returns only fragments with the matching affect value. Valid values: neutral, frustration, confidence, surprise, doubt, satisfaction |
 | fields | string[] | - | Fragment fields to include in the response. Returns all fields if not specified. Supported keys: id / content / type / topic / keywords / importance / created_at / access_count / confidence / linked / explanations / workspace / context_summary / case_id / valid_to / affect / ema_activation |
 

@@ -47,8 +47,8 @@ read 경로는 write 경로와 달리 row-level lock을 사용하지 않는다. 
 
 |경로|진입점|필터 계약|격리 특성|비고|
 |-|-|-|-|-|
-|recall (HotCache)|`FragmentSearch._searchHotCache`|`SearchScope.applyTo(fragment)`|읽기 전용. RLS는 호출자 agent_id 적용|L1 캐시 히트. workspace/caseId/phase/affect 5개 필드를 단일 `applyTo` 호출로 판정|
-|recall (L3 semantic)|`FragmentSearch._searchL3`|`SearchScope.applyTo(fragment)` post-filter|읽기 전용|pgvector KNN 후 `SearchScope`로 2차 필터. `_executeSearch`는 별도의 후처리 보정을 수행하지 않는다|
+|recall (HotCache)|`FragmentSearch._searchHotCache`|`SearchScope.applyTo(fragment)`|읽기 전용. RLS는 호출자 agent_id 적용|L1 캐시 히트. workspace/caseId/phase/affect/isAnchor를 단일 `applyTo` 호출로 판정|
+|recall (L3 semantic)|`FragmentSearch._searchL3`|`SearchScope.applyTo(fragment)` post-filter|읽기 전용|pgvector KNN 후 `SearchScope`로 2차 필터하고 `search()` 최종 공통 필터로 다시 검증한다|
 |recall (graph)|`FragmentSearch._searchGraph`|호출 사이트에서 `SearchScope.applyTo` 직접 적용|읽기 전용|GraphExplorer가 반환한 fragment 각각에 applyTo 체크|
 |recall (side effects)|`commitSearchSideEffects` (`lib/memory/read/SearchSideEffects.js`)|없음 (결과 확정 후 별도 실행)|fire-and-forget `recordOutcome` + await `recordSearchEvent`|`searchEventId` 반환. tool_feedback FK 계약에 사용됨|
 

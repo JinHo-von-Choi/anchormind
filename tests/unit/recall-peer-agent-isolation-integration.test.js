@@ -192,6 +192,7 @@ mock.module("../../lib/memory/read/Reranker.js", {
 const { FragmentIndex }       = await import("../../lib/memory/FragmentIndex.js");
 const { FragmentReader }      = await import("../../lib/memory/read/FragmentReader.js");
 const { FragmentSearch }      = await import("../../lib/memory/read/FragmentSearch.js");
+const { SearchScope }         = await import("../../lib/memory/read/SearchScope.js");
 const { fetchGraphNeighbors } = await import("../../lib/memory/read/GraphNeighborSearch.js");
 const { LinkStore }           = await import("../../lib/memory/link/LinkStore.js");
 const { MemoryRecaller }      = await import("../../lib/memory/processors/MemoryRecaller.js");
@@ -208,6 +209,7 @@ function fragment(overrides) {
     importance : 0.9,
     created_at : NOW,
     valid_to   : null,
+    is_anchor  : false,
     agent_id   : "agent-a",
     workspace  : "ws-a",
     ...overrides
@@ -255,6 +257,44 @@ async function runHotCacheSearch(includePeerAgents) {
   return search.search(query);
 }
 
+async function runAnchorCacheSearch({ warm, isAnchor }) {
+  const index = new FragmentIndex();
+  const rows = [
+    fragment({ id: "anchor-result", is_anchor: true }),
+    fragment({ id: "non-anchor-result", is_anchor: false })
+  ];
+
+  for (const row of rows) {
+    await index.index(row, null, null);
+    if (warm) await index.cacheFragment(row.id, row, null);
+  }
+
+  const search = Object.create(FragmentSearch.prototype);
+  search.index = index;
+  search.store = {
+    searchByKeywords: async () => [],
+    searchByTopic   : async () => [],
+    searchByTimeRange: async (_from, _to, options) => rows
+      .filter(row => options.isAnchor === undefined || row.is_anchor === options.isAnchor)
+      .map(row => ({ ...row })),
+    getByIds        : async ids => rows.filter(row => ids.includes(row.id)).map(row => ({ ...row })),
+    incrementAccess : () => {},
+    touchLinked     : async () => {}
+  };
+
+  const query = {
+    workspace  : "ws-a",
+    agentId    : "agent-a",
+    tokenBudget: 5000
+  };
+  if (isAnchor !== undefined) {
+    query.isAnchor = isAnchor;
+  } else {
+    query.keywords = ["scope-isolation"];
+  }
+  return search.search(query);
+}
+
 beforeEach(() => {
   redisRef.current = createRedisMock();
   vectorQueries = [];
@@ -277,6 +317,78 @@ describe("Hot Cache 최종 결과 agent/workspace 격리", () => {
   it("includePeerAgents=true 시 같은 workspace peer는 허용하되 다른 workspace는 차단한다", async () => {
     const result = await runHotCacheSearch(true);
     assert.deepEqual(idsOf(result), new Set(["own", "peer", "global"]));
+  });
+});
+
+describe("Redis cold/warm isAnchor 3상태 정합", () => {
+  for (const warm of [false, true]) {
+    const state = warm ? "warm" : "cold";
+
+    it(`${state}: true는 앵커만 반환한다`, async () => {
+      const result = await runAnchorCacheSearch({ warm, isAnchor: true });
+      assert.deepEqual(idsOf(result), new Set(["anchor-result"]));
+    });
+
+    it(`${state}: false는 비앵커만 반환한다`, async () => {
+      const result = await runAnchorCacheSearch({ warm, isAnchor: false });
+      assert.deepEqual(idsOf(result), new Set(["non-anchor-result"]));
+    });
+
+    it(`${state}: 미지정은 둘 다 반환한다`, async () => {
+      const result = await runAnchorCacheSearch({ warm, isAnchor: undefined });
+      assert.deepEqual(idsOf(result), new Set(["anchor-result", "non-anchor-result"]));
+    });
+  }
+});
+
+describe("Semantic 실제 결과 isAnchor 3상태 정합", () => {
+  async function runSemantic(isAnchor) {
+    const candidates = [
+      fragment({ id: "semantic-anchor", is_anchor: true }),
+      fragment({ id: "semantic-non-anchor", is_anchor: false })
+    ];
+    const search = Object.create(FragmentSearch.prototype);
+    search.embeddingCache = {
+      get: async () => [0.1, 0.2],
+      set: () => {}
+    };
+    search._morphemeIndex = { textToMorphemeVector: async () => null };
+    search.store = {
+      searchBySemantic: async () => candidates.map(row => ({ ...row, similarity: 0.9 }))
+    };
+    const query = {
+      text             : "synthetic semantic query",
+      agentId          : "agent-a",
+      workspace        : "ws-a",
+      includePeerAgents: false,
+      _skipMorpheme    : true
+    };
+    if (isAnchor !== undefined) query.isAnchor = isAnchor;
+    return search._searchL3(
+      query,
+      "agent-a",
+      null,
+      null,
+      SearchScope.fromQuery(query)
+    );
+  }
+
+  it("true는 앵커만 반환한다", async () => {
+    const results = await runSemantic(true);
+    assert.deepEqual(new Set(results.map(row => row.id)), new Set(["semantic-anchor"]));
+  });
+
+  it("false는 비앵커만 반환한다", async () => {
+    const results = await runSemantic(false);
+    assert.deepEqual(new Set(results.map(row => row.id)), new Set(["semantic-non-anchor"]));
+  });
+
+  it("미지정은 앵커와 비앵커를 모두 반환한다", async () => {
+    const results = await runSemantic(undefined);
+    assert.deepEqual(
+      new Set(results.map(row => row.id)),
+      new Set(["semantic-anchor", "semantic-non-anchor"])
+    );
   });
 });
 
@@ -364,6 +476,37 @@ describe("GraphNeighborSearch SQL 및 최종 RRF 격리", () => {
     assert.ok(!ids.has("graph-peer"));
     assert.ok(!ids.has("graph-cross-workspace"));
   });
+
+  it("isAnchor=false가 graph SQL과 최종 scope에 모두 적용된다", async () => {
+    graphRows = [
+      fragment({ id: "graph-non-anchor", is_anchor: false }),
+      fragment({ id: "graph-anchor", is_anchor: true })
+    ];
+
+    const search = Object.create(FragmentSearch.prototype);
+    search._searchL2 = async () => [fragment({ id: "seed" })];
+    search._searchL3 = async () => [];
+    const sq = {
+      text             : "scope isolation",
+      agentId          : "agent-a",
+      keyId            : ["key-1"],
+      workspace        : "ws-a",
+      includePeerAgents: false,
+      isAnchor         : false,
+      minImportance    : 0
+    };
+
+    const combined = await search._buildTextRRF(
+      sq, [], [], false, [], "agent-a", ["key-1"], null, [], {}
+    );
+    const ids = new Set(combined.map(row => row.id));
+    const { sql, params } = graphQueries.at(-1);
+
+    assert.match(sql, /f\.is_anchor = \$/);
+    assert.ok(params.includes(false));
+    assert.ok(ids.has("graph-non-anchor"));
+    assert.ok(!ids.has("graph-anchor"));
+  });
 });
 
 describe("LinkStore SQL agent/workspace 격리", () => {
@@ -413,6 +556,22 @@ describe("LinkStore SQL agent/workspace 격리", () => {
     assert.match(sql, /f\.key_id = ANY\(\$2(::text\[\])?\)/);
     assert.match(sql, /\(f\.workspace = \$3 OR f\.workspace IS NULL\)/);
     assert.deepEqual(params, [["seed"], ["key-1"], "ws-a"]);
+  });
+
+  it("isAnchor=false를 양방향 UNION SQL에 동일하게 적용한다", async () => {
+    const store = new LinkStore();
+    await store.getLinkedFragments(
+      ["seed"],
+      null,
+      "agent-a",
+      ["key-1"],
+      { workspace: "ws-a", includePeerAgents: false, isAnchor: false }
+    );
+
+    const { sql, params } = vectorQueries.at(-1);
+    assert.equal((sql.match(/f\.is_anchor = \$/g) || []).length, 2);
+    assert.equal((sql.match(/f\.valid_to IS NULL/g) || []).length, 2);
+    assert.ok(params.includes(false));
   });
 });
 
@@ -479,6 +638,28 @@ describe("MemoryRecaller 기본 includeLinks 최종 병합 격리", () => {
       workspace         : "ws-a",
       allWorkspaces     : false,
       includePeerAgents : true
+    });
+  });
+
+  it("isAnchor=false 검색에 연결된 앵커가 다시 유입되지 않는다", async () => {
+    const calls    = [];
+    const candidates = [
+      fragment({ id: "linked-non-anchor", is_anchor: false }),
+      fragment({ id: "linked-anchor", is_anchor: true })
+    ];
+    const recaller = createRecaller(candidates, calls);
+    const result   = await recaller.recall({
+      agentId : "agent-a",
+      workspace: "ws-a",
+      keywords: ["scope-isolation"],
+      isAnchor: false
+    });
+
+    assert.deepEqual(idsOf(result), new Set(["base", "linked-non-anchor"]));
+    assert.deepEqual(calls[0][4], {
+      workspace        : "ws-a",
+      includePeerAgents: false,
+      isAnchor          : false
     });
   });
 });

@@ -28,7 +28,7 @@ Search-related modules are separated into `lib/memory/read/`.
 | Module | Role |
 |--------|------|
 | `FragmentSearch` (`lib/memory/read/FragmentSearch.js`) | Orchestrates the L1-L4 search pipeline |
-| `SearchScope` (`lib/memory/read/SearchScope.js`) | A single contract object that consistently passes workspace, caseId, resolutionStatus, phase, and affect filters to all search layers |
+| `SearchScope` (`lib/memory/read/SearchScope.js`) | A single contract object that consistently passes workspace, caseId, resolutionStatus, phase, affect, type, topic, and isAnchor filters to all search layers |
 | `SearchSideEffects` (`lib/memory/read/SearchSideEffects.js`) | Isolates post-search side effects (search event persistence, SearchParamAdaptor learning signal) into a single module |
 
 Search-related modules live under `lib/memory/read/`; import paths follow the actual file locations directly.
@@ -81,9 +81,9 @@ recall(query)
   ├── L3 PostgreSQL full-text search (morpheme; MorphemeTokenizer local CPU analyzer → morpheme_dict → tsquery)
   ├── L4 Cross-Encoder Reranker (top 30 from RRF)
   ├── RRF merge (k=60)
-  ├── SearchScope.applyTo() filter — workspace/caseId/resolutionStatus/phase/affect consistency
+  ├── SearchScope.applyTo() filter — workspace/caseId/resolutionStatus/phase/affect/type/topic/isAnchor consistency
   │     All layers inside _executeSearch() share the same SearchScope instance
-  │     No post-processing correction needed after _executeSearch() completes
+  │     search() reapplies the same SearchScope contract after layer prefilters
   ├── token budget truncation (tokenBudget)
   ├── valid_to filter
   ├── explanations (ExplanationBuilder.annotate)
@@ -94,15 +94,13 @@ recall(query)
   │     L1/L2/RRF cache stages retain full fields; pick is applied only at final return
   └── commitSearchSideEffects() → returns _meta.searchEventId
         Delegated to SearchSideEffects module. Search event persistence + SearchParamAdaptor learning.
-        SearchScope filter is already applied inside _executeSearch(), so no additional
-        post-processing correction is needed here; only searchEventId is returned.
+        search() applies the final common SearchScope filter before ranking and token trimming;
+        this step only records and returns searchEventId.
 ```
 
 `pickFields` removes fields outside the 19-item whitelist (`id, content, type, importance, topic, ..., key_id, key_name`). It is not applied to cache stages (L1 warm hits, RRF intermediate objects) to preserve cache efficiency.
 
-**Deterministic ranking contract:** Search, RRF, reranker, graph, and context injection preserve each path's existing descending primary score. Only ties use `created_at DESC, id ASC`. Write paths populate `created_at` by default, and the SQL deliberately omits explicit `NULLS LAST` so existing PostgreSQL descending indexes remain usable. Exceptional null values follow PostgreSQL's default `NULLS FIRST` order in both SQL and JavaScript. Unranked Redis Set candidates contribute equal RRF scores, and hydration candidates use the same comparator, so cold DB and warm-cache results have the same ID order. Working Memory preserves its existing `added_at DESC NULLS LAST, id ASC` shape. `recall` retains offset cursors to preserve rolling-deployment compatibility and the established semantics of dynamic reranker candidate sets, while reusing the cursor's fixed `anchorTime` for reranker recency boosts. ANN vector search keeps a distance-only SQL ordering for index eligibility and deterministically sorts distance ties within the selected candidate set in JavaScript.
-
-**SearchScope contract:** The `SearchScope.fromQuery(sq)` static factory creates a scope instance from the normalized sq returned by `_buildSearchQuery()`. The `scope.applyTo(fragment)` method checks workspace, caseId, resolutionStatus, phase, and affect simultaneously and returns false to exclude a fragment from results. HotCache, L3, and graph call sites all reference the same instance, ensuring consistent filtering across layers. `_executeSearch()` performs no separate post-processing correction step.
+**SearchScope contract:** The `SearchScope.fromQuery(sq)` static factory creates a scope instance from the normalized sq returned by `_buildSearchQuery()`. The `scope.applyTo(fragment)` method checks workspace, caseId, resolutionStatus, phase, affect, type, topic, and isAnchor simultaneously and returns false to exclude a fragment from results. HotCache, L3, and graph prefilters plus the final common filter in `search()` share the same contract, covering hydration and auxiliary search paths as well.
 
 ---
 

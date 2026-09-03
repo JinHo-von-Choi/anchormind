@@ -47,7 +47,7 @@ server.js  (HTTP 서버)
             │   ├── LinkedFragmentLoader.js 연결 파편 일괄 로드 (1-hop 이웃 배치 조회)
             │   ├── RecallSuggestionEngine.js recall 결과 분석 후 _suggestion 메타 생성
             │   ├── assistant-query.js    보조 조회 헬퍼
-            │   ├── SearchScope.js        검색 정합 필터 계약. workspace/caseId/resolutionStatus/phase/affect/type/topic/keyId 캡슐화. applyTo(fragment) → boolean. L1 HotCache·L2·L3·Graph 각 호출 사이트에서 fragment 단위 필터링을 수행하며 _executeSearch는 별도 후처리 보정을 수행하지 않는다
+            │   ├── SearchScope.js        검색 정합 필터 계약. workspace/caseId/resolutionStatus/phase/affect/type/topic/isAnchor/keyId 캡슐화. applyTo(fragment) → boolean. L1 HotCache·L2·L3·Graph 사전 필터와 search() 최종 공통 필터에서 fragment 단위 정합성을 보장한다
             │   └── SearchSideEffects.js  검색 부작용 격리 모듈. commitSearchSideEffects()가 searchEventId를 동기 반환하고 SearchParamAdaptor.recordOutcome()을 fire-and-forget으로 호출. FragmentSearch는 검색 파이프라인에만 집중
             ├── write/                    쓰기 레이어 모듈
             │   ├── FragmentWriter.js     파편 쓰기 (insert, update, delete, incrementAccess, touchLinked)
@@ -873,7 +873,7 @@ case_id로 파편을 묶어 과거 유사 사례를 구조화 검색하고 인�
 
 ### CaseRecall
 
-recall 도구에 `caseMode: true`를 전달하면 CaseRecall 경로가 활성화된다. case_id별로 `(goal, events[], outcome)` 트리플을 반환하여 유사 사례의 전체 해결 흐름을 한 번에 복원한다.
+recall 도구에 `caseMode: true`를 전달하면 CaseRecall 경로가 활성화된다. case_id별로 `(goal, events[], outcome)` 트리플을 반환하여 유사 사례의 전체 해결 흐름을 한 번에 복원한다. `isAnchor`가 지정되면 대표 파편·상태·파편 수와 source fragment가 있는 events에도 같은 true/false 필터를 적용한다.
 
 ### CaseRewardBackprop
 
@@ -1280,7 +1280,7 @@ lib/memory/
 
 `SearchScope.fromQuery(sq)` 정적 팩토리로 `_buildSearchQuery()` 반환값에서 생성한다. `applyTo(fragment) → boolean`으로 fragment 단위 정합 검사를 수행한다.
 
-L1 HotCache, L2, L3, Graph 각 호출 사이트가 `scope.applyTo(fragment)` 한 번으로 필터링을 완료한다. `_executeSearch`는 별도의 workspace/affect 후처리 보정을 수행하지 않는다.
+L1 HotCache, L2, L3, Graph 각 호출 사이트가 `scope.applyTo(fragment)`로 후보를 사전 필터링하고, `search()`가 토큰 절삭 전에 같은 계약의 최종 공통 필터를 적용한다.
 
 ### SearchSideEffects 부작용 격리
 
