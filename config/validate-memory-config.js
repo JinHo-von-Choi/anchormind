@@ -29,6 +29,19 @@ export function validateMemoryConfig(cfg) {
     errors.push(`rankWeights must sum to 1.0 (got ${rwSum})`);
   }
 
+  // workspace anchor 예약은 전체 anchor 상한 안의 0 이상 정수여야 한다.
+  const anchorLimit   = cfg.contextInjection.maxAnchorFragments;
+  const anchorReserve = cfg.contextInjection.workspaceAnchorReserve;
+  if (!Number.isInteger(anchorLimit) || anchorLimit <= 0) {
+    errors.push(`contextInjection.maxAnchorFragments must be a positive integer (got ${anchorLimit})`);
+  }
+  if (!Number.isInteger(anchorReserve) || anchorReserve < 0 || anchorReserve > anchorLimit) {
+    errors.push(
+      `contextInjection.workspaceAnchorReserve must be an integer between 0 and maxAnchorFragments (${anchorLimit}) ` +
+      `(got ${anchorReserve})`
+    );
+  }
+
   // 0~1 범위 검증
   const zeroOneFields = [
     ["semanticSearch.minSimilarity", cfg.semanticSearch.minSimilarity],

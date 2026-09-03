@@ -1,11 +1,7 @@
 /**
- * 앵커 주입 개수 설정(maxAnchorFragments / MEMENTO_CONTEXT_ANCHOR_LIMIT) 단위 테스트
+ * workspace anchor 예약 선택과 응답 정합성 테스트
  *
- * 작성자: 최진호
- * 작성일: 2026-07-14
- *
- * env 클램프 규칙과 #loadAnchorMemory LIMIT 바인딩,
- * structured rankedInjection의 앵커 상단 고정을 검증한다.
+ * 모든 fixture는 합성 ID/content만 사용한다.
  */
 
 import { describe, it, mock } from "node:test";
@@ -14,56 +10,232 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-import { ContextBuilder } from "../../lib/memory/read/ContextBuilder.js";
-import { MEMORY_CONFIG } from "../../config/memory.js";
+import {
+  ContextBuilder,
+  selectAnchorFragments,
+} from "../../lib/memory/read/ContextBuilder.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-/**
- * 서브프로세스에서 env를 설정한 뒤 config를 새로 로드하여
- * maxAnchorFragments 값을 반환한다 (모듈 캐시 격리).
- */
-function loadAnchorLimit(envValue) {
+function loadAnchorConfig(values = {}, validate = false) {
   const env = { ...process.env };
   delete env.MEMENTO_CONTEXT_ANCHOR_LIMIT;
-  if (envValue !== undefined) env.MEMENTO_CONTEXT_ANCHOR_LIMIT = envValue;
-  const out = execFileSync(process.execPath, [
-    "--input-type=module",
-    "-e",
-    `import { MEMORY_CONFIG } from "${path.join(ROOT, "config", "memory.js")}";` +
-    "console.log(MEMORY_CONFIG.contextInjection.maxAnchorFragments);"
-  ], { env, encoding: "utf8" });
-  return Number(out.trim());
+  delete env.MEMENTO_CONTEXT_WORKSPACE_ANCHOR_RESERVE;
+  Object.assign(env, values);
+  const script = [
+    `import { MEMORY_CONFIG } from "${path.join(ROOT, "config", "memory.js")}";`,
+    validate
+      ? `import { validateMemoryConfig } from "${path.join(ROOT, "config", "validate-memory-config.js")}"; validateMemoryConfig(MEMORY_CONFIG);`
+      : "",
+    "console.log(JSON.stringify(MEMORY_CONFIG.contextInjection));",
+  ].join("");
+  return JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", script], {
+    env,
+    encoding: "utf8",
+  }).trim());
 }
 
-describe("MEMENTO_CONTEXT_ANCHOR_LIMIT env 클램프", () => {
-  it("미설정 시 기본값 10", () => {
-    assert.equal(loadAnchorLimit(undefined), 10);
+function anchor(id, importance, workspace = null, createdAt = "2026-01-01T00:00:00.000Z") {
+  return {
+    id,
+    type: "fact",
+    topic: "synthetic-anchor",
+    content: `synthetic content ${id}`,
+    importance,
+    workspace,
+    created_at: createdAt,
+  };
+}
+
+function candidateRows(rows) {
+  return rows.map(row => ({ ...row, candidate_count: String(rows.length) }));
+}
+
+describe("anchor 환경 설정", () => {
+  it("미설정 시 total=20, workspace reserve=10", () => {
+    const config = loadAnchorConfig();
+    assert.equal(config.maxAnchorFragments, 20);
+    assert.equal(config.workspaceAnchorReserve, 10);
   });
 
-  it("=25 시 25", () => {
-    assert.equal(loadAnchorLimit("25"), 25);
+  it("total은 기존 1~30 클램프를 유지한다", () => {
+    assert.equal(loadAnchorConfig({ MEMENTO_CONTEXT_ANCHOR_LIMIT: "0" }).maxAnchorFragments, 1);
+    assert.equal(loadAnchorConfig({ MEMENTO_CONTEXT_ANCHOR_LIMIT: "30" }).maxAnchorFragments, 30);
+    assert.equal(loadAnchorConfig({ MEMENTO_CONTEXT_ANCHOR_LIMIT: "999" }).maxAnchorFragments, 30);
   });
 
-  it("=0 시 하한 1로 클램프", () => {
-    assert.equal(loadAnchorLimit("0"), 1);
+  it("reserve 미설정 시 total의 절반(최대 10)으로 유도한다", () => {
+    assert.equal(loadAnchorConfig({ MEMENTO_CONTEXT_ANCHOR_LIMIT: "1" }, true).workspaceAnchorReserve, 0);
+    assert.equal(loadAnchorConfig({ MEMENTO_CONTEXT_ANCHOR_LIMIT: "5" }, true).workspaceAnchorReserve, 2);
+    assert.equal(loadAnchorConfig({ MEMENTO_CONTEXT_ANCHOR_LIMIT: "10" }, true).workspaceAnchorReserve, 5);
+    assert.equal(loadAnchorConfig({ MEMENTO_CONTEXT_ANCHOR_LIMIT: "30" }, true).workspaceAnchorReserve, 10);
   });
 
-  it("=999 시 상한 30으로 클램프", () => {
-    assert.equal(loadAnchorLimit("999"), 30);
+  it("reserve=0과 reserve=total은 검증을 통과한다", () => {
+    assert.equal(loadAnchorConfig({ MEMENTO_CONTEXT_WORKSPACE_ANCHOR_RESERVE: "0" }, true).workspaceAnchorReserve, 0);
+    assert.equal(loadAnchorConfig({
+      MEMENTO_CONTEXT_ANCHOR_LIMIT: "20",
+      MEMENTO_CONTEXT_WORKSPACE_ANCHOR_RESERVE: "20",
+    }, true).workspaceAnchorReserve, 20);
   });
 
-  it("비숫자 시 파싱 실패 기본값 10", () => {
-    assert.equal(loadAnchorLimit("abc"), 10);
+  for (const invalid of ["-1", "21", "1.5", "not-an-integer"]) {
+    it(`잘못된 reserve=${invalid}는 검증 시 fail-fast`, () => {
+      assert.throws(() => loadAnchorConfig({
+        MEMENTO_CONTEXT_ANCHOR_LIMIT: "20",
+        MEMENTO_CONTEXT_WORKSPACE_ANCHOR_RESERVE: invalid,
+      }, true));
+    });
+  }
+});
+
+describe("workspace anchor 예약 선택", () => {
+  const globals = Array.from({ length: 25 }, (_, i) => anchor(`global-${i + 1}`, 0.99 - i * 0.01));
+
+  for (const count of [0, 1, 9, 10, 15]) {
+    it(`workspace 후보 ${count}개 경계`, () => {
+      const workspaceRows = Array.from(
+        { length: count },
+        (_, i) => anchor(`workspace-${i + 1}`, 0.8 - i * 0.01, "workspace-a")
+      );
+      const result = selectAnchorFragments(workspaceRows, globals, {
+        limit: 20,
+        reserve: 10,
+        workspaceApplied: true,
+      });
+      const ids = new Set(result.fragments.map(fragment => fragment.id));
+      for (const fragment of workspaceRows.slice(0, 10)) {
+        assert.ok(ids.has(fragment.id), `${fragment.id}가 예약 선택되어야 한다`);
+      }
+      assert.equal(result.fragments.length, 20);
+      assert.equal(result.meta.selected.reservedWorkspace, Math.min(count, 10));
+      assert.equal(result.meta.candidates.workspace, count);
+      assert.equal(result.meta.candidates.global, 25);
+    });
+  }
+
+  it("예약 후 남은 슬롯은 잔여 workspace와 global을 통합 중요도순으로 채운다", () => {
+    const workspaceRows = [
+      ...Array.from({ length: 10 }, (_, i) => anchor(`reserved-${i + 1}`, 1 - i * 0.01, "workspace-a")),
+      anchor("workspace-remainder-high", 0.88, "workspace-a"),
+      anchor("workspace-remainder-low", 0.60, "workspace-a"),
+    ];
+    const globalRows = [
+      anchor("global-high", 0.89),
+      anchor("global-middle", 0.70),
+    ];
+    const result = selectAnchorFragments(workspaceRows, globalRows, {
+      limit: 13,
+      reserve: 10,
+      workspaceApplied: true,
+    });
+    assert.deepEqual(result.fragments.slice(10).map(fragment => fragment.id), [
+      "global-high",
+      "workspace-remainder-high",
+      "global-middle",
+    ]);
+  });
+
+  it("reserve=0이면 workspace/global 순수 통합 top-N", () => {
+    const result = selectAnchorFragments(
+      [anchor("workspace-low", 0.4, "workspace-a"), anchor("workspace-high", 0.9, "workspace-a")],
+      [anchor("global-middle", 0.7)],
+      { limit: 2, reserve: 0, workspaceApplied: true }
+    );
+    assert.deepEqual(result.fragments.map(fragment => fragment.id), ["workspace-high", "global-middle"]);
+    assert.equal(result.meta.selected.reservedWorkspace, 0);
+  });
+
+  it("reserve=total이면 workspace를 먼저 채우고 부족분만 global로 채운다", () => {
+    const result = selectAnchorFragments(
+      [anchor("workspace-low", 0.1, "workspace-a")],
+      [anchor("global-high", 1.0), anchor("global-next", 0.9)],
+      { limit: 2, reserve: 2, workspaceApplied: true }
+    );
+    assert.deepEqual(result.fragments.map(fragment => fragment.id), ["workspace-low", "global-high"]);
+  });
+
+  it("workspace 미지정이면 reserve 없이 기존 unscoped 후보를 최대 total 선택", () => {
+    const unscoped = [anchor("workspace-anchor", 1.0, "workspace-a"), ...globals];
+    const result = selectAnchorFragments([], unscoped, {
+      limit: 20,
+      reserve: 10,
+      workspaceApplied: false,
+      unscopedCandidateCount: unscoped.length,
+    });
+    assert.equal(result.fragments.length, 20);
+    assert.equal(result.meta.reserveApplied, false);
+    assert.equal(result.meta.selected.workspace, 0);
+    assert.equal(result.meta.selected.global, 0);
+    assert.equal(result.meta.selected.unscoped, 20);
+    assert.equal(result.meta.candidates.unscoped, 26);
+    assert.equal(result.meta.candidates.total, 26);
+    assert.equal(result.meta.excluded.total, 6);
+    assert.equal(result.meta.candidates.total, result.meta.selected.total + result.meta.excluded.total);
+    assert.ok(result.fragments.some(fragment => fragment.id === "workspace-anchor"));
+  });
+
+  it("후보/선택/제외 메타는 전체 후보 수를 기준으로 산술 정합하다", () => {
+    const result = selectAnchorFragments(
+      [anchor("workspace-1", 0.8, "workspace-a")],
+      [anchor("global-1", 0.9)],
+      {
+        limit: 2,
+        reserve: 1,
+        workspaceApplied: true,
+        workspaceCandidateCount: 7,
+        globalCandidateCount: 11,
+      }
+    );
+    assert.deepEqual(result.meta.candidates, { workspace: 7, global: 11, unscoped: 0, total: 18 });
+    assert.equal(result.meta.selected.total, 2);
+    assert.equal(result.meta.excluded.total, 16);
+    assert.equal(result.meta.candidates.total, result.meta.selected.total + result.meta.excluded.total);
+  });
+
+  it("동점은 created_at DESC NULLS LAST, id ASC 순서로 결정한다", () => {
+    const rows = [
+      anchor("id-c", 0.8, null, null),
+      anchor("id-b", 0.8, null, "2026-02-01T00:00:00.000Z"),
+      anchor("id-a", 0.8, null, "2026-02-01T00:00:00.000Z"),
+      anchor("id-d", 0.8, null, "2026-01-01T00:00:00.000Z"),
+    ];
+    const result = selectAnchorFragments([], rows.reverse(), {
+      limit: 4,
+      reserve: 0,
+      workspaceApplied: false,
+    });
+    assert.deepEqual(result.fragments.map(fragment => fragment.id), ["id-a", "id-b", "id-d", "id-c"]);
+  });
+
+  it("id 동점 정렬은 PostgreSQL C collation과 같은 UTF-8 바이트 순서를 따른다", () => {
+    const result = selectAnchorFragments([], [
+      anchor("😀", 0.8),
+      anchor("\uE000", 0.8),
+    ], {
+      limit: 2,
+      reserve: 0,
+      workspaceApplied: false,
+    });
+    assert.deepEqual(result.fragments.map(fragment => fragment.id), ["\uE000", "😀"]);
+  });
+
+  it("limit을 생략해도 설정 기본 상한을 적용한다", () => {
+    const rows = Array.from({ length: 25 }, (_, i) => anchor(`unscoped-${i + 1}`, 1 - i * 0.01));
+    const result = selectAnchorFragments([], rows, { workspaceApplied: false });
+
+    assert.equal(result.fragments.length, 20);
+    assert.equal(result.meta.totalLimit, 20);
+    assert.equal(result.meta.selected.total, 20);
+    assert.equal(result.meta.excluded.total, 5);
   });
 });
 
-/* ── #loadAnchorMemory LIMIT 바인딩 + structured 앵커 고정 ── */
-describe("ContextBuilder 앵커 주입", () => {
-  function makeBuilder(poolQuery) {
-    const recallMock = mock.fn(async (params) => {
+describe("ContextBuilder anchor 조회와 응답", () => {
+  function makeBuilder(poolQuery, getPool = () => ({ query: poolQuery })) {
+    const recallMock = mock.fn(async params => {
       if (params.topic === "session_reflect") return { fragments: [] };
-      return { fragments: [{ id: `${params.type}-1`, type: params.type, content: `${params.type} c`, importance: 0.5 }] };
+      return { fragments: [] };
     });
     const indexMock = {
       getWorkingMemory: mock.fn(async () => []),
@@ -74,91 +246,164 @@ describe("ContextBuilder 앵커 주입", () => {
       recall : recallMock,
       store  : storeMock,
       index  : indexMock,
-      getPool: () => ({ query: poolQuery }),
+      getPool,
     });
   }
 
-  it("앵커 SELECT의 LIMIT이 설정값으로 바인딩된다", async () => {
-    let captured = null;
+  it("pool이 없는 정상 경로는 빈 결과를 partial 없이 보고한다", async () => {
+    const result = await makeBuilder(undefined, () => null).build({});
+
+    assert.equal(result.anchorCount, 0);
+    assert.equal(result._anchorSelection.partial, false);
+    assert.deepEqual(result._anchorSelection.loadStatus, {
+      workspace: null,
+      global: null,
+      unscoped: true,
+    });
+    assert.deepEqual(result._anchorSelection.candidates, {
+      workspace: 0,
+      global: 0,
+      unscoped: 0,
+      total: 0,
+    });
+  });
+
+  it("pool 조회 실패는 partial과 알 수 없는 후보 수로 보고한다", async () => {
+    const result = await makeBuilder(async () => {
+      throw new Error("synthetic pool failure");
+    }).build({});
+
+    assert.equal(result.anchorCount, 0);
+    assert.equal(result._anchorSelection.partial, true);
+    assert.deepEqual(result._anchorSelection.loadStatus, {
+      workspace: null,
+      global: null,
+      unscoped: false,
+    });
+    assert.equal(result._anchorSelection.candidates.unscoped, null);
+    assert.equal(result._anchorSelection.candidates.total, null);
+  });
+
+  it("workspace 지정 시 exact workspace와 global을 분리 조회하고 key scope를 함께 유지한다", async () => {
+    const calls = [];
     const builder = makeBuilder(async (sql, params) => {
-      captured = { sql, params };
+      calls.push({ sql, params });
       return { rows: [] };
     });
 
-    await builder.build({});
+    await builder.build({ workspace: "workspace-a", _keyId: "key-a", _groupKeyIds: ["key-a", "key-shared"] });
 
-    assert.ok(captured, "anchor 쿼리가 실행되어야 한다");
-    assert.match(captured.sql, /LIMIT \$\d+/);
-    assert.match(captured.sql, /ORDER BY importance DESC, created_at DESC, id ASC/);
-    assert.equal(
-      captured.params[captured.params.length - 1],
-      MEMORY_CONFIG.contextInjection.maxAnchorFragments
-    );
+    assert.equal(calls.length, 2);
+    const workspaceCall = calls.find(call => /AND workspace = \$\d+/.test(call.sql));
+    const globalCall = calls.find(call => /AND workspace IS NULL/.test(call.sql));
+    assert.ok(workspaceCall);
+    assert.ok(globalCall);
+    assert.match(workspaceCall.sql, /key_id = ANY\(\$\d+::text\[\]\)/);
+    assert.deepEqual(workspaceCall.params, [["key-a", "key-shared"], "workspace-a", 20]);
+    assert.deepEqual(globalCall.params, [["key-a", "key-shared"], 20]);
+    for (const call of calls) {
+      assert.match(call.sql, /ORDER BY importance DESC, created_at DESC NULLS LAST, id COLLATE "C" ASC/);
+      assert.match(call.sql, /LIMIT \$\d+/);
+    }
   });
 
-  it("workspace 지정 시 동일 workspace와 전역(NULL) 앵커만 조회한다", async () => {
-    let captured = null;
+  it("키의 default workspace도 예약 조회에 적용한다", async () => {
+    const calls = [];
     const builder = makeBuilder(async (sql, params) => {
-      captured = { sql, params };
+      calls.push({ sql, params });
       return { rows: [] };
     });
-
-    await builder.build({ workspace: "mcps" });
-
-    assert.match(captured.sql, /AND \(workspace = \$\d+ OR workspace IS NULL\)/);
-    assert.deepEqual(captured.params, [
-      "mcps",
-      MEMORY_CONFIG.contextInjection.maxAnchorFragments
-    ]);
+    await builder.build({ _defaultWorkspace: "workspace-default" });
+    assert.equal(calls.length, 2);
+    assert.ok(calls.some(call => call.params.includes("workspace-default")));
   });
 
-  it("키의 default workspace도 앵커 조회에 적용한다", async () => {
-    let captured = null;
-    const builder = makeBuilder(async (sql, params) => {
-      captured = { sql, params };
-      return { rows: [] };
-    });
-
-    await builder.build({ _defaultWorkspace: "team-default" });
-
-    assert.match(captured.sql, /AND \(workspace = \$\d+ OR workspace IS NULL\)/);
-    assert.deepEqual(captured.params, [
-      "team-default",
-      MEMORY_CONFIG.contextInjection.maxAnchorFragments
-    ]);
-  });
-
-  it("workspace가 없으면 기존처럼 앵커 workspace 필터를 추가하지 않는다", async () => {
-    let captured = null;
-    const builder = makeBuilder(async (sql, params) => {
-      captured = { sql, params };
-      return { rows: [] };
-    });
-
-    await builder.build({});
-
-    assert.doesNotMatch(captured.sql, /workspace = \$\d+/);
-  });
-
-  it("structured=true에서 앵커 파편(원래 type 유지)이 rankedInjection 상단에 고정된다", async () => {
-    const anchorRows = [
-      { id: "anc-1", type: "preference", topic: "t", content: "anchor pref", importance: 1.0 },
-      { id: "anc-2", type: "decision",   topic: "t", content: "anchor deci", importance: 0.9 },
+  it("workspace가 없으면 기존 unscoped 단일 조회로 최대 20개를 유지한다", async () => {
+    const unscoped = [
+      anchor("workspace-anchor", 1.0, "workspace-a"),
+      ...Array.from({ length: 24 }, (_, i) => anchor(`global-${i + 1}`, 0.99 - i * 0.01)),
     ];
-    const builder = makeBuilder(async () => ({ rows: anchorRows }));
+    const calls = [];
+    const builder = makeBuilder(async (sql, params) => {
+      calls.push({ sql, params });
+      return { rows: candidateRows(unscoped).slice(0, params.at(-1)) };
+    });
+    const result = await builder.build({ tokenBudget: 1 });
+    assert.equal(calls.length, 1);
+    assert.doesNotMatch(calls[0].sql, /AND workspace(?: IS NULL| =)/);
+    assert.equal(result.anchorCount, 20);
+    assert.equal(result._anchorSelection.reserveApplied, false);
+    assert.equal(result._anchorSelection.partial, false);
+    assert.deepEqual(result._anchorSelection.loadStatus, {
+      workspace: null,
+      global: null,
+      unscoped: true,
+    });
+    assert.equal(result._anchorSelection.candidates.unscoped, 25);
+    assert.equal(result.fragments[0].id, "workspace-anchor");
+    assert.ok(!("workspace" in result.fragments[0]));
+    assert.ok(!("created_at" in result.fragments[0]));
+  });
 
-    const result = await builder.build({ structured: true });
+  it("workspace 후보 조회 실패 시 성공한 global 결과를 유지한다", async () => {
+    const builder = makeBuilder(async sql => {
+      if (/AND workspace =/.test(sql)) throw new Error("synthetic workspace failure");
+      return { rows: candidateRows([anchor("global-survivor", 0.9)]) };
+    });
+    const result = await builder.build({ workspace: "workspace-a" });
+    assert.equal(result.anchorCount, 1);
+    assert.equal(result.fragments[0].id, "global-survivor");
+    assert.equal(result._anchorSelection.partial, true);
+    assert.equal(result._anchorSelection.loadStatus.workspace, false);
+    assert.equal(result._anchorSelection.loadStatus.global, true);
+    assert.equal(result._anchorSelection.candidates.workspace, null);
+    assert.equal(result._anchorSelection.excluded.workspace, null);
+    assert.equal(result._anchorSelection.candidates.total, null);
+    assert.equal(result._anchorSelection.excluded.total, null);
+  });
 
-    assert.equal(result.structured, true);
-    assert.equal(result.anchorCount, 2);
-    const items = result.rankedInjection.items;
-    assert.equal(items[0].id, "anc-1");
-    assert.equal(items[0].anchor, true);
-    assert.equal(items[1].id, "anc-2");
-    assert.equal(items[1].anchor, true);
-    /** 앵커가 아닌 파편이 anchor=true로 표시되지 않아야 한다 */
-    for (const item of items.slice(2)) {
-      assert.equal(item.anchor, false);
+  it("global 후보 조회 실패 시 성공한 workspace 결과를 유지한다", async () => {
+    const builder = makeBuilder(async sql => {
+      if (/AND workspace IS NULL/.test(sql)) throw new Error("synthetic global failure");
+      return { rows: candidateRows([anchor("workspace-survivor", 0.9, "workspace-a")]) };
+    });
+    const result = await builder.build({ workspace: "workspace-a" });
+    assert.equal(result.anchorCount, 1);
+    assert.equal(result.fragments[0].id, "workspace-survivor");
+    assert.equal(result._anchorSelection.partial, true);
+    assert.equal(result._anchorSelection.loadStatus.workspace, true);
+    assert.equal(result._anchorSelection.loadStatus.global, false);
+    assert.equal(result._anchorSelection.candidates.global, null);
+    assert.equal(result._anchorSelection.excluded.global, null);
+  });
+
+  it("flat/structured의 선택 anchor 집합과 순서가 모든 응답 표면에서 일치한다", async () => {
+    const workspaceRows = Array.from(
+      { length: 15 },
+      (_, i) => anchor(`workspace-${i + 1}`, 0.95 - i * 0.02, "workspace-a")
+    );
+    const globalRows = Array.from(
+      { length: 15 },
+      (_, i) => anchor(`global-${i + 1}`, 0.99 - i * 0.02)
+    );
+    const query = async sql => ({
+      rows: candidateRows(/AND workspace IS NULL/.test(sql) ? globalRows : workspaceRows)
+    });
+
+    const flat = await makeBuilder(query).build({ workspace: "workspace-a", tokenBudget: 1 });
+    const structured = await makeBuilder(query).build({ workspace: "workspace-a", structured: true, tokenBudget: 1 });
+    const flatAnchorIds = flat.fragments.slice(0, flat.anchorCount).map(fragment => fragment.id);
+    const structuredAnchorIds = structured.anchors.permanent.map(fragment => fragment.id);
+    const rankedAnchorIds = structured.rankedInjection.items
+      .filter(item => item.anchor)
+      .map(item => item.id);
+
+    assert.deepEqual(flatAnchorIds, structuredAnchorIds);
+    assert.deepEqual(structuredAnchorIds, rankedAnchorIds);
+    assert.deepEqual(flat._anchorSelection, structured._anchorSelection);
+    assert.equal(flat.anchorCount, 20, "작은 tokenBudget도 anchor 상한을 줄이지 않아야 한다");
+    for (const fragment of flat.fragments.slice(0, flat.anchorCount)) {
+      assert.match(flat.injectionText, new RegExp(fragment.content));
     }
   });
 });

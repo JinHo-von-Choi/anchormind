@@ -53,7 +53,8 @@
 | MEMENTO_STORAGE | pgvector | storage 어댑터 선택. `pgvector`(기본, PgVectorStore) 또는 `sqlite-vec`(SqliteVecStore). 변경 시 서버 재시작 필요 |
 | MEMENTO_KEYWORD_SEMANTIC_FALLBACK | true | `false` 설정 시 text 없는 keywords-only recall의 L3 시맨틱 보조 경로를 비활성화. 활성 시 정규화된 keywords 합성 텍스트 임베딩 1회가 L2와 병렬 수행되어 저장 keywords에 없는 용어도 content 기반으로 회수된다 |
 | MEMENTO_KEYWORD_FALLBACK_TIMEOUT_MS | 1500 | keywords 보조 L3 실행 상한(ms, 100~60000 클램프). 초과 시 빈 결과로 대체하고 searchPath에 `L3kw:timeout`을 남긴다 |
-| MEMENTO_CONTEXT_ANCHOR_LIMIT | 10 | context 응답에 항상 포함되는 앵커(isAnchor) 파편의 최대 개수. 1~30 범위로 클램프되며 파싱 실패 시 10. 앵커는 tokenBudget 절삭 대상이 아니므로 이 개수 상한이 유일한 주입량 제한이다 |
+| MEMENTO_CONTEXT_ANCHOR_LIMIT | 20 | context 응답에 항상 포함되는 앵커(isAnchor) 파편의 전체 최대 개수. 종전 기본값 10에서 20으로 변경되었다. 1~30 범위로 클램프되며 파싱 실패 시 20. 앵커는 tokenBudget 절삭 대상이 아니므로 이 개수 상한이 유일한 주입량 제한이다. 종전 주입량이 필요하면 10으로 설정한다 |
+| MEMENTO_CONTEXT_WORKSPACE_ANCHOR_RESERVE | 10 | effective workspace가 있는 context에서 해당 workspace의 importance 상위 anchor에 먼저 예약할 슬롯 수. 미설정 시 total/2를 내림한 값(최대 10)으로 유도되므로 기본 total 20에서는 10, total 10에서는 5다. 명시값은 0 이상 total 이하여야 하며 잘못된 값은 서버 기동 검증에서 실패한다. workspace가 없으면 적용하지 않는다 |
 | MEMENTO_RECALL_MIN_SIM_FLOOR | (없음) | `SearchParamAdaptor.getMinSimilarity`가 반환하는 적응형 임계값에 옵트인 하한을 강제. 예: `0.45` 설정 시 학습값이 0.45 미만이어도 0.45 반환. 미설정 시 기존 동작 그대로 |
 | MIGRATION_LINT_FROM | (없음) | `npm run lint:migrations` 검사 cutoff override. 지정 마이그레이션 번호 이후분만 검사. 미설정 시 전체 검사 |
 | MEMENTO_MORPHEME_TOKENIZER | local | 형태소 토크나이저 경로 선택. `local`: garu-ko(한글)·natural PorterStemmer(영어)·@node-rs/jieba(중국어)·kuromoji(일본어) 로컬 CPU 분석기 사용(기본). `llm`: LLM 서브프로세스 경로(`MorphemeIndex._tokenizeViaLLM()`)로 전환. |
