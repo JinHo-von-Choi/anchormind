@@ -219,10 +219,20 @@ describe("workspace anchor 예약 선택", () => {
     });
     assert.deepEqual(result.fragments.map(fragment => fragment.id), ["\uE000", "😀"]);
   });
+
+  it("limit을 생략해도 설정 기본 상한을 적용한다", () => {
+    const rows = Array.from({ length: 25 }, (_, i) => anchor(`unscoped-${i + 1}`, 1 - i * 0.01));
+    const result = selectAnchorFragments([], rows, { workspaceApplied: false });
+
+    assert.equal(result.fragments.length, 20);
+    assert.equal(result.meta.totalLimit, 20);
+    assert.equal(result.meta.selected.total, 20);
+    assert.equal(result.meta.excluded.total, 5);
+  });
 });
 
 describe("ContextBuilder anchor 조회와 응답", () => {
-  function makeBuilder(poolQuery) {
+  function makeBuilder(poolQuery, getPool = () => ({ query: poolQuery })) {
     const recallMock = mock.fn(async params => {
       if (params.topic === "session_reflect") return { fragments: [] };
       return { fragments: [] };
@@ -236,9 +246,43 @@ describe("ContextBuilder anchor 조회와 응답", () => {
       recall : recallMock,
       store  : storeMock,
       index  : indexMock,
-      getPool: () => ({ query: poolQuery }),
+      getPool,
     });
   }
+
+  it("pool이 없는 정상 경로는 빈 결과를 partial 없이 보고한다", async () => {
+    const result = await makeBuilder(undefined, () => null).build({});
+
+    assert.equal(result.anchorCount, 0);
+    assert.equal(result._anchorSelection.partial, false);
+    assert.deepEqual(result._anchorSelection.loadStatus, {
+      workspace: null,
+      global: null,
+      unscoped: true,
+    });
+    assert.deepEqual(result._anchorSelection.candidates, {
+      workspace: 0,
+      global: 0,
+      unscoped: 0,
+      total: 0,
+    });
+  });
+
+  it("pool 조회 실패는 partial과 알 수 없는 후보 수로 보고한다", async () => {
+    const result = await makeBuilder(async () => {
+      throw new Error("synthetic pool failure");
+    }).build({});
+
+    assert.equal(result.anchorCount, 0);
+    assert.equal(result._anchorSelection.partial, true);
+    assert.deepEqual(result._anchorSelection.loadStatus, {
+      workspace: null,
+      global: null,
+      unscoped: false,
+    });
+    assert.equal(result._anchorSelection.candidates.unscoped, null);
+    assert.equal(result._anchorSelection.candidates.total, null);
+  });
 
   it("workspace 지정 시 exact workspace와 global을 분리 조회하고 key scope를 함께 유지한다", async () => {
     const calls = [];
