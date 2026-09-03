@@ -805,13 +805,13 @@ When `sessionId` is provided, session fragments are synthesized separately per w
 
 ## MCP Tool — context
 
-Loads Core Memory + Working Memory + session_reflect separately. Injects preference, error, procedure, decision fragments at session start to maintain context.
+Loads Anchor, Core, Learning, and Working Memory plus session_reflect separately. After ID deduplication, flat/structured responses and injectionText use the same fragment set. Anchors and one minimum slot for each core type, Learning, and Working Memory are guaranteed to prevent context loss.
 
 ### Parameters
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| tokenBudget | number | - | Maximum token count (default 2000) |
+| tokenBudget | number | - | Injection token target (default 2000). Anchors and minimum non-anchor slots may make the total exceed the target; remaining candidates are trimmed by score. |
 | types | string[] | - | Types to load (default: preference, error, procedure) |
 | sessionId | string | - | Session ID (for Working Memory loading) |
 | agentId | string | - | Agent ID |

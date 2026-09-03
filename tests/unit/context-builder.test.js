@@ -15,6 +15,7 @@ import {
   ContextBuilder,
   buildContextHint,
   buildRankedInjection,
+  collectGuaranteedContextFragments,
   deduplicateContextSections
 } from "../../lib/memory/read/ContextBuilder.js";
 
@@ -77,6 +78,15 @@ describe("buildRankedInjection", () => {
     assert.equal(result.items.length, 1);
     assert.equal(result.items[0].id, "o1");
   });
+
+  it("앵커가 예산을 소진해도 비앵커 최소 슬롯을 유지한다", () => {
+    const anchors = [frag("a1", "anchor", "a".repeat(400), { importance: 1.0 })];
+    const core    = frag("core-1", "fact", "core context", { importance: 0.8 });
+    const result  = buildRankedInjection(anchors, [core], 10, weights, null, [core]);
+
+    assert.deepEqual(result.items.map(item => item.id), ["a1", "core-1"]);
+    assert.ok(result.totalTokens > 10);
+  });
 });
 
 describe("deduplicateContextSections", () => {
@@ -93,6 +103,46 @@ describe("deduplicateContextSections", () => {
     assert.deepEqual(result.core.map(item => item.id), ["core-only"]);
     assert.deepEqual(result.learning.map(item => item.id), ["learning-only"]);
     assert.deepEqual(result.working.map(item => item.id), ["working-only"]);
+  });
+
+  it("core 유형별 하나와 learning/working 하나씩을 최소 슬롯으로 고른다", () => {
+    const sections = {
+      core: [
+        frag("fact-1", "fact", "first fact"),
+        frag("fact-2", "fact", "second fact"),
+        frag("error-1", "error", "first error")
+      ],
+      learning: [frag("learning-1", "fact", "learning")],
+      working : [frag("working-1", "fact", "working")]
+    };
+
+    assert.deepEqual(
+      collectGuaranteedContextFragments(sections).map(item => item.id),
+      ["fact-1", "error-1", "learning-1", "working-1"]
+    );
+  });
+
+  it("여러 provenance 버킷이 같은 core ID를 가리켜도 최소 슬롯을 중복 계산하지 않는다", () => {
+    const retained = frag("shared-core", "fact", "shared");
+    const duplicateProvenance = frag("shared-core", "fact", "same persisted fragment");
+
+    assert.deepEqual(
+      collectGuaranteedContextFragments(
+        { core: [retained], learning: [], working: [] },
+        [retained, duplicateProvenance]
+      ).map(item => item.id),
+      ["shared-core"]
+    );
+  });
+
+  it("ID 없는 동일 객체 참조는 한 번만 유지하고 서로 다른 객체는 보존한다", () => {
+    const shared = { type: "fact", content: "shared temporary fragment" };
+    const distinct = { type: "fact", content: "shared temporary fragment" };
+    const result = deduplicateContextSections({
+      anchor: [], core: [], learning: [shared, shared, distinct], working: []
+    });
+
+    assert.deepEqual(result.learning, [shared, distinct]);
   });
 });
 
@@ -315,7 +365,7 @@ describe("ContextBuilder.build()", () => {
     });
   });
 
-  it("작은 structured 토큰 예산도 tree/fragments/injection/ranked 통계를 함께 절삭한다", async () => {
+  it("앵커가 structured 예산을 넘겨도 비앵커 섹션 최소 슬롯을 함께 보존한다", async () => {
     recallMock = mock.fn(async (params) => {
       if (params.topic === "session_reflect") return { fragments: [] };
       return { fragments: [frag("core-only", params.type, "c".repeat(80))] };
@@ -331,7 +381,11 @@ describe("ContextBuilder.build()", () => {
       store : storeMock,
       index : indexMock,
       getPool: () => ({
-        query: async () => ({ rows: [frag("anchor-only", "fact", "anchor", { is_anchor: true })] })
+        query: async () => ({
+          rows: Array.from({ length: 10 }, (_, index) =>
+            frag(`anchor-${index}`, "fact", "a".repeat(900), { is_anchor: true })
+          )
+        })
       })
     });
 
@@ -339,18 +393,76 @@ describe("ContextBuilder.build()", () => {
       structured : true,
       sessionId  : "synthetic-session",
       types      : ["fact"],
-      tokenBudget: 2
+      tokenBudget: 2000
     });
 
-    assert.deepEqual(result.fragments.map(item => item.id), ["anchor-only"]);
-    assert.deepEqual(result.rankedInjection.items.map(item => item.id), ["anchor-only"]);
+    const fragmentIds = result.fragments.map(item => item.id);
+    assert.equal(result.anchors.permanent.length, 10);
+    assert.deepEqual(fragmentIds.slice(-3), ["core-only", "learning-only", "working-only"]);
+    assert.deepEqual(result.rankedInjection.items.map(item => item.id), fragmentIds);
     assert.equal(result.rankedInjection.totalTokens, result.totalTokens);
-    assert.equal(result.count, 1);
-    assert.equal(result.coreTokens, 0);
-    assert.equal(result.learningTokens, 0);
-    assert.equal(result.wmTokens, 0);
-    assert.match(result.injectionText, /anchor/);
-    assert.doesNotMatch(result.injectionText, /c{20}|l{20}|w{20}/);
+    assert.equal(result.count, 13);
+    assert.ok(result.totalTokens > 2000);
+    assert.ok(result.coreTokens > 0);
+    assert.ok(result.learningTokens > 0);
+    assert.ok(result.wmTokens > 0);
+    assert.match(result.injectionText, /\[CORE MEMORY\]/);
+    assert.match(result.injectionText, /\[LEARNING MEMORY\]/);
+    assert.match(result.injectionText, /\[WORKING MEMORY\]/);
+  });
+
+  it("flat 응답도 같은 토큰 선택을 적용해 추가 후보를 절삭한다", async () => {
+    recallMock = mock.fn(async (params) => {
+      if (params.topic === "session_reflect") return { fragments: [] };
+      return {
+        fragments: [
+          frag("core-guaranteed", params.type, "g".repeat(400), { importance: 0.9 }),
+          frag("core-extra", params.type, "x".repeat(400), { importance: 0.8 })
+        ]
+      };
+    });
+    builder = new ContextBuilder({ recall: recallMock, store: storeMock, index: indexMock, getPool: () => null });
+
+    const result = await builder.build({ types: ["fact"], tokenBudget: 100 });
+
+    assert.deepEqual(result.fragments.map(item => item.id), ["core-guaranteed"]);
+    assert.match(result.injectionText, /g{100}/);
+    assert.doesNotMatch(result.injectionText, /x{100}/);
+    assert.equal(result.totalTokens, 100);
+  });
+
+  it("ID 없는 추가 후보도 ranked 선택에서 빠지면 flat/structured 출력에서 제외한다", async () => {
+    recallMock = mock.fn(async (params) => {
+      if (params.topic === "session_reflect") return { fragments: [] };
+      return {
+        fragments: [
+          frag("core-guaranteed", params.type, "g".repeat(400), { importance: 0.9 }),
+          { type: params.type, content: "x".repeat(400), importance: 0.8 }
+        ]
+      };
+    });
+    builder = new ContextBuilder({ recall: recallMock, store: storeMock, index: indexMock, getPool: () => null });
+
+    const result = await builder.build({ structured: true, types: ["fact"], tokenBudget: 100 });
+
+    assert.equal(result.fragments.length, 1);
+    assert.deepEqual(result.rankedInjection.items.map(item => item.id), ["core-guaranteed"]);
+    assert.doesNotMatch(result.injectionText, /x{100}/);
+  });
+
+  it("session_reflect 버킷은 일반 fact와 type이 같아도 별도 최소 슬롯을 유지한다", async () => {
+    recallMock = mock.fn(async (params) => {
+      if (params.topic === "session_reflect") {
+        return { fragments: [frag("reflect-guaranteed", "fact", "r".repeat(400))] };
+      }
+      return { fragments: [frag("fact-guaranteed", "fact", "f".repeat(400))] };
+    });
+    builder = new ContextBuilder({ recall: recallMock, store: storeMock, index: indexMock, getPool: () => null });
+
+    const result = await builder.build({ types: ["fact"], tokenBudget: 100 });
+
+    assert.deepEqual(result.fragments.map(item => item.id), ["fact-guaranteed", "reflect-guaranteed"]);
+    assert.ok(result.totalTokens > 100);
   });
 
   it("파편이 비어 있으면 _memento_hint에 empty_context 포함", async () => {

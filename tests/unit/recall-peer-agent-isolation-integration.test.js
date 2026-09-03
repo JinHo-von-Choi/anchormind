@@ -507,6 +507,27 @@ describe("GraphNeighborSearch SQL 및 최종 RRF 격리", () => {
     assert.ok(ids.has("graph-non-anchor"));
     assert.ok(!ids.has("graph-anchor"));
   });
+
+  it("includeSuperseded=true는 graph 확장에서 valid_to 조건을 제거한다", async () => {
+    const search = Object.create(FragmentSearch.prototype);
+    search._searchL2 = async () => [fragment({ id: "seed" })];
+    search._searchL3 = async () => [];
+
+    await search._buildTextRRF(
+      {
+        text             : "scope isolation",
+        agentId          : "agent-a",
+        keyId            : ["key-1"],
+        workspace        : "ws-a",
+        includePeerAgents: false,
+        includeSuperseded: true,
+        minImportance    : 0
+      },
+      [], [], false, [], "agent-a", ["key-1"], null, [], {}
+    );
+
+    assert.doesNotMatch(graphQueries.at(-1).sql, /f\.valid_to IS NULL/);
+  });
 });
 
 describe("LinkStore SQL agent/workspace 격리", () => {
@@ -572,6 +593,21 @@ describe("LinkStore SQL agent/workspace 격리", () => {
     assert.equal((sql.match(/f\.is_anchor = \$/g) || []).length, 2);
     assert.equal((sql.match(/f\.valid_to IS NULL/g) || []).length, 2);
     assert.ok(params.includes(false));
+  });
+
+  it("includeSuperseded=true는 양방향 UNION에서 valid_to 조건을 제거한다", async () => {
+    const store = new LinkStore();
+    await store.getLinkedFragments(
+      ["seed"],
+      null,
+      "agent-a",
+      ["key-1"],
+      { workspace: "ws-a", includePeerAgents: false, includeSuperseded: true }
+    );
+
+    const { sql } = vectorQueries.at(-1);
+    assert.doesNotMatch(sql, /f\.valid_to IS NULL/);
+    assert.equal((sql.match(/valid_to/g) || []).length, 3);
   });
 });
 
@@ -660,6 +696,42 @@ describe("MemoryRecaller 기본 includeLinks 최종 병합 격리", () => {
       workspace        : "ws-a",
       includePeerAgents: false,
       isAnchor          : false
+    });
+  });
+
+  it("문자열 isAnchor=false도 연결 확장 전에 불리언으로 정규화한다", async () => {
+    const calls = [];
+    const recaller = createRecaller([
+      fragment({ id: "linked-non-anchor", is_anchor: false }),
+      fragment({ id: "linked-anchor", is_anchor: true })
+    ], calls);
+
+    const result = await recaller.recall({
+      agentId : "agent-a",
+      workspace: "ws-a",
+      keywords: ["scope-isolation"],
+      isAnchor: "false"
+    });
+
+    assert.deepEqual(idsOf(result), new Set(["base", "linked-non-anchor"]));
+    assert.equal(calls[0][4].isAnchor, false);
+  });
+
+  it("includeSuperseded=true를 연결 확장 저장소까지 전달한다", async () => {
+    const calls    = [];
+    const recaller = createRecaller([], calls);
+
+    await recaller.recall({
+      agentId          : "agent-a",
+      workspace        : "ws-a",
+      keywords         : ["scope-isolation"],
+      includeSuperseded: true
+    });
+
+    assert.deepEqual(calls[0][4], {
+      workspace         : "ws-a",
+      includePeerAgents : false,
+      includeSuperseded : true
     });
   });
 });

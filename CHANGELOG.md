@@ -2,30 +2,10 @@
 
 ## [Unreleased]
 
-### Added
-
-- 자동 앵커 승격만 비활성화할 수 있는 `MEMENTO_AUTO_PROMOTE_ANCHORS` 설정을 추가했다. 기본값과 빈 값은 기존 동작을 유지하는 `true`이며, 비활성 상태는 정리 결과·로그·`mcp_anchor_auto_promotion_enabled` 메트릭에서 확인할 수 있다.
-
 ### Changed
 
-- 검색·캐시·그래프·컨텍스트의 기존 주 점수 의미는 유지하면서 동점 결과를 `created_at DESC, id ASC`로 결정적으로 정렬한다. 기존 내림차순 인덱스와 offset cursor 계약은 유지하며, ANN 검색은 인덱스가 고른 후보 집합 안에서만 동점을 정렬한다.
-- context anchor 기본 상한을 10개에서 20개로 변경한다. effective workspace에 기본 10개를 예약하면서도 나머지 10개를 잔여 workspace/global 통합 순위에 남기기 위한 의도적인 주입량 변경이다. Anchor는 `tokenBudget` 절삭 대상이 아니므로 최악 주입량이 종전의 2배가 될 수 있으며, 기존 주입량이 필요한 배포는 `MEMENTO_CONTEXT_ANCHOR_LIMIT=10`으로 유지할 수 있다. Reserve를 따로 지정하지 않으면 total/2를 내림한 값(최대 10)으로 유도해 total만 낮춘 기존 배포의 기동 실패와 workspace 예약분의 자동 독점을 피한다.
-
-### Security
-
-- `recall`/`context`가 workspace와 key default를 모두 생략한 경우 이제 전역(`workspace IS NULL`) 파편만 조회한다. 전체 workspace 조회는 master가 `allWorkspaces=true`를 명시한 경우에만 허용하며, 일반 API key 요청은 권한 오류로 거부한다. anchor/core/learning/working memory와 L1~L3·graph·linked hydration에도 같은 계약을 적용한다.
-
-### 업그레이드 주의
-
-- master 키로 workspace를 생략해 전체 기억을 조회하던 관리 호출은 `allWorkspaces=true`를 추가해야 한다. 명시 workspace와 API key `default_workspace`의 의미는 유지된다.
-- `default_workspace`가 없는 공유 키로 저장할 때 workspace를 명시해 왔다면, `recall`과 `context`에도 같은 workspace를 명시해야 한다. 생략하면 이제 전역(`workspace IS NULL`) 범위만 조회하며, 빈 결과 힌트는 workspace를 지정한 재검색을 안내한다.
-- 업그레이드 전에 Redis Working Memory에 들어간 항목은 workspace 필드가 없어 scoped/global-only context에서 안전하게 판정할 수 없으므로 제외된다. master의 `allWorkspaces=true`에서는 조회할 수 있으며, 그 밖에는 해당 WM 목록이 만료·퇴출·삭제될 때까지 남을 수 있다(명목 TTL 24시간, 쓰기 시 갱신).
-
-### Fixed
-
-- case mode 이벤트 조회가 nullable `source_fragment_id`를 활성 파편과 내부 조인해 source 없는 이벤트와 supersede·GC된 source의 과거 이벤트를 누락하던 회귀를 막았다. API 키 요청은 동일 case ID 충돌에 따른 교차 테넌트 노출을 막기 위해 현재 키 그룹의 이벤트만 허용하며, `key_id IS NULL`인 레거시·master 이벤트는 master 조회에서만 반환된다.
-- 업그레이드 전 Redis 세션에 `isMaster` 필드가 없을 때 현재 요청의 인증과 세션 key가 일치하면 master 여부를 안전하게 재앵커링한다. 인증정보가 없거나 key가 다르면 일반 권한으로 유지한다.
-- global-only 빈 결과 안내를 CLI의 table·CSV·JSON 출력에 노출하고, `topic_mismatch`가 함께 감지되더라도 workspace 재검색 안내를 유지한다.
+- `recall.isAnchor`의 true/false/미지정 계약을 캐시·그래프·링크·케이스 확장까지 일관되게 적용한다. case event 타임라인은 source 파편의 현재 앵커 상태와 분리해 과거 이력을 보존한다.
+- `context`는 fragment ID 중복을 제거하고 Anchor/Core/Learning/Working의 최소 슬롯을 보장한 뒤, flat·structured·주입 텍스트·순위 목록에 같은 선택 집합과 토큰 통계를 사용한다. 최소 보장 슬롯 때문에 `tokenBudget`은 soft target으로 동작할 수 있다.
 
 ## [5.9.0] - 2026-08-29
 

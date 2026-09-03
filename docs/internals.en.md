@@ -17,7 +17,7 @@ MemoryManager is a thin facade. Business logic is delegated to 4 processors unde
 
 | Module | Delegated to | Role |
 |--------|-------------|------|
-| `ContextBuilder` | `context()` | Core/Working/Anchor Memory composition, rankedInjection, context hint generation |
+| `ContextBuilder` | `context()` | Anchor/Core/Learning/Working ID deduplication, minimum-slot token selection, shared flat/structured/rankedInjection composition, and context hints |
 | `ReflectProcessor` | `reflect()` | summary/decisions/errors_resolved/new_procedures/open_questions fragment conversion and storage, episode creation, Working Memory cleanup |
 | `BatchRememberProcessor` | `batchRemember()` | Phase A (validation) → Phase B (transactional INSERT) → Phase C (post-processing) 3-stage batch storage. When Redis is available, Phase B is delegated to `_enqueueAsync()` for async processing by BatchRememberWorker. Uses `getBatchPool()` (dedicated batch pool) for DB connections |
 | `QuotaChecker` | `remember()` entry | Per-API-key fragment quota (fragment_limit) check |

@@ -17,7 +17,7 @@ MemoryManager는 thin facade다. 비즈니스 로직은 `lib/memory/processors/`
 
 | 모듈 | 위임 대상 | 역할 |
 |------|----------|------|
-| `ContextBuilder` | `context()` | Core/Working/Anchor Memory 조합, rankedInjection, 컨텍스트 힌트 생성 |
+| `ContextBuilder` | `context()` | Anchor/Core/Learning/Working 후보 ID dedup, 최소 슬롯 보장 토큰 선택, 공통 flat/structured/rankedInjection 조립, 컨텍스트 힌트 생성 |
 | `ReflectProcessor` | `reflect()` | summary/decisions/errors_resolved/new_procedures/open_questions 파편 변환·저장, episode 생성, Working Memory 정리 |
 | `BatchRememberProcessor` | `batchRemember()` | Phase A(유효성 검증) → Phase B(트랜잭션 INSERT) → Phase C(후처리) 3단계 일괄 저장. Redis 가용 시 Phase B를 `_enqueueAsync()`로 위임하여 비동기 큐(BatchRememberWorker)에서 처리. DB 풀은 `getBatchPool()`(배치 전용 풀) 사용 |
 | `QuotaChecker` | `remember()` 진입 시 | API 키별 파편 할당량(fragment_limit) 검사 |

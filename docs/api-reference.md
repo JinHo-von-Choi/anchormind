@@ -871,13 +871,13 @@ violations 있는 경우 (soft gate — 저장됨):
 
 ## MCP 도구 — context
 
-Core Memory + Working Memory + session_reflect를 분리 로드한다. 세션 시작 시 preference, error, procedure, decision 파편을 주입하여 맥락 유지.
+Anchor + Core + Learning + Working Memory와 session_reflect를 분리 로드한다. ID 중복 제거 후 flat/structured 응답과 injectionText에 같은 파편 집합을 사용한다. 앵커와 core 유형별·learning·working의 최소 1건은 맥락 소실 방지를 위해 우선 보장한다.
 
 ### 파라미터
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| tokenBudget | number | - | 최대 토큰 수 (기본 2000) |
+| tokenBudget | number | - | 주입 토큰 목표치(기본 2000). 앵커와 비앵커 최소 보장 슬롯 때문에 합계가 목표치를 넘을 수 있고, 나머지 후보는 점수순으로 절삭된다. |
 | types | string[] | - | 로드할 유형 목록 (기본: preference, error, procedure) |
 | sessionId | string | - | 세션 ID (Working Memory 로드용) |
 | agentId | string | - | 에이전트 ID |

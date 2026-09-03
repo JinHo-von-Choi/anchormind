@@ -1,8 +1,14 @@
 /**
  * graph/linked/context 확장 SQL이 isAnchor 3상태 계약을 우회하지 않는지 검증한다.
  */
-import { beforeEach, describe, it, mock } from "node:test";
+import { after, beforeEach, describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { teardownTestResources, assertCleanShutdown } from "../_lifecycle.js";
+
+after(async () => {
+  await teardownTestResources();
+  await assertCleanShutdown();
+});
 
 const queries = [];
 
@@ -69,6 +75,22 @@ describe("isAnchor 확장 SQL", () => {
     for (const { sql, params } of queries) {
       assert.doesNotMatch(sql, /f\.is_anchor = \$/);
       assert.ok(!params.includes(true) && !params.includes(false));
+    }
+  });
+
+  it("includeSuperseded=true는 linked/stitch 확장에서 valid_to 조건을 제거한다", async () => {
+    await fetchLinkedFragments(["synthetic-fragment"], { includeSuperseded: true });
+    await fetchCausalLinks(["synthetic-fragment"], { includeSuperseded: true });
+    await fetchSessionNeighbors([
+      {
+        id        : "synthetic-fragment",
+        session_id: "synthetic-session",
+        created_at: "2026-01-01T00:00:00.000Z"
+      }
+    ], { includeSuperseded: true });
+
+    for (const { sql } of queries) {
+      assert.doesNotMatch(sql, /f\.valid_to IS NULL/);
     }
   });
 });

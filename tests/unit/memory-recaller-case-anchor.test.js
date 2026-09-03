@@ -1,6 +1,12 @@
 /** MemoryRecaller가 caseMode 확장기에 isAnchor 3상태를 손실 없이 전달하는지 검증한다. */
-import { beforeEach, describe, it, mock } from "node:test";
+import { after, beforeEach, describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { teardownTestResources, assertCleanShutdown } from "../_lifecycle.js";
+
+after(async () => {
+  await teardownTestResources();
+  await assertCleanShutdown();
+});
 
 const capturedOptions = [];
 

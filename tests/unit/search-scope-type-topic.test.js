@@ -127,6 +127,15 @@ describe("isAnchor 3상태 검색 계약", () => {
     assert.equal(SearchScope.fromQuery({ isAnchor: false }).isAnchor, false);
   });
 
+  it("문자열 true/false는 경계에서 불리언으로 정규화하고 잘못된 값은 거부한다", () => {
+    assert.equal(new SearchScope({ isAnchor: "true" }).isAnchor, true);
+    assert.equal(new SearchScope({ isAnchor: " false " }).isAnchor, false);
+    assert.throws(
+      () => new SearchScope({ isAnchor: "yes" }),
+      /isAnchor must be a boolean/
+    );
+  });
+
   it("keyword/topic/semantic/time/source SQL에 false도 명시 필터로 전달한다", async () => {
     const reader = new FragmentReader();
     const calls = [
@@ -152,5 +161,20 @@ describe("isAnchor 3상태 검색 계약", () => {
     await new FragmentReader().searchByTopic("synthetic", {});
     assert.doesNotMatch(capturedSql, /(?:f\.)?is_anchor = \$/);
     assert.ok(!capturedParams.includes(true) && !capturedParams.includes(false));
+  });
+
+  it("source 조회도 includeSuperseded=true이면 valid_to 조건을 제거하고 값을 반환 필드에 싣는다", async () => {
+    capturedSql = "";
+    capturedParams = [];
+    await new FragmentReader().searchBySource(
+      "synthetic-source",
+      "synthetic-agent",
+      null,
+      5,
+      { includeSuperseded: true }
+    );
+
+    assert.doesNotMatch(capturedSql, /valid_to IS NULL/);
+    assert.match(capturedSql, /workspace, valid_to,/);
   });
 });
