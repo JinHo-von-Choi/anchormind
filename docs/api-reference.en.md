@@ -341,7 +341,7 @@ MCP resources for real-time queries on the current state of the memory system.
 | depth | string | - | Search depth filter. "high-level" / "detail" / "tool-level". See details below. |
 | workspace | string | - | Search scope restriction. When specified, only fragments from the given workspace + global (NULL) fragments are returned. |
 | contextText | string | - | Current conversation context text. Proactively activates related fragments (when ENABLE_SPREADING_ACTIVATION=true). |
-| cursor | string | - | Pagination cursor |
+| cursor | string | - | Backward-compatible opaque pagination cursor carrying the offset and fixed `anchorTime` |
 | pageSize | number | - | Default 20, max 50 |
 | agentId | string | - | Agent ID |
 | minImportance | number | - | Minimum importance filter (0-1). Only fragments with importance at or above this value are returned. |

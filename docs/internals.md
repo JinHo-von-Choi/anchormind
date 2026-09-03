@@ -99,6 +99,8 @@ recall(query)
 
 `pickFields`는 19개 화이트리스트(`id, content, type, importance, topic, ..., key_id, key_name`) 외 필드를 제거한다. 캐시 단계(L1 warm hit, RRF 병합 중간 객체)에는 적용하지 않아 캐시 효율을 보존한다.
 
+**결정적 랭킹 계약:** 검색·RRF·reranker·graph·context 주입은 각 경로의 기존 primary score를 내림차순으로 유지하고, 점수가 같을 때만 `created_at DESC, id ASC`를 적용한다. `created_at`은 쓰기 경로의 기본값으로 채워지며, PostgreSQL의 기존 내림차순 인덱스와 일치하도록 명시적 `NULLS LAST`를 사용하지 않는다. 예외적인 NULL 값도 PostgreSQL 기본값과 같은 `NULLS FIRST`로 비교해 SQL과 JS 순서를 맞춘다. rank가 없는 Redis Set 후보는 RRF에 동일 점수로 기여하고, hydration 후보도 같은 comparator로 정규화하므로 cold DB와 warm cache의 ID 순서가 같다. Working Memory는 기존 저장 shape 계약에 따라 `added_at DESC NULLS LAST, id ASC`를 유지한다. `recall`은 롤링 배포와 동적 reranker 후보 집합의 기존 의미를 보존하기 위해 offset cursor를 유지하며, cursor의 고정 `anchorTime`을 reranker recency boost에도 재사용한다. ANN 벡터 검색은 인덱스 사용을 위해 SQL에서 거리 표현식 하나로 후보를 제한하고, 선택된 후보 집합 내부의 거리 동점만 JS에서 결정적으로 정렬한다.
+
 **SearchScope 계약:** `SearchScope.fromQuery(sq)` 정적 팩토리가 `_buildSearchQuery()` 반환 sq에서 scope 인스턴스를 생성한다. `scope.applyTo(fragment)` 메서드는 workspace, caseId, resolutionStatus, phase, affect, type, topic 7개 필드를 동시 검사하여 false를 반환하는 경우 해당 파편을 결과에서 제외한다. HotCache·L3·Graph 호출 사이트가 모두 동일 인스턴스를 참조하므로 레이어별 파편 결과의 정합성이 보장된다. `_executeSearch()`는 별도의 후처리 보정을 수행하지 않는다.
 
 ---

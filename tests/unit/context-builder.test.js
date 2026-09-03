@@ -135,6 +135,21 @@ describe("ContextBuilder.build()", () => {
     assert.equal(result.wmCount, 1);
   });
 
+  it("working memory는 added_at 최신순, 동점이면 id 오름차순이다", async () => {
+    indexMock.getWorkingMemory = mock.fn(async () => [
+      { id: "wm-b", content: "b", type: "fact", added_at: 100 },
+      { id: "wm-old", content: "old", type: "fact", added_at: 50 },
+      { id: "wm-a", content: "a", type: "fact", added_at: 100 },
+      { id: "wm-new", content: "new", type: "fact", added_at: 200 }
+    ]);
+
+    const result = await builder.build({ sessionId: "synthetic-session", structured: true });
+    assert.deepEqual(
+      result.working.current_session.map(item => item.id),
+      ["wm-new", "wm-a", "wm-b", "wm-old"]
+    );
+  });
+
   it("중복 ID 파편은 첫 등장만 유지", async () => {
     recallMock = mock.fn(async (params) => {
       if (params.topic === "session_reflect") return { fragments: [] };

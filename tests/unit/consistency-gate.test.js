@@ -94,6 +94,16 @@ describe("Consistency Gate — morpheme_indexed SQL 조건 검증", () => {
     }).catch(() => {});
 
     assert.ok(capturedSql.length > 0, "SQL이 캡처되어야 함");
+    assert.match(
+      capturedSql,
+      /ORDER BY f\.embedding <=> \$1::vector ASC\s+LIMIT/,
+      "semantic 검색은 pgvector KNN 인덱스를 위한 단일 거리 ORDER BY를 사용해야 함"
+    );
+    assert.doesNotMatch(
+      capturedSql,
+      /ORDER BY f\.embedding <=> \$1::vector ASC,/,
+      "KNN SQL의 추가 정렬 키가 HNSW/IVFFlat 선택을 막지 않아야 함"
+    );
     assert.ok(!capturedSql.includes("morpheme_indexed"),
       "morphemeOnly=false 시 morpheme_indexed 조건 미포함");
     /** 자리표시자 개수와 바인딩 개수가 어긋나면 실행 시점에 터진다. */
@@ -137,5 +147,10 @@ describe("Consistency Gate — morpheme_indexed SQL 조건 검증", () => {
 
     assert.ok(!capturedSql.includes("morpheme_indexed"),
       "키워드 검색 경로에 morpheme_indexed 조건 없음");
+    assert.match(
+      capturedSql,
+      /f\.created_at DESC, f\.id ASC/,
+      "keyword 검색도 공통 결정 정렬을 사용해야 함"
+    );
   });
 });
