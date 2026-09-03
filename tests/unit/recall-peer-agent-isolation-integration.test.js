@@ -292,6 +292,15 @@ describe("FragmentReader 검색 SELECT agent_id 가시성", () => {
 });
 
 describe("GraphNeighborSearch SQL 및 최종 RRF 격리", () => {
+  it("workspace 미지정은 global-only, allWorkspaces만 필터 없음", async () => {
+    await fetchGraphNeighbors(["seed-a"], 10, "agent-a", null, {});
+    assert.match(graphQueries.at(-1).sql, /f\.workspace IS NULL/);
+
+    await fetchGraphNeighbors(
+      ["seed-a"], 10, "agent-a", null, { allWorkspaces: true }
+    );
+    assert.doesNotMatch(graphQueries.at(-1).sql, /f\.workspace (?:=|IS NULL)/);
+  });
   it("기본 SQL이 key_id에 더해 agent/workspace 조건과 결과 필드를 포함한다", async () => {
     await fetchGraphNeighbors(
       ["seed"],
@@ -358,6 +367,19 @@ describe("GraphNeighborSearch SQL 및 최종 RRF 격리", () => {
 });
 
 describe("LinkStore SQL agent/workspace 격리", () => {
+  it("workspace 미지정은 global-only, allWorkspaces만 필터 없음", () => {
+    const store = new LinkStore();
+    const globalSql = store._buildLinkedFragmentsSql({
+      fromIds: ["seed-a"], safeRelationType: null, keyId: null
+    }).sql;
+    assert.match(globalSql, /f\.workspace IS NULL/);
+
+    const allSql = store._buildLinkedFragmentsSql({
+      fromIds: ["seed-a"], safeRelationType: null, keyId: null,
+      allWorkspaces: true
+    }).sql;
+    assert.doesNotMatch(allSql, /f\.workspace (?:=|IS NULL)/);
+  });
   it("기본 SQL이 key_id에 더해 agent/workspace 조건과 결과 필드를 포함한다", async () => {
     const store = new LinkStore();
     await store.getLinkedFragments(
@@ -434,6 +456,7 @@ describe("MemoryRecaller 기본 includeLinks 최종 병합 격리", () => {
     assert.deepEqual(idsOf(result), new Set(["base", "linked-own", "linked-global"]));
     assert.deepEqual(calls[0][4], {
       workspace         : "ws-a",
+      allWorkspaces     : false,
       includePeerAgents : false
     });
   });
@@ -454,6 +477,7 @@ describe("MemoryRecaller 기본 includeLinks 최종 병합 격리", () => {
     );
     assert.deepEqual(calls[0][4], {
       workspace         : "ws-a",
+      allWorkspaces     : false,
       includePeerAgents : true
     });
   });

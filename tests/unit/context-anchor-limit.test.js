@@ -318,7 +318,27 @@ describe("ContextBuilder anchor 조회와 응답", () => {
     assert.ok(calls.some(call => call.params.includes("workspace-default")));
   });
 
-  it("workspace가 없으면 기존 unscoped 단일 조회로 최대 20개를 유지한다", async () => {
+  it("workspace가 없으면 전역(NULL) 후보만 단일 조회한다", async () => {
+    const globalsOnly = Array.from(
+      { length: 25 },
+      (_, i) => anchor(`global-only-${i + 1}`, 0.99 - i * 0.01)
+    );
+    const calls = [];
+    const builder = makeBuilder(async (sql, params) => {
+      calls.push({ sql, params });
+      return { rows: candidateRows(globalsOnly).slice(0, params.at(-1)) };
+    });
+    const result = await builder.build({ tokenBudget: 1 });
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].sql, /AND workspace IS NULL/);
+    assert.equal(result.anchorCount, 20);
+    assert.equal(result._anchorSelection.reserveApplied, false);
+    assert.equal(result._anchorSelection.partial, false);
+    assert.equal(result._anchorSelection.candidates.unscoped, 25);
+    assert.equal(result.fragments[0].id, "global-only-1");
+  });
+
+  it("allWorkspaces=true이면 기존 unscoped 단일 조회로 최대 20개를 유지한다", async () => {
     const unscoped = [
       anchor("workspace-anchor", 1.0, "workspace-a"),
       ...Array.from({ length: 24 }, (_, i) => anchor(`global-${i + 1}`, 0.99 - i * 0.01)),
@@ -328,7 +348,7 @@ describe("ContextBuilder anchor 조회와 응답", () => {
       calls.push({ sql, params });
       return { rows: candidateRows(unscoped).slice(0, params.at(-1)) };
     });
-    const result = await builder.build({ tokenBudget: 1 });
+    const result = await builder.build({ tokenBudget: 1, allWorkspaces: true });
     assert.equal(calls.length, 1);
     assert.doesNotMatch(calls[0].sql, /AND workspace(?: IS NULL| =)/);
     assert.equal(result.anchorCount, 20);

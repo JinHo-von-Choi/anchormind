@@ -67,8 +67,8 @@ describe("classifyQueryType", () => {
 });
 
 describe("extractFilterKeys", () => {
-    it("빈 객체는 빈 배열을 반환한다", () => {
-        assert.deepStrictEqual(extractFilterKeys({}), []);
+    it("빈 객체는 global-only 표식을 반환한다", () => {
+        assert.deepStrictEqual(extractFilterKeys({}), ["global_only"]);
     });
 
     it("null/undefined 입력은 빈 배열을 반환한다", () => {
@@ -115,6 +115,12 @@ describe("extractFilterKeys", () => {
 
     it("undefined 필드는 포함하지 않는다", () => {
         assert.ok(!extractFilterKeys({ topic: undefined }).includes("topic"));
+    });
+
+    it("effective workspace 3상태를 구분한다", () => {
+        assert.ok(extractFilterKeys({}).includes("global_only"));
+        assert.ok(extractFilterKeys({ workspace: "ws-a" }).includes("workspace"));
+        assert.ok(extractFilterKeys({ allWorkspaces: true }).includes("all_workspaces"));
     });
 });
 

@@ -896,7 +896,8 @@ async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기�
 | includeContext | boolean | - | context_summary + 인접 파편 포함 |
 | includeKeywords | boolean | - | 응답에 keywords 배열 포함 |
 | agentId | string | - | 에이전트 ID |
-| workspace | string | - | 검색 범위 제한. 지정 시 해당 workspace + 전역(NULL) 파편만 반환. |
+| workspace | string | - | 지정 workspace + 전역(NULL). 미지정 시 key default를 적용하고, 둘 다 없으면 전역(NULL)만 반환. |
+| allWorkspaces | boolean | - | master 전용 전체 workspace 조회. 일반 API key는 권한 오류. |
 | contextText | string | - | 현재 대화 맥락 텍스트. 관련 파편을 선제적으로 활성화한다 (ENABLE_SPREADING_ACTIVATION=true 시 동작). |
 | caseId | string | - | 케이스 ID 필터. 해당 케이스에 속한 파편만 반환. |
 | resolutionStatus | string | - | 해결 상태 필터 (open / resolved / abandoned) |
@@ -1000,7 +1001,8 @@ task_effectiveness 세부 필드:
 | structured | boolean | - | 계층 구조 반환. 기본 false. |
 | includeKeyName | boolean | X | true 시 fragments 각 항목에 key_id·key_name(액세스 키 라벨) 포함. structured=true 트리 응답에는 적용되지 않음. 기본 false |
 | agentId | string | - | 에이전트 ID |
-| workspace | string | - | 컨텍스트 로드 범위. 지정 시 해당 workspace + 전역(NULL) 파편만 포함. |
+| workspace | string | - | 지정 workspace + 전역(NULL). 미지정 시 key default를 적용하고, 둘 다 없으면 전역(NULL)만 포함. |
+| allWorkspaces | boolean | - | master 전용 전체 workspace context 조회. |
 
 ### tool_feedback
 

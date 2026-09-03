@@ -339,7 +339,8 @@ MCP resources for real-time queries on the current state of the memory system.
 | caseMode | boolean | - | CBR mode. Groups similar fragments by case_id and returns them as (goal, events, outcome) triples. Use when referencing past similar work resolution cases. |
 | maxCases | number | - | Maximum number of cases to return in caseMode. Default 5, upper limit 10. |
 | depth | string | - | Search depth filter. "high-level" / "detail" / "tool-level". See details below. |
-| workspace | string | - | Search scope restriction. When specified, only fragments from the given workspace + global (NULL) fragments are returned. |
+| workspace | string | - | Returns the selected workspace + global (NULL), falls back to the key default, and returns global-only when neither exists. |
+| allWorkspaces | boolean | - | Master-only cross-workspace read. API keys receive a permission error when requesting true. |
 | contextText | string | - | Current conversation context text. Proactively activates related fragments (when ENABLE_SPREADING_ACTIVATION=true). |
 | cursor | string | - | Backward-compatible opaque pagination cursor carrying the offset and fixed `anchorTime` |
 | pageSize | number | - | Default 20, max 50 |
@@ -812,7 +813,8 @@ Loads Core Memory + Working Memory + session_reflect separately. Injects prefere
 | types | string[] | - | Types to load (default: preference, error, procedure) |
 | sessionId | string | - | Session ID (for Working Memory loading) |
 | agentId | string | - | Agent ID |
-| workspace | string | - | Workspace filter. When specified, returns only fragments from the given workspace + global (NULL) fragments. Key's default_workspace applied if not specified. |
+| workspace | string | - | Returns the selected workspace + global (NULL), falls back to the key default, and returns global-only when neither exists. |
+| allWorkspaces | boolean | - | Master-only cross-workspace context read, including anchor/core/learning/working memory. |
 | structured | boolean | - | When true, returns hierarchical tree structure; when false/omitted, returns existing flat list (default: false) |
 | includeKeyName | boolean | - | When true, each fragment carries key_id and key_name (the access key label). Only information within the same key group scope is exposed, and it does not apply to the structured=true tree response. Default false. |
 

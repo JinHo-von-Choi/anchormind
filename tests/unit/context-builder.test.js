@@ -125,7 +125,7 @@ describe("ContextBuilder.build()", () => {
 
   it("sessionId 전달 시 working memory를 로드하고 seenIds 저장", async () => {
     indexMock.getWorkingMemory = mock.fn(async () => [
-      { id: "wm-1", content: "wm item", type: "fact" }
+      { id: "wm-1", content: "wm item", type: "fact", workspace: null }
     ]);
 
     const result = await builder.build({ sessionId: "sess-1" });
@@ -137,10 +137,10 @@ describe("ContextBuilder.build()", () => {
 
   it("working memory는 added_at 최신순, 동점이면 id 오름차순이다", async () => {
     indexMock.getWorkingMemory = mock.fn(async () => [
-      { id: "wm-b", content: "b", type: "fact", added_at: 100 },
-      { id: "wm-old", content: "old", type: "fact", added_at: 50 },
-      { id: "wm-a", content: "a", type: "fact", added_at: 100 },
-      { id: "wm-new", content: "new", type: "fact", added_at: 200 }
+      { id: "wm-b", content: "b", type: "fact", added_at: 100, workspace: null },
+      { id: "wm-old", content: "old", type: "fact", added_at: 50, workspace: null },
+      { id: "wm-a", content: "a", type: "fact", added_at: 100, workspace: null },
+      { id: "wm-new", content: "new", type: "fact", added_at: 200, workspace: null }
     ]);
 
     const result = await builder.build({ sessionId: "synthetic-session", structured: true });
@@ -148,6 +148,46 @@ describe("ContextBuilder.build()", () => {
       result.working.current_session.map(item => item.id),
       ["wm-new", "wm-a", "wm-b", "wm-old"]
     );
+  });
+
+  it("workspace scope를 core와 learning source 조회에 동일하게 전달", async () => {
+    await builder.build({ workspace: "ws-a" });
+
+    for (const call of recallMock.mock.calls) {
+      assert.equal(call.arguments[0].workspace, "ws-a");
+      assert.equal(call.arguments[0].allWorkspaces, false);
+    }
+    const sourceArgs = storeMock.searchBySource.mock.calls[0].arguments;
+    assert.equal(sourceArgs[4], "ws-a");
+    assert.equal(sourceArgs[5], false);
+  });
+
+  it("working memory에서 다른 workspace와 legacy entry를 제외", async () => {
+    indexMock.getWorkingMemory = mock.fn(async () => [
+      { id: "global", content: "global", type: "fact", workspace: null },
+      { id: "same", content: "same", type: "fact", workspace: "ws-a" },
+      { id: "other", content: "other", type: "fact", workspace: "ws-b" },
+      { id: "legacy", content: "legacy", type: "fact" }
+    ]);
+
+    const result = await builder.build({ sessionId: "session-a", workspace: "ws-a" });
+    const wmIds = result.fragments.filter(f => f.id?.startsWith("g") || f.id === "same" || f.id === "other" || f.id === "legacy").map(f => f.id);
+    assert.ok(wmIds.includes("global"));
+    assert.ok(wmIds.includes("same"));
+    assert.ok(!wmIds.includes("other"));
+    assert.ok(!wmIds.includes("legacy"));
+  });
+
+  it("allWorkspaces=true이면 모든 신규 working memory entry를 허용", async () => {
+    indexMock.getWorkingMemory = mock.fn(async () => [
+      { id: "a", content: "a", type: "fact", workspace: "ws-a" },
+      { id: "b", content: "b", type: "fact", workspace: "ws-b" }
+    ]);
+
+    const result = await builder.build({ sessionId: "session-all", allWorkspaces: true });
+    const ids = new Set(result.fragments.map(f => f.id));
+    assert.ok(ids.has("a"));
+    assert.ok(ids.has("b"));
   });
 
   it("중복 ID 파편은 첫 등장만 유지", async () => {

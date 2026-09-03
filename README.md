@@ -175,7 +175,7 @@ Claude.ai Web / ChatGPT 연동은 OAuth를 사용한다. 발급한 API 키(`mmcp
 | 에피소드 연속성 | `reflect` 후 생성된 episode 파편 간 `preceded_by` 엣지를 자동 생성하여 경험 흐름을 그래프로 보존 (EpisodeContinuityService). |
 | 관리 콘솔 | 기억 탐색, 지식 그래프, 통계 대시보드, API 키 그룹/상태 필터, daily-limit 인라인 편집 |
 | OAuth 연동 | RFC 7591 Dynamic Client Registration, Claude.ai / ChatGPT Web 통합 지원 |
-| Workspace 격리 | 같은 키 내에서도 프로젝트·직종·클라이언트 단위로 기억을 분리. `api_keys.default_workspace`로 자동 태깅, 검색 시 자동 필터. |
+| Workspace 격리 | 같은 키 내에서도 프로젝트·직종·클라이언트 단위로 기억을 분리. 명시 workspace 또는 `api_keys.default_workspace`를 적용하고, 둘 다 없으면 전역(NULL)만 조회. 전체 조회는 master의 `allWorkspaces=true`만 허용. |
 | 배치 처리 | `batch_remember`는 multi-row 단일 INSERT(256KB 또는 500행 chunk) + 비동기 큐 워커(BatchRememberWorker)로 임베딩·후처리를 논블로킹 실행. `async: true` 시 ack·재시도(최대 3회)·dead-letter·기동 복구(RPOPLPUSH reliable queue)로 at-least-once 처리 보장. `batch_status(jobId)` 도구로 처리 상태(queued/processing/completed/dead) 조회 가능. 항상 표준 단일 JSON-RPC 응답 반환(`stream` deprecated). `reflect`는 5카테고리를 단일 배치 호출로 위임. EmbeddingWorker는 큐 묶음을 generateBatchEmbeddings + multi-row UPDATE로 처리. |
 | Consistency Gate | `fragments.morpheme_indexed` 컬럼으로 형태소 인덱스 완료 여부 추적. 미완료 파편은 L3 형태소 검색 경로에서 자동 제외. |
 | Mode preset | `recall-only` / `write-only` / `onboarding` / `audit` JSON preset. `X-Memento-Mode` 헤더 또는 `api_keys.default_mode`로 도구 노출 범위 제한. |

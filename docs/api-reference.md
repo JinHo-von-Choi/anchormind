@@ -344,7 +344,8 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 | caseMode | boolean | - | CBR 모드. 유사 파편을 case_id별로 그루핑하여 (goal, events, outcome) 트리플로 반환. 과거 유사 작업 해결 사례 참조 시 사용. |
 | maxCases | number | - | caseMode에서 반환할 최대 케이스 수. 기본 5, 상한 10. |
 | depth | string | - | 검색 깊이 필터. "high-level" / "detail" / "tool-level". 상세 설명은 아래 참조. |
-| workspace | string | - | 검색 범위 제한. 지정 시 해당 workspace + 전역(NULL) 파편만 반환. |
+| workspace | string | - | 검색 범위 제한. 지정 시 해당 workspace + 전역(NULL), 미지정 시 key default + 전역(NULL), 둘 다 없으면 전역(NULL)만 반환. |
+| allWorkspaces | boolean | - | master 전용 전체 workspace 조회. 일반 API key가 true를 요청하면 권한 오류. |
 | contextText | string | - | 현재 대화 맥락 텍스트. 관련 파편을 선제적으로 활성화 (ENABLE_SPREADING_ACTIVATION=true 시). |
 | cursor | string | - | 정렬 위치와 고정 `anchorTime`을 담은 기존 호환 불투명 페이지네이션 커서 |
 | pageSize | number | - | 기본 20, 최대 50 |
@@ -878,7 +879,8 @@ Core Memory + Working Memory + session_reflect를 분리 로드한다. 세션 �
 | types | string[] | - | 로드할 유형 목록 (기본: preference, error, procedure) |
 | sessionId | string | - | 세션 ID (Working Memory 로드용) |
 | agentId | string | - | 에이전트 ID |
-| workspace | string | - | 워크스페이스 필터. 지정 시 해당 workspace 파편 + 전역(NULL) 파편만 반환. 미지정 시 키의 default_workspace 적용. |
+| workspace | string | - | 워크스페이스 필터. 지정 시 해당 workspace + 전역(NULL), 미지정 시 key default + 전역(NULL), 둘 다 없으면 전역(NULL)만 반환. |
+| allWorkspaces | boolean | - | master 전용 전체 workspace context 조회. anchor/core/learning/working memory에 동일 적용. |
 | structured | boolean | - | true 시 계층적 트리 구조 반환, false/미지정 시 기존 flat list (기본값: false) |
 | includeKeyName | boolean | - | true 시 fragments 각 항목에 key_id와 key_name(액세스 키 라벨)을 포함한다. 같은 키 그룹 스코프의 정보만 노출되며, structured=true 트리 응답에는 적용되지 않는다. 기본 false. |
 

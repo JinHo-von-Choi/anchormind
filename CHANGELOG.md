@@ -11,6 +11,14 @@
 - 검색·캐시·그래프·컨텍스트의 기존 주 점수 의미는 유지하면서 동점 결과를 `created_at DESC, id ASC`로 결정적으로 정렬한다. 기존 내림차순 인덱스와 offset cursor 계약은 유지하며, ANN 검색은 인덱스가 고른 후보 집합 안에서만 동점을 정렬한다.
 - context anchor 기본 상한을 10개에서 20개로 변경한다. effective workspace에 기본 10개를 예약하면서도 나머지 10개를 잔여 workspace/global 통합 순위에 남기기 위한 의도적인 주입량 변경이다. Anchor는 `tokenBudget` 절삭 대상이 아니므로 최악 주입량이 종전의 2배가 될 수 있으며, 기존 주입량이 필요한 배포는 `MEMENTO_CONTEXT_ANCHOR_LIMIT=10`으로 유지할 수 있다. Reserve를 따로 지정하지 않으면 total/2를 내림한 값(최대 10)으로 유도해 total만 낮춘 기존 배포의 기동 실패와 workspace 예약분의 자동 독점을 피한다.
 
+### Security
+
+- `recall`/`context`가 workspace와 key default를 모두 생략한 경우 이제 전역(`workspace IS NULL`) 파편만 조회한다. 전체 workspace 조회는 master가 `allWorkspaces=true`를 명시한 경우에만 허용하며, 일반 API key 요청은 권한 오류로 거부한다. anchor/core/learning/working memory와 L1~L3·graph·linked hydration에도 같은 계약을 적용한다.
+
+### 업그레이드 주의
+
+- master 키로 workspace를 생략해 전체 기억을 조회하던 관리 호출은 `allWorkspaces=true`를 추가해야 한다. 명시 workspace와 API key `default_workspace`의 의미는 유지된다.
+
 ## [5.9.0] - 2026-08-29
 
 회상 품질 회귀의 원인을 규명해 되돌리고, 인증과 격리의 기본값을 안전한 쪽으로
