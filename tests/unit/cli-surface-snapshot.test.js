@@ -64,7 +64,7 @@ function readCommandTable() {
   const block = source.match(/const COMMANDS = \{([\s\S]*?)\n\};/);
   const local = source.match(/const LOCAL_ONLY_COMMANDS = new Set\(\[([\s\S]*?)\]\)/);
   return {
-    registered: [...block[1].matchAll(/^\s*([a-z][a-z-]*):/gm)].map(m => m[1]).sort(),
+    registered: [...block[1].matchAll(/^\s*(?:['"])?([a-z][a-z-]*)(?:['"])?\s*:/gm)].map(m => m[1]).sort(),
     localOnly : [...local[1].matchAll(/"([a-z][a-z-]*)"/g)].map(m => m[1]).sort()
   };
 }

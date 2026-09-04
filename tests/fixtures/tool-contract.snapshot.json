@@ -160,6 +160,9 @@
         "includeKeyName": {
           "type": "boolean"
         },
+        "includePeerAgents": {
+          "type": "boolean"
+        },
         "sessionId": {
           "type": "string"
         },
@@ -211,6 +214,9 @@
         },
         "includePeerAgents": {
           "type": "boolean"
+        },
+        "workspace": {
+          "type": "string"
         }
       },
       "required": [
@@ -230,7 +236,13 @@
         "agentId": {
           "type": "string"
         },
+        "includePeerAgents": {
+          "type": "boolean"
+        },
         "startId": {
+          "type": "string"
+        },
+        "workspace": {
           "type": "string"
         }
       },
@@ -270,18 +282,6 @@
         "fromId",
         "toId"
       ]
-    },
-    "memory_consolidate": {
-      "properties": {
-        "stream": {
-          "type": "boolean"
-        }
-      },
-      "required": []
-    },
-    "memory_stats": {
-      "properties": {},
-      "required": []
     },
     "recall": {
       "properties": {
@@ -424,11 +424,20 @@
     },
     "reconstruct_history": {
       "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "allWorkspaces": {
+          "type": "boolean"
+        },
         "caseId": {
           "type": "string"
         },
         "entity": {
           "type": "string"
+        },
+        "includePeerAgents": {
+          "type": "boolean"
         },
         "limit": {
           "type": "number"
@@ -666,6 +675,12 @@
     },
     "search_traces": {
       "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "allWorkspaces": {
+          "type": "boolean"
+        },
         "caseId": {
           "type": "string"
         },
@@ -683,6 +698,9 @@
         },
         "event_type": {
           "type": "string"
+        },
+        "includePeerAgents": {
+          "type": "boolean"
         },
         "keyword": {
           "type": "string"
@@ -965,6 +983,9 @@
         "includeKeyName": {
           "type": "boolean"
         },
+        "includePeerAgents": {
+          "type": "boolean"
+        },
         "sessionId": {
           "type": "string"
         },
@@ -1016,6 +1037,9 @@
         },
         "includePeerAgents": {
           "type": "boolean"
+        },
+        "workspace": {
+          "type": "string"
         }
       },
       "required": [
@@ -1035,7 +1059,13 @@
         "agentId": {
           "type": "string"
         },
+        "includePeerAgents": {
+          "type": "boolean"
+        },
         "startId": {
+          "type": "string"
+        },
+        "workspace": {
           "type": "string"
         }
       },
@@ -1229,11 +1259,20 @@
     },
     "reconstruct_history": {
       "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "allWorkspaces": {
+          "type": "boolean"
+        },
         "caseId": {
           "type": "string"
         },
         "entity": {
           "type": "string"
+        },
+        "includePeerAgents": {
+          "type": "boolean"
         },
         "limit": {
           "type": "number"
@@ -1471,6 +1510,12 @@
     },
     "search_traces": {
       "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "allWorkspaces": {
+          "type": "boolean"
+        },
         "caseId": {
           "type": "string"
         },
@@ -1488,6 +1533,9 @@
         },
         "event_type": {
           "type": "string"
+        },
+        "includePeerAgents": {
+          "type": "boolean"
         },
         "keyword": {
           "type": "string"

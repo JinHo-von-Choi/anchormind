@@ -132,8 +132,8 @@ describe("_searchL2 ID 보충 조회 scope 정합", () => {
 
   it("topic 일치 파편만 통과한다", async () => {
     const rows = [
-      { id: "f1", content: "x", topic: "memento-mcp", type: "fact", created_at: "2026-08-01T00:00:00Z", workspace: null },
-      { id: "f2", content: "y", topic: "arcana",      type: "fact", created_at: "2026-08-01T00:00:00Z", workspace: null },
+      { id: "f1", content: "x", topic: "memento-mcp", type: "fact", agent_id: "default", created_at: "2026-08-01T00:00:00Z", workspace: null },
+      { id: "f2", content: "y", topic: "arcana",      type: "fact", agent_id: "default", created_at: "2026-08-01T00:00:00Z", workspace: null },
     ];
     const results = await FragmentSearch.prototype._searchL2.call(
       { store: makeStore(rows) },
@@ -146,8 +146,8 @@ describe("_searchL2 ID 보충 조회 scope 정합", () => {
 
   it("type 필터도 보충 조회에 적용된다", async () => {
     const rows = [
-      { id: "f1", content: "x", topic: "t", type: "error",     created_at: "2026-08-01T00:00:00Z", workspace: null },
-      { id: "f2", content: "y", topic: "t", type: "procedure", created_at: "2026-08-01T00:00:00Z", workspace: null },
+      { id: "f1", content: "x", topic: "t", type: "error",     agent_id: "default", created_at: "2026-08-01T00:00:00Z", workspace: null },
+      { id: "f2", content: "y", topic: "t", type: "procedure", agent_id: "default", created_at: "2026-08-01T00:00:00Z", workspace: null },
     ];
     const results = await FragmentSearch.prototype._searchL2.call(
       { store: makeStore(rows) },
@@ -160,8 +160,8 @@ describe("_searchL2 ID 보충 조회 scope 정합", () => {
 
   it("timeRange가 보충 조회에 적용된다", async () => {
     const rows = [
-      { id: "old", content: "x", created_at: "2026-01-01T00:00:00Z", workspace: null },
-      { id: "new", content: "y", created_at: "2026-08-10T00:00:00Z", workspace: null },
+      { id: "old", content: "x", agent_id: "default", created_at: "2026-01-01T00:00:00Z", workspace: null },
+      { id: "new", content: "y", agent_id: "default", created_at: "2026-08-10T00:00:00Z", workspace: null },
     ];
     const results = await FragmentSearch.prototype._searchL2.call(
       { store: makeStore(rows) },

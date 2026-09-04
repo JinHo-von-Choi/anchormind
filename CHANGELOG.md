@@ -5,6 +5,9 @@
 ### Added
 
 - 자동 앵커 승격만 비활성화할 수 있는 `MEMENTO_AUTO_PROMOTE_ANCHORS` 설정을 추가했다. 기본값과 빈 값은 기존 동작을 유지하는 `true`이며, 비활성 상태는 정리 결과·로그·`mcp_anchor_auto_promotion_enabled` 메트릭에서 확인할 수 있다.
+- `anchor-scope` CLI: non-default anchor를 shared/private/unconfirmed로 inventory한다. `--include-non-anchors`는 legacy 일반 파편까지 포함한다. 기본 dry-run이며 migration-046 schema guard와 명시 승인 목록을 통과한 shared 항목만 version history를 남기고 `default`로 정규화한다.
+- `MEMENTO_REDIS_SESSION_FAIL_CLOSED=true`: Redis session 저장 실패 시 요청도 실패시키는 opt-in. 기본값은 false이며 Redis 순단 시 in-memory 세션으로 계속 동작한다. 단, rotation에서 기존 Redis 세션 삭제가 실패하면 fixation 방지를 위해 항상 실패한다.
+- 검색 이벤트에 effective agent scope와 peer flag를 기록하는 migration-046.
 
 ### Changed
 
@@ -16,13 +19,22 @@
 
 ### Security
 
-- `recall`/`context`가 workspace와 key default를 모두 생략한 경우 이제 전역(`workspace IS NULL`) 파편만 조회한다. 전체 workspace 조회는 master가 `allWorkspaces=true`를 명시한 경우에만 허용하며, 일반 API key 요청은 권한 오류로 거부한다. anchor/core/learning/working memory와 L1~L3·graph·linked hydration에도 같은 계약을 적용한다.
+- 기억 조회가 workspace와 key default를 모두 생략한 경우 이제 전역(`workspace IS NULL`) 파편만 조회한다. 전체 workspace 조회는 master가 `allWorkspaces=true`를 명시한 경우에만 허용하며, 일반 API key 요청은 권한 오류로 거부한다. recall/context의 anchor/core/learning/working memory와 L1~L3·graph·linked hydration뿐 아니라 reconstruct_history/search_traces에도 같은 계약을 적용한다.
+- `context`의 anchor/core/learning/Working Memory와 recall의 source/linked/graph/semantic hydration에 동일한 agent 범위를 적용한다. `agentId` 생략은 `default` 공유 기억만, 지정 시 해당 agent와 `default`만 반환한다.
+- `includePeerAgents=true`는 master key 전용으로 제한한다. 일반 API key 요청은 권한 오류로 거부하며 key-group/workspace 경계는 완화하지 않는다.
+- API key에는 아직 non-default agent identity 바인딩이 없으므로 `agentId` 생략/`default`만 허용한다. master key만 specific agent 범위를 지정할 수 있다.
+- transport session context가 없는 직접 `tools/call` dispatch와 body의 내부 권한 필드 위조를 fail-closed로 거부한다.
+- migration-046은 version/case-event scope 컬럼을 nullable로만 추가한다. 구버전 writer와의 롤링 호환을 위해 `NOT NULL` 제약과 대량 backfill을 migration 트랜잭션에 포함하지 않는다.
+- agent scope snapshot 진단은 `anchor-scope --backfill-snapshots`로 제공한다. source가 남은 legacy snapshot만 짧은 배치로 복구하며, source가 없거나 삭제된 case event는 오귀속·정보 노출을 피하기 위해 NULL 격리 상태를 유지한다. 이 이벤트는 non-peer timeline에서 제외될 수 있고 진단 출력의 `sourceMissing`/`sourceDeleted`로 영향 건수를 확인할 수 있다.
+- 일반 API key에서 `memory_stats`를 포함한 master 전용 도구는 tools/list와 OpenAPI 모두에서 노출하지 않는다. 기존 read 권한 키의 도구 목록에서 `memory_stats`가 제거된다.
+- 일반 API key는 신뢰 가능한 agent identity binding이 없으므로 기본적으로 non-default `agentId`를 거부한다. 기존 데이터는 `anchor-scope --include-non-anchors`로 전체 파편을 inventory한 뒤 명시적으로 공유 분류된 항목만 `default`로 이관할 수 있다. 불가피한 이관 기간에는 `MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE=true`로 기존 동작을 임시 복원할 수 있으나 같은 key 내부 agent 격리는 보장되지 않는다.
+- 인과 체인 링크는 양 끝 파편이 모두 요청의 agent/key/effective-workspace 범위 안에 있을 때만 반환한다. workspace 생략 시 전역(NULL), 지정 시 해당 workspace와 전역, master의 `allWorkspaces=true`일 때만 전체 workspace를 허용한다.
 
 ### 업그레이드 주의
 
 - master 키로 workspace를 생략해 전체 기억을 조회하던 관리 호출은 `allWorkspaces=true`를 추가해야 한다. 명시 workspace와 API key `default_workspace`의 의미는 유지된다.
 - `default_workspace`가 없는 공유 키로 저장할 때 workspace를 명시해 왔다면, `recall`과 `context`에도 같은 workspace를 명시해야 한다. 생략하면 이제 전역(`workspace IS NULL`) 범위만 조회하며, 빈 결과 힌트는 workspace를 지정한 재검색을 안내한다.
-- 업그레이드 전에 Redis Working Memory에 들어간 항목은 workspace 필드가 없어 scoped/global-only context에서 안전하게 판정할 수 없으므로 제외된다. master의 `allWorkspaces=true`에서는 조회할 수 있으며, 그 밖에는 해당 WM 목록이 만료·퇴출·삭제될 때까지 남을 수 있다(명목 TTL 24시간, 쓰기 시 갱신).
+- 업그레이드 전에 Redis Working Memory에 들어간 항목은 workspace 필드가 없어 scoped/global-only context에서 안전하게 판정할 수 없으므로 제외된다. master의 `allWorkspaces=true`에서는 agent/key 메타데이터가 확인되는 항목만 조회할 수 있고, agent/key 메타데이터도 없으면 항상 제외된다. 그 밖에는 해당 WM 목록이 만료·퇴출·삭제될 때까지 남을 수 있다(명목 TTL 24시간, 쓰기 시 갱신).
 
 ### Fixed
 

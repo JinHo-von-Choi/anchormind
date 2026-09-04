@@ -167,7 +167,7 @@ Claude.ai Web / ChatGPT 연동은 OAuth를 사용한다. 발급한 API 키(`mmcp
 |------|------|
 | `remember` | 중요한 정보를 원자적 파편으로 분해하여 저장. `MEMENTO_REMEMBER_ATOMIC=true` 시 quota check + INSERT를 단일 트랜잭션으로 원자화. |
 | `recall` | 키워드 + 시맨틱 3계층 검색으로 필요한 기억만 반환. `SearchScope`가 workspace/caseId/affect 등 scope를 L1~L3 전 레이어에 정합 적용. |
-| `context` | 세션 시작 시 핵심 맥락을 자동 복원 |
+| `context` | 세션 시작 시 핵심 맥락을 자동 복원. `agentId=X`는 `X + default`, 생략 시 `default` 공유 기억만 반환. |
 | 자동 정리 | 중복 병합, 모순 탐지, 중요도 감쇠, TTL 기반 망각 |
 | storage 어댑터 계층 | `lib/storage/`에 스토리지 추상화 계층이 있다. `getStorage()` 팩토리가 `MEMENTO_STORAGE` ENV에 따라 `PgVectorStore`(기본) 또는 `SqliteVecStore`(스텁, 미구현)를 반환한다. |
 | 링크 재통합 | `tool_feedback` 피드백이 fragment_links의 weight/confidence에 실시간 반영 (ReconsolidationEngine). 모순 링크는 자동 격리(quarantine). |
@@ -184,6 +184,16 @@ Claude.ai Web / ChatGPT 연동은 OAuth를 사용한다. 발급한 API 키(`mmcp
 | 마이그레이션 lint | `npm run lint:migrations`로 신규 마이그레이션 파일의 번호 충돌·규약 위반을 커밋 전 자동 검사. |
 
 전체 MCP 도구 목록은 [SKILL.md](SKILL.md) 참조.
+
+### Agent 범위
+
+`agent_id='default'`는 같은 key/workspace의 공유 기억이고, 다른 값은 해당 agent 전용 기억이다. `recall`과 `context`에서 `agentId`를 생략하면 공유 기억만 조회한다. 현재 API key 스키마에는 specific agent identity 바인딩이 없으므로 일반 API key는 `agentId` 생략/`default`만 허용한다. specific agent 및 `includePeerAgents=true`는 관리·감사용 master key에서만 사용할 수 있으며, key와 workspace 경계를 넓히지 않는다.
+
+기존 non-default anchor를 공유 범위로 옮기기 전에는 `memento-mcp anchor-scope --classifications <file>`로 dry-run inventory를 확인한다. 비앵커 일반 파편까지 이관 대상이면 `--include-non-anchors`를 추가한다. 실제 변경은 migration-046 적용 후 승인 JSON의 `shared` 목록과 `--execute --approve-shared`를 모두 명시해야 한다. `private`와 `unconfirmed` 항목은 변경하지 않는다.
+
+기존 클라이언트를 즉시 이관할 수 없다면 `MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE=true`로 non-default `agentId` 주장을 임시 허용할 수 있다. 이 모드는 같은 API key를 공유하는 agent 사이를 인증할 수 없으므로 이관 완료 후 반드시 해제한다.
+
+업그레이드는 migration-046(nullable 컬럼 추가) → 모든 인스턴스의 새 코드 롤링 배포 및 구 writer 종료 확인 → `memento-mcp anchor-scope --backfill-snapshots` 사전 집계 → `--backfill-snapshots --execute --approve-backfill` 순서로 진행한다. backfill은 source fragment가 남은 이력만 짧은 배치로 처리하며, backfill 가능한 잔여 행이 있으면 실패 종료하여 재실행을 요구한다. source가 없거나 삭제된 legacy case event는 안전하게 귀속할 근거가 없으므로 NULL 격리 상태를 유지하며 non-peer timeline에서 제외될 수 있다.
 
 ## CLI
 
@@ -344,7 +354,7 @@ docs/
 
 ## 알려진 제한사항
 
-- L1 Redis 캐시는 API 키 기반 격리만 지원한다. multi-agent 환경에서 에이전트 간 격리는 L2/L3에서 적용된다.
+- L1 Redis 인덱스는 API 키 단위지만, Hot Cache/Working Memory hydration에서 effective agent 범위를 재검증한다. agent metadata가 없는 구형 캐시 항목은 fail-closed로 제외된다.
 - 자동 품질 평가는 decision, preference, relation 유형만 대상이다. fact, procedure, error는 평가 큐에서 제외된다.
 - MEMENTO_ACCESS_KEY를 설정하지 않으면 서버가 기동하지 않는다. 인증 없이 운용하려면 MEMENTO_AUTH_DISABLED=true를 함께 명시해야 한다.
 - ALLOWED_ORIGINS — 브라우저 기반 MCP 클라이언트 화이트리스트. 미설정 시 모든 Origin을 허용한다.

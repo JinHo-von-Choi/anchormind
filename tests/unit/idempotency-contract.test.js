@@ -35,7 +35,7 @@ const EXEMPT = {
   memory_consolidate: "대상 집합이 호출 시점에 결정된다"
 };
 
-const tools = getToolsDefinition(null);
+const tools = getToolsDefinition(null, true);
 const byName = new Map(tools.map(t => [t.name, t]));
 
 /**

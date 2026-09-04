@@ -33,10 +33,11 @@ const COMMANDS = {
   completion: () => import('../lib/cli/completion.js'),
   session:    () => import('../lib/cli/session.js'),
   benchmark:  () => import('../lib/cli/benchmark.js'),
+  'anchor-scope': () => import('../lib/cli/anchor-scope.js'),
 };
 
 /** 원격 모드를 지원하지 않는 로컬 전용 명령 목록 */
-const LOCAL_ONLY_COMMANDS = new Set(["serve", "migrate", "cleanup", "backfill", "health", "update", "export", "import", "benchmark"]);
+const LOCAL_ONLY_COMMANDS = new Set(["serve", "migrate", "cleanup", "backfill", "health", "update", "export", "import", "benchmark", "anchor-scope"]);
 
 /**
  * `memento-mcp --help` 출력 텍스트를 stdout으로 송출한다.
@@ -61,6 +62,7 @@ function printUsage() {
     '  completion <shell>               Print shell completion script (bash|zsh)',
     '  session <list|show|delete>       Manage active sessions (headless/CI)',
     '  benchmark [--goldset FILE]       Measure recall quality against a goldset',
+    '  anchor-scope [--execute]         Inventory/normalize approved shared anchors',
     '',
     'Options:',
     '  --help                      Show this help message',

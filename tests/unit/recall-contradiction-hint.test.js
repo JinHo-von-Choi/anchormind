@@ -123,7 +123,7 @@ describe("hasPendingContradictions", () => {
     assert.equal(queryCalls.length, 1);
     assert.match(queryCalls[0].sql, /relation_type = 'contradicts'/);
     assert.match(queryCalls[0].sql, /valid_to IS NULL/);
-    assert.deepEqual(queryCalls[0].params, [["f1", "f2"]]);
+    assert.deepEqual(queryCalls[0].params, [["f1", "f2"], "default"]);
   });
 
   it("pool 부재 시 false로 강등 (힌트는 advisory)", async () => {

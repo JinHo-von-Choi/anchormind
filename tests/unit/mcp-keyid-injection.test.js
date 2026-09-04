@@ -22,7 +22,8 @@ describe("injectSessionContext — _keyId 주입 보장", () => {
     sessionKeyId:     42,
     sessionGroupKeyIds: [10, 20],
     sessionPermissions: ["read", "write"],
-    sessionDefaultWorkspace: "ws-main"
+    sessionDefaultWorkspace: "ws-main",
+    sessionIsMaster: false
   };
 
   it("arguments가 null인 경우 새 객체 생성 후 _keyId 주입", () => {
@@ -68,7 +69,8 @@ describe("injectSessionContext — 클라이언트 위조 차단", () => {
     sessionKeyId:     99,
     sessionGroupKeyIds: [1],
     sessionPermissions: ["read"],
-    sessionDefaultWorkspace: "ws-real"
+    sessionDefaultWorkspace: "ws-real",
+    sessionIsMaster: false
   };
 
   it("클라이언트가 전송한 _keyId='victim_key' 무시하고 서버 keyId로 덮어씀", () => {

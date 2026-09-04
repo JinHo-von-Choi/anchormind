@@ -31,7 +31,7 @@ const { FragmentReader } = await import("../../lib/memory/read/FragmentReader.js
 const { FragmentStore }  = await import("../../lib/memory/write/FragmentStore.js");
 
 const AGENT_COND = /agent_id = \$\d+ OR (f\.)?agent_id = 'default'/;
-const PEER_COND  = /\$\d+::text IS NOT NULL/;
+const PEER_COND  = /peer-agent: no [a-z._]+ filter/;
 
 function lastSql() {
   return captured[captured.length - 1].sql;

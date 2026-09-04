@@ -23,6 +23,7 @@ mock.module("../../lib/tools/db.js", {
 mock.module("../../lib/config.js", {
   namedExports: {
     resolveSplitChainConfig: () => null,
+    ALLOW_LEGACY_UNBOUND_AGENT_SCOPE: false,
     LLM_PRIMARY            : "gemini-cli",
     LLM_FALLBACKS          : [],
     /** ConsolidatorGC가 키워드 추출을 위해 write 계층을 로드하므로 필요 */

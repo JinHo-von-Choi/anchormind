@@ -92,7 +92,7 @@ All MCP tool calls must pass RBAC validation.
 - Master key (`MEMENTO_ACCESS_KEY`): treated as `permissions=null`, granting access to all tools.
 - API key (`mmcp_xxx`): tool access is restricted based on the `permissions` array specified at key creation time. Requests for tools not included in the array are immediately denied.
 - Tools registered in the `TOOL_PERMISSIONS` map require the corresponding permission level. Unregistered tool names are treated as `required=null` and pass the permission check. To bring a new tool into the RBAC boundary, register it explicitly in the `TOOL_PERMISSIONS` map.
-- Three permission levels exist: `read` (recall/context/memory_stats etc.), `write` (remember/forget/amend etc.), `admin` (memory_consolidate/apply_update etc.). A key with `admin` permission can invoke tools at all levels.
+- Three permission levels exist: `read` (recall/context etc.), `write` (remember/forget/amend etc.), and `admin` (memory_consolidate/apply_update etc.). The `admin` permission does not bypass tools that require explicit master authentication.
 - When a forget/amend/link request targets a fragment owned by another tenant (different API key), a `"Fragment not found"` error is returned. Isolation is enforced at the SQL level via `key_id` conditions, so the fragment's existence is never exposed.
 
 Accessing a protected resource without authentication returns `401 Unauthorized` with a `WWW-Authenticate: Bearer resource_metadata="</.well-known/oauth-protected-resource URL>"` header.
@@ -851,7 +851,7 @@ Usefulness feedback on tool usage results. Evaluates whether the target tool's r
 
 ## MCP Tool — memory_stats
 
-Query fragment memory system statistics. Returns total fragment count, TTL distribution, and per-type statistics.
+Master-key-only fragment memory statistics. Returns total fragment count, TTL distribution, and per-type statistics. Because these are global aggregates without tenant scope, regular API keys cannot access this tool.
 
 ### Parameters
 
@@ -903,7 +903,7 @@ Execute fragment memory maintenance. Performs TTL transitions, importance decay,
 
 ## MCP Tool — session_rotate
 
-Closes the current session and issues a new `sessionId`. Use it when a token leak is suspected or on a rotation schedule. The same `bound_key_id`, `workspace`, and `permissions` carry over to the new session.
+Closes the current session and issues a new `sessionId`. Use it when a token leak is suspected or on a rotation schedule. Rotation revalidates the current credential and refreshes `bound_key_id`, key-group membership, and `permissions`, while preserving the `defaultWorkspace` and `mode` selected on the existing session.
 
 ### Parameters
 
@@ -966,6 +966,7 @@ Reconstruct work history chronologically based on case_id or entity. Restores na
 | query | string | - | Additional keyword filter |
 | limit | number | - | Default 100, max 500 |
 | workspace | string | - | Workspace filter. When specified, only fragments from the given workspace + global (NULL) fragments are targeted. |
+| allWorkspaces | boolean | - | Master only. When true, removes workspace filters from the timeline, events, evidence, and causal links. |
 
 ### Returns
 
@@ -994,6 +995,7 @@ Search fragments by exact matching (unlike recall's semantic search, uses conten
 | time_range | object | - | Time range filter. Includes from (start time, ISO 8601), to (end time, ISO 8601). |
 | limit | number | - | Default 20, max 100 |
 | workspace | string | - | Workspace filter. When specified, only fragments from the given workspace + global (NULL) fragments are targeted. |
+| allWorkspaces | boolean | - | Master only. When true, removes the workspace filter from traces. |
 
 ---
 

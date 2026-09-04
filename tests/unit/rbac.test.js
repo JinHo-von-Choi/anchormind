@@ -15,8 +15,12 @@ describe("RBAC permission check", () => {
   });
 
   it("allows everything for null permissions (master key)", () => {
-    assert.ok(checkPermission(null, "memory_consolidate").allowed);
-    assert.ok(checkPermission(null, "remember").allowed);
+    assert.ok(checkPermission(null, "memory_consolidate", true).allowed);
+    assert.ok(checkPermission(null, "remember", true).allowed);
+  });
+
+  it("null permissions without explicit master is denied", () => {
+    assert.equal(checkPermission(null, "recall", false).allowed, false);
   });
 
   it("admin permission implies write and read", () => {

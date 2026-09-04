@@ -102,7 +102,7 @@ describe("deriveTokenKey — initialize.params.accessKey", () => {
     const req = { headers: {} };
     const msg = { method: "initialize", params: { accessKey: "params-access-key" } };
 
-    const key = deriveTokenKey(req, msg, { keyId: null });
+    const key = deriveTokenKey(req, msg, { keyId: null, isMaster: true });
 
     assert.ok(key, "initialize.params.accessKey에서 tokenKey 추출 필요");
     assert.ok(key.startsWith("master:"), `master 네임스페이스 사용: ${key}`);
@@ -123,7 +123,7 @@ describe("deriveTokenKey — sha256 해시 특성", () => {
     const rawToken = "super-secret-bearer-token";
     const req      = { headers: { authorization: `Bearer ${rawToken}` } };
 
-    const key = deriveTokenKey(req, {}, { keyId: null });
+    const key = deriveTokenKey(req, {}, { keyId: null, isMaster: true });
 
     assert.ok(key, "tokenKey가 생성되어야 한다");
     assert.ok(!key.includes(rawToken), "원문 토큰이 tokenKey에 포함되면 안 된다");
@@ -136,8 +136,14 @@ describe("deriveTokenKey — sha256 해시 특성", () => {
     const req1 = { headers: { authorization: `Bearer ${rawToken}` } };
     const req2 = { headers: { authorization: `Bearer ${rawToken}` } };
 
-    const key1 = deriveTokenKey(req1, {}, { keyId: null });
-    const key2 = deriveTokenKey(req2, {}, { keyId: null });
+    const key1 = deriveTokenKey(req1, {}, { keyId: null, isMaster: true });
+    const key2 = deriveTokenKey(req2, {}, { keyId: null, isMaster: true });
+
+    assert.notStrictEqual(
+      deriveTokenKey(req1, {}, { keyId: null, isMaster: false }),
+      key1,
+      "non-API OAuth identity must not share the master namespace"
+    );
 
     assert.strictEqual(key1, key2, "동일 토큰은 동일 tokenKey");
     assert.strictEqual(key1, expected, "sha256 16자 해시와 일치");

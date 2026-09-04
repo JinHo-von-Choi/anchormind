@@ -69,7 +69,7 @@ export function normalizeToolContract(tools) {
 function buildSnapshot() {
   return {
     scoped: normalizeToolContract(getToolsDefinition("some-key-id")),
-    master: normalizeToolContract(getToolsDefinition(null))
+    master: normalizeToolContract(getToolsDefinition(null, true))
   };
 }
 
@@ -98,7 +98,9 @@ describe("도구 계약 스냅샷", () => {
     const scopedNames = Object.keys(current.scoped);
     const masterNames = Object.keys(current.master);
     const extra       = masterNames.filter(n => !scopedNames.includes(n));
-    assert.deepEqual(extra.sort(), ["apply_update", "check_update"]);
+    assert.deepEqual(extra.sort(), [
+      "apply_update", "check_update", "memory_consolidate", "memory_stats"
+    ]);
   });
 
   test("정규화는 설명 문구를 계약에 포함하지 않는다", () => {

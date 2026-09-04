@@ -198,6 +198,16 @@ describe("buildSearchEvent", () => {
         assert.ok(event.filter_keys.includes("is_anchor"));
     });
 
+    it("effective agent scope와 peer flag를 기록한다", () => {
+        const own = buildSearchEvent({ agentId: "agent-a" }, [], {});
+        assert.strictEqual(own.effective_agent_scope, "specific+default");
+        assert.strictEqual(own.include_peer_agents, false);
+
+        const peer = buildSearchEvent({ agentId: "agent-a", includePeerAgents: true }, [], {});
+        assert.strictEqual(peer.effective_agent_scope, "all-agents");
+        assert.strictEqual(peer.include_peer_agents, true);
+    });
+
     it("L1 전용 폴백 경로도 올바르게 파싱된다", () => {
         const event = buildSearchEvent(
             { keywords: ["k"] },
