@@ -210,13 +210,13 @@ MCP `memory_consolidate` 도구는 `admin` 권한을 요구하며, 권한이 없
 
 | 스크립트 | 목적 | 호출 조건 | 빈도 |
 |-|-|-|-|
-| `scripts/migrate.js` | DB 마이그레이션 자동 실행 | 서버 업그레이드, 초기 설치 | 버전 업그레이드 시 1회 |
+| `scripts/migrate.js` | DB 마이그레이션 자동 실행 및 synthetic-query 보조 임베딩 차원 정합화 | 서버 업그레이드, 초기 설치 | 버전 업그레이드 시 1회 |
 | `scripts/backfill-embeddings.js` | embedding IS NULL 파편에 임베딩 일괄 생성 | EMBEDDING_PROVIDER 변경 후, 임베딩 API 장애 복구 후 | 조건부 1회 |
 | `scripts/backfill-morpheme-dict.js` | morpheme_dict의 embedding NULL 행 일괄 재임베딩 (`--dry-run`·`--batch`·`--sleep-ms`·`--max`) | 형태소 사전 NULL 행 누적 확인 시 (backfill-embeddings는 fragments 전용이라 이 테이블을 다루지 않음) | 조건부 1회 |
 | `scripts/check-embedding-consistency.js` | 설정 차원과 DB 실제 벡터 차원 일치 검증 | 서버 기동 시 자동 실행 (server.js 내부 호출) | 기동마다 자동 |
 | `scripts/normalize-vectors.js` | 기존 임베딩 벡터 L2 정규화 | 임베딩 제공자 전환 직후 1회 | 조건부 1회 |
 | `scripts/cleanup-noise.js` | 초단문·빈 세션 요약·NLI 재귀 쓰레기 파편 탐지·삭제 | recall 품질 저하 또는 context 토큰 예산 오염 시 | 조건부, 필요 시 월 1회 |
-| `scripts/post-migrate-flexible-embedding-dims.js` | fragments + morpheme_dict 임베딩 컬럼 차원 동시 조정 | EMBEDDING_DIMENSIONS 변경 또는 provider 전환 시 | 조건부 1회 |
+| `scripts/post-migrate-flexible-embedding-dims.js` | fragments + morpheme_dict + fragment_synthetic_query 임베딩 컬럼 차원 동시 조정 | EMBEDDING_DIMENSIONS 변경 또는 provider 전환 시 | 조건부 1회 |
 | `scripts/backfill-claims.js` | 기존 코퍼스에 ClaimExtractor 소급 실행 | Shadow mode(MEMENTO_SYMBOLIC_SHADOW=true) 활성화 전 | 일회성 |
 | `scripts/backfill-split-keywords.js` | keywords가 빈 split 자식 파편에 키워드 소급 생성 | 5.3.1 이하에서 생성된 split 자식이 키워드 검색에 잡히지 않을 때 | 일회성 |
 | `scripts/backfill-body-keywords.js` | 본문 식별자가 keywords에 없는 파편에 추출 결과 소급 병합 | 5.4.1 이하에서 keywords를 지정해 저장한 파편의 코드 식별자가 검색되지 않을 때 | 일회성 |
@@ -224,6 +224,13 @@ MCP `memory_consolidate` 도구는 `admin` 권한을 요구하며, 권한이 없
 | `scripts/run-e2e-tests.sh` | Docker 기반 E2E 테스트 실행 | CI/CD 파이프라인 또는 대규모 리팩터링 후 회귀 검증 | CI마다 또는 릴리즈 전 |
 | `scripts/smoke-test-symbolic.sh` | Symbolic Memory end-to-end smoke 검증 | MEMENTO_SYMBOLIC_* 플래그 전환 후 | 조건부 |
 | `scripts/test-llm-callers.mjs` | AutoReflect/ConsolidatorGC/ContradictionDetector/MemoryEvaluator LLM 스키마 E2E 검증 | LLM provider 교체 또는 프롬프트 수정 후 | 조건부 |
+
+`npm run migrate`는 번호가 매겨진 SQL 마이그레이션을 적용한 뒤
+`fragment_synthetic_query.embedding`을 기존 `fragments.embedding`과 비교한다.
+두 컬럼의 타입 또는 선언 차원이 다르면 보조 HNSW 인덱스를 재생성하고,
+재생성 가능한 파생 임베딩만 NULL로 초기화한다. `fragments`와 `morpheme_dict`의
+임베딩은 이 보정 단계에서 변경하지 않는다. 이 동작은 `migration-046`으로
+버전 이력에도 기록되며, 이미 정합한 설치에서는 아무 변경도 하지 않는다.
 
 ---
 
