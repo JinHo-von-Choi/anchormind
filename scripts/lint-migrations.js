@@ -36,6 +36,38 @@ function resolveCutoff(files) {
   return numbers.length > 0 ? Math.max(...numbers) + 1 : 0;
 }
 
+/**
+ * 같은 번호를 쓰는 파일이 둘 이상이면 위반으로 본다.
+ *
+ * cutoff와 무관하게 전체 파일을 본다. 충돌은 두 파일 사이에서 생기고 그중 하나가
+ * cutoff 아래에 있을 수 있으므로 대상을 좁히면 놓친다.
+ */
+function findDuplicateNumbers(files) {
+  const byNumber = new Map();
+
+  for (const file of files) {
+    const n = extractNumber(file);
+    if (n === null) continue;
+    const group = byNumber.get(n);
+    if (group) group.push(file);
+    else byNumber.set(n, [file]);
+  }
+
+  const violations = [];
+
+  for (const [number, group] of [...byNumber].sort((a, b) => a[0] - b[0])) {
+    if (group.length < 2) continue;
+    violations.push({
+      file:    group[0],
+      line:    null,
+      message: `번호 ${String(number).padStart(3, "0")}을 ${group.length}개 파일이 함께 쓴다 `
+             + `(${group.join(", ")}). 머지 시점에 +1 하여 재번호할 것.`,
+    });
+  }
+
+  return violations;
+}
+
 const FILENAME_PATTERN = /^migration-\d{3}-[a-z0-9]+(?:-[a-z0-9]+)*\.sql$/;
 
 const RULES = [
@@ -99,14 +131,7 @@ function main() {
     return n !== null && n >= cutoff;
   });
 
-  if (targets.length === 0) {
-    process.stdout.write(
-      `OK: cutoff=${cutoff} — 검사 대상 파일 없음 (기존 파일 모두 면제)\n`
-    );
-    process.exit(0);
-  }
-
-  const allViolations = [];
+  const allViolations = findDuplicateNumbers(allFiles);
 
   for (const filename of targets) {
     const filepath    = path.join(MIGRATION_DIR, filename);
@@ -115,7 +140,11 @@ function main() {
   }
 
   if (allViolations.length === 0) {
-    process.stdout.write(`OK: ${targets.length}개 파일 검사 완료, 규약 위반 없음\n`);
+    process.stdout.write(
+      targets.length === 0
+        ? `OK: cutoff=${cutoff} — 검사 대상 파일 없음 (기존 파일 모두 면제), 번호 중복 없음\n`
+        : `OK: ${targets.length}개 파일 검사 완료, 규약 위반 없음\n`
+    );
     process.exit(0);
   }
 

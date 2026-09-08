@@ -113,6 +113,8 @@ CREATE INDEX IF NOT EXISTS idx_fragments_embedding
 
 `npm run lint:migrations`는 cutoff 번호 이상인 파일만 검사한다. cutoff는 `MIGRATION_LINT_FROM` 환경변수로 지정하며, 미설정 시 `scripts/lint-migrations.js`가 현존 파일 최대 번호 + 1을 cutoff로 잡는다. 즉 env 없이 실행하면 기존 파일이 전부 제외되고 새로 추가할 파일부터 검사 대상이 된다.
 
+번호 중복 검사만은 cutoff를 따르지 않고 항상 전체 파일을 본다. 충돌은 파일 둘 사이에서 생기고 그중 하나가 cutoff 아래에 있을 수 있어, 대상을 좁히면 놓치기 때문이다. 이 검사는 CI의 Lint migrations 단계에서도 실행된다.
+
 기존 파일을 함께 검사하려면 하한을 명시한다.
 
 ```bash
