@@ -26,7 +26,6 @@
 
 ### Fixed
 
-- `migration-043`이 기본 `vector(1536)`으로 만든 `fragment_synthetic_query`가 기존 `fragments`의 다른 임베딩 차원과 어긋날 때, `npm run migrate`가 보조 테이블만 기존 canonical 컬럼에 맞춰 정합화하도록 수정했다. 파생 임베딩은 재생성할 수 있으므로 변환 시 해당 테이블의 값만 NULL로 초기화하고 HNSW 인덱스를 재생성한다.
 - case mode 이벤트 조회가 nullable `source_fragment_id`를 활성 파편과 내부 조인해 source 없는 이벤트와 supersede·GC된 source의 과거 이벤트를 누락하던 회귀를 막았다. API 키 요청은 동일 case ID 충돌에 따른 교차 테넌트 노출을 막기 위해 현재 키 그룹의 이벤트만 허용하며, `key_id IS NULL`인 레거시·master 이벤트는 master 조회에서만 반환된다.
 - 업그레이드 전 Redis 세션에 `isMaster` 필드가 없을 때 현재 요청의 인증과 세션 key가 일치하면 master 여부를 안전하게 재앵커링한다. 인증정보가 없거나 key가 다르면 일반 권한으로 유지한다.
 - global-only 빈 결과 안내를 CLI의 table·CSV·JSON 출력에 노출하고, `topic_mismatch`가 함께 감지되더라도 workspace 재검색 안내를 유지한다.

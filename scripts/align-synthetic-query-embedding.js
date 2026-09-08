@@ -28,8 +28,9 @@ function describe(column) {
 
 /**
  * Align the derived table without changing fragments or morpheme_dict.
- * Synthetic-query vectors are disposable and can be regenerated, so a type
- * change intentionally clears only the derived table's embedding values.
+ * Delete derived rows on a type change so SyntheticQueryWorker.backfill() can
+ * select their fragments again. Keeping rows with NULL embeddings would leave
+ * them excluded by backfill's NOT EXISTS check.
  *
  * @param {import("pg").PoolClient} client
  * @returns {Promise<{action: string, reason?: string, sourceType?: string, targetType?: string}>}
@@ -52,18 +53,22 @@ export async function alignSyntheticQueryEmbedding(client) {
     return { action: "skip", reason: "already_aligned", sourceType, targetType: targetType ?? describe(target) };
   }
 
-  // Both values are validated pgvector type names, so this identifier is safe to interpolate.
-  const opsType    = `${source.udtName}_cosine_ops`;
-  const clientIndex = `${SCHEMA}.${TARGET_INDEX}`;
+  // The source type name and dimension are validated before interpolation.
+  const opsType = `${source.udtName}_cosine_ops`;
   try {
     await client.query("BEGIN");
-    await client.query(`DROP INDEX IF EXISTS ${clientIndex}`);
+    // Prevent a concurrent worker from inserting rows between DELETE and ALTER,
+    // including when the HNSW index is missing and DROP INDEX is a no-op.
+    await client.query(`LOCK TABLE ${SCHEMA}.${TARGET_TABLE} IN ACCESS EXCLUSIVE MODE`);
+    await client.query(`DROP INDEX IF EXISTS ${SCHEMA}.${TARGET_INDEX}`);
+    await client.query(`DELETE FROM ${SCHEMA}.${TARGET_TABLE}`);
     await client.query(
       `ALTER TABLE ${SCHEMA}.${TARGET_TABLE}
          ALTER COLUMN embedding TYPE ${sourceType} USING NULL`
     );
+    // PostgreSQL creates the index in the table's schema; its name must be unqualified.
     await client.query(
-      `CREATE INDEX ${clientIndex}
+      `CREATE INDEX ${TARGET_INDEX}
          ON ${SCHEMA}.${TARGET_TABLE}
          USING hnsw (embedding ${opsType})
          WITH (m = 16, ef_construction = 128)

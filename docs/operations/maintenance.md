@@ -227,10 +227,20 @@ MCP `memory_consolidate` 도구는 `admin` 권한을 요구하며, 권한이 없
 
 `npm run migrate`는 번호가 매겨진 SQL 마이그레이션을 적용한 뒤
 `fragment_synthetic_query.embedding`을 기존 `fragments.embedding`과 비교한다.
-두 컬럼의 타입 또는 선언 차원이 다르면 보조 HNSW 인덱스를 재생성하고,
-재생성 가능한 파생 임베딩만 NULL로 초기화한다. `fragments`와 `morpheme_dict`의
-임베딩은 이 보정 단계에서 변경하지 않는다. 이 동작은 `migration-046`으로
+두 컬럼의 타입 또는 선언 차원이 다르면 같은 트랜잭션에서 보조 테이블을 잠근 뒤
+HNSW 인덱스를 삭제하고, `fragment_synthetic_query`의 파생 행 전체를 삭제한 다음
+컬럼 타입을 변경하고 `WHERE embedding IS NOT NULL` 부분 HNSW 인덱스를 재생성한다.
+실패하면 행 삭제와 DDL을 함께 롤백한다. `fragments`와 `morpheme_dict`의
+임베딩은 이 보정 단계에서 변경하지 않는다. 이 동작은 `migration-047`으로
 버전 이력에도 기록되며, 이미 정합한 설치에서는 아무 변경도 하지 않는다.
+
+행을 남긴 채 임베딩만 NULL로 바꾸면 `SyntheticQueryWorker.backfill()`의
+`NOT EXISTS` 조건에 걸려 다시 생성되지 않으므로 행 자체를 삭제한다.
+마이그레이션이 동기적으로 역질의를 생성하는 것은 아니다.
+`MEMENTO_SYNTHETIC_QUERY_ENABLED=true`이고 임베딩이 설정된 워커가 동작하면,
+큐가 빈 회차의 기존 백필이 현재 중요도·유형 등 자격 조건을 만족하는 파편을 회수한다.
+재생성이 끝날 때까지 역질의 검색 결과가 줄어들 수 있으며, 설정한 생성·임베딩
+제공자에 따라 재생성 비용이 발생할 수 있다. 워커가 꺼져 있으면 파생 행은 비어 있는 채로 남는다.
 
 ---
 
