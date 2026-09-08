@@ -19,6 +19,10 @@ jobs:
       - run: npm ci
       - name: Lint
         run: npm run lint
+      # 번호 중복은 파일 둘이 각각은 규약을 지키면서도 함께 있을 때만 어긋나므로
+      # 사람이 아니라 여기서 본다.
+      - name: Lint migrations
+        run: npm run lint:migrations
       # 런타임 의존성에 알려진 취약점이 있으면 여기서 막는다. 개발 의존성은
       # 배포물에 실리지 않으므로 분리해 본다.
       - name: Audit runtime dependencies
