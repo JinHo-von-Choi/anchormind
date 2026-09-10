@@ -34,7 +34,7 @@ mock.module("../../lib/logger.js", {
 const { CaseRecall } = await import("../../lib/memory/read/CaseRecall.js");
 
 describe("CaseRecall event workspace isolation", () => {
-  it("case 파편은 workspace로 제한하고 nullable-source 이벤트는 현재 키 그룹으로 조회", async () => {
+  it("case 파편과 nullable-source 이벤트를 immutable agent/key/workspace 범위로 조회", async () => {
     queries.length = 0;
     const cases = await new CaseRecall().buildCaseTriples(
       [{ case_id: "case-a" }],
@@ -46,9 +46,11 @@ describe("CaseRecall event workspace isolation", () => {
     assert.match(caseQuery.sql, /\(workspace = \$\d+ OR workspace IS NULL\)/);
     assert.doesNotMatch(eventQuery.sql, /JOIN agent_memory\.fragments/);
     assert.doesNotMatch(eventQuery.sql, /source_fragment_id|valid_to/);
-    assert.match(eventQuery.sql, /e\.key_id = ANY/);
-    assert.doesNotMatch(eventQuery.sql, /e\.key_id IS NULL/);
-    assert.deepEqual(eventQuery.params, [["case-a"], ["key-a"]]);
+    assert.match(eventQuery.sql, /ce\.agent_id/);
+    assert.match(eventQuery.sql, /ce\.key_id = ANY/);
+    assert.match(eventQuery.sql, /\(ce\.workspace = \$\d+ OR ce\.workspace IS NULL\)/);
+    assert.doesNotMatch(eventQuery.sql, /ce\.key_id IS NULL/);
+    assert.deepEqual(eventQuery.params, [["case-a"], "default", ["key-a"], "ws-a"]);
     assert.equal(cases[0].events[0].summary, "source-independent event");
   });
 
@@ -60,9 +62,10 @@ describe("CaseRecall event workspace isolation", () => {
 
     const eventQuery = queries[1];
     assert.doesNotMatch(eventQuery.sql, /JOIN agent_memory\.fragments/);
-    assert.doesNotMatch(eventQuery.sql, /e\.key_id (?:IS NULL|= ANY)/);
-    assert.doesNotMatch(eventQuery.sql, /workspace (?:=|IS NULL)/);
-    assert.deepEqual(eventQuery.params, [["case-a"]]);
+    assert.match(eventQuery.sql, /ce\.agent_id/);
+    assert.doesNotMatch(eventQuery.sql, /ce\.key_id (?:IS NULL|= ANY)/);
+    assert.doesNotMatch(eventQuery.sql, /ce\.workspace (?:=|IS NULL)/);
+    assert.deepEqual(eventQuery.params, [["case-a"], "default"]);
   });
 
   it("빈 키 그룹은 NULL 이벤트를 허용하지 않고 아무 이벤트도 매칭하지 않는다", async () => {
@@ -73,8 +76,8 @@ describe("CaseRecall event workspace isolation", () => {
 
     const eventQuery = queries[1];
     assert.doesNotMatch(eventQuery.sql, /JOIN agent_memory\.fragments/);
-    assert.match(eventQuery.sql, /e\.key_id = ANY/);
-    assert.doesNotMatch(eventQuery.sql, /e\.key_id IS NULL/);
-    assert.deepEqual(eventQuery.params, [["case-a"], []]);
+    assert.match(eventQuery.sql, /ce\.key_id = ANY/);
+    assert.doesNotMatch(eventQuery.sql, /ce\.key_id IS NULL/);
+    assert.deepEqual(eventQuery.params, [["case-a"], "default", [], "ws-a"]);
   });
 });

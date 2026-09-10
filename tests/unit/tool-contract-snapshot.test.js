@@ -34,6 +34,7 @@ function normalizeProperty(schema) {
   if (!schema || typeof schema !== "object") return {};
   const out = {};
   if (schema.type !== undefined)  out.type  = schema.type;
+  if (schema.maxLength !== undefined) out.maxLength = schema.maxLength;
   if (Array.isArray(schema.enum)) out.enum  = [...schema.enum].sort();
   if (schema.items)               out.items = normalizeProperty(schema.items);
   if (schema.properties) {
@@ -69,7 +70,7 @@ export function normalizeToolContract(tools) {
 function buildSnapshot() {
   return {
     scoped: normalizeToolContract(getToolsDefinition("some-key-id")),
-    master: normalizeToolContract(getToolsDefinition(null))
+    master: normalizeToolContract(getToolsDefinition(null, true))
   };
 }
 
@@ -98,7 +99,9 @@ describe("도구 계약 스냅샷", () => {
     const scopedNames = Object.keys(current.scoped);
     const masterNames = Object.keys(current.master);
     const extra       = masterNames.filter(n => !scopedNames.includes(n));
-    assert.deepEqual(extra.sort(), ["apply_update", "check_update"]);
+    assert.deepEqual(extra.sort(), [
+      "apply_update", "check_update", "memory_consolidate", "memory_stats"
+    ]);
   });
 
   test("정규화는 설명 문구를 계약에 포함하지 않는다", () => {
@@ -114,5 +117,19 @@ describe("도구 계약 스냅샷", () => {
     const a  = normalizeToolContract(mk({ b: { type: "string" }, a: { type: "number" } }));
     const b  = normalizeToolContract(mk({ a: { type: "number" }, b: { type: "string" } }));
     assert.deepEqual(a, b);
+  });
+
+  test("정규화는 중첩 속성과 배열 항목의 문자열 길이 제한을 보존한다", () => {
+    const normalized = normalizeToolContract([{
+      name: "t",
+      inputSchema: { properties: {
+        agentId: { type: "string", maxLength: 128 },
+        batch: { type: "array", items: { type: "object", properties: {
+          id: { type: "string", maxLength: 0 }
+        } } }
+      } }
+    }]);
+    assert.equal(normalized.t.properties.agentId.maxLength, 128);
+    assert.equal(normalized.t.properties.batch.items.properties.id.maxLength, 0);
   });
 });

@@ -77,7 +77,10 @@ async function createSession(overrides = {}) {
     overrides.keyId         ?? null,
     null,
     null,
-    overrides.workspace     ?? null
+    overrides.workspace     ?? null,
+    null,
+    null,
+    overrides.isMaster      ?? true
   );
   return { sid, streamableSessions };
 }
@@ -214,7 +217,7 @@ describe("시나리오 3: CSRF Origin 거부", () => {
 /* ------------------------------------------------------------------ */
 describe("시나리오 4: rotate 후 새 sessionId로 세션 접근 가능", () => {
   it("rotate 후 반환된 newSessionId로 세션 유효성 검증 통과", async () => {
-    const { sid, streamableSessions } = await createSession({ authenticated: true, keyId: "k-test" });
+    const { sid, streamableSessions } = await createSession({ authenticated: true, keyId: null, isMaster: true });
 
     const { handleSessionRotate } = await import("../../lib/handlers/session-handler.js");
     const req = makeReq({ sessionId: sid });
@@ -227,9 +230,10 @@ describe("시나리오 4: rotate 후 새 sessionId로 세션 접근 가능", () 
     /** 신규 세션이 streamableSessions에 존재 */
     assert.ok(streamableSessions.has(newSessionId), "newSessionId가 sessions Map에 없음");
 
-    /** 신규 세션의 keyId가 이관됨 */
+    /** 신규 master 세션 identity가 이관됨 */
     const newSession = streamableSessions.get(newSessionId);
-    assert.strictEqual(newSession.keyId, "k-test", "keyId 이관 실패");
+    assert.strictEqual(newSession.keyId, null, "master keyId 이관 실패");
+    assert.strictEqual(newSession.isMaster, true, "master identity 이관 실패");
     assert.strictEqual(newSession.authenticated, true, "authenticated 이관 실패");
 
     /** 구 sessionId로 재 rotate 시 404 */
@@ -237,5 +241,17 @@ describe("시나리오 4: rotate 후 새 sessionId로 세션 접근 가능", () 
     const res2 = fakeRes();
     await handleSessionRotate(req2, res2);
     assert.strictEqual(res2.statusCode, 404, `구 sessionId가 아직 유효함: statusCode=${res2.statusCode}`);
+  });
+
+  it("master caller도 다른 tenant identity 세션은 회전하지 못한다", async () => {
+    const { sid, streamableSessions } = await createSession({
+      authenticated: true, keyId: "key-a", isMaster: false
+    });
+    const { handleSessionRotate } = await import("../../lib/handlers/session-handler.js");
+    const req = makeReq({ sessionId: sid });
+    const res = fakeRes();
+    await handleSessionRotate(req, res);
+    assert.strictEqual(res.statusCode, 403);
+    assert.equal(streamableSessions.has(sid), true);
   });
 });

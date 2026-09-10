@@ -5,9 +5,16 @@
 ### Added
 
 - 자동 앵커 승격만 비활성화할 수 있는 `MEMENTO_AUTO_PROMOTE_ANCHORS` 설정을 추가했다. 기본값과 빈 값은 기존 동작을 유지하는 `true`이며, 비활성 상태는 정리 결과·로그·`mcp_anchor_auto_promotion_enabled` 메트릭에서 확인할 수 있다.
+- `anchor-scope` CLI: non-default anchor를 shared/private/unconfirmed로 inventory한다. `--include-non-anchors`는 legacy 일반 파편까지 포함한다. 기본 dry-run이며 migration-047 schema guard와 명시 승인 목록을 통과한 shared 항목만 version history를 남기고 `default`로 정규화한다.
+- `MEMENTO_REDIS_SESSION_FAIL_CLOSED=true`: Redis session 저장 실패 시 요청도 실패시키는 opt-in. 기본값은 false이며 Redis 순단 시 in-memory 세션으로 계속 동작한다. 단, rotation에서 기존 Redis 세션 삭제가 실패하면 fixation 방지를 위해 항상 실패한다.
+- 검색 이벤트에 effective agent scope와 peer flag를 기록하는 migration-047.
 
 ### Changed
 
+- `fragment_history`와 `graph_explore`의 ID 기반 조회에도 workspace 필터를 적용한다. 종전의 ID만 지정한 조회와 호환되지 않을 수 있다. `default_workspace` 없는 키가 `workspace="proj"`에 저장한 파편의 이력은 `{ "id": "fragment-id", "workspace": "proj" }`로 조회해야 한다(`graph_explore`는 `id` 대신 `startId`). master는 `allWorkspaces=true`로 workspace 필터만 제거할 수 있으며 agent·key-group 범위는 유지된다.
+- `memory://stats`와 `memory://topics`는 현재 유효한(`valid_to IS NULL`) `default` agent 파편을 해당 리소스의 key/workspace 범위에서 집계한다. 리소스에는 peer 범위를 지정하는 통로가 없어 master도 이 리소스로 전체 agent 집계를 얻을 수 없다.
+- `search_traces`와 `reconstruct_history`에도 agent 필터를 적용한다. `agentId` 생략은 `default` 범위이므로 기존 관리 호출의 결과가 줄어들 수 있다. master는 특정 `agentId` 또는 `includePeerAgents=true`를 명시할 수 있다.
+- `searchBySource`를 사용하는 session-context와 learning 파편은 자기 키뿐 아니라 같은 키 그룹의 파편도 조회한다. 다른 읽기 경로와 같은 그룹 공유 계약이며 agent/workspace 제한은 유지된다.
 - 검색·캐시·그래프·컨텍스트의 기존 주 점수 의미는 유지하면서 동점 결과를 `created_at DESC, id ASC`로 결정적으로 정렬한다. 기존 내림차순 인덱스와 offset cursor 계약은 유지하며, ANN 검색은 인덱스가 고른 후보 집합 안에서만 동점을 정렬한다.
 - context anchor 기본 상한을 10개에서 20개로 변경한다. effective workspace에 기본 10개를 예약하면서도 나머지 10개를 잔여 workspace/global 통합 순위에 남기기 위한 의도적인 주입량 변경이다. Anchor는 `tokenBudget` 절삭 대상이 아니므로 최악 주입량이 종전의 2배가 될 수 있으며, 기존 주입량이 필요한 배포는 `MEMENTO_CONTEXT_ANCHOR_LIMIT=10`으로 유지할 수 있다. Reserve를 따로 지정하지 않으면 total/2를 내림한 값(최대 10)으로 유도해 total만 낮춘 기존 배포의 기동 실패와 workspace 예약분의 자동 독점을 피한다.
 - `recall.isAnchor`의 true/false/미지정 계약을 캐시·그래프·링크·케이스 확장까지 일관되게 적용한다. 검색 진입점과 링크 조회의 null도 미지정으로 정규화한다. case event 타임라인은 source 파편의 현재 앵커 상태와 분리해 과거 이력을 보존한다. `caseMode.fragment_count`는 키 그룹·workspace·유효 상태·앵커 필터를 적용한 대표 후보 수로 정의한다.
@@ -16,13 +23,28 @@
 
 ### Security
 
-- `recall`/`context`가 workspace와 key default를 모두 생략한 경우 이제 전역(`workspace IS NULL`) 파편만 조회한다. 전체 workspace 조회는 master가 `allWorkspaces=true`를 명시한 경우에만 허용하며, 일반 API key 요청은 권한 오류로 거부한다. anchor/core/learning/working memory와 L1~L3·graph·linked hydration에도 같은 계약을 적용한다.
+- 기억 조회가 workspace와 key default를 모두 생략한 경우 이제 전역(`workspace IS NULL`) 파편만 조회한다. 전체 workspace 조회는 master가 `allWorkspaces=true`를 명시한 경우에만 허용하며, 일반 API key 요청은 권한 오류로 거부한다. recall/context의 anchor/core/learning/working memory와 L1~L3·graph·linked hydration뿐 아니라 reconstruct_history/search_traces에도 같은 계약을 적용한다.
+- `context`의 anchor/core/learning/Working Memory와 recall의 source/linked/graph/semantic hydration에 동일한 agent 범위를 적용한다. `agentId` 생략은 `default` 공유 기억만, 지정 시 해당 agent와 `default`만 반환한다.
+- `includePeerAgents=true`는 master key 전용으로 제한한다. 일반 API key 요청은 권한 오류로 거부하며 key-group/workspace 경계는 완화하지 않는다.
+- API key에는 아직 non-default agent identity 바인딩이 없다. 이번 전환 릴리즈는 `MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE=true`를 기본으로 기존 클라이언트의 non-default `agentId` 주장을 허용하고, 실제 완화 경로 사용에 경고 로그와 `mcp_legacy_unbound_agent_scope_total` 계수기를 남긴다. `false`를 명시하면 일반 API key는 생략/`default`만 허용한다. `includePeerAgents`는 설정과 무관하게 master 전용이다.
+- transport session context가 없는 직접 `tools/call` dispatch와 body의 내부 권한 필드 위조를 fail-closed로 거부한다.
+- migration-047은 version/case-event scope 컬럼을 nullable로만 추가한다. 구버전 writer와의 롤링 호환을 위해 `NOT NULL` 제약과 대량 backfill을 migration 트랜잭션에 포함하지 않는다.
+- agent scope snapshot 진단은 `anchor-scope --backfill-snapshots`로 제공한다. source가 남은 legacy snapshot만 짧은 배치로 복구하며, source가 없거나 삭제된 행은 NULL 격리 상태로 남고 peer 조회에서도 제외된다. 완료 판정과 출력은 `sourceMissing`/`sourceDeleted` 잔량을 함께 드러내어 복구 가능한 행 처리와 격리 데이터 잔존을 구분한다.
+- 일반 API key에서 `memory_stats`를 포함한 master 전용 도구는 tools/list와 OpenAPI 모두에서 노출하지 않는다. 기존 read 권한 키의 도구 목록에서 `memory_stats`가 제거된다.
+- 기존 데이터는 `anchor-scope --include-non-anchors`로 inventory한 뒤 명시적으로 공유 분류된 항목만 `default`로 이관한다. 정규화는 파편과 해당 `fragment_versions.agent_id`를 같은 트랜잭션에서 옮겨 변경 이력의 가시성을 유지한다. 기본 활성인 legacy 호환 모드는 같은 key 내부 agent 인증을 보장하지 않으므로 사용 계수를 관찰하고 클라이언트 이관 후 명시적으로 `false`로 전환한다. 다음 부 버전의 기본 차단 전환은 사용 계수가 0인지 확인한 뒤 판단한다.
+- 인과 체인 링크는 양 끝 파편이 모두 요청의 agent/key/effective-workspace 범위 안에 있을 때만 반환한다. workspace 생략 시 전역(NULL), 지정 시 해당 workspace와 전역, master의 `allWorkspaces=true`일 때만 전체 workspace를 허용한다.
 
 ### 업그레이드 주의
 
+- 업그레이드 전에 열린 세션은 재연결하여 `initialize`를 다시 수행해야 한다. `isMaster` 없는 구 세션이 bearer 인증정보 없이 재사용되면 재앵커링할 수 없어 도구 호출이 `-32001`로 실패한다.
+- migration-047은 `fragment_versions`와 `case_events`의 legacy snapshot을 자동으로 채우지 않는다. `migrate`의 잔량 경고를 확인하고 구 writer 종료 후 `anchor-scope --backfill-snapshots --execute --approve-backfill`을 수동 실행한다. 그 전에는 NULL snapshot 이력·이벤트가 읽기에서 제외되어 `fragment_history.versions`가 비어 보일 수 있다.
+- snapshot 롤백은 컬럼과 backfill 결과를 삭제하며 `anchor-scope --execute` 정규화를 되돌리지 않는다. 재적용·재백필은 현재 파편의 `default`를 기록하므로 정규화 이전 agent 복원에는 별도 사전 백업이 필요하다.
+- `anchor-scope` 출력은 항상 JSON이다. `--json`은 기존 호출 호환용이며 출력 형식을 바꾸지 않는다.
+- `MCP_REJECT_NONAPIKEY_OAUTH=false`는 non-API-key OAuth 인증을 허용하지만 master 권한을 부여하지 않는다. 도구 호출에는 API 키 바인딩이 필요하며, 바인딩 없는 OAuth 세션은 `-32001`로 거부된다.
+- snapshot backfill은 실행당 최대 1,000배치로 제한한다. 상한 도달 시 처리 건수와 함께 실패 종료하며, 이미 커밋된 배치는 유지된다. 구 writer 종료를 확인한 뒤 같은 명령으로 남은 항목을 이어서 처리할 수 있다.
 - master 키로 workspace를 생략해 전체 기억을 조회하던 관리 호출은 `allWorkspaces=true`를 추가해야 한다. 명시 workspace와 API key `default_workspace`의 의미는 유지된다.
 - `default_workspace`가 없는 공유 키로 저장할 때 workspace를 명시해 왔다면, `recall`과 `context`에도 같은 workspace를 명시해야 한다. 생략하면 이제 전역(`workspace IS NULL`) 범위만 조회하며, 빈 결과 힌트는 workspace를 지정한 재검색을 안내한다.
-- 업그레이드 전에 Redis Working Memory에 들어간 항목은 workspace 필드가 없어 scoped/global-only context에서 안전하게 판정할 수 없으므로 제외된다. master의 `allWorkspaces=true`에서는 조회할 수 있으며, 그 밖에는 해당 WM 목록이 만료·퇴출·삭제될 때까지 남을 수 있다(명목 TTL 24시간, 쓰기 시 갱신).
+- 업그레이드 전에 Redis Working Memory에 들어간 항목은 workspace 필드가 없어 scoped/global-only context에서 안전하게 판정할 수 없으므로 제외된다. master의 `allWorkspaces=true`에서는 agent/key 메타데이터가 확인되는 항목만 조회할 수 있고, agent/key 메타데이터도 없으면 항상 제외된다. 그 밖에는 해당 WM 목록이 만료·퇴출·삭제될 때까지 남을 수 있다(명목 TTL 24시간, 쓰기 시 갱신).
 
 ### Fixed
 

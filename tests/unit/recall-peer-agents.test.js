@@ -31,7 +31,7 @@ const { FragmentReader } = await import("../../lib/memory/read/FragmentReader.js
 const { FragmentStore }  = await import("../../lib/memory/write/FragmentStore.js");
 
 const AGENT_COND = /agent_id = \$\d+ OR (f\.)?agent_id = 'default'/;
-const PEER_COND  = /\$\d+::text IS NOT NULL/;
+const PEER_COND  = /peer-agent: no [a-z._]+ filter/;
 
 function lastSql() {
   return captured[captured.length - 1].sql;
@@ -50,20 +50,20 @@ describe("FragmentReader includePeerAgents", () => {
   });
 
   it("searchByKeywords includePeerAgents=true면 격리 완화", async () => {
-    await reader.searchByKeywords(["k"], { agentId: "a1", includePeerAgents: true });
+    await reader.searchByKeywords(["k"], { agentId: "a1", includePeerAgents: true, _isMaster: true });
     assert.doesNotMatch(lastSql(), AGENT_COND);
     assert.match(lastSql(), PEER_COND);
   });
 
   it("searchByTopic includePeerAgents=true면 격리 완화", async () => {
-    await reader.searchByTopic("t", { agentId: "a1", includePeerAgents: true });
+    await reader.searchByTopic("t", { agentId: "a1", includePeerAgents: true, _isMaster: true });
     assert.doesNotMatch(lastSql(), AGENT_COND);
   });
 
   it("searchBySemantic includePeerAgents=true면 f.agent_id 격리 완화", async () => {
     const vec = new Array(4).fill(0.1);
     await reader.searchBySemantic(vec, {
-      limit: 5, minSimilarity: 0.3, agentId: "a1", includePeerAgents: true
+      limit: 5, minSimilarity: 0.3, agentId: "a1", includePeerAgents: true, _isMaster: true
     });
     assert.doesNotMatch(lastSql(), AGENT_COND);
     assert.match(lastSql(), PEER_COND);
@@ -76,7 +76,7 @@ describe("FragmentReader includePeerAgents", () => {
   });
 
   it("getByIds opts.includePeerAgents=true면 격리 완화", async () => {
-    await reader.getByIds(["f1"], "a1", null, [], { includePeerAgents: true });
+    await reader.getByIds(["f1"], "a1", null, [], { includePeerAgents: true, _isMaster: true });
     assert.doesNotMatch(lastSql(), AGENT_COND);
   });
 
@@ -89,13 +89,13 @@ describe("FragmentReader includePeerAgents", () => {
   });
 
   it("searchByTimeRange includePeerAgents=true면 격리 완화", async () => {
-    await reader.searchByTimeRange("2026-01-01", "2026-02-01", { agentId: "a1", includePeerAgents: true });
+    await reader.searchByTimeRange("2026-01-01", "2026-02-01", { agentId: "a1", includePeerAgents: true, _isMaster: true });
     assert.doesNotMatch(lastSql(), AGENT_COND);
   });
 
   it("FragmentStore.getByIds가 includePeerAgents 옵션을 전달", async () => {
     const store = new FragmentStore();
-    await store.getByIds(["f1"], "a1", null, [], { includePeerAgents: true });
+    await store.getByIds(["f1"], "a1", null, [], { includePeerAgents: true, _isMaster: true });
     assert.doesNotMatch(lastSql(), AGENT_COND);
     assert.match(lastSql(), PEER_COND);
   });
@@ -104,14 +104,14 @@ describe("FragmentReader includePeerAgents", () => {
     const store = new FragmentStore();
     const vec = new Array(4).fill(0.1);
     await store.searchBySemantic(vec, {
-      limit: 5, minSimilarity: 0.3, agentId: "a1", includePeerAgents: true
+      limit: 5, minSimilarity: 0.3, agentId: "a1", includePeerAgents: true, _isMaster: true
     });
     assert.doesNotMatch(lastSql(), AGENT_COND);
     assert.match(lastSql(), PEER_COND);
   });
 
   it("includePeerAgents=true여도 keyId 테넌트 필터는 유지", async () => {
-    await reader.searchByKeywords(["k"], { agentId: "a1", keyId: "key-1", includePeerAgents: true });
+    await reader.searchByKeywords(["k"], { agentId: "a1", keyId: "key-1", includePeerAgents: true, _isMaster: true });
     assert.match(lastSql(), /key_id/);
   });
 });

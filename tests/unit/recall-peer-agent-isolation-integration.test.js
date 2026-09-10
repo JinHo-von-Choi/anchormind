@@ -252,6 +252,7 @@ async function runHotCacheSearch(includePeerAgents) {
   };
   if (includePeerAgents !== undefined) {
     query.includePeerAgents = includePeerAgents;
+    query._isMaster = true;
   }
 
   return search.search(query);
@@ -442,7 +443,7 @@ describe("GraphNeighborSearch SQL 및 최종 RRF 격리", () => {
       10,
       "agent-a",
       ["key-1"],
-      { workspace: "ws-a", includePeerAgents: true }
+      { workspace: "ws-a", includePeerAgents: true, _isMaster: true }
     );
 
     const { sql, params } = graphQueries.at(-1);
@@ -575,7 +576,7 @@ describe("LinkStore SQL agent/workspace 격리", () => {
       null,
       "agent-a",
       ["key-1"],
-      { workspace: "ws-a", includePeerAgents: true }
+      { workspace: "ws-a", includePeerAgents: true, _isMaster: true }
     );
 
     const { sql, params } = vectorQueries.at(-1);
@@ -700,7 +701,7 @@ describe("MemoryRecaller 기본 includeLinks 최종 병합 격리", () => {
       agentId          : "agent-a",
       workspace        : "ws-a",
       keywords         : ["scope-isolation"],
-      includePeerAgents: true
+      includePeerAgents: true, _isMaster: true
     });
 
     assert.deepEqual(
@@ -710,7 +711,7 @@ describe("MemoryRecaller 기본 includeLinks 최종 병합 격리", () => {
     assert.deepEqual(calls[0][4], {
       workspace         : "ws-a",
       allWorkspaces     : false,
-      includePeerAgents : true
+      includePeerAgents: true, _isMaster: true
     });
   });
 

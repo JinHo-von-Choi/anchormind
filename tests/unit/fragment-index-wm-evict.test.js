@@ -89,13 +89,37 @@ function newRedis() {
 
 async function seedWm(idx, sessionId, items) {
   for (const item of items) {
-    await idx.addToWorkingMemory(sessionId, item);
+    await idx.addToWorkingMemory(sessionId, {
+      agent_id: "default", key_id: null, workspace: null, ...item
+    });
   }
 }
 
 describe("FragmentIndex.evictWorkingMemoryItems", () => {
 
   beforeEach(() => { newRedis(); });
+
+  it("scope metadata 누락은 캐시를 건너뛰고 호출자에게 예외를 전파하지 않는다", async () => {
+    const idx = new FragmentIndex();
+    await assert.doesNotReject(
+      idx.addToWorkingMemory("session-missing-scope", {
+        id: "wm-missing", content: "synthetic", type: "fact"
+      })
+    );
+    assert.deepEqual(await idx.getWorkingMemory("session-missing-scope"), []);
+  });
+
+  it("agent/key/workspace metadata를 Working Memory에서 그대로 round-trip한다", async () => {
+    const idx = new FragmentIndex();
+    await idx.addToWorkingMemory("session-scope", {
+      id: "wm-scope", content: "synthetic", type: "fact",
+      agent_id: "default", key_id: "key-a", workspace: "workspace-a"
+    });
+    const [item] = await idx.getWorkingMemory("session-scope");
+    assert.equal(item.agent_id, "default");
+    assert.equal(item.key_id, "key-a");
+    assert.equal(item.workspace, "workspace-a");
+  });
 
   it("지정된 id만 evict하고 나머지는 보존한다", async () => {
     const idx = new FragmentIndex();

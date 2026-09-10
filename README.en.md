@@ -167,7 +167,7 @@ See [integration guides](docs/getting-started/) for platform-specific setup.
 |---------|-------------|
 | `remember` | Decomposes important information into atomic fragments and stores them. With `MEMENTO_REMEMBER_ATOMIC=true`, the quota check and the INSERT run as a single atomic transaction. |
 | `recall` | Returns only relevant memories via keyword + semantic 3-tier search. `SearchScope` consistently applies workspace/caseId/affect and other scope filters across all L1-L3 layers. |
-| `context` | Automatically restores key context at session start |
+| `context` | Restores key context. `agentId=X` returns `X + default`; omission returns shared `default` memory only. |
 | Auto-cleanup | Duplicate merging, contradiction detection, importance decay, TTL-based forgetting |
 | Storage adapter layer | `lib/storage/` holds the storage abstraction. The `getStorage()` factory returns `PgVectorStore` (default) or `SqliteVecStore` (stub, not yet implemented) based on the `MEMENTO_STORAGE` environment variable. |
 | **Link Reconsolidation** | `tool_feedback` signals update fragment_links weight/confidence in real time (ReconsolidationEngine). Contradicting links are automatically quarantined. |
@@ -185,6 +185,18 @@ See [integration guides](docs/getting-started/) for platform-specific setup.
 | Migration lint | `npm run lint:migrations` checks new migration files for numbering conflicts and convention violations before commit. |
 
 See [SKILL.md](SKILL.md) for the full list of MCP tools.
+
+### Agent scope
+
+`agent_id='default'` is shared within the same key/workspace; any other value selects that agent's scope. Omit `agentId` or use `default` for ordinary clients. API keys have no trusted specific-agent binding; strict mode restricts specific-agent selection to master authentication. `includePeerAgents=true` always requires master authentication and never widens key/workspace boundaries. Before normalizing legacy anchors, run `memento-mcp anchor-scope --classifications <file>` (dry-run by default). Add `--include-non-anchors` to inventory all legacy fragments. Execution requires migration-047 plus the bare `--execute --approve-shared` flags.
+
+This transition release defaults `MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE` to `true`, allowing deployed clients' non-default `agentId` claims. Each compatibility use emits a warning and increments `mcp_legacy_unbound_agent_scope_total`. This does not authenticate agents sharing an API key. Migrate clients, confirm the counter stops increasing, then explicitly set `false` for strict mode. A default change in the next minor release requires first confirming zero compatibility usage.
+
+For upgrades, apply migration-047 (nullable columns), roll the new code to every instance and confirm all old writers have stopped, inspect counts with `memento-mcp anchor-scope --backfill-snapshots`, then run `--backfill-snapshots --execute --approve-backfill`. Both `fragment_versions` and `case_events` require manual backfill; `migrate` warns about pending snapshots. Until then, NULL snapshots are excluded and existing version histories may appear empty. Missing/deleted-source rows remain quarantined as NULL, excluded even from peer reads. Remaining or quarantined rows cause `SNAPSHOT_BACKFILL_INCOMPLETE` with `sourceMissing`/`sourceDeleted` counts. Quarantined rows require operator review; rerunning alone cannot repair them.
+
+Reconnect old sessions and run `initialize` again. Old sessions reused without bearer credentials may fail with `-32001` because their explicit authentication scope cannot be restored. Normalization moves fragment and version snapshot agents in one transaction. Rolling back the snapshot migration drops columns and backfill results but does not undo normalization; reapplying/backfilling uses the current agent. Keep a separate pre-execution backup if restoration is required.
+
+Backfill is limited to 1,000 batches per invocation. `--batch-size` accepts integers from 1 to 10,000 (default 500). Reaching the limit fails with committed progress counts. Progress is retained, so confirm old writers have stopped and rerun the same command to process remaining NULL snapshots.
 
 ## CLI
 

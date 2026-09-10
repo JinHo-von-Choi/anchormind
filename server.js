@@ -130,7 +130,7 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ error: auth.error || "Unauthorized" }));
       return;
     }
-    const isMaster = auth.keyId == null;
+    const isMaster = auth.isMaster === true;
     const spec     = buildSpec(isMaster, isMaster ? null : (auth.permissions ?? []));
     res.statusCode = 200;
     res.setHeader("Content-Type", "application/json; charset=utf-8");

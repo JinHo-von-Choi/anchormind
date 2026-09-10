@@ -241,11 +241,13 @@ SSE 스트림이 닫히면(`res.on('close')`) 서버는 SSE 응답 객체만 제
 
 ### OAuth 보안 모델 — keyId가 없는 OAuth는 master 권한이 아님
 
+인증은 `keyId=null`에서 권한을 추론하지 않고 명시적 `isMaster`를 보존한다. 직접 access-key와 명시적 auth-disabled 세션은 master이고, API-key-bound OAuth는 해당 key/group/workspace/permissions를 유지한다. generic non-API-key OAuth는 `isMaster=false`로 남는다.
+
 `validateAuthentication`의 OAuth 분기는 세 가지 우선순위 경로로 처리된다.
 
 1. **bound_key_id 경로 (1순위)**: 토큰의 `bound_key_id` 필드가 있으면 `validateApiKeyById(bound_key_id)`로 UUID 직접 조회. name-based client_id 바인딩 방식이 이 경로를 사용한다. 성공 시 `keyId`/`groupKeyIds`/`permissions` 반환. `mcp_oauth_bound_client_authenticated_total` 카운터 증가.
 2. **is_api_key=true 경로 (2순위)**: `client_id`가 원본 API 키 문자열인 경우 `validateApiKeyFromDB(client_id)`로 조회. bound_key_id 조회 실패 시에도 이 경로로 낙하.
-3. **non-API-key OAuth (3순위)**: `MCP_REJECT_NONAPIKEY_OAUTH=true`(기본)이면 `{ valid: false, error: "non-API-key OAuth denied" }` 반환. `mcp_oauth_nonapikey_rejected_total` + `memento_tenant_isolation_blocked_total{component="oauth_nonapikey_denied"}` 카운터 증가. `false`이면 하위 호환 동작 (`keyId=null` 세션 — 운영 환경에서 절대 사용하지 말 것).
+3. **non-API-key OAuth (3순위)**: `MCP_REJECT_NONAPIKEY_OAUTH=true`(기본)이면 `{ valid: false, error: "non-API-key OAuth denied" }` 반환. `mcp_oauth_nonapikey_rejected_total` + `memento_tenant_isolation_blocked_total{component="oauth_nonapikey_denied"}` 카운터 증가. `false`여도 세션은 `isMaster=false`이며, key/permission identity가 없으므로 memory tool과 resource read는 fail-closed로 거부된다. 현재 API key/OAuth 스키마는 non-default agent identity 바인딩을 지원하지 않는다.
 
 ### OAuth name-based client_id 바인딩
 
@@ -709,7 +711,7 @@ initialize 이후 모든 요청에서 `MCP-Protocol-Version` 헤더를 검사한
 
 ### tools/list 필터링
 
-`filterTools(tools, presetName, isMaster)` 함수가 `excluded_tools` Set에 포함된 도구를 제거한 목록을 반환한다. `requiresMaster=true` 프리셋은 마스터 키 세션(`keyId === null`)에만 적용되며, 일반 API 키 세션에서는 프리셋을 무시하고 전체 도구를 노출한다.
+`filterTools(tools, presetName, isMaster)` 함수가 `excluded_tools` Set에 포함된 도구를 제거한 목록을 반환한다. `requiresMaster=true` 프리셋은 명시적으로 인증된 마스터 세션(`isMaster === true`)에만 적용된다. 일반 API 키는 master 전용 프리셋을 무시하되 permission/master 전용 도구 필터는 계속 적용한다.
 
 `get_skill_guide` 도구 응답 조립 시 `getSkillGuideOverride(presetName, isMaster)`가 `skill_guide_override` 문자열을 반환하면 기본 가이드 대신 해당 문자열이 사용된다.
 
@@ -861,6 +863,14 @@ export async function dispatchChain(chain, prompt, options = {}, deps = {})
 체인은 provider 설정 배열이며, 첫 번째 provider부터 순서대로 시도하여 성공 시 결과를 반환한다. 실패(429, semaphore timeout, 오류) 시 다음 fallback provider로 이동한다.
 
 **동시성 제어:** `getSemaphore(chainKey, limit, waitMs)`로 provider별 독립 semaphore를 획득한다. chainKey는 `provider|baseUrl|model|apiKeyHash` 조합. `LLM_CONCURRENCY_WAIT_MS`(기본 30000ms) 초과 시 해당 provider 실패 처리. chain deadline은 `deps.startedAt`과 `LLM_CHAIN_TIMEOUT_MS`로 계산하며, 잔여 시간이 0 이하이면 즉시 chain 종료.
+
+## Agent scope와 snapshot 이관
+
+`resolveAgentScope`는 범위 해석 자체에서 peer 요청의 명시적 `_isMaster=true`를 검사하므로 CLI/임베디드 호출에도 master 계약을 적용한다. `agentId` 생략은 `default`이고, 특정 agent 요청은 해당 agent와 `default`를 선택한다. 전환 릴리즈의 legacy unbound 호환은 기본 true이며, 완화 경로 사용마다 경고와 `mcp_legacy_unbound_agent_scope_total`을 기록한다. 이관 후 false로 전환하면 일반 API key의 non-default agent 요청을 거부한다.
+
+migration-047은 `fragment_versions`/`case_events` snapshot 컬럼만 추가한다. `migrate`의 잔량 경고를 확인하고 구 writer 종료 후 CLI backfill을 실행한다. NULL은 peer를 포함한 읽기에서 격리된다. backfill은 갱신 0건 이후 재집계하며, backfillable 또는 sourceMissing/sourceDeleted 잔량은 `SNAPSHOT_BACKFILL_INCOMPLETE`로 보고한다. 공유 정규화는 파편과 version agent snapshot을 같은 트랜잭션에서 이동한다. 롤백은 snapshot 컬럼을 삭제할 뿐 정규화를 복원하지 않는다.
+
+구 세션은 재연결·initialize가 필요하다. bearer 없이 재사용한 구 세션에 isMaster가 없으면 도구 호출을 거부한다. `memory://stats`/`memory://topics`는 현재 default-agent 파편만 집계하며 master peer 입력 통로가 없다. `search_traces`/`reconstruct_history`도 기본 default-agent 범위를 적용한다.
 
 ## 프로세스 에러 가드
 

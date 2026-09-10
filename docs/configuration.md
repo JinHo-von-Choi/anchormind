@@ -26,7 +26,7 @@
 | EVALUATOR_MAX_QUEUE | 100 | MemoryEvaluator 큐 크기 상한 (초과 시 오래된 작업 드롭) |
 | OAUTH_TRUSTED_ORIGINS | (없음) | OAuth redirect_uri 신뢰 도메인 추가 목록 (쉼표 구분, origin 단위). 기본 신뢰 도메인(claude.ai, chatgpt.com, platform.openai.com, copilot.microsoft.com, gemini.google.com)에 추가로 허용할 origin만 지정 |
 | MCP_STRICT_ORIGIN | false | `true`로 설정 시 Origin 헤더 엄격 검증 활성화 (DNS rebinding 방어). 허용 목록(`OAUTH_TRUSTED_ORIGINS` + `ALLOWED_ORIGINS` + 기본 신뢰 도메인)에 없는 Origin에서 온 요청을 403으로 거부. Origin 헤더 없는 요청(CLI/curl)은 항상 허용. **opt-in** — 기본 `false`로 기존 동작 유지 |
-| MCP_REJECT_NONAPIKEY_OAUTH | true | `false`로 설정 시 `is_api_key=false` OAuth 토큰 허용 (하위 호환). 기본 `true` — non-API-key OAuth 토큰은 `keyId=null` 세션을 생성하여 모든 파편에 master 권한으로 접근할 수 있으므로 차단. API 키 기반 OAuth 토큰(`is_api_key=true`)과 Bearer ACCESS_KEY 직접 사용은 영향 없음 |
+| MCP_REJECT_NONAPIKEY_OAUTH | true | 기본 `true`는 `is_api_key=false` OAuth 토큰 인증을 거부한다. `false`는 해당 인증만 허용하며 master 권한을 부여하지 않는다. API 키 바인딩이 없는 OAuth 세션의 도구 호출은 `-32001`로 거부된다. API 키 기반 OAuth 토큰(`is_api_key=true`)과 Bearer ACCESS_KEY 직접 사용은 영향 없음 |
 | MCP_ALLOW_AUTO_DCR_REGISTER | false | `true`로 설정 시 `/authorize`에서 미등록 `client_id`의 자동 등록 허용 (기존 동작). 기본 `false` — RFC 7591 `POST /register` 엔드포인트 경유 강제 |
 | OAUTH_ALLOWED_REDIRECT_URIS | (없음) | OAuth redirect_uri 정확 일치 허용 목록 (쉼표 구분). OAUTH_TRUSTED_ORIGINS와 별도로 동작 |
 | DEFAULT_DAILY_LIMIT | 10000 | API 키 생성 시 기본 일일 호출 한도 |
@@ -267,6 +267,8 @@ POSTGRES_* 접두어가 DB_* 접두어보다 우선한다. 두 형식을 혼용�
 | REDIS_PORT | 6379 | Redis 서버 포트 |
 | REDIS_PASSWORD | (없음) | Redis 인증 비밀번호 |
 | REDIS_DB | 0 | Redis 데이터베이스 번호 |
+| MEMENTO_REDIS_SESSION_FAIL_CLOSED | false | true이면 Redis 세션 저장 실패 시 요청을 실패 처리. false이면 경고 후 in-memory 세션으로 계속 동작 |
+| MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE | true | 전환 기간 동안 일반 API key의 non-default agentId 주장을 허용. 실제 사용 시 경고와 `mcp_legacy_unbound_agent_scope_total` 기록. 같은 key 내부 agent 인증은 보장하지 않으며, 이관 후 계수 증가가 없는지 확인하고 false로 strict 모드 적용. includePeerAgents는 항상 master 전용 |
 | REDIS_MASTER_NAME | mymaster | Sentinel 마스터 이름 |
 | REDIS_SENTINELS | localhost:26379, localhost:26380, localhost:26381 | Sentinel 노드 목록. 쉼표로 구분된 host:port 형식 |
 

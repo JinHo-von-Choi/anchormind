@@ -16,6 +16,7 @@
 
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { hasSessionIdentityMismatch } from "../../lib/handlers/mcp-handler.js";
 
 /** ─────────────────────────────────────────────────────────────────
  *  sessionData 구조 검증 (TC4: lastReflectedAt 초기화)
@@ -94,7 +95,7 @@ async function simulateRecovery({
 
   if (redisEnabled && redisSession !== undefined) {
     const existingRedis = redisSession;
-    if (existingRedis && existingRedis.keyId !== incomingKeyId) {
+    if (hasSessionIdentityMismatch(existingRedis, authResult)) {
       mockRecordTI("session_recover_keyid_mismatch");
       mockRecordSR("keyid_mismatch");
       return "keyid_mismatch";
@@ -111,7 +112,7 @@ describe("세션 복구 분기 — keyId 교차 검증", () => {
   it("TC1: keyId 일치 → same_id_success", async () => {
     const result = await simulateRecovery({
       redisSession: { keyId: "key-A", authenticated: true },
-      authResult:   { valid: true, keyId: "key-A" },
+      authResult:   { valid: true, keyId: "key-A", isMaster: false },
     });
     assert.strictEqual(result, "same_id_success");
   });
@@ -119,7 +120,7 @@ describe("세션 복구 분기 — keyId 교차 검증", () => {
   it("TC2: 다른 keyId → keyid_mismatch (403)", async () => {
     const result = await simulateRecovery({
       redisSession: { keyId: "key-A", authenticated: true },
-      authResult:   { valid: true, keyId: "key-B" },
+      authResult:   { valid: true, keyId: "key-B", isMaster: false },
     });
     assert.strictEqual(result, "keyid_mismatch");
   });
@@ -127,7 +128,7 @@ describe("세션 복구 분기 — keyId 교차 검증", () => {
   it("TC3: Redis에 기존 세션 없음 (null) + 인증 성공 → same_id_success", async () => {
     const result = await simulateRecovery({
       redisSession: null,
-      authResult:   { valid: true, keyId: "key-C" },
+      authResult:   { valid: true, keyId: "key-C", isMaster: false },
     });
     assert.strictEqual(result, "same_id_success");
   });
@@ -143,7 +144,7 @@ describe("세션 복구 분기 — keyId 교차 검증", () => {
   it("TC5: Redis 비활성화 + keyId 불일치 → same_id_success (검증 스킵)", async () => {
     const result = await simulateRecovery({
       redisSession : { keyId: "key-A", authenticated: true },
-      authResult   : { valid: true, keyId: "key-B" },
+      authResult   : { valid: true, keyId: "key-B", isMaster: false },
       redisEnabled : false,
     });
     assert.strictEqual(result, "same_id_success");
@@ -151,10 +152,18 @@ describe("세션 복구 분기 — keyId 교차 검증", () => {
 
   it("TC6: master 키(keyId=null) 복구 → same_id_success", async () => {
     const result = await simulateRecovery({
-      redisSession: { keyId: null, authenticated: true },
-      authResult:   { valid: true, keyId: null },
+      redisSession: { keyId: null, isMaster: true, authenticated: true },
+      authResult:   { valid: true, keyId: null, isMaster: true },
     });
     assert.strictEqual(result, "same_id_success");
+  });
+
+  it("TC7: keyId=null이어도 OAuth non-master와 master identity는 교차 복구되지 않는다", async () => {
+    const result = await simulateRecovery({
+      redisSession: { keyId: null, isMaster: true, authenticated: true },
+      authResult: { valid: true, keyId: null, isMaster: false }
+    });
+    assert.strictEqual(result, "keyid_mismatch");
   });
 
 });

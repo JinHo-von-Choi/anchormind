@@ -234,6 +234,12 @@ Trigger condition: `(now - session.lastAccessedAt) > idleThresholdMs` AND (`sess
 
 When an SSE stream closes (`res.on('close')`), the server removes only the SSE response object; the session itself is kept alive. The session persists until its Redis TTL expires, allowing a reconnecting client to resume the same session.
 
+### OAuth security model — identities without a keyId are not master
+
+Authentication preserves an explicit `isMaster` decision instead of inferring master access from `keyId=null`. Direct access-key and explicit auth-disabled sessions are master; API-key-bound OAuth sessions carry their key, group, workspace, and permissions. A generic non-API-key OAuth session remains `isMaster=false`. Even when compatibility mode permits that authentication, the missing key/permission identity causes memory tools and resource reads to fail closed. The current API-key/OAuth schema does not support binding a non-default agent identity.
+
+OAuth authentication first tries `bound_key_id` via `validateApiKeyById`, then `is_api_key=true` via `validateApiKeyFromDB(client_id)`. Generic non-API-key OAuth is rejected by default with `MCP_REJECT_NONAPIKEY_OAUTH=true`; setting false permits authentication only, not memory tool/resource access without a bound key/permission identity.
+
 ### OAuth refresh_token is_api_key Propagation
 
 When refreshing a token via `POST /token` with `grant_type=refresh_token`, the `is_api_key` flag from the original token is propagated to the newly issued access_token and refresh_token. API key-based clients retain the same isolation context after a refresh.
@@ -619,7 +625,7 @@ The resolved mode is stored in the session object and reused for all subsequent 
 
 ### tools/list Filtering
 
-`filterTools(tools, presetName, isMaster)` removes tools in the `excluded_tools` set and returns the filtered list. Presets with `requiresMaster=true` are only applied to master-key sessions (`keyId === null`); regular API key sessions ignore such presets and receive the full tool list.
+`filterTools(tools, presetName, isMaster)` removes tools in the `excluded_tools` set and returns the filtered list. Presets with `requiresMaster=true` apply only to explicitly authenticated master sessions (`isMaster === true`). API-key sessions ignore master-only presets but still apply permission and master-only tool filtering.
 
 When assembling the `get_skill_guide` response, `getSkillGuideOverride(presetName, isMaster)` returns the `skill_guide_override` string from the preset. If present, this overrides the default skill guide text.
 
@@ -770,3 +776,11 @@ export async function dispatchChain(chain, prompt, options = {}, deps = {})
 The chain is an array of provider configurations. Providers are tried in order; on success the result is returned immediately. On failure (429, semaphore timeout, error), execution moves to the next fallback provider.
 
 **Concurrency control:** `getSemaphore(chainKey, limit, waitMs)` acquires a per-provider independent semaphore. The chainKey is composed of `provider|baseUrl|model|apiKeyHash`. Exceeding `LLM_CONCURRENCY_WAIT_MS` (default 30000ms) records the current provider as failed and tries the next. Chain deadline is calculated from `deps.startedAt` and `LLM_CHAIN_TIMEOUT_MS`; when remaining time reaches 0 the chain terminates immediately.
+
+## Agent scope and snapshot migration
+
+`resolveAgentScope` validates explicit `_isMaster=true` for peer requests at scope resolution, enforcing the same master contract for CLI/embedded callers. Omitting agentId selects default; specifying one selects that agent plus default. Legacy unbound compatibility defaults to true for this transition release; each relaxed request emits a warning and increments `mcp_legacy_unbound_agent_scope_total`. After migration, setting false rejects non-default agent requests from ordinary API keys.
+
+Migration-047 only adds snapshot columns to `fragment_versions`/`case_events`. Inspect pending warnings from `migrate`, stop old writers, then run the CLI backfill. NULL snapshots are quarantined from reads, including peer reads. Backfill recounts after a zero-update batch; remaining backfillable or sourceMissing/sourceDeleted rows produce `SNAPSHOT_BACKFILL_INCOMPLETE`. Shared normalization moves the fragment and version agent snapshots in one transaction. Rollback drops snapshot columns but does not undo normalization.
+
+Old sessions require reconnection and initialize. Old sessions reused without bearer credentials and without isMaster are denied tool access. `memory://stats`/`memory://topics` aggregate only current default-agent fragments and expose no master peer input. `search_traces`/`reconstruct_history` also default to the default-agent scope.

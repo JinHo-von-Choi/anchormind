@@ -45,6 +45,15 @@ if (!DB_URL) {
   process.exit(1);
 }
 
+async function warnPendingAgentScopeSnapshots(client) {
+  // Load application configuration only after dotenv and DB setup are complete.
+  // Pass the existing migration connection: reporting must not open another pool.
+  const { warnPendingAgentScopeSnapshots: warnPending } = await import(
+    "../lib/memory/admin/AgentScopeBackfill.js"
+  );
+  await warnPending(client);
+}
+
 /**
  * 기반 스키마가 없으면 먼저 적용한다.
  *
@@ -147,6 +156,7 @@ async function migrate() {
 
     if (pending.length === 0) {
       console.log("All migrations already applied.");
+      await warnPendingAgentScopeSnapshots(client);
       return;
     }
 
@@ -181,6 +191,7 @@ async function migrate() {
     }
 
     console.log(`${pending.length} migration(s) applied successfully.`);
+    await warnPendingAgentScopeSnapshots(client);
   } finally {
     await client.query(`SELECT pg_advisory_unlock(${MIGRATE_LOCK_ID})`);
     console.log("Migration lock released");

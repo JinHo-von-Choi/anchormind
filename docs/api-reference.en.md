@@ -89,10 +89,10 @@ X-RateLimit-Resource: fragments
 
 All MCP tool calls must pass RBAC validation.
 
-- Master key (`MEMENTO_ACCESS_KEY`): treated as `permissions=null`, granting access to all tools.
+- Master key (`MEMENTO_ACCESS_KEY`): identified by explicit trusted `isMaster=true`, granting access to all tools. Neither `permissions=null` nor `keyId=null` alone implies master authentication.
 - API key (`mmcp_xxx`): tool access is restricted based on the `permissions` array specified at key creation time. Requests for tools not included in the array are immediately denied.
 - Tools registered in the `TOOL_PERMISSIONS` map require the corresponding permission level. Unregistered tool names are treated as `required=null` and pass the permission check. To bring a new tool into the RBAC boundary, register it explicitly in the `TOOL_PERMISSIONS` map.
-- Three permission levels exist: `read` (recall/context/memory_stats etc.), `write` (remember/forget/amend etc.), `admin` (memory_consolidate/apply_update etc.). A key with `admin` permission can invoke tools at all levels.
+- Three permission levels exist: `read` (recall/context etc.), `write` (remember/forget/amend etc.), and `admin` (memory_consolidate/apply_update etc.). The `admin` permission does not bypass tools that require explicit master authentication.
 - When a forget/amend/link request targets a fragment owned by another tenant (different API key), a `"Fragment not found"` error is returned. Isolation is enforced at the SQL level via `key_id` conditions, so the fragment's existence is never exposed.
 
 Accessing a protected resource without authentication returns `401 Unauthorized` with a `WWW-Authenticate: Bearer resource_metadata="</.well-known/oauth-protected-resource URL>"` header.
@@ -304,10 +304,16 @@ MCP resources for real-time queries on the current state of the memory system.
 
 | URI | Description | Data Source |
 |-----|-------------|-------------|
-| `memory://stats` | System statistics | Per-type and per-tier counts and utility score averages from the `fragments` table |
-| `memory://topics` | Topic list | All unique `topic` labels from the `fragments` table |
+| `memory://stats` | Scoped statistics | Per-type/per-tier counts and utility averages for current default-agent fragments within the resource's key/workspace scope |
+| `memory://topics` | Scoped topic list | Unique topics from current default-agent fragments in the same scope |
 | `memory://config` | System configuration | Weights and TTL thresholds defined in `MEMORY_CONFIG` |
 | `memory://active-session` | Session activity log | Current session tool usage history recorded in `SessionActivityTracker` (Redis) |
+
+These resources have no `includePeerAgents` input, so even master cannot request all-agent aggregates through them. Superseded fragments (`valid_to IS NOT NULL`) are excluded.
+
+Omitting agentId selects default; specifying it selects that agent plus default. This transition release defaults `MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE=true`, allowing deployed API-key specific-agent claims with a warning and counter. Setting false enables strict mode, where specific-agent selection requires master authentication. `includePeerAgents` always requires master authentication regardless of the flag. `search_traces` and `reconstruct_history` also apply this default agent filter, so existing administrative calls may return fewer rows.
+
+ID lookups through `fragment_history` and `graph_explore` now apply workspace filters. For an ordinary key with no default_workspace that stored a fragment in proj, request its history with `{ "id": "fragment-id", "workspace": "proj" }`. Master may use `{ "id": "fragment-id", "allWorkspaces": true }` to remove only the workspace filter. For `graph_explore`, replace `id` with `startId` in both examples. Omitting workspace selects global-only, so previously successful ID-only calls may now return not found.
 
 ---
 
@@ -326,7 +332,7 @@ MCP resources for real-time queries on the current state of the memory system.
 | linkRelationType | string | - | Link relation type filter (related, caused_by, resolved_by, part_of, contradicts) |
 | threshold | number | - | Similarity threshold (0-1) |
 | includeSuperseded | boolean | - | Include expired (superseded) fragments. Default false. |
-| includePeerAgents | boolean | - | When true, includes fragments from other agentIds within the same key/workspace scope (for multi-agent collaboration). Key and workspace boundaries are preserved. Default false. |
+| includePeerAgents | boolean | - | Master only. Includes other agents within the same key/workspace scope. Ordinary API keys receive a permission error. Default false. |
 | includeKeyName | boolean | - | When true, each fragment carries key_id and key_name (the access key label). Only information within the same key group scope is exposed. Default false. |
 | asOf | string | - | ISO 8601. Return only fragments valid at the specified point in time. |
 | excludeSeen | boolean | - | Exclude fragments already injected by context(). Default true. |
@@ -851,7 +857,7 @@ Usefulness feedback on tool usage results. Evaluates whether the target tool's r
 
 ## MCP Tool — memory_stats
 
-Query fragment memory system statistics. Returns total fragment count, TTL distribution, and per-type statistics.
+Master-key-only fragment memory statistics. Returns total fragment count, TTL distribution, and per-type statistics. Because these are global aggregates without tenant scope, regular API keys cannot access this tool.
 
 ### Parameters
 
@@ -903,7 +909,7 @@ Execute fragment memory maintenance. Performs TTL transitions, importance decay,
 
 ## MCP Tool — session_rotate
 
-Closes the current session and issues a new `sessionId`. Use it when a token leak is suspected or on a rotation schedule. The same `bound_key_id`, `workspace`, and `permissions` carry over to the new session.
+Closes the current session and issues a new `sessionId`. Use it when a token leak is suspected or on a rotation schedule. Rotation revalidates the current credential and refreshes `bound_key_id`, key-group membership, and `permissions`, while preserving the `defaultWorkspace` and `mode` selected on the existing session.
 
 ### Parameters
 
@@ -923,6 +929,9 @@ Traces causal relationship chains starting from an error fragment. Dedicated to 
 |------|------|----------|-------------|
 | startId | string | Y | Starting fragment ID (error fragment recommended) |
 | agentId | string | - | Agent ID |
+| includePeerAgents | boolean | - | Master only. Includes other agents' nodes within the same key/workspace scope. Default false. |
+| workspace | string | - | Scope for the start fragment and neighbors. Falls back to the key default; global (NULL) only when neither is set. |
+| allWorkspaces | boolean | - | Master only. Removes workspace filters from the start fragment and neighbors, preserving agent/key boundaries. Default false. |
 
 ---
 
@@ -936,7 +945,9 @@ Query the complete change history of a fragment. Returns previous versions modif
 |------|------|----------|-------------|
 | id | string | Y | Fragment ID to query |
 | agentId | string | - | Agent ID |
-| includePeerAgents | boolean | - | When true, also returns version history for other agentIds within the same API key scope. The tenant (key) boundary is never relaxed. Default false. |
+| includePeerAgents | boolean | - | Master only. Includes other agents' history within the same key/workspace scope. Ordinary API keys receive a permission error. Default false. |
+| workspace | string | - | Scope for the current fragment, versions and superseded chain. Falls back to the key default; global (NULL) only when neither is set. |
+| allWorkspaces | boolean | - | Master only. Removes workspace filters from the current fragment, versions and superseded chain, preserving agent/key boundaries. Default false. |
 
 ---
 
@@ -966,6 +977,9 @@ Reconstruct work history chronologically based on case_id or entity. Restores na
 | query | string | - | Additional keyword filter |
 | limit | number | - | Default 100, max 500 |
 | workspace | string | - | Workspace filter. When specified, only fragments from the given workspace + global (NULL) fragments are targeted. |
+| allWorkspaces | boolean | - | Master only. When true, removes workspace filters from the timeline, events, evidence, and causal links. |
+| agentId | string | - | Defaults to shared default scope. Strict mode requires master for specific-agent selection; transition compatibility defaults true and temporarily accepts existing API-key claims. |
+| includePeerAgents | boolean | - | Master only. Includes all agents within the same key/workspace scope. Default false. |
 
 ### Returns
 
@@ -994,6 +1008,9 @@ Search fragments by exact matching (unlike recall's semantic search, uses conten
 | time_range | object | - | Time range filter. Includes from (start time, ISO 8601), to (end time, ISO 8601). |
 | limit | number | - | Default 20, max 100 |
 | workspace | string | - | Workspace filter. When specified, only fragments from the given workspace + global (NULL) fragments are targeted. |
+| allWorkspaces | boolean | - | Master only. When true, removes the workspace filter from traces. |
+| agentId | string | - | Defaults to shared default scope. Strict mode requires master for specific-agent selection; transition compatibility defaults true and temporarily accepts existing API-key claims. |
+| includePeerAgents | boolean | - | Master only. Includes all agents within the same key/workspace scope. Default false. |
 
 ---
 

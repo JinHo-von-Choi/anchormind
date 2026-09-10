@@ -126,11 +126,18 @@ describe("scope=session — Working Memory 경로", async () => {
       topic    : "session-test",
       type     : "fact",
       scope    : "session",
-      sessionId: "sess-abc-001"
+      sessionId: "sess-abc-001",
+      agentId  : "default",
+      _keyId   : "key-a",
+      _defaultWorkspace: "workspace-a"
     });
 
     assert.strictEqual(insertCalled, false, "DB insert가 호출되면 안 된다");
     assert.ok(deps.index.addToWorkingMemory.mock.calls.length > 0, "addToWorkingMemory가 호출돼야 한다");
+    const wmFragment = deps.index.addToWorkingMemory.mock.calls[0].arguments[1];
+    assert.equal(wmFragment.agent_id, "default");
+    assert.equal(wmFragment.key_id, "key-a");
+    assert.equal(wmFragment.workspace, "workspace-a");
     assert.strictEqual(result.scope,    "session");
     assert.strictEqual(result.ttl_tier, "session");
     assert.deepStrictEqual(result.conflicts, []);
@@ -475,5 +482,93 @@ describe("skipConflictDetection=true — detectConflicts 미호출", async () =>
     });
 
     assert.ok(detectFn.mock.calls.length > 0, "detectConflicts가 호출돼야 한다");
+  });
+});
+
+describe("amend case event source scope", async () => {
+  const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
+
+  it("master amend도 event/source snapshot에 실제 fragment 소유 key를 사용한다", async () => {
+    const appended = [];
+    const existing = {
+      id: "owned-fragment", content: "검증할 파편", topic: "scope",
+      keywords: ["scope"], type: "fact", importance: 0.8,
+      key_id: "tenant-key", agent_id: "agent-a", workspace: "project-a",
+      case_id: "case-a", session_id: "session-a", assertion_status: "observed"
+    };
+    const deps = buildDeps({
+      store: {
+        getById: async () => existing,
+        update: async () => ({ ...existing, assertion_status: "verified" })
+      },
+      top: {
+        caseEventStore: {
+          append: async event => {
+            appended.push(event);
+            return { event_id: "event-a" };
+          },
+          addEvidence: async () => {}
+        }
+      }
+    });
+
+    const result = await new MemoryRememberer(deps).amend({
+      id: existing.id,
+      assertionStatus: "verified",
+      agentId: "agent-a",
+      _keyId: null,
+      _isMaster: true
+    });
+
+    assert.equal(result.updated, true);
+    assert.equal(appended.length, 1);
+    assert.equal(appended[0].key_id, "tenant-key");
+    assert.equal(appended[0].source_fragment_id, "owned-fragment");
+  });
+});
+
+describe("auto case assignment scope forwarding", async () => {
+  const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
+
+  it("조회와 error backfill에 동일한 agent/key-group/workspace 범위를 전달한다", async () => {
+    const calls = [];
+    const deps = buildDeps({
+      store: {
+        findCaseIdBySessionTopic: async (...args) => {
+          calls.push(["case", ...args]);
+          return null;
+        },
+        findErrorFragmentsBySessionTopic: async (...args) => {
+          calls.push(["errors", ...args]);
+          return ["error-a"];
+        },
+        updateCaseId: async (...args) => {
+          calls.push(["update", ...args]);
+          return true;
+        }
+      }
+    });
+    const rememberer = new MemoryRememberer(deps);
+    const result = await rememberer._autoAssignCaseId({
+      type: "procedure", topic: "scope", agentId: "agent-a",
+      workspace: "project-a"
+    }, "session-a", "key-a", ["key-a", "key-b"]);
+    await Promise.resolve();
+
+    assert.ok(result.caseId);
+    const expectedScope = {
+      agentId: "agent-a", includePeerAgents: false,
+      workspace: "project-a", allWorkspaces: false
+    };
+    assert.deepEqual(calls[0], [
+      "case", "session-a", "scope", "key-a", ["key-a", "key-b"], expectedScope
+    ]);
+    assert.deepEqual(calls[1], [
+      "errors", "session-a", "scope", "key-a", ["key-a", "key-b"], expectedScope
+    ]);
+    assert.deepEqual(calls[2], [
+      "update", "error-a", result.caseId, "key-a",
+      { ...expectedScope, groupKeyIds: ["key-a", "key-b"] }
+    ]);
   });
 });

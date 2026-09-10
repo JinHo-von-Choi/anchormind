@@ -165,7 +165,7 @@ describe("deriveTokenKey — 미커버 분기 보강", () => {
 
   it("keyId가 null(master)이면 'master:hash' 형식이다", () => {
     const req = { headers: { authorization: "Bearer master-token-xyz" } };
-    const key = deriveTokenKey(req, {}, { keyId: null });
+    const key = deriveTokenKey(req, {}, { keyId: null, isMaster: true });
 
     assert.ok(key,                    "null이면 안 된다");
     assert.ok(key.startsWith("master:"), `'master:' prefix 기대: ${key}`);
@@ -175,7 +175,7 @@ describe("deriveTokenKey — 미커버 분기 보강", () => {
 
   it("memento-access-key 헤더 + keyId=null → 'master:hash'", () => {
     const req = { headers: { "memento-access-key": "ak-test-123" } };
-    const key = deriveTokenKey(req, {}, { keyId: null });
+    const key = deriveTokenKey(req, {}, { keyId: null, isMaster: true });
 
     assert.ok(key.startsWith("master:"), `'master:' prefix: ${key}`);
   });

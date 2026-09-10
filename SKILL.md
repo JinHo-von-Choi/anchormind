@@ -718,7 +718,6 @@ curl -s -X POST $SERVER_URL \
   -H "Authorization: Bearer $ACCESS_KEY" \
   -H "MCP-Session-Id: $SESSION_ID" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"reflect","arguments":{
-    "agentId":"AGENT_ID",
     "summary":["요약 내용1","요약 내용2"],
     "decisions":["기술/아키텍처 결정사항"],
     "errors_resolved":["원인: X → 해결: Y"]
@@ -730,7 +729,6 @@ curl -s -X POST $SERVER_URL \
   -H "Authorization: Bearer $ACCESS_KEY" \
   -H "MCP-Session-Id: $SESSION_ID" \
   -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"remember","arguments":{
-    "agentId":"AGENT_ID",
     "content":"저장할 내용",
     "topic":"주제",
     "type":"fact",
@@ -744,7 +742,6 @@ curl -s -X POST $SERVER_URL \
   -H "Authorization: Bearer $ACCESS_KEY" \
   -H "MCP-Session-Id: $SESSION_ID" \
   -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"recall","arguments":{
-    "agentId":"AGENT_ID",
     "text":"검색어",
     "keywords":["키워드"]
   }}}'
@@ -755,7 +752,6 @@ curl -s -X POST $SERVER_URL \
   -H "Authorization: Bearer $ACCESS_KEY" \
   -H "MCP-Session-Id: $SESSION_ID" \
   -d '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"context","arguments":{
-    "agentId":"AGENT_ID",
     "structured":true
   }}}'
 ```
@@ -800,7 +796,7 @@ curl 응답 검증 체크:
 
 1. 같은 API 키 또는 같은 키 그룹 + 동일 workspace를 사용한다. 파편 공유 범위는 키 그룹 단위다.
 2. 공동 작업은 동일 caseId를 공유하고, 진행 파편은 즉시 remember한다(기본 scope=permanent — 저장 즉시 상대 에이전트가 recall로 조회 가능). scope=session 파편은 세션 전용 스크래치라 공유되지 않는다.
-3. agentId 정책을 통일한다(default 또는 팀 고정 ID). 에이전트마다 다른 agentId를 쓰면 recall의 agent 필터 때문에 상대 파편이 검색에서 제외된다.
+3. 공동 기억은 `agentId`를 생략하거나 `default`로 통일한다. 일반 API key의 팀 고정 ID는 신뢰 가능한 agent 인증이 아니다. 전환 릴리즈의 legacy 호환 기본값은 true지만 이관 후 `MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE=false`로 차단하며, specific agent 관리와 peer 조회는 master 권한을 사용한다.
 4. 중간 가설은 assertionStatus="inferred"로 저장하고, 검증한 에이전트가 amend로 verified/rejected 전환한다. 미검증 가설과 확정 사실을 섞지 않는 것이 협업 오염 방지의 핵심이다.
 5. 상대 에이전트의 파편이 유용했으면 tool_feedback(relevant=true)을 보낸다 — 링크 가중치 강화가 팀 검색 품질을 누적 개선한다.
 6. 전체 흐름 복기는 reconstruct_history(caseId) 또는 recall(caseMode=true). 모순 발견 시 link(relationType="contradicts") 명시 후 대표 파편을 amend로 정리한다.
@@ -888,7 +884,7 @@ async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기�
 | linkRelationType | string | - | 연결 관계 필터 (related, caused_by, resolved_by, part_of, contradicts) |
 | threshold | number | - | similarity 임계값 0~1 |
 | includeSuperseded | boolean | - | 만료 파편 포함. 기본 false. |
-| includePeerAgents | boolean | - | true 시 같은 키/workspace 스코프 내 다른 agentId 파편 포함 (멀티에이전트 협업용). 키·workspace 경계는 유지. 기본 false. |
+| includePeerAgents | boolean | - | master 전용. 같은 키/workspace 범위의 다른 agent 파편 포함. 일반 API 키는 권한 오류. 기본 false. |
 | includeKeyName | boolean | X | true 시 각 파편에 key_id·key_name(액세스 키 라벨) 포함. 같은 키 그룹 스코프의 정보만 노출. 팀 공유 workspace에서 파편 생성 주체 식별용. 기본 false |
 | asOf | string | - | ISO 8601. 해당 시점에 가까운 파편을 상위로 올리는 시간 근접 랭킹 기준(anchorTime)으로만 작동. 주의: 그 시점에 유효했던 버전을 복원하는 bitemporal as-of 필터가 아니며, 과거 시점 스냅샷 조회는 미구현. 특정 기간의 파편을 실제로 한정하려면 timeRange를 쓴다. |
 | timeRange | object | - | {from, to} 생성시각(created_at) 기준 시간창 필터. ISO 8601과 한국어 자연어("3일 전","지난 주","오늘") 모두 지원. 지정 시 시간 검색 경로가 동작하고 RRF에서 시간 근접 가중이 부스트된다. |
@@ -1029,7 +1025,7 @@ fragment_ids를 지정하고 ENABLE_RECONSOLIDATION=true인 경우: relevant=fal
 
 ### memory_stats
 
-기억 시스템 통계. 파라미터 없음.
+기억 시스템 전역 통계. master key 전용, 파라미터 없음.
 
 ### memory_consolidate
 
@@ -1047,6 +1043,9 @@ fragment_ids를 지정하고 ENABLE_RECONSOLIDATION=true인 경우: relevant=fal
 |------|------|------|------|
 | startId | string | O | 시작 파편 ID (error 권장) |
 | agentId | string | - | 에이전트 ID |
+| includePeerAgents | boolean | - | master 전용. 같은 key/workspace 범위의 다른 agent 노드 포함. 기본 false. |
+| workspace | string | - | 생략 시 key 기본값, 둘 다 없으면 전역(NULL) 범위. 시작·이웃 파편에 함께 적용. |
+| allWorkspaces | boolean | - | master 전용. workspace 필터를 제거하고 agent/key 범위는 유지. 기본 false. |
 
 startId가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permission"` 오류가 반환된다.
 
@@ -1058,7 +1057,9 @@ startId가 타 테넌트 소유 파편인 경우 `"Fragment not found or no perm
 |------|------|------|------|
 | id | string | O | 조회할 파편 ID |
 | agentId | string | - | 에이전트 ID |
-| includePeerAgents | boolean | - | true 시 같은 API 키 스코프 내 다른 agentId의 파편 이력도 조회. 테넌트(키) 경계는 유지. 기본 false |
+| includePeerAgents | boolean | - | master 전용. 같은 key/workspace 범위의 다른 agent 이력 포함. 일반 API 키는 권한 오류. 기본 false. |
+| workspace | string | - | 생략 시 key 기본값, 둘 다 없으면 전역(NULL) 범위. 현재 파편·버전·superseded chain에 함께 적용. |
+| allWorkspaces | boolean | - | master 전용. workspace 필터를 제거하고 agent/key 범위는 유지. 기본 false. |
 
 id가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permission"` 오류가 반환된다.
 
@@ -1086,6 +1087,9 @@ id가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permissio
 | query | string | - | content 키워드 추가 필터 |
 | limit | number | 100 | 최대 반환 파편 수 (최대 500) |
 | workspace | string | - | 워크스페이스 필터 |
+| allWorkspaces | boolean | false | master 전용. true이면 timeline·event·evidence·인과 링크의 workspace 필터를 제거 |
+| agentId | string | default | 특정 agent 지정은 master 전용 |
+| includePeerAgents | boolean | false | master 전용. 같은 key/workspace 범위의 모든 agent 포함 |
 
 반환값:
 - `ordered_timeline`: 시간순 파편 배열 (각 항목에 agent_id 포함 — 멀티에이전트 케이스에서 기여 에이전트 식별용)
@@ -1116,6 +1120,9 @@ id가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permissio
 | session_id | string | - | 특정 세션 필터 |
 | time_range | object | - | { from: ISO8601, to: ISO8601 } |
 | workspace | string | - | 워크스페이스 필터. 지정 시 해당 workspace + 전역(NULL) 파편만 대상 |
+| allWorkspaces | boolean | false | master 전용. true이면 trace의 workspace 필터를 제거 |
+| agentId | string | default | 특정 agent 지정은 master 전용 |
+| includePeerAgents | boolean | false | master 전용. 같은 key/workspace 범위의 모든 agent 포함 |
 | limit | number | 20 | 최대 반환 수 (최대 100) |
 
 snake_case 파라미터에는 camelCase alias가 있다: `eventType`, `entityKey`, `caseId`, `sessionId`. 두 표기 중 어느 쪽을 보내도 동일하게 처리된다.
@@ -1131,7 +1138,7 @@ snake_case 파라미터에는 camelCase alias가 있다: `eventType`, `entityKey
 
 **목적**: 현재 세션을 종료하고 새 `sessionId`를 발급한다. 토큰 탈취 의심 시 또는 주기적 로테이션에 사용한다.
 
-**언제 사용**: 키 노출이 의심되거나 스케줄된 회전 시점에서 동일 `bound_key_id` / `workspace` / `permissions`로 새 세션을 발급받을 때.
+**언제 사용**: 키 노출이 의심되거나 스케줄된 회전 시점에서 credential의 `bound_key_id` / key group / `permissions`를 재검증하고, 기존 세션의 `defaultWorkspace` / `mode`를 유지한 새 세션을 발급받을 때.
 
 | 파라미터 | 타입 | 기본값 | 설명 |
 |---|---|---|---|

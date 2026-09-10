@@ -127,6 +127,26 @@ describe("TOOL_REGISTRY — requiresMaster 제약 규칙", () => {
     assert.ok(entry.meta.capabilities.includes("admin"));
   });
 
+  it("check_update도 master에게만 노출된다", () => {
+    const entry = TOOL_REGISTRY.get("check_update");
+    assert.strictEqual(entry.meta.requiresMaster, true);
+    assert.ok(entry.meta.capabilities.includes("admin"));
+  });
+
+  it("memory_stats는 전역 집계이므로 requiresMaster=true다", () => {
+    const entry = TOOL_REGISTRY.get("memory_stats");
+    assert.strictEqual(entry.meta.requiresMaster, true);
+    assert.ok(entry.meta.capabilities.includes("admin"));
+  });
+
+});
+
+describe("TOOL_REGISTRY — audit log input safety", () => {
+  it("session_rotate 로그에 사용자 reason을 포함하지 않는다", () => {
+    const message = TOOL_REGISTRY.get("session_rotate").log({ reason: "synthetic\nforged" });
+    assert.equal(message, "Session rotated");
+    assert.doesNotMatch(message, /forged|\n/);
+  });
 });
 
 describe("TOOL_REGISTRY — 읽기 도구 안전성 규칙", () => {

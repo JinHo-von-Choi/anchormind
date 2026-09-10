@@ -25,7 +25,7 @@
 | EVALUATOR_MAX_QUEUE | 100 | MemoryEvaluator queue size cap (older jobs dropped on overflow) |
 | OAUTH_TRUSTED_ORIGINS | (none) | Additional OAuth redirect_uri trusted domains (comma-separated, origin level). Added on top of default trusted domains (claude.ai, chatgpt.com, platform.openai.com, copilot.microsoft.com, gemini.google.com). Only specify additional origins to allow |
 | MCP_STRICT_ORIGIN | false | When `true`, enables strict Origin header validation (DNS rebinding defense). Requests from Origins not in the allowlist (`OAUTH_TRUSTED_ORIGINS` + `ALLOWED_ORIGINS` + default trusted domains) are rejected with 403. Requests without an Origin header (CLI/curl) are always allowed. **opt-in** — defaults to `false` to preserve existing behavior |
-| MCP_REJECT_NONAPIKEY_OAUTH | true | Set to `false` to allow `is_api_key=false` OAuth tokens (backward compatibility). Default `true` — non-API-key OAuth tokens create a `keyId=null` session with master-level access to all fragments. API-key-based OAuth tokens (`is_api_key=true`) and Bearer ACCESS_KEY direct use are unaffected |
+| MCP_REJECT_NONAPIKEY_OAUTH | true | The default `true` rejects authentication with `is_api_key=false` OAuth tokens. `false` permits that authentication only and never grants master privileges. OAuth sessions without an API-key binding receive `-32001` on tool calls. API-key-based OAuth tokens (`is_api_key=true`) and direct Bearer ACCESS_KEY use are unaffected |
 | MCP_ALLOW_AUTO_DCR_REGISTER | false | Set to `true` to allow auto-registration of unregistered `client_id` in `/authorize` (legacy behavior). Default `false` — enforces RFC 7591 `POST /register` endpoint for client registration |
 | OAUTH_ALLOWED_REDIRECT_URIS | (none) | OAuth redirect_uri exact-match allowed list (comma-separated). Operates independently of OAUTH_TRUSTED_ORIGINS |
 | DEFAULT_DAILY_LIMIT | 10000 | Default daily call limit when creating API keys |
@@ -267,6 +267,8 @@ This feature operates asynchronously only when `REDIS_ENABLED=true`. When `REDIS
 | REDIS_PORT | 6379 | Redis server port |
 | REDIS_PASSWORD | (none) | Redis authentication password |
 | REDIS_DB | 0 | Redis database number |
+| MEMENTO_REDIS_SESSION_FAIL_CLOSED | false | Fail the request when Redis session persistence fails. When false, warn and continue with the in-memory session |
+| MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE | true | Transition compatibility for API-key non-default agentId claims. Each use emits a warning and increments `mcp_legacy_unbound_agent_scope_total`. It does not authenticate agents sharing a key; migrate clients, confirm no further increments, then set false for strict mode. includePeerAgents always requires master authentication |
 | REDIS_MASTER_NAME | mymaster | Sentinel master name |
 | REDIS_SENTINELS | localhost:26379, localhost:26380, localhost:26381 | Sentinel node list. Comma-separated host:port format |
 

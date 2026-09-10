@@ -23,7 +23,11 @@ import {
 
 /* ── 헬퍼: 파편 팩토리 ── */
 function frag(id, type, content, extra = {}) {
-  return { id, type, content, importance: 0.5, workspace: null, ...extra };
+  return {
+    id, type, content, importance: 0.5,
+    agent_id: "default", key_id: null, workspace: null,
+    ...extra
+  };
 }
 
 /* ── buildContextHint 단위 테스트 ── */
@@ -235,7 +239,10 @@ describe("ContextBuilder.build()", () => {
 
   it("sessionId 전달 시 working memory를 로드하고 seenIds 저장", async () => {
     indexMock.getWorkingMemory = mock.fn(async () => [
-      { id: "wm-1", content: "wm item", type: "fact", workspace: null }
+      {
+        id: "wm-1", content: "wm item", type: "fact",
+        agent_id: "default", key_id: null, workspace: null
+      }
     ]);
 
     const result = await builder.build({ sessionId: "sess-1" });
@@ -247,10 +254,10 @@ describe("ContextBuilder.build()", () => {
 
   it("working memory는 added_at 최신순, 동점이면 id 오름차순이다", async () => {
     indexMock.getWorkingMemory = mock.fn(async () => [
-      { id: "wm-b", content: "b", type: "fact", added_at: 100, workspace: null },
-      { id: "wm-old", content: "old", type: "fact", added_at: 50, workspace: null },
-      { id: "wm-a", content: "a", type: "fact", added_at: 100, workspace: null },
-      { id: "wm-new", content: "new", type: "fact", added_at: 200, workspace: null }
+      { id: "wm-b", content: "b", type: "fact", added_at: 100, agent_id: "default", key_id: null, workspace: null },
+      { id: "wm-old", content: "old", type: "fact", added_at: 50, agent_id: "default", key_id: null, workspace: null },
+      { id: "wm-a", content: "a", type: "fact", added_at: 100, agent_id: "default", key_id: null, workspace: null },
+      { id: "wm-new", content: "new", type: "fact", added_at: 200, agent_id: "default", key_id: null, workspace: null }
     ]);
 
     const result = await builder.build({ sessionId: "synthetic-session", structured: true });
@@ -271,15 +278,16 @@ describe("ContextBuilder.build()", () => {
     assert.deepEqual(sourceArgs[4], {
       workspace: "ws-a",
       allWorkspaces: false,
-      isAnchor: false
+      isAnchor: false,
+      includePeerAgents: false
     });
   });
 
   it("working memory에서 다른 workspace와 legacy entry를 제외", async () => {
     indexMock.getWorkingMemory = mock.fn(async () => [
-      { id: "global", content: "global", type: "fact", workspace: null },
-      { id: "same", content: "same", type: "fact", workspace: "ws-a" },
-      { id: "other", content: "other", type: "fact", workspace: "ws-b" },
+      { id: "global", content: "global", type: "fact", agent_id: "default", key_id: null, workspace: null },
+      { id: "same", content: "same", type: "fact", agent_id: "default", key_id: null, workspace: "ws-a" },
+      { id: "other", content: "other", type: "fact", agent_id: "default", key_id: null, workspace: "ws-b" },
       { id: "legacy", content: "legacy", type: "fact" }
     ]);
 
@@ -291,10 +299,10 @@ describe("ContextBuilder.build()", () => {
     assert.ok(!wmIds.includes("legacy"));
   });
 
-  it("allWorkspaces=true이면 모든 신규 working memory entry를 허용", async () => {
+  it("allWorkspaces=true여도 agent metadata 없는 legacy entry는 차단한다", async () => {
     indexMock.getWorkingMemory = mock.fn(async () => [
-      { id: "a", content: "a", type: "fact", workspace: "ws-a" },
-      { id: "b", content: "b", type: "fact", workspace: "ws-b" },
+      { id: "a", content: "a", type: "fact", agent_id: "default", key_id: null, workspace: "ws-a" },
+      { id: "b", content: "b", type: "fact", agent_id: "default", key_id: null, workspace: "ws-b" },
       { id: "legacy", content: "legacy", type: "fact" }
     ]);
 
@@ -304,10 +312,25 @@ describe("ContextBuilder.build()", () => {
     const ids = new Set(result.fragments.map(f => f.id));
     assert.ok(ids.has("a"));
     assert.ok(ids.has("b"));
-    assert.ok(ids.has("legacy"));
+    assert.ok(!ids.has("legacy"));
     for (const call of recallMock.mock.calls) {
       assert.equal(call.arguments[0]._isMaster, true);
     }
+  });
+
+  it("peer+allWorkspaces도 agent metadata 없는 legacy entry는 차단한다", async () => {
+    indexMock.getWorkingMemory = mock.fn(async () => [
+      { id: "peer", content: "peer", type: "fact", agent_id: "agent-b", key_id: null, workspace: "ws-b" },
+      { id: "legacy", content: "legacy", type: "fact", key_id: null, workspace: "ws-b" }
+    ]);
+
+    const result = await builder.build({
+      sessionId: "session-peer-all", agentId: "agent-a",
+      includePeerAgents: true, allWorkspaces: true, _isMaster: true
+    });
+    const ids = new Set(result.fragments.map(f => f.id));
+    assert.ok(ids.has("peer"));
+    assert.ok(!ids.has("legacy"));
   });
 
   it("중복 ID 파편은 첫 등장만 유지", async () => {
@@ -396,7 +419,8 @@ describe("ContextBuilder.build()", () => {
     assert.deepEqual(storeMock.searchBySource.mock.calls[0].arguments[4], {
       workspace: "synthetic-workspace",
       allWorkspaces: false,
-      isAnchor: false
+      isAnchor: false,
+      includePeerAgents: false
     });
   });
 
