@@ -33,6 +33,8 @@
 - 일반 API key에서 `memory_stats`를 포함한 master 전용 도구는 tools/list와 OpenAPI 모두에서 노출하지 않는다. 기존 read 권한 키의 도구 목록에서 `memory_stats`가 제거된다.
 - 기존 데이터는 `anchor-scope --include-non-anchors`로 inventory한 뒤 명시적으로 공유 분류된 항목만 `default`로 이관한다. 정규화는 파편과 해당 `fragment_versions.agent_id`를 같은 트랜잭션에서 옮겨 변경 이력의 가시성을 유지한다. 기본 활성인 legacy 호환 모드는 같은 key 내부 agent 인증을 보장하지 않으므로 사용 계수를 관찰하고 클라이언트 이관 후 명시적으로 `false`로 전환한다. 다음 부 버전의 기본 차단 전환은 사용 계수가 0인지 확인한 뒤 판단한다.
 - 인과 체인 링크는 양 끝 파편이 모두 요청의 agent/key/effective-workspace 범위 안에 있을 때만 반환한다. workspace 생략 시 전역(NULL), 지정 시 해당 workspace와 전역, master의 `allWorkspaces=true`일 때만 전체 workspace를 허용한다.
+- 런타임 의존성 감사 게이트를 `audit-ci`로 옮기고 예외를 `audit-ci.jsonc`의 allowlist에 사유와 함께 명시한다. moderate 이상 차단 기준은 그대로이며, 상류에 패치 판이 없어 올릴 데가 없는 권고만 예외로 둔다. 현재 예외는 `GHSA-vwc7-r8mq-g2x9`(adm-zip) 한 건으로, `@huggingface/transformers` -> `onnxruntime-node` 경로의 postinstall 아카이브 해제에서만 쓰이고 런타임 경로에는 없다.
+- `sharp` override를 `^0.35.4`로 올린다.
 
 ### 업그레이드 주의
 

@@ -1,0 +1,21 @@
+{
+  // 런타임 의존성에 알려진 취약점이 있으면 CI를 막는다. 개발 의존성은 배포물에
+  // 실리지 않으므로 --skip-dev 로 분리한다.
+  //
+  // allowlist 는 상류에 패치 판이 없어 올릴 데가 없는 권고만 담는다. 패치가 나오면
+  // 버전을 올리고 해당 항목을 지운다. --show-not-found 가 더 이상 발견되지 않는
+  // 항목을 알려주므로 만료된 예외는 그때 정리한다.
+  //
+  // GHSA-vwc7-r8mq-g2x9 (adm-zip, moderate)
+  //   @huggingface/transformers -> onnxruntime-node -> adm-zip
+  //   adm-zip 은 >=0.5.9 전부가 대상이고 최신 0.6.0 에도 패치가 없다. 유일한 호출부는
+  //   onnxruntime-node 의 postinstall 로, NuGet 에서 받은 .nupkg 에서 항목을 지정해
+  //   그때 새로 만든 임시 디렉터리에 푼다. 런타임 경로에는 없다.
+  "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
+  "moderate": true,
+  "skip-dev": true,
+  "show-not-found": true,
+  "allowlist": [
+    "GHSA-vwc7-r8mq-g2x9"
+  ]
+}

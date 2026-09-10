@@ -37,6 +37,7 @@
     "lint": "eslint .",
     "backfill:embeddings": "node scripts/backfill-embeddings.js",
     "lint:migrations": "node scripts/lint-migrations.js",
+    "audit:ci": "audit-ci --config audit-ci.jsonc",
     "migrate": "node scripts/migrate.js",
     "cli": "node bin/memento.js"
   },
@@ -58,6 +59,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "audit-ci": "^7.1.0",
     "eslint": "^10.9.1"
   },
   "overrides": {
