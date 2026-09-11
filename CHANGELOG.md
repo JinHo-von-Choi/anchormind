@@ -2,12 +2,16 @@
 
 ## [Unreleased]
 
+## [5.9.1] - 2026-09-11
+
 ### Added
 
 - 자동 앵커 승격만 비활성화할 수 있는 `MEMENTO_AUTO_PROMOTE_ANCHORS` 설정을 추가했다. 기본값과 빈 값은 기존 동작을 유지하는 `true`이며, 비활성 상태는 정리 결과·로그·`mcp_anchor_auto_promotion_enabled` 메트릭에서 확인할 수 있다.
 - `anchor-scope` CLI: non-default anchor를 shared/private/unconfirmed로 inventory한다. `--include-non-anchors`는 legacy 일반 파편까지 포함한다. 기본 dry-run이며 migration-047 schema guard와 명시 승인 목록을 통과한 shared 항목만 version history를 남기고 `default`로 정규화한다.
 - `MEMENTO_REDIS_SESSION_FAIL_CLOSED=true`: Redis session 저장 실패 시 요청도 실패시키는 opt-in. 기본값은 false이며 Redis 순단 시 in-memory 세션으로 계속 동작한다. 단, rotation에서 기존 Redis 세션 삭제가 실패하면 fixation 방지를 위해 항상 실패한다.
 - 검색 이벤트에 effective agent scope와 peer flag를 기록하는 migration-047.
+- `case_events.event_type` CHECK 제약에 `case_closed`를 추가하는 migration-048.
+- 서버 기동 시 `schema_migrations`에 기록되지 않은 migration 파일을 error 로그로 나열한다. 기동은 막지 않으며, 미적용 상태에서 해당 컬럼을 쓰는 amend·case event·search event 기록이 실패하기 전에 `npm run migrate` 누락을 드러낸다.
 
 ### Changed
 
@@ -40,6 +44,7 @@
 
 - 업그레이드 전에 열린 세션은 재연결하여 `initialize`를 다시 수행해야 한다. `isMaster` 없는 구 세션이 bearer 인증정보 없이 재사용되면 재앵커링할 수 없어 도구 호출이 `-32001`로 실패한다.
 - migration-047은 `fragment_versions`와 `case_events`의 legacy snapshot을 자동으로 채우지 않는다. `migrate`의 잔량 경고를 확인하고 구 writer 종료 후 `anchor-scope --backfill-snapshots --execute --approve-backfill`을 수동 실행한다. 그 전에는 NULL snapshot 이력·이벤트가 읽기에서 제외되어 `fragment_history.versions`가 비어 보일 수 있다.
+- migration-048을 적용하지 않고 이 버전을 기동하면 `case_closed` 이벤트 기록은 종전처럼 경고만 남기고 무시된다. `npm run migrate` 후 재시작해야 케이스 종결 이벤트가 남는다.
 - snapshot 롤백은 컬럼과 backfill 결과를 삭제하며 `anchor-scope --execute` 정규화를 되돌리지 않는다. 재적용·재백필은 현재 파편의 `default`를 기록하므로 정규화 이전 agent 복원에는 별도 사전 백업이 필요하다.
 - `anchor-scope` 출력은 항상 JSON이다. `--json`은 기존 호출 호환용이며 출력 형식을 바꾸지 않는다.
 - `MCP_REJECT_NONAPIKEY_OAUTH=false`는 non-API-key OAuth 인증을 허용하지만 master 권한을 부여하지 않는다. 도구 호출에는 API 키 바인딩이 필요하며, 바인딩 없는 OAuth 세션은 `-32001`로 거부된다.
@@ -50,6 +55,7 @@
 
 ### Fixed
 
+- `amend`가 `resolutionStatus=resolved` 전환 시 남기는 `case_closed` 이벤트가 `CaseEventStore`의 허용 목록과 DB CHECK 제약 양쪽에서 거부되어 항상 기록되지 않던 문제를 고쳤다. 허용 목록은 `CASE_EVENT_TYPES`로 내보내며 migration-048과 함께 적용해야 한다.
 - case mode 이벤트 조회가 nullable `source_fragment_id`를 활성 파편과 내부 조인해 source 없는 이벤트와 supersede·GC된 source의 과거 이벤트를 누락하던 회귀를 막았다. API 키 요청은 동일 case ID 충돌에 따른 교차 테넌트 노출을 막기 위해 현재 키 그룹의 이벤트만 허용하며, `key_id IS NULL`인 레거시·master 이벤트는 master 조회에서만 반환된다.
 - 업그레이드 전 Redis 세션에 `isMaster` 필드가 없을 때 현재 요청의 인증과 세션 key가 일치하면 master 여부를 안전하게 재앵커링한다. 인증정보가 없거나 key가 다르면 일반 권한으로 유지한다.
 - global-only 빈 결과 안내를 CLI의 table·CSV·JSON 출력에 노출하고, `topic_mismatch`가 함께 감지되더라도 workspace 재검색 안내를 유지한다.
