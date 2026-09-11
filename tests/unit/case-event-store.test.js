@@ -19,7 +19,7 @@
 import { describe, it, mock, after } from "node:test";
 import assert                         from "node:assert/strict";
 
-import { CaseEventStore } from "../../lib/memory/CaseEventStore.js";
+import { CaseEventStore, CASE_EVENT_TYPES } from "../../lib/memory/CaseEventStore.js";
 import { disconnectRedis } from "../../lib/redis.js";
 
 after(async () => { await disconnectRedis().catch(() => {}); });
@@ -65,13 +65,8 @@ function makeStore(pool) {
     if (!event.event_type || typeof event.event_type !== "string") {
       throw new Error("event_type is required and must be a string");
     }
-    const VALID_EVENT_TYPES = [
-      "milestone_reached", "hypothesis_proposed", "hypothesis_rejected",
-      "decision_committed", "error_observed", "fix_attempted",
-      "verification_passed", "verification_failed"
-    ];
-    if (!VALID_EVENT_TYPES.includes(event.event_type)) {
-      throw new Error(`Invalid event_type: ${event.event_type}. Must be one of: ${VALID_EVENT_TYPES.join(", ")}`);
+    if (!CASE_EVENT_TYPES.includes(event.event_type)) {
+      throw new Error(`Invalid event_type: ${event.event_type}. Must be one of: ${CASE_EVENT_TYPES.join(", ")}`);
     }
 
     const client = await pool.connect();
@@ -198,6 +193,19 @@ describe("CaseEventStore.append — 유효성 검증 (pool 접근 전)", () => {
       () => store.append({ case_id: "case-001", event_type: "unknown_type", summary: "s" }),
       (err) => err.message.includes("Invalid event_type")
     );
+  });
+
+  it("case_closed는 허용 목록에 있어 append가 실제 검증 경로에서 거부되지 않는다", async () => {
+    assert.ok(CASE_EVENT_TYPES.includes("case_closed"));
+
+    const client = makeClient({ ins: { rows: [{ event_id: "evt-closed", sequence_no: 3 }] } });
+    const store  = makeStore(makePool(client));
+    const result = await store.append({
+      case_id   : "case-close-001",
+      event_type: "case_closed",
+      summary   : "케이스 종결"
+    });
+    assert.equal(result.event_id, "evt-closed");
   });
 
   it("유효한 이벤트 append 시 { event_id, sequence_no }를 반환한다", async () => {

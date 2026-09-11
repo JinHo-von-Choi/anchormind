@@ -60,6 +60,9 @@ import { installProcessGuards }     from "./lib/process-guards.js";
 /** 임베딩 차원 일관성 검증 */
 import { checkEmbeddingConsistency } from "./scripts/check-embedding-consistency.js";
 
+/** 미적용 migration 검사 */
+import { warnPendingMigrations } from "./lib/memory/admin/PendingMigrations.js";
+
 /** OpenAPI */
 import { validateAuthentication } from "./lib/auth.js";
 import { buildSpec }              from "./lib/openapi.js";
@@ -338,6 +341,7 @@ server.listen(PORT, () => {
       if (!await checkEmbeddingConsistency()) {
         process.exit(1);
       }
+      await warnPendingMigrations(pool, { error: (msg, meta) => logError(msg, null, meta) });
     }).catch(() => {});
   }
 
