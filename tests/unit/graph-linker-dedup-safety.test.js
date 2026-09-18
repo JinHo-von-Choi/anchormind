@@ -7,12 +7,14 @@ let writes;
 let dedupQuery;
 let candidateQuery;
 let warnings;
+let sourceQuery;
 
 mock.module("../../lib/tools/db.js", {
   namedExports: {
     queryWithAgentVector: async (_agentId, sql, params, mode) => {
       const normalized = String(sql).replace(/\s+/g, " ").trim();
       if (normalized.startsWith("SELECT id, content, topic, type, created_at, key_id")) {
+        sourceQuery = { sql: normalized, params: [...params] };
         return { rows: sourceRow ? [{ ...sourceRow }] : [] };
       }
       if (normalized.includes(">= 0.90")) {
@@ -67,6 +69,7 @@ beforeEach(() => {
   writes = [];
   dedupQuery = null;
   candidateQuery = null;
+  sourceQuery = null;
   warnings = [];
 });
 
@@ -87,6 +90,14 @@ test("high semantic similarity does not retire distinct batch memories", async (
   ]);
   assert.match(candidateQuery.sql, /key_id IS NOT DISTINCT FROM \$3/);
   assert.deepEqual(candidateQuery.params, ["frag-b", "batch-canary", "key-web"]);
+});
+
+test("retired rows are excluded from the source, dedup, and candidate lookups", async () => {
+  await new GraphLinker().linkFragment("frag-b", "system", null, []);
+
+  assert.match(sourceQuery.sql, /WHERE id = \$1 AND embedding IS NOT NULL AND valid_to IS NULL/);
+  assert.match(dedupQuery.sql, /AND valid_to IS NULL AND \(created_at < \$3::timestamptz/);
+  assert.match(candidateQuery.sql, /AND embedding IS NOT NULL AND valid_to IS NULL AND 1 - \(embedding/);
 });
 
 test("an older byte-identical memory remains the winner", async () => {
