@@ -6,7 +6,8 @@
  * 작성일: 2026-03-08
  * 수정일: 2026-08-12 ((타입, 차원) 쌍 판정·dry-run·테이블별 트랜잭션 도입)
  *
- * 목적: EMBEDDING_DIMENSIONS 환경변수에 따라 fragments + morpheme_dict 테이블의
+ * 목적: EMBEDDING_DIMENSIONS 환경변수에 따라 fragments + morpheme_dict +
+ *       fragment_synthetic_query 테이블의
  *       embedding 컬럼 타입을 동시에 조정한다.
  *       - ≤2000차원: vector(N)  + HNSW 인덱스
  *       - >2000차원: halfvec(N) + HNSW 인덱스 (pgvector ≥0.7.0 필요)
@@ -38,7 +39,7 @@ import { resolveEmbeddingColumnSpec, embeddingColumnMismatch, fetchEmbeddingColu
 const SCHEMA  = "agent_memory";
 const DRY_RUN = process.argv.includes("--dry-run");
 
-/** fragments + morpheme_dict 둘 다 갱신. ef_construction은 기본 스키마(128)와 정합 유지. */
+/** 모든 임베딩 테이블을 갱신. ef_construction은 기본 스키마(128)와 정합 유지. */
 const TABLES = [
   { table: "fragments",                 indexName: "idx_frag_embedding",          whereClause: "WHERE embedding IS NOT NULL" },
   { table: "morpheme_dict",             indexName: "idx_morpheme_dict_embedding", whereClause: ""                            },
