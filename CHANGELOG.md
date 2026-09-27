@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 런타임 의존성 `dotenv`를 18.0.4로, `garu-ko`를 0.9.18로, `openai`를 7.23.0으로, 개발 의존성 `eslint`를 10.11.0으로 올렸다. `dotenv` 18은 `import "dotenv/config"`가 주입 안내 문구를 출력하지 않고, `DOTENV_CONFIG_PATH`는 그대로 인식한다. `garu-ko` 0.9.18은 외래어·고유명사 20개를 사전에 추가해 해당 단어의 형태소 분할이 달라질 수 있다.
+
 ## [5.10.0] - 2026-09-19
 
 ### Added
