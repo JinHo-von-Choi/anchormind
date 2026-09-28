@@ -39,7 +39,9 @@ MemoryManager는 thin facade다. 비즈니스 로직은 `lib/memory/processors/`
 
 **위임 패턴:** 각 모듈은 생성자에서 필요한 의존성(store, index, factory, 바인딩된 메서드 등)을 주입받는다. MemoryManager 생성자에서 `this.recall.bind(this)`, `this.remember.bind(this)` 형태로 자기 참조 메서드를 바인딩하여 전달하므로, 모듈이 MemoryManager를 역참조하지 않는다.
 
-**reflect의 resolution_status 자동 세팅:** ReflectProcessor는 reflect 생성 파편에 resolution_status를 자동 부여한다. `errors_resolved` 항목은 `resolutionStatus: "resolved"`로, `open_questions` 항목은 `resolutionStatus: "open"`으로 설정된다. 또한 모든 reflect 생성 파편에 `sessionId`가 전파되어 세션 단위 추적이 가능하다.
+**reflect의 resolution_status 자동 세팅:** ReflectProcessor는 reflect 생성 파편에 resolution_status를 자동 부여한다. `errors_resolved` 항목은 `resolutionStatus: "resolved"`로, `open_questions` 항목은 `resolutionStatus: "open"`으로 설정된다. 세션 종합에서 `[해결됨]` 표기가 없는 Working Memory error는 내부 범주 `errors_open`으로 분류되어 `resolutionStatus: "open"`인 error 파편이 된다.
+
+**reflect 세션 종합 입력:** `SessionLinker.consolidateSessionFragments`는 세션 집합의 DB 파편을 `sourceFragmentIds`로만 반환하고 내용을 다시 종합하지 않는다. 새로 저장할 내용은 대응 DB 파편이 없는 Working Memory 항목에서만 나온다. reflect가 만든 fact와 episode도 세션 집합에 들어가므로, 이 규칙이 없으면 반복 reflect가 이전 종합을 다시 종합한다. 세션 종합 그룹의 파편은 그룹의 workspace를 따르고, `params.workspace`는 그룹에 workspace가 없을 때만 적용된다. 또한 모든 reflect 생성 파편에 `sessionId`가 전파되어 세션 단위 추적이 가능하다.
 
 **remember() 본문 구조 (MEMENTO_REMEMBER_ATOMIC=true 경로 포함):**
 

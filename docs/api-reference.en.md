@@ -759,14 +759,14 @@ Persist session learnings as atomic fragments at session end. Each array item is
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | summary | string \| string[] | - | Session overview fragment list. Array recommended. 1 item = 1 fact (1-2 sentences). |
-| sessionId | string | - | Session ID. When provided, reflect synthesizes only fragments from the same session. |
+| sessionId | string | - | Session ID. When provided, reflect synthesizes only Working Memory items of that session that are not yet stored. Session fragments already stored are never stored again, so repeated calls do not add fragments. A synthesized error gets `resolution_status=resolved` only when its content starts with `[해결됨]`; otherwise it is stored as `open`. |
 | decisions | string[] | - | Technical/architecture decision list. 1 item = 1 decision. |
 | errors_resolved | string[] | - | Resolved error list. 'Cause: X -> Resolution: Y' format recommended. |
 | new_procedures | string[] | - | Established procedure/workflow list. 1 item = 1 procedure. |
 | open_questions | string[] | - | Unresolved question list. 1 item = 1 question. |
 | narrative_summary | string | - | Summarize the entire session as a 3-5 sentence narrative. Stored as an episode fragment contributing to cross-session context continuity. Auto-generated from summary if omitted. |
 | agentId | string | - | Agent ID |
-| workspace | string | - | Workspace applied to all fragments created by this reflect call. Falls back to each group's own workspace, then the API key's default_workspace, then global (NULL). When set explicitly, it overrides the workspace derived per-group from session synthesis. Recommended in multi-project setups to prevent cross-project session summary injection. |
+| workspace | string | - | Workspace applied to the items passed by the caller (summary, decisions, etc.). Session synthesis groups keep their own workspace and use this value only when the group has none. Falls back to the API key's default_workspace, then global (NULL). Recommended in multi-project setups to prevent cross-project session summary injection. |
 | task_effectiveness | object | - | Session outcome and tool usage effectiveness assessment. Composed of outcome, evaluator, evidence, unmet_requirements, overall_success, tool_highlights, tool_pain_points. See the table below. |
 
 #### task_effectiveness sub-fields

@@ -965,14 +965,14 @@ fromId 또는 toId가 타 테넌트 소유 파편인 경우 `"Fragment not found
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | summary | string/string[] | - | 세션 개요. 배열 권장 (1항목=1사실). |
-| sessionId | string | - | 세션 ID |
+| sessionId | string | - | 세션 ID. 이 세션의 Working Memory 중 저장되지 않은 항목만 종합한다. 이미 저장된 파편은 다시 저장하지 않는다. |
 | decisions | string[] | - | 결정 목록 (1항목=1결정) |
 | errors_resolved | string[] | - | 해결 에러 ('원인: X -> 해결: Y') |
 | new_procedures | string[] | - | 확립된 절차 |
 | open_questions | string[] | - | 미해결 질문 |
 | narrative_summary | string | - | 3~5문장 서사 요약. episode 파편으로 저장되어 세션 연속성에 기여. |
 | task_effectiveness | object | - | {outcome, evaluator, evidence, unmet_requirements[], overall_success, tool_highlights[], tool_pain_points[]} |
-| workspace | string | - | 생성되는 모든 reflect 파편에 적용할 워크스페이스. 미지정 시 키의 default_workspace, 그것도 없으면 전역(NULL). |
+| workspace | string | - | 호출자가 넘긴 항목에 적용할 워크스페이스. 세션 종합 그룹은 원래 workspace를 유지한다. 미지정 시 키의 default_workspace, 그것도 없으면 전역(NULL). |
 | agentId | string | - | 에이전트 ID |
 
 summary 또는 sessionId 중 하나 이상 필수.

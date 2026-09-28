@@ -149,6 +149,7 @@ MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test \
 | `auto-link-session-gate.test.js` | autoLinkSessionFragments schema-fit 1:1 매칭 + linkSuggestions |
 | `consolidator-schema-fit-gate.test.js` | evaluateSchemaFitGate SQL 조건 3종 |
 | `reflect-meta-link-suggestions.test.js` | tool_reflect 응답 _meta.link_suggestions 구조 |
+| `reflect-session-reingest.test.js` | 반복 reflect 시 저장된 세션 파편 재저장 없음, WM error 해결 상태, 세션 그룹 workspace 보존 |
 
 ### 통합 테스트 (tests/integration/)
 

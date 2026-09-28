@@ -39,7 +39,9 @@ Search-related modules live under `lib/memory/read/`; import paths follow the ac
 
 **Delegation pattern:** Each module receives required dependencies (store, index, factory, bound methods, etc.) through its constructor. MemoryManager binds self-referencing methods in its constructor (`this.recall.bind(this)`, `this.remember.bind(this)`) and passes them, so modules never back-reference MemoryManager.
 
-**reflect resolution_status auto-setting:** ReflectProcessor automatically assigns resolution_status to reflect-generated fragments. `errors_resolved` items receive `resolutionStatus: "resolved"`, and `open_questions` items receive `resolutionStatus: "open"`. All reflect-generated fragments also propagate `sessionId` for session-level tracking.
+**reflect resolution_status auto-setting:** ReflectProcessor automatically assigns resolution_status to reflect-generated fragments. `errors_resolved` items receive `resolutionStatus: "resolved"`, and `open_questions` items receive `resolutionStatus: "open"`. During session synthesis, a Working Memory error without the `[해결됨]` marker falls into the internal `errors_open` category and becomes an error fragment with `resolutionStatus: "open"`.
+
+**reflect session synthesis input:** `SessionLinker.consolidateSessionFragments` returns the session set's DB fragments only as `sourceFragmentIds` and does not synthesize their content again. New content comes only from Working Memory items with no matching DB fragment. Facts and episodes created by reflect also enter the session set, so without this rule a repeated reflect would re-synthesize the previous synthesis. Fragments of a session synthesis group follow the group's workspace; `params.workspace` applies only when the group has none. All reflect-generated fragments also propagate `sessionId` for session-level tracking.
 
 **remember() pipeline structure (including MEMENTO_REMEMBER_ATOMIC=true path):**
 

@@ -817,14 +817,14 @@ violations 있는 경우 (soft gate — 저장됨):
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | summary | string \| string[] | - | 세션 개요 파편 목록. 배열 권장. 항목 1개 = 사실 1건 (1~2문장). |
-| sessionId | string | - | 세션 ID. 전달 시 같은 세션의 파편만 종합하여 reflect 수행. |
+| sessionId | string | - | 세션 ID. 전달 시 같은 세션의 Working Memory 중 저장되지 않은 항목을 종합해 저장한다. 이미 저장된 세션 파편은 다시 저장하지 않으므로 반복 호출해도 파편이 늘지 않는다. 종합한 error는 내용이 `[해결됨]`으로 시작할 때만 `resolution_status=resolved`, 그 외에는 `open`으로 저장된다. |
 | decisions | string[] | - | 기술/아키텍처 결정 목록. 항목 1개 = 결정 1건. |
 | errors_resolved | string[] | - | 해결된 에러 목록. '원인: X → 해결: Y' 형식 권장. |
 | new_procedures | string[] | - | 확립된 절차/워크플로우 목록. 항목 1개 = 절차 1개. |
 | open_questions | string[] | - | 미해결 질문 목록. 항목 1개 = 질문 1건. |
 | narrative_summary | string | - | 세션 전체를 3~5문장의 서사(narrative)로 요약. episode 파편으로 저장되어 세션 간 맥락 연속성에 기여. 생략 시 summary에서 자동 생성. |
 | agentId | string | - | 에이전트 ID |
-| workspace | string | - | 생성되는 모든 reflect 파편에 적용할 워크스페이스. 미지정 시 각 그룹 자체의 workspace, 그것도 없으면 API 키의 default_workspace, 그것도 없으면 전역(NULL). 명시하면 세션 종합으로 도출된 그룹별 workspace보다 우선한다. 멀티 프로젝트 환경에서 세션 요약의 교차 주입 방지에 권장. |
+| workspace | string | - | 호출자가 넘긴 항목(summary, decisions 등)에 적용할 워크스페이스. 세션 종합 그룹은 원래 workspace를 유지하고, 그룹에 workspace가 없을 때만 이 값을 쓴다. 미지정 시 API 키의 default_workspace, 그것도 없으면 전역(NULL). 멀티 프로젝트 환경에서 세션 요약의 교차 주입 방지에 권장. |
 | task_effectiveness | object | - | 세션 작업 결과와 도구 사용 효과성 평가. outcome, evaluator, evidence, unmet_requirements, overall_success, tool_highlights, tool_pain_points로 구성된다. 아래 표 참조. |
 
 #### task_effectiveness 하위 필드
