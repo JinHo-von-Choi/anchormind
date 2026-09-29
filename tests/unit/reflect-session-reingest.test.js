@@ -3,6 +3,7 @@
  *
  * 작성자: 최진호
  * 작성일: 2026-09-28
+ * 수정일: 2026-09-29 (저장 실패 시 Working Memory 보존 검증 추가)
  *
  * 실제 SessionLinker·ReflectProcessor·FragmentFactory를 묶고 저장소만
  * content_hash 병합(ON CONFLICT)을 흉내 낸 메모리 대역으로 바꿔, 같은 세션에서
@@ -44,12 +45,13 @@ const SESSION = "12345678-aaaa-bbbb-cccc-000000000000";
  * 저장된 파편은 FragmentIndex.index와 같이 세션 집합에 들어가 다음 reflect의
  * 입력 후보가 된다.
  */
-function makeEnv({ wmItems = [] } = {}) {
+function makeEnv({ wmItems = [], failOnce = [], batchErrors = null } = {}) {
   const rows       = new Map();
   const byHash     = new Map();
   const sessionIds = new Map();
   let   wm         = [...wmItems];
   let   seq        = 0;
+  const pendingFail = new Set(failOnce);
 
   const addToSession = (sessionId, id) => {
     if (!sessionId) return;
@@ -59,6 +61,10 @@ function makeEnv({ wmItems = [] } = {}) {
 
   const store = {
     async insert(f) {
+      if (pendingFail.has(f.content)) {
+        pendingFail.delete(f.content);
+        throw new Error("connection reset");
+      }
       const hash = computeContentHash(f.content);
       if (byHash.has(hash)) return byHash.get(hash);
       const id = f.id || `row-${++seq}`;
@@ -93,8 +99,26 @@ function makeEnv({ wmItems = [] } = {}) {
     return { id };
   };
 
+  /**
+   * BatchRememberProcessor 대역. batchErrors(content)가 오류 문자열을 돌리면 그
+   * 항목은 저장하지 않고 실패로 보고한다.
+   */
+  const batchRememberProcessor = batchErrors && {
+    async process({ fragments, sessionId }) {
+      const results = [];
+      for (const item of fragments) {
+        const error = batchErrors(item.content);
+        if (error) { results.push({ id: null, success: false, error }); continue; }
+        const id = await store.insert(item);
+        addToSession(sessionId, id);
+        results.push({ id, success: true });
+      }
+      return { results };
+    }
+  };
+
   const processor = new ReflectProcessor({
-    store, index, factory, sessionLinker: linker, remember, batchRememberProcessor: null
+    store, index, factory, sessionLinker: linker, remember, batchRememberProcessor
   });
   processor._queueEmbeddings   = async () => {};
   processor._registerMorphemes = () => {};
@@ -114,7 +138,7 @@ function makeEnv({ wmItems = [] } = {}) {
     return [...rows.values()].filter(r => !before.has(r.id));
   };
 
-  return { seed, reflect };
+  return { seed, reflect, wmIds: () => wm.map(w => w.id) };
 }
 
 describe("reflect 세션 종합 재수집 방지", () => {
@@ -190,5 +214,50 @@ describe("reflect 세션 종합 재수집 방지", () => {
 
     assert.ok(created.some(r => r.type === "fact" && r.content === "Project Alpha 큐 서버를 15000 포트로 이전했다"));
     assert.ok(created.some(r => r.type === "episode" && r.content.includes("재시작 절차")));
+  });
+  it("개별 저장이 실패한 그룹의 WM 항목은 남아 다음 reflect에서 저장되고 중복되지 않는다", async () => {
+    const env = makeEnv({
+      wmItems : [
+        { id: "wm-1", type: "decision",  content: "배치 큐는 단일 큐로 운영하기로 결정했다", topic: "queue", workspace: "alpha" },
+        { id: "wm-2", type: "procedure", content: "배치 큐 재시작은 systemctl restart batch-queue로 한다", topic: "queue", workspace: "alpha" }
+      ],
+      failOnce: ["배치 큐는 단일 큐로 운영하기로 결정했다"]
+    });
+
+    const first = await env.reflect();
+    assert.equal(first.some(r => r.type === "decision"), false);
+    assert.equal(first.filter(r => r.type === "procedure").length, 1);
+    assert.deepEqual(env.wmIds().sort(), ["wm-1", "wm-2"]);
+
+    const second = await env.reflect();
+    assert.equal(second.filter(r => r.type === "decision").length, 1);
+    assert.equal(second.some(r => r.type === "procedure"), false);
+    assert.deepEqual(env.wmIds(), []);
+  });
+
+  it("일괄 저장의 할당량 초과는 WM 항목을 남긴다", async () => {
+    let quotaFull = true;
+    const env = makeEnv({
+      wmItems    : [{ id: "wm-1", type: "decision", content: "배치 큐는 단일 큐로 운영하기로 결정했다", topic: "queue", workspace: "alpha" }],
+      batchErrors: () => quotaFull ? "fragment_limit_exceeded" : null
+    });
+
+    assert.deepEqual(await env.reflect(), []);
+    assert.deepEqual(env.wmIds(), ["wm-1"]);
+
+    quotaFull = false;
+    const second = await env.reflect();
+    assert.equal(second.filter(r => r.type === "decision").length, 1);
+    assert.deepEqual(env.wmIds(), []);
+  });
+
+  it("재시도해도 통과하지 않는 검증 거부는 WM 항목을 붙잡아 두지 않는다", async () => {
+    const env = makeEnv({
+      wmItems    : [{ id: "wm-1", type: "decision", content: "배치 큐는 단일 큐로 운영하기로 결정했다", topic: "queue", workspace: "alpha" }],
+      batchErrors: () => "Content too short: length < 10 and word count < 3"
+    });
+
+    await env.reflect();
+    assert.deepEqual(env.wmIds(), []);
   });
 });
