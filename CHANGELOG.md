@@ -5,7 +5,7 @@
 ### Changed
 
 - GraphLinker는 임베딩 유사도만으로 `superseded_by`를 만들거나 파편을 닫지 않는다. 같은 topic·type의 유사 파편(코사인 0.7 초과)은 `related`로만 연결한다. 본문이 완전히 같은 중복을 닫는 동작은 유지한다. 파편 대체는 remember의 `supersedes` 인자와 대체 관계 판정(`detect_supersessions`)으로만 일어난다.
-- 모순 탐지는 모순 쌍에 `contradicts` 링크를 걸고 오래된 쪽의 importance를 절반으로 낮출 뿐 어느 쪽도 닫지 않는다. 앵커는 importance도 낮추지 않는다. 모순 해소 기록 파편은 더 만들지 않는다. 이미 닫힌 파편은 탐지 대상에서 뺀다.
+- 모순 해소는 오래된 쪽이 앵커면 닫지 않는다. 해소 기록 파편은 `contradiction_audit` topic에 남기고 이 topic은 모순·대체 탐지에서 빼, 해소 기록끼리 다시 모순으로 판정되는 일을 막는다. 이미 닫힌 파편은 탐지 대상에서 뺀다.
 - 의미 중복 병합(`semantic_dedup`)은 같은 key와 workspace 안에서만 병합하고, 닫은 파편에서 남긴 파편으로 `superseded_by` 링크를 남긴다.
 - reflect milestone이 직전 milestone과 `preceded_by`로 다시 이어진다. 직전 milestone을 찾는 조회가 방금 삽입한 자기 자신을 돌려주던 문제를 고쳤다.
 - `reflect`의 세션 종합은 세션에 이미 저장된 파편을 다시 저장하지 않는다. 세션 파편은 출처로만 참조하고, 새로 저장하는 것은 호출자가 넘긴 항목과 DB에 없는 Working Memory 항목뿐이다. 새 내용이 없으면 `reflect`는 fact와 episode를 만들지 않으며, 같은 세션에서 반복 호출해도 파편이 늘지 않는다. "결정 N건, 에러 해결 N건, 절차 N건" 형태의 건수 요약도 만들지 않는다.
