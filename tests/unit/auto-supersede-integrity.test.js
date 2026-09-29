@@ -1,5 +1,5 @@
 /**
- * 유사도·모순 판정만으로 파편을 닫지 않는지 검증하는 단위 테스트
+ * 자동 폐기 경로(유사도 연결, 모순 해소, 의미 중복 병합)와 milestone 연결 단위 테스트
  *
  * 작성자: 최진호
  * 작성일: 2026-09-29
@@ -27,12 +27,17 @@ mock.module("../../lib/memory/write/FragmentStore.js", {
     FragmentStore: class { async createLink(from, to, rel) { links.push({ from, to, rel }); } }
   }
 });
+const audits = [];
+mock.module("../../lib/memory/MemoryManager.js", {
+  namedExports: { MemoryManager: { getInstance: () => ({ remember: async p => { audits.push(p); return { id: "audit" }; } }) } }
+});
 mock.module("../../lib/logger.js", {
   namedExports: { logDebug() {}, logWarn() {}, logInfo() {}, logError() {} }
 });
 
 const { GraphLinker }          = await import("../../lib/memory/link/GraphLinker.js");
-const { ContradictionDetector } = await import("../../lib/memory/link/ContradictionDetector.js");
+const { ContradictionDetector, CONTRADICTION_AUDIT_TOPIC } =
+  await import("../../lib/memory/link/ContradictionDetector.js");
 const { linkEpisodeMilestone, _lastEventCacheForTest } =
   await import("../../lib/memory/processors/EpisodeContinuityService.js");
 const { MemoryConsolidator }   = await import("../../lib/memory/consolidate/MemoryConsolidator.js");
@@ -43,6 +48,7 @@ let writes = [];
 beforeEach(() => {
   links  = [];
   writes = [];
+  audits.length = 0;
   _lastEventCacheForTest().clear();
 });
 
@@ -110,35 +116,42 @@ describe("GraphLinker는 유사도만으로 파편을 닫지 않는다", () => {
   });
 });
 
-describe("ContradictionDetector.resolveContradiction은 파편을 닫지 않는다", () => {
-  const newer = { id: "n", key_id: null, created_at: "2026-09-02T00:00:00Z", content: "포트는 15000이다", is_anchor: false };
+describe("ContradictionDetector 모순 해소", () => {
+  const newer = { id: "n", key_id: null, created_at: "2026-09-02T00:00:00Z", content: "포트는 15000이다", is_anchor: false, topic: "ops" };
+  const captureWrites = async (_agent, sql, params, mode) => {
+    if (mode === "write") writes.push({ sql: norm(sql), params: [...params] });
+    return { rows: [], rowCount: 1 };
+  };
+  const detector = () => new ContradictionDetector({ createLink: async (from, to, rel) => links.push({ from, to, rel }) });
 
-  it("contradicts 링크와 오래된 쪽 중요도 하향만 남긴다", async () => {
-    vectorHandler = async (_agent, sql, params, mode) => {
-      if (mode === "write") writes.push({ sql: norm(sql), params: [...params] });
-      return { rows: [], rowCount: 1 };
-    };
+  it("오래된 쪽을 대체·폐기하고 해소 기록은 탐지 대상 밖 topic에 남긴다", async () => {
+    vectorHandler = captureWrites;
     const older = { id: "o", key_id: null, created_at: "2026-09-01T00:00:00Z", content: "포트는 8080이다", is_anchor: false };
-    await new ContradictionDetector({ createLink: async (from, to, rel) => links.push({ from, to, rel }) })
-      .resolveContradiction(newer, older, "port changed");
+    await detector().resolveContradiction(newer, older, "port changed");
 
-    assert.deepEqual(links, [{ from: "n", to: "o", rel: "contradicts" }]);
-    assert.equal(writes.length, 1);
-    assert.match(writes[0].sql, /SET importance = importance \* 0\.5/);
-    assert.deepEqual(writes[0].params, ["o"]);
-    assert.equal(writes.some(w => /valid_to/.test(w.sql)), false);
+    assert.deepEqual(links, [
+      { from: "n", to: "o", rel: "contradicts" },
+      { from: "o", to: "n", rel: "superseded_by" }
+    ]);
+    assert.ok(writes.some(w => /SET valid_to = NOW\(\)/.test(w.sql) && w.params[0] === "o"));
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0].topic, CONTRADICTION_AUDIT_TOPIC);
   });
 
-  it("오래된 쪽이 앵커면 중요도도 건드리지 않는다", async () => {
-    vectorHandler = async (_agent, sql, params, mode) => {
-      if (mode === "write") writes.push({ sql: norm(sql), params: [...params] });
-      return { rows: [], rowCount: 1 };
-    };
+  it("오래된 쪽이 앵커면 닫지도 중요도를 낮추지도 않는다", async () => {
+    vectorHandler = captureWrites;
     const anchor = { id: "o", key_id: null, created_at: "2026-09-01T00:00:00Z", content: "포트는 8080이다", is_anchor: true };
-    await new ContradictionDetector({ createLink: async (from, to, rel) => links.push({ from, to, rel }) })
-      .resolveContradiction(newer, anchor, "port changed");
+    await detector().resolveContradiction(newer, anchor, "port changed");
 
+    assert.deepEqual(links, [{ from: "n", to: "o", rel: "contradicts" }]);
     assert.equal(writes.length, 0);
+    assert.equal(audits.length, 0);
+  });
+
+  it("탐지 대상 조회가 해소 기록 topic과 닫힌 파편을 뺀다", () => {
+    const src = ContradictionDetector.prototype.detectContradictions.toString();
+    assert.match(src, /topic IS DISTINCT FROM '\$\{CONTRADICTION_AUDIT_TOPIC\}'/);
+    assert.match(src, /c\.valid_to IS NULL/);
   });
 });
 
