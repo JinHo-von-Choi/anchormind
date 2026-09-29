@@ -520,7 +520,7 @@ reflect 규칙:
 - 여러 사실을 한 항목에 뭉치지 않는다
 - 관련 파편들이 맥락상 연결되어 있다면 episode 유형 파편을 추가 생성
 - contextSummary로 전후관계 요약을 첨부
-- sessionId를 전달하면 이전 세션의 episode와 자동으로 preceded_by 엣지가 생성됨 (경험 흐름 그래프 보존)
+- reflect가 새 episode나 파편을 저장하면 같은 workspace(없으면 topic)의 직전 milestone과 preceded_by 엣지가 생성됨 (경험 흐름 그래프 보존). 새로 저장할 내용이 없으면 milestone도 생기지 않음
 - reflect 한 번에 파편 수십 건을 쏟아붓지 않는다. 세션 진행 중 중요한 사실·결정·에러·절차가 확정되는 시점마다 remember로 즉시 개별 저장하고, 세션 종료 시 reflect는 그 세션의 narrative_summary와 open_questions 정리 및 누락분 최종 집계 용도로만 사용한다. 이 분할 저장 패턴이 중요도 가중, 키워드 정밀도, 링크 품질 모두에서 한 번에 몰아 넣는 reflect보다 유의미하게 우수하다.
 
 ## 키워드 작성 규칙 (가장 중요)
@@ -1362,7 +1362,7 @@ reflect(
   errors_resolved=["원인: X → 해결: Y"],
   sessionId=현재세션ID
 )
-# → episode 파편 자동 생성 + preceded_by 엣지 자동 연결
+# → 새로 저장한 내용이 있으면 episode 파편 생성 + preceded_by 엣지 연결
 ```
 
 ### 6. Case-based 작업 추적 — 복잡한 작업을 케이스 단위로 관리
