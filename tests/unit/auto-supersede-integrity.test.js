@@ -3,6 +3,7 @@
  *
  * 작성자: 최진호
  * 작성일: 2026-09-29
+ * 수정일: 2026-09-30 (링크 이전 SQL 검사 추가)
  *
  * 실제 GraphLinker·ContradictionDetector·EpisodeContinuityService 모듈을 쓰고
  * DB 계층만 대역으로 바꾼다. 사례의 본문과 유사도는 운영에서 잘못 닫힌 쌍에서
@@ -11,6 +12,9 @@
 
 import { describe, it, mock, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import { join }          from "node:path";
+import { fileURLToPath } from "node:url";
 
 /** 시험마다 바꿔 끼우는 DB 응답 처리기 */
 let vectorHandler = async () => ({ rows: [] });
@@ -161,6 +165,30 @@ describe("semantic_dedup 후보는 같은 key·workspace로 제한된다", () =>
     assert.match(src, /keyScopeNullable\(knnParams, "key_id", frag\.key_id/);
     assert.match(src, /workspace IS NOT DISTINCT FROM \$4/);
     assert.match(src, /createLink\(oldId, keepId, "superseded_by"/);
+  });
+});
+
+describe("링크 이전 SQL", () => {
+  it("semantic_dedup 링크 이전은 NOT EXISTS로 충돌을 거른다", () => {
+    const src = MemoryConsolidator.prototype._semanticDedup.toString();
+    assert.match(src, /SET from_id = \$1[\s\S]*?NOT EXISTS/);
+    assert.match(src, /SET to_id = \$1[\s\S]*?NOT EXISTS/);
+  });
+
+  it("lib 어디에도 ON CONFLICT를 쓰는 UPDATE 문이 없다", () => {
+    const offenders = [];
+    const walk = dir => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) { walk(path); continue; }
+        if (!entry.name.endsWith(".js")) continue;
+        for (const [sql] of readFileSync(path, "utf8").matchAll(/`[^`]*`/g)) {
+          if (/^`\s*UPDATE\b/i.test(sql) && /\bON CONFLICT\b/i.test(sql)) offenders.push(path);
+        }
+      }
+    };
+    walk(fileURLToPath(new URL("../../lib", import.meta.url)));
+    assert.deepEqual(offenders, []);
   });
 });
 
