@@ -2,9 +2,11 @@
 
 ## [Unreleased]
 
+## [5.11.0] - 2026-09-29
+
 ### Changed
 
-- GraphLinker는 임베딩 유사도만으로 `superseded_by`를 만들거나 파편을 닫지 않는다. 같은 topic·type의 유사 파편(코사인 0.7 초과)은 `related`로만 연결한다. 본문이 완전히 같은 중복을 닫는 동작은 유지한다. 파편 대체는 remember의 `supersedes` 인자와 대체 관계 판정(`detect_supersessions`)으로만 일어난다.
+- GraphLinker는 임베딩 유사도만으로 `superseded_by`를 만들거나 파편을 닫지 않는다. 같은 topic·type의 유사 파편(코사인 0.7 초과)은 `related`로만 연결한다. 본문이 완전히 같은 중복을 닫는 동작은 유지한다. 파편 대체는 remember의 `supersedes` 인자와 대체 관계 판정(`detect_supersessions`)으로만 일어난다. 이전 판에서 이 경로로 닫힌 파편은 자동으로 되살아나지 않는다. `fragment_links`의 `superseded_by` 가운데 연결 생성 직후 닫힌 행이 이 경로의 흔적이다.
 - 모순 해소는 오래된 쪽이 앵커면 닫지 않는다. 해소 기록 파편은 `contradiction_audit` topic에 남기고 이 topic은 모순·대체 탐지에서 빼, 해소 기록끼리 다시 모순으로 판정되는 일을 막는다. 이미 닫힌 파편은 탐지 대상에서 뺀다.
 - 의미 중복 병합(`semantic_dedup`)은 같은 key와 workspace 안에서만 병합하고, 닫은 파편에서 남긴 파편으로 `superseded_by` 링크를 남긴다.
 - reflect milestone이 직전 milestone과 `preceded_by`로 다시 이어진다. 직전 milestone을 찾는 조회가 방금 삽입한 자기 자신을 돌려주던 문제를 고쳤다.
