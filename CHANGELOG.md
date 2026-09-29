@@ -6,6 +6,7 @@
 
 - `reflect`의 세션 종합은 세션에 이미 저장된 파편을 다시 저장하지 않는다. 세션 파편은 출처로만 참조하고, 새로 저장하는 것은 호출자가 넘긴 항목과 DB에 없는 Working Memory 항목뿐이다. 새 내용이 없으면 `reflect`는 fact와 episode를 만들지 않으며, 같은 세션에서 반복 호출해도 파편이 늘지 않는다. "결정 N건, 에러 해결 N건, 절차 N건" 형태의 건수 요약도 만들지 않는다.
 - 세션 종합에서 Working Memory의 error는 내용이 `[해결됨]`으로 시작할 때만 해결 상태로 저장하고, 그 외에는 `resolution_status=open`으로 저장한다.
+- `reflect`가 종합에 쓴 Working Memory 항목 가운데 할당량 초과나 삽입 오류로 저장되지 못한 그룹의 항목은 지우지 않고 남겨, 다음 `reflect`에서 다시 저장을 시도한다.
 - 세션 종합 그룹의 파편은 원래 workspace를 유지한다. `reflect`의 `workspace` 인자는 호출자가 넘긴 항목과 workspace가 없는 그룹에만 적용된다.
 
 - 런타임 의존성 `dotenv`를 18.0.4로, `garu-ko`를 0.9.18로, `openai`를 7.23.0으로, 개발 의존성 `eslint`를 10.11.0으로 올렸다. `dotenv` 18은 `import "dotenv/config"`가 주입 안내 문구를 출력하지 않고, `DOTENV_CONFIG_PATH`는 그대로 인식한다. `garu-ko` 0.9.18은 외래어·고유명사 20개를 사전에 추가해 해당 단어의 형태소 분할이 달라질 수 있다.
