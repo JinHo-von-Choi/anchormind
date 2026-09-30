@@ -87,7 +87,7 @@ import {
   handleAdminImage,
   handleAdminStatic,
   handleAdminApi,
-  getAllowedOrigin,
+  applyCorsOrigin,
   setWorkerRefs
 } from "./lib/http-handlers.js";
 
@@ -269,7 +269,7 @@ const server = http.createServer(async (req, res) => {
   /* CORS Preflight */
   if (req.method === "OPTIONS") {
     res.statusCode = 204;
-    res.setHeader("Access-Control-Allow-Origin", getAllowedOrigin(req));
+    applyCorsOrigin(req, res);
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, MCP-Session-Id, memento-access-key");
     res.setHeader("Access-Control-Expose-Headers", "MCP-Session-Id");
