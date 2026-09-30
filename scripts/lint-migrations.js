@@ -2,7 +2,7 @@
  * 마이그레이션 파일 규약 검사 스크립트.
  *
  * 대상: lib/memory/migrations/migration-*.sql
- * cutoff 미만(기존) 파일은 검사에서 제외한다.
+ * MIGRATION_LINT_FROM 이 지정되면 그 번호 미만 파일은 검사에서 제외한다.
  *
  * 작성자: 최진호
  * 작성일: 2026-05-13
@@ -21,19 +21,15 @@ function extractNumber(filename) {
   return m ? parseInt(m[1], 10) : null;
 }
 
-/** cutoff 번호를 결정한다. MIGRATION_LINT_FROM 환경변수가 없으면 현존 파일 최대값 + 1. */
-function resolveCutoff(files) {
+/** cutoff 번호를 결정한다. MIGRATION_LINT_FROM 환경변수가 없으면 0(전체 검사). */
+function resolveCutoff() {
   const envVal = process.env.MIGRATION_LINT_FROM;
   if (envVal !== undefined) {
     const parsed = parseInt(envVal, 10);
     if (!Number.isNaN(parsed)) return parsed;
   }
 
-  const numbers = files
-    .map(f => extractNumber(f))
-    .filter(n => n !== null);
-
-  return numbers.length > 0 ? Math.max(...numbers) + 1 : 0;
+  return 0;
 }
 
 /**
@@ -68,6 +64,7 @@ function findDuplicateNumbers(files) {
   return violations;
 }
 
+const GRANDFATHERED_NAMES = new Set(["migration-034-v2.16.0-bundle.sql"]);
 const FILENAME_PATTERN = /^migration-\d{3}-[a-z0-9]+(?:-[a-z0-9]+)*\.sql$/;
 
 const RULES = [
@@ -92,7 +89,7 @@ function lintFile(filepath) {
   const filename  = path.basename(filepath);
   const violations = [];
 
-  if (!FILENAME_PATTERN.test(filename)) {
+  if (!FILENAME_PATTERN.test(filename) && !GRANDFATHERED_NAMES.has(filename)) {
     violations.push({
       file:    filename,
       line:    null,
@@ -124,11 +121,11 @@ function main() {
     .filter(f => f.startsWith("migration-") && f.endsWith(".sql"))
     .sort();
 
-  const cutoff = resolveCutoff(allFiles);
+  const cutoff = resolveCutoff();
 
   const targets = allFiles.filter(f => {
     const n = extractNumber(f);
-    return n !== null && n >= cutoff;
+    return n === null || n >= cutoff;
   });
 
   const allViolations = findDuplicateNumbers(allFiles);
