@@ -8,7 +8,9 @@
  * 1. soft gate (default false) — violations 누적, save 허용
  * 2. hard gate true — violations 시 throw (SymbolicPolicyViolationError)
  * 3. master key (keyId=null) — hard gate 무시, save 허용
- * 4. apiKeyStore 조회 실패 → fail-open (save 허용)
+ * 4. apiKeyStore 조회 실패 → fail-closed (위반이 있으면 save 거부)
+ * 5. 위반이 없으면 조회 실패와 무관하게 save 허용
+ * 6. policy rules 평가 실패 → hard gate 키는 거부, soft 키는 경고로 저장
  *
  * 실제 DB 의존성 없이 순수 단위 테스트.
  * SYMBOLIC_CONFIG.freeze 문제는 MemoryManager._policyGatingEnabled 인스턴스 프로퍼티로 우회.
@@ -21,7 +23,7 @@ import assert            from "node:assert/strict";
  * policy rules 검사가 활성화된 상태에서 내부 컴포넌트를 stub한
  * MemoryManager 인스턴스를 반환한다.
  *
- * @param {{ symbolicHardGate?: boolean, throwOnLookup?: boolean }} opts
+ * @param {{ symbolicHardGate?: boolean, throwOnLookup?: boolean, throwOnPolicy?: boolean }} opts
  * @returns {Promise<import("../../lib/memory/MemoryManager.js").MemoryManager>}
  */
 async function makeManager(opts = {}) {
@@ -43,6 +45,7 @@ async function makeManager(opts = {}) {
   /** PolicyRules.check stub — decision 파편에 위반 하나를 항상 반환 */
   mm.policyRules = {
     check(fragment) {
+      if (opts.throwOnPolicy) throw new Error("policy engine failure (simulated)");
       if (fragment.type === "decision") {
         return [{ rule: "decisionHasRationale", severity: "medium", detail: "test violation", ruleVersion: "v1" }];
       }
@@ -145,11 +148,43 @@ describe("Symbolic Hard Gate", () => {
     assert.ok(result.id, "마스터 키는 hard gate에 관계없이 저장되어야 한다");
   });
 
-  it("apiKeyStore 조회 실패 → fail-open (save 허용)", async () => {
-    const mm     = await makeManager({ throwOnLookup: true });
-    const result = await mm.remember({ content: "bad decision", type: "decision", _keyId: "key-003" });
+  it("apiKeyStore 조회 실패 → fail-closed (위반이 있으면 save 거부)", async () => {
+    const mm = await makeManager({ throwOnLookup: true });
 
-    assert.ok(result.id, "DB 조회 실패 시 fail-open으로 저장이 허용되어야 한다");
+    await assert.rejects(
+      () => mm.remember({ content: "bad decision", type: "decision", _keyId: "key-003" }),
+      (err) => {
+        assert.strictEqual(err.name, "SymbolicPolicyViolationError");
+        assert.ok(err.violations.includes("hardGateLookupFailed"), "hardGateLookupFailed가 violations에 포함되어야 한다");
+        return true;
+      }
+    );
+    assert.strictEqual(mm._getSavedFragment(), null, "조회 실패 시 store.insert가 호출되지 않아야 한다");
+  });
+
+  it("위반이 없으면 조회 실패와 무관하게 save 허용", async () => {
+    const mm     = await makeManager({ throwOnLookup: true });
+    const result = await mm.remember({ content: "plain fact", type: "fact", _keyId: "key-004" });
+
+    assert.ok(result.id, "위반이 없으면 hard gate를 조회하지 않으므로 저장되어야 한다");
+  });
+
+  it("policy rules 평가 실패 + hard gate 키 → save 거부", async () => {
+    const mm = await makeManager({ symbolicHardGate: true, throwOnPolicy: true });
+
+    await assert.rejects(
+      () => mm.remember({ content: "plain fact", type: "fact", _keyId: "key-005" }),
+      (err) => err.name === "SymbolicPolicyViolationError" && err.violations.includes("policyCheckFailed")
+    );
+    assert.strictEqual(mm._getSavedFragment(), null);
+  });
+
+  it("policy rules 평가 실패 + soft gate 키 → 경고로 기록하고 save 허용", async () => {
+    const mm     = await makeManager({ symbolicHardGate: false, throwOnPolicy: true });
+    const result = await mm.remember({ content: "plain fact", type: "fact", _keyId: "key-006" });
+
+    assert.ok(result.id);
+    assert.ok(mm._getSavedFragment().validation_warnings.some(v => v.rule === "policyCheckFailed"));
   });
 
 });
