@@ -19,7 +19,7 @@
  */
 
 import http from "http";
-import { resolveClientIp } from "./lib/http/helpers.js";
+import { resolveClientIp, applyBaseResponseHeaders } from "./lib/http/helpers.js";
 
 /** 설정 */
 import { PORT, ACCESS_KEY, AUTH_DISABLED, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI } from "./lib/config.js";
@@ -107,6 +107,8 @@ const ADMIN_BASE = "/v1/internal/model/nothing";
  */
 const server = http.createServer(async (req, res) => {
   const startTime = process.hrtime.bigint();
+
+  applyBaseResponseHeaders(res);
 
   if (!validateOrigin(req, res)) {
     return;
