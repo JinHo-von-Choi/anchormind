@@ -282,7 +282,7 @@ const server = http.createServer(async (req, res) => {
   res.end("Not Found");
 
   const duration = Number(process.hrtime.bigint() - startTime) / 1e9;
-  recordHttpRequest(req.method, url.pathname, 404, duration);
+  recordHttpRequest(req.method, "__not_found__", 404, duration);
 });
 
 server.keepAliveTimeout = Number(process.env.KEEP_ALIVE_TIMEOUT_MS  || 75000);
