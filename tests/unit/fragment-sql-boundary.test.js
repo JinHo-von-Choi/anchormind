@@ -67,7 +67,7 @@ const ALLOWED = {
   "memory/signals/SpreadingActivation.js": 2,
   "memory/write/BatchRememberProcessor.js": 1,
   "memory/write/ConflictResolver.js": 2,
-  "memory/write/FragmentWriter.js": 22, // archive 전에 현재 파편을 FOR UPDATE로 재조회
+  "memory/write/FragmentWriter.js": 25, // archive 전에 현재 파편을 FOR UPDATE로 재조회, 접근 기록 갱신 3경로는 id 순 잠금 CTE와 갱신 문장을 함께 쓴다
   "memory/write/RememberPostProcessor.js": 1,
   "tools/reconstruct.js": 1,
   "tools/resources.js": 4,
