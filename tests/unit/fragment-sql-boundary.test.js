@@ -40,7 +40,7 @@ const ALLOWED = {
   "memory/FragmentIndex.js": 1,
   "memory/consolidate/ConsolidatorGC.js": 12,
   "memory/consolidate/FragmentGC.js": 11,
-  "memory/consolidate/MemoryConsolidator.js": 23,
+  "memory/consolidate/MemoryConsolidator.js": 26, // semantic_dedup 병합은 잠금, 폐기, linked_to, 합산을 한 트랜잭션 클라이언트로 쓴다
   "memory/consolidate/MorphemeBackfill.js": 2,
   "memory/consolidate/UtilityBaseline.js": 1,
   "memory/embedding/EmbeddingWorker.js": 4,

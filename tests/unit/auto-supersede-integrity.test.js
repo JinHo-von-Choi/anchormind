@@ -23,7 +23,8 @@ let poolHandler   = async () => ({ rows: [] });
 mock.module("../../lib/tools/db.js", {
   namedExports: {
     queryWithAgentVector: (...args) => vectorHandler(...args),
-    getPrimaryPool      : () => ({ query: (...args) => poolHandler(...args) })
+    getPrimaryPool      : () => ({ query: (...args) => poolHandler(...args) }),
+    withTransaction     : async (_pool, fn) => fn({ query: (...args) => poolHandler(...args) })
   }
 });
 mock.module("../../lib/memory/write/FragmentStore.js", {
@@ -164,7 +165,7 @@ describe("semantic_dedup 후보는 같은 key·workspace로 제한된다", () =>
     const src = MemoryConsolidator.prototype._semanticDedup.toString();
     assert.match(src, /keyScopeNullable\(knnParams, "key_id", frag\.key_id/);
     assert.match(src, /workspace IS NOT DISTINCT FROM \$4/);
-    assert.match(src, /createLink\(oldId, keepId, "superseded_by"/);
+    assert.match(src, /VALUES \(\$1, \$2, 'superseded_by', 1\)[\s\S]{0,200}\[oldId, keepId\]/);
   });
 });
 

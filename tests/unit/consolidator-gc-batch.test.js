@@ -66,7 +66,7 @@ describe("ConsolidatorGC.compressOldFragments 배치 병렬화", () => {
     );
   });
 
-  it("기존 병합 로직(group sort, supersedes, valid_to)이 유지된다", async () => {
+  it("기존 병합 로직(group sort, superseded_by, valid_to)이 유지된다", async () => {
     const { readFileSync } = await import("fs");
     const { join }         = await import("path");
     const src = readFileSync(
@@ -83,8 +83,8 @@ describe("ConsolidatorGC.compressOldFragments 배치 병렬화", () => {
       "importance 기반 그룹 정렬 유지 필수"
     );
     assert.ok(
-      compressMethod.includes("supersedes"),
-      "supersedes 링크 생성 유지 필수"
+      compressMethod.includes("'superseded_by'"),
+      "superseded_by 링크 생성 유지 필수"
     );
     assert.ok(
       compressMethod.includes("valid_to = NOW()"),

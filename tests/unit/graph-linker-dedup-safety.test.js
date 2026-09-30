@@ -9,6 +9,10 @@ let candidateQuery;
 let warnings;
 let sourceQuery;
 
+mock.module("../../lib/memory/FragmentIndex.js", {
+  namedExports: { deindexRows: async () => {} }
+});
+
 mock.module("../../lib/tools/db.js", {
   namedExports: {
     queryWithAgentVector: async (_agentId, sql, params, mode) => {

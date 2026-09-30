@@ -16,6 +16,10 @@ import assert                              from "node:assert/strict";
 const mockQuery = mock.fn();
 const mockPool  = { query: mockQuery };
 
+mock.module("../../lib/memory/FragmentIndex.js", {
+  namedExports: { deindexRows: async () => {} }
+});
+
 mock.module("../../lib/tools/db.js", {
   namedExports: {
     getPrimaryPool     : () => mockPool,

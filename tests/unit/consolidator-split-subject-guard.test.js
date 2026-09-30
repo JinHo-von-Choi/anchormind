@@ -17,6 +17,10 @@ mock.module("../../lib/gemini.js", {
   }
 });
 
+mock.module("../../lib/memory/FragmentIndex.js", {
+  namedExports: { deindexRows: async () => {} }
+});
+
 mock.module("../../lib/tools/db.js", {
   exports: {
     getPrimaryPool      : () => null,

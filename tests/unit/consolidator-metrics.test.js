@@ -19,6 +19,7 @@ mock.module("../../lib/tools/db.js", {
     exports: {
         getPrimaryPool:       () => null,
         queryWithAgentVector: async () => ({ rows: [], rowCount: 0 }),
+        withTransaction:      async () => false,
     },
 });
 
@@ -66,6 +67,7 @@ mock.module("../../lib/memory/FragmentIndex.js", {
         getFragmentIndex: () => ({
             pruneKeywordIndexes: async () => undefined,
         }),
+        deindexRows:      async () => undefined,
     },
 });
 
