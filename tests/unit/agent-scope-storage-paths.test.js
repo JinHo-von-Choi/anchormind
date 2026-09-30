@@ -265,9 +265,9 @@ describe("reconstruct/search trace scope", () => {
         seen.push(["dag", { ids, keyId }]);
         return [];
       },
-      getEvidenceByEvent: async (_eventId, opts) => {
+      getEvidenceByEvents: async (_eventIds, opts) => {
         seen.push(["evidence", opts]);
-        return [];
+        return new Map();
       }
     };
     await new HistoryReconstructor({}, {}, caseEventStore).reconstruct({

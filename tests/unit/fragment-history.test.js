@@ -35,3 +35,14 @@ describe("fragment history", () => {
     assert.deepEqual(captured[4], { includePeerAgents: true, workspace: null, allWorkspaces: false });
   });
 });
+
+describe("reconstruct_history 근거 조회", () => {
+  test("근거 조회는 이벤트 수와 무관하게 한 번의 질의로 묶는다", async () => {
+    const { readFileSync } = await import("node:fs");
+    const path             = (await import("node:path")).default;
+    const ROOT = path.resolve(import.meta.dirname, "../..");
+    const src  = readFileSync(path.join(ROOT, "lib/memory/read/HistoryReconstructor.js"), "utf8");
+    assert.match(src, /getEvidenceByEvents/);
+    assert.doesNotMatch(src, /Promise\.all\(case_events\.map\(async \(evt\) =>[\s\S]*getEvidenceByEvent\(/);
+  });
+});
