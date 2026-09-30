@@ -30,12 +30,12 @@ jobs:
         run: npm run audit:ci
       - name: Audit all dependencies (report only)
         run: npm audit --audit-level=high || true
-      - name: All unit tests (Jest + node:test)
+      - name: All unit tests (node:test)
         run: npm test
       # 통합시험은 외부 서비스 없이 도는 것을 전제로 작성돼 있다. 실제로 그런지
       # 여기서 확인한다. 외부 의존이 새로 생기면 이 단계가 먼저 깨진다.
       - name: Integration tests (no external services)
-        run: npm run test:integration
+        run: DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test tests/integration/*.test.js
 
   runtime-matrix:
     name: Runtime Boot (Node 20/22/24)
