@@ -869,11 +869,11 @@ violations 있는 경우 (soft gate — 저장됨):
 
 ### AutoReflect 타임아웃
 
-세션 종료 시 자동 실행되는 AutoReflect는 Gemini CLI 호출에 `GEMINI_TIMEOUT_MS` 환경변수로 설정된 타임아웃(기본값 30000ms)을 적용한다. 외부 게이트웨이(예: claude.ai MCP 프록시) 60s 컷오프 대비 30s 마진을 확보하기 위해 30s로 설정되어 있다. 40000ms 이상으로 변경하지 않는다.
+세션 종료 시 자동 실행되는 AutoReflect는 LLM 호출에 30000ms 타임아웃을 적용한다. 외부 게이트웨이(예: claude.ai MCP 프록시) 60s 컷오프 대비 30s 마진을 확보하기 위한 값이며, 40000ms 이상으로 변경하지 않는다.
 
-| 환경변수 | 기본값 | 설명 |
+| 항목 | 기본값 | 설명 |
 |-|-|-|
-| `GEMINI_TIMEOUT_MS` | 30000 | AutoReflect의 Gemini CLI 호출 타임아웃 (ms). `lib/memory/processors/AutoReflect.js` 상수 `GEMINI_TIMEOUT_MS`로 export됨 |
+| `GEMINI_TIMEOUT_MS` (코드 상수) | 30000 | AutoReflect의 LLM 호출 타임아웃 (ms). `lib/memory/processors/AutoReflect.js`의 상수로 export되며 환경변수로 바꿀 수 없다 |
 
 ---
 

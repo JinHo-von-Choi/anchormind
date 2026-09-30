@@ -179,6 +179,6 @@ CI에서 전체 통과 수를 비교할 때 이 3건을 기준에서 제외하�
 
 ## 전체 테스트 현황
 
-- 단위 테스트: node:test 단일 러너. DB·Redis·EMBEDDING_API_KEY 불필요. 216개 테스트 파일. v4.6.0 신규: batch-remember-async.test.js, batch-remember-worker.test.js, session-activity-scan-limit.test.js, rrf-importance-cutoff.test.js, rememberer-characterization.test.js, mcp-handler-characterization.test.js.
+- 단위 테스트: node:test 단일 러너. DB·Redis·EMBEDDING_API_KEY 불필요. 368개 테스트 파일(tests/unit), 전체 385개(tests/unit, integration, e2e). v4.6.0 신규: batch-remember-async.test.js, batch-remember-worker.test.js, session-activity-scan-limit.test.js, rrf-importance-cutoff.test.js, rememberer-characterization.test.js, mcp-handler-characterization.test.js.
 - 통합 테스트: DB/Redis 환경에서 전체 통과
 - E2E: LLM CLI 인증 환경에서 전체 통과

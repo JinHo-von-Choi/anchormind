@@ -43,7 +43,7 @@ claude mcp list
 claude mcp get memento
 ```
 
-`claude mcp list`에 `memento`가 보이고 `Connected` 상태면 정상. 이후 Claude Code 세션을 재시작하면 18개 MCP 도구가 로드된다.
+`claude mcp list`에 `memento`가 보이고 `Connected` 상태면 정상. 이후 Claude Code 세션을 재시작하면 16개 MCP 도구가 로드된다.
 
 등록 제거:
 

@@ -23,7 +23,7 @@ server.js  (HTTP 서버)
     └── GET  /.well-known/oauth-protected-resource
     │
     ├── lib/jsonrpc.js        JSON-RPC 2.0 파싱 및 메서드 디스패치. `dispatchJsonRpc`는 METHOD_MAP 객체로 메서드명→핸들러를 정적 매핑
-    ├── lib/tool-registry.js  18개 기억 도구 등록 및 라우팅
+    ├── lib/tool-registry.js  16개 기억 도구 등록 및 라우팅
     │
     └── lib/memory/
             ├── MemoryManager.js          비즈니스 로직 조율 facade (259줄, 싱글턴). 15개 공개 메서드를 1줄 위임으로 4개 processor에 라우팅. 공유 프로퍼티는 _installSharedSync로 동기화

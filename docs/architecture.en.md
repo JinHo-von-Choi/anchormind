@@ -20,7 +20,7 @@ server.js  (HTTP server)
     +-- GET  /.well-known/oauth-protected-resource
     |
     +-- lib/jsonrpc.js        JSON-RPC 2.0 parsing and method dispatch. `dispatchJsonRpc` uses a METHOD_MAP object for static method-name-to-handler routing
-    +-- lib/tool-registry.js  18 memory tool registration and routing
+    +-- lib/tool-registry.js  16 memory tool registration and routing
     |
     +-- lib/memory/
             +-- MemoryManager.js          Business logic orchestration facade (259 lines, singleton). Routes 15 public methods to 4 processors via 1-line delegation. Shared properties synchronized via _installSharedSync

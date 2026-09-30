@@ -20,7 +20,7 @@ AnchorMind의 주요 모듈을 한 페이지로 정리한 ledger. 새 모듈 추
 |`EmbeddingCache` (`lib/memory/embedding/EmbeddingCache.js`)|텍스트 hash|cache hit/miss|Redis 장애 시 noop|`CACHE_ENABLED`, `CACHE_DB_TTL`|`memento_embedding_cache_*`|—|
 |`MorphemeIndex` (`lib/memory/embedding/MorphemeIndex.js`)|fragment 텍스트|morpheme 토큰 + 임베딩|형태소 분석 실패 시 fragment의 `morpheme_indexed=false` 유지|`MORPHEME_PROVIDER`, `MORPHEME_TIMEOUT_MS`|`memento_morpheme_index_*`|migration-035|
 |`NLIClassifier` (`lib/memory/signals/NLIClassifier.js`)|premise/hypothesis 텍스트 쌍|entail / contradict / neutral 라벨|NLI 서비스 미도달 시 LLM fallback 또는 soft skip|`NLI_SERVICE_URL`, `NLI_TIMEOUT_MS`|`memento_nli_total`|—|
-|`AutoReflect` (`lib/memory/processors/AutoReflect.js`)|long session events|reflect 파편 자동 생성|LLM 응답 파싱 실패 시 skip|`GEMINI_TIMEOUT_MS`, `AUTOREFLECT_ENABLED`|`memento_autoreflect_total`|—|
+|`AutoReflect` (`lib/memory/processors/AutoReflect.js`)|long session events|reflect 파편 자동 생성|LLM 응답 파싱 실패 시 skip|`GEMINI_TIMEOUT_MS`(코드 상수)|`memento_autoreflect_total`|없음|
 |`RecallSuggestionEngine` (`lib/memory/read/RecallSuggestionEngine.js`)|recall 응답 메타|`_meta.suggestion.recommendedTool` 권고|graph 신호 부재 시 suggestion 미발행|—|`memento_recall_suggestion_total`|—|
 |`MemoryLinker` (`lib/memory/processors/MemoryLinker.js`)|fromId/toId/relationType|link 생성/모순 격리|cycle detection 거부, RLS 거부|—|`memento_link_create_total`|core schema|
 |`MemoryReflector` (`lib/memory/processors/MemoryReflector.js`)|session reflect params|batchRemember 결과 + episode 생성|상속 (batch)|—|상속|—|
