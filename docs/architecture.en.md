@@ -168,7 +168,7 @@ lib/tools/
 +-- memory.js    16 MCP tool handlers
 +-- reconstruct.js  reconstruct_history, search_traces tool handlers (Narrative Reconstruction)
 +-- memory-schemas.js  Tool schema definitions (inputSchema)
-+-- db.js        PostgreSQL connection pool, RLS-applied query helper (not exposed via MCP). getPrimaryPool(), getBatchPool(), queryWithAgentVector()
++-- db.js        PostgreSQL connection pool, agent session variable query helper (not exposed via MCP). getPrimaryPool(), getBatchPool(), queryWithAgentVector()
 +-- db-tools.js  MCP DB tool handlers (per-tool logic split from db.js)
 +-- embedding.js OpenAI text embedding generation
 +-- stats.js     Access statistics collection and storage
@@ -331,7 +331,7 @@ erDiagram
         real importance
         text content_hash "Unique"
         text_array linked_to
-        text agent_id "RLS Key"
+        text agent_id "Agent Key"
         integer access_count
         real utility_score
         vector embedding "OpenAI 1536, L2 normalized"
@@ -422,7 +422,7 @@ The store for all fragments. This is the core table of the system.
 | content_hash | TEXT | NOT NULL | SHA hash-based duplicate prevention. Not a global UNIQUE — enforced by two per-tenant partial unique indexes (`uq_frag_hash_master`, `uq_frag_hash_per_key`, migration-031) |
 | source | TEXT | | Source identifier (session ID, tool name, etc.) |
 | linked_to | TEXT[] | DEFAULT '{}' | Connected fragment ID list (GIN indexed) |
-| agent_id | TEXT | NOT NULL DEFAULT 'default' | RLS isolation agent ID |
+| agent_id | TEXT | NOT NULL DEFAULT 'default' | Agent scoping ID |
 | access_count | INTEGER | DEFAULT 0 | Recall count -- factored into utility_score |
 | accessed_at | TIMESTAMPTZ | | Last recall timestamp |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | Creation timestamp |
@@ -593,7 +593,7 @@ Evidence join table linking fragments to case_events. Connects fragments that su
 
 ### Row-Level Security
 
-RLS is enabled on the fragments table. The policy name is `fragment_isolation_policy`. It evaluates the session variable `app.current_agent_id`.
+RLS is enabled on the fragments table under the policy name `fragment_isolation_policy`, which evaluates the session variable `app.current_agent_id`. Database-level isolation is not active, however. The application account owns the table and `FORCE ROW LEVEL SECURITY` is not set, so the policy does not apply to runtime queries, and many paths query directly without setting the session variable. Isolation between keys is performed by the application query filter (`lib/memory/keyScope.js`). The procedure for establishing database-level isolation is in `docs/operations/row-level-security.md`.
 
 ```sql
 CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
@@ -604,7 +604,7 @@ CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
     );
 ```
 
-Access is granted only to fragments matching the agent ID, `default` agent fragments (shared data), and `system`/`admin` sessions (for maintenance). Tool handlers set the context via `SET LOCAL app.current_agent_id = $1` immediately before query execution.
+When the policy applies, access is limited to fragments matching the agent ID, `default` agent fragments (shared data), and `system`/`admin` sessions (for maintenance). Some write paths set the context via `SET LOCAL app.current_agent_id` immediately before query execution.
 
 ### API Key-Based Memory Isolation
 
@@ -673,11 +673,11 @@ MCP clients connect via an OAuth 2.0 flow based on RFC 8414/RFC 7591/RFC 7636. U
 
 ### Tenant Isolation Security Model
 
-Memory isolation is composed of three layers.
+Memory isolation is composed of three layers. The layers that operate today are the application filters, key_id isolation and group isolation. Read the RLS row on the premise that database-level isolation is not active.
 
 | Layer | Isolation Key | Behavior |
 |-------|--------------|----------|
-| RLS (Row-Level Security) | `agent_id` | Based on session variable `app.current_agent_id`. Shared access for `default` agent and `system`/`admin` sessions |
+| RLS (Row-Level Security) | `agent_id` | Policy is defined but inactive because it does not apply to the table owner account. Based on session variable `app.current_agent_id`; shared access for `default` agent and `system`/`admin` sessions |
 | key_id isolation | `key_id` column | master key: `key_id = NULL` (full access), API key: `key_id = <that key's ID>` (own fragments only) |
 | Group isolation | `groupKeyIds` array | Fragments shared among keys in the same group. `COALESCE(group_id, api_keys.id)` used as effective_key_id |
 

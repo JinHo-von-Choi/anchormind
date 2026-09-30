@@ -171,7 +171,7 @@ lib/tools/
 ├── memory.js    16개 MCP 도구 핸들러
 ├── reconstruct.js  reconstruct_history, search_traces 도구 핸들러 (Narrative Reconstruction)
 ├── memory-schemas.js  도구 스키마 정의 (inputSchema)
-├── db.js        PostgreSQL 연결 풀, RLS 적용 쿼리 헬퍼 (MCP 미노출). getPrimaryPool(), getBatchPool(), queryWithAgentVector()
+├── db.js        PostgreSQL 연결 풀, 에이전트 세션 변수 설정 쿼리 헬퍼 (MCP 미노출). getPrimaryPool(), getBatchPool(), queryWithAgentVector()
 ├── db-tools.js  MCP DB 도구 핸들러 (db.js에서 분리된 도구별 로직)
 ├── embedding.js OpenAI 텍스트 임베딩 생성
 ├── stats.js     접근 통계 수집 및 저장
@@ -334,7 +334,7 @@ erDiagram
         real importance
         text content_hash "Unique"
         text_array linked_to
-        text agent_id "RLS Key"
+        text agent_id "Agent Key"
         integer access_count
         real utility_score
         vector embedding "OpenAI 1536, L2 정규화"
@@ -425,7 +425,7 @@ erDiagram
 | content_hash | TEXT | NOT NULL | SHA 해시 기반 중복 방지. 전역 UNIQUE가 아니라 테넌트별 partial unique index 2종(`uq_frag_hash_master`, `uq_frag_hash_per_key`, migration-031)으로 강제 |
 | source | TEXT | | 출처 식별자 (세션 ID, 도구명 등) |
 | linked_to | TEXT[] | DEFAULT '{}' | 연결 파편 ID 목록 (GIN 인덱스) |
-| agent_id | TEXT | NOT NULL DEFAULT 'default' | RLS 격리 기준 에이전트 ID |
+| agent_id | TEXT | NOT NULL DEFAULT 'default' | 에이전트 구분용 ID |
 | access_count | INTEGER | DEFAULT 0 | 회상 횟수 — utility_score 산정에 반영 |
 | accessed_at | TIMESTAMPTZ | | 최근 회상 시각 |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | 생성 시각 |
@@ -596,7 +596,7 @@ fragment_links의 weight/confidence 변경 이력을 기록하는 감사 테이�
 
 ### Row-Level Security
 
-fragments 테이블에 RLS가 활성화되어 있다. 정책명은 `fragment_isolation_policy`. 판단 기준은 세션 변수 `app.current_agent_id`다.
+fragments 테이블에 RLS가 켜져 있고 정책명은 `fragment_isolation_policy`, 판단 기준은 세션 변수 `app.current_agent_id`다. 다만 DB 수준 격리는 활성 상태가 아니다. 애플리케이션 계정이 표 소유자이고 `FORCE ROW LEVEL SECURITY`가 없어 정책이 런타임 질의에 적용되지 않으며, 다수 경로가 세션 변수를 설정하지 않고 직접 질의한다. 키 간 격리는 애플리케이션 질의 필터(`lib/memory/keyScope.js`)가 담당한다. DB 격리를 세우는 절차는 `docs/operations/row-level-security.md`에 있다.
 
 ```sql
 CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
@@ -607,7 +607,7 @@ CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
     );
 ```
 
-에이전트 ID가 일치하는 파편, `default` 에이전트의 파편(공용 데이터), `system`/`admin` 세션(유지보수용)에만 접근이 허용된다. 도구 핸들러는 쿼리 실행 직전 `SET LOCAL app.current_agent_id = $1`로 컨텍스트를 설정한다.
+정책을 적용하면 에이전트 ID가 일치하는 파편, `default` 에이전트의 파편(공용 데이터), `system`/`admin` 세션(유지보수용)만 접근이 허용된다. 일부 쓰기 경로는 쿼리 실행 직전 `SET LOCAL app.current_agent_id`로 컨텍스트를 설정한다.
 
 ### API 키 기반 기억 격리
 
@@ -676,11 +676,11 @@ MCP 클라이언트는 RFC 8414/RFC 7591/RFC 7636 기반 OAuth 2.0 흐름으로 
 
 ### Tenant Isolation 보안 모델
 
-기억 격리는 세 가지 레이어로 구성된다.
+기억 격리는 세 가지 레이어로 구성되며 실제로 동작하는 것은 애플리케이션 필터인 key_id 격리와 그룹 격리다. RLS 행은 DB 수준 격리가 활성이 아님을 전제로 읽는다.
 
 | 레이어 | 격리 기준 | 동작 |
 |--------|----------|------|
-| RLS (Row-Level Security) | `agent_id` | 세션 변수 `app.current_agent_id` 기준. `default` 에이전트와 `system`/`admin` 세션 공통 접근 허용 |
+| RLS (Row-Level Security) | `agent_id` | 정책은 걸려 있으나 표 소유자 계정에는 적용되지 않아 비활성. 세션 변수 `app.current_agent_id` 기준이며 `default` 에이전트와 `system`/`admin` 세션 공통 접근 허용 |
 | key_id 격리 | `key_id` 컬럼 | master key: `key_id = NULL` (전체 접근), API key: `key_id = <해당 키 ID>` (자기 소유 파편만) |
 | 그룹 격리 | `groupKeyIds` 배열 | 동일 그룹 소속 키들 간 파편 공유. `COALESCE(group_id, api_keys.id)` 를 effective_key_id로 사용 |
 

@@ -837,7 +837,7 @@ RBAC default-deny: 도구 맵에 등록되지 않은 도구를 호출하면 `"Ac
 | supersedes | string[] | - | 대체할 기존 파편 ID. 지정 파편은 만료 처리. |
 | contextSummary | string | - | 맥락/배경 요약 (1-2문장) |
 | sessionId | string | - | 현재 세션 ID |
-| agentId | string | - | 에이전트 ID (RLS 격리용) |
+| agentId | string | - | 에이전트 ID (에이전트 구분용) |
 | workspace | string | - | 워크스페이스 이름. 미지정 시 키의 default_workspace 자동 적용. |
 | caseId | string | - | 이 파편이 속한 케이스 ID. 미지정 시 session_id 사용 |
 | goal | string | - | 에피소드 목표 (episode 타입 권장) |

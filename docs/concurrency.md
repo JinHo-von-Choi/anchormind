@@ -9,9 +9,9 @@ write 경로별 lock 종류·격리 수준·재시도 정책을 한 페이지로
 |경로|진입점|lock 종류|격리/트랜잭션|재시도 정책|TOCTOU 가드|회귀 테스트|
 |-|-|-|-|-|-|-|
 |remember (atomic)|`MemoryRememberer._rememberAtomic` (`lib/memory/processors/MemoryRememberer.js`)|`SELECT … api_keys FOR UPDATE` (row lock) → INSERT|단일 트랜잭션 BEGIN/COMMIT, `app.current_agent_id='system'`|호출자가 idempotencyKey로 안전 재시도. 트랜잭션 자체 자동 재시도 없음|quota 재검증을 동일 트랜잭션 안에서 수행. PolicyRules hard gate는 진입 직전 `_runPolicyGate`로 통일됨|`tests/unit/atomic-remember-policy-gate.test.js`, `tests/integration/toctou-remember-concurrency.test.js`|
-|remember (non-atomic)|`MemoryRememberer.remember` 본문|`QuotaChecker.check` 선제 검사 + INSERT|개별 쿼리. RLS는 호출자 agent_id 적용|호출자 책임|동시 요청이 드문 환경 전용. 다중 인스턴스에서는 atomic 사용 권고|`tests/unit/memory-manager-remember-tdz.test.js`|
+|remember (non-atomic)|`MemoryRememberer.remember` 본문|`QuotaChecker.check` 선제 검사 + INSERT|개별 쿼리. 호출자 agent_id 기준 조건 적용|호출자 책임|동시 요청이 드문 환경 전용. 다중 인스턴스에서는 atomic 사용 권고|`tests/unit/memory-manager-remember-tdz.test.js`|
 |batchRemember|`MemoryRememberer.batchRemember` → `BatchRememberProcessor`|`api_keys FOR UPDATE`로 quota Phase B 검증 → 24컬럼 × N행 multi-row INSERT|단일 트랜잭션. `ON CONFLICT (idempotency_key) DO NOTHING` 유지|chunk 단위 256KB 또는 500행 분할. chunk별 트랜잭션|Phase A 사전 quota check + Phase B 동일 트랜잭션 재검증|`tests/integration/batch-remember.test.js`|
-|consolidate.merge_duplicates|`MemoryConsolidator._mergeDuplicates`|advisory 없음. `queryWithAgentVector("system", …)`로 RLS 우회|개별 UPDATE/DELETE. `WHERE key_id = $X`로 키 범위 강제|cycle 단위 LIMIT 50으로 1회 실행, 미처리분은 다음 cycle에서 처리|GROUP BY (key_id, workspace, content_hash) + scope mismatch 어설션 + key_id 조건부 UPDATE/DELETE|`tests/unit/consolidator-merge-tenant-scope.test.js`|
+|consolidate.merge_duplicates|`MemoryConsolidator._mergeDuplicates`|advisory 없음. `queryWithAgentVector("system", …)`로 에이전트 범위 해제|개별 UPDATE/DELETE. `WHERE key_id = $X`로 키 범위 강제|cycle 단위 LIMIT 50으로 1회 실행, 미처리분은 다음 cycle에서 처리|GROUP BY (key_id, workspace, content_hash) + scope mismatch 어설션 + key_id 조건부 UPDATE/DELETE|`tests/unit/consolidator-merge-tenant-scope.test.js`|
 |consolidate.semantic_dedup|`MemoryConsolidator._semanticDedup`|advisory 없음|개별 쿼리|cycle 단위 LIMIT|topic·key_id 범위 안 KNN cos>=0.92|`tests/unit/semantic-dedup.test.js`|
 |consolidate.detect_contradictions|`MemoryConsolidator._detectContradictions`|advisory 없음|개별 쿼리|`resetCheckedPairs()`로 cycle 시작 시 추적 초기화|NLI + LLM 하이브리드. `pending_contradictions` 큐로 후처리 분리|`tests/unit/detect-supersessions.test.js`|
 |link.createLinks|`LinkStore.createLinks` (`lib/memory/link/LinkStore.js`)|`pg_advisory_xact_lock` 1개 + multi-row INSERT|단일 트랜잭션|advisory 획득 실패 시 단건 fallback|`(from_id, to_id, relation_type)` UNIQUE로 중복 차단|`tests/unit/link-store.test.js`|
@@ -21,7 +21,7 @@ write 경로별 lock 종류·격리 수준·재시도 정책을 한 페이지로
 
 ## 격리 수준 약식
 
-- 모든 RLS 정책은 `app.current_agent_id` 세션 변수로 enforce된다. atomic·consolidate 경로가 `app.current_agent_id='system'`을 설정하면 RLS를 우회한다. 의도된 우회는 키 범위(`WHERE key_id = $X`)로 명시 가드되어야 하며, `_mergeDuplicates`가 이 가드를 적용한다.
+- DB 수준 격리(RLS)는 활성 상태가 아니다. 격리는 각 질의의 `key_id` 조건과 `lib/memory/keyScope.js`가 담당한다. atomic·consolidate 경로는 `app.current_agent_id='system'`을 설정해 에이전트 범위를 해제하므로, 키 범위(`WHERE key_id = $X`)를 질의에 명시해야 하며 `_mergeDuplicates`가 이 조건을 적용한다.
 - master 키(`key_id IS NULL`)는 자동 병합·hard gate 대상에서 제외된다. cross-tenant 데이터 유실 경로를 차단하기 위함.
 
 ## 재시도 정책 정리
@@ -36,7 +36,7 @@ write 경로별 lock 종류·격리 수준·재시도 정책을 한 페이지로
 
 ## 새 경로 추가 규약
 
-1. 코드 본문에 동시성 가드를 명시적으로 작성한다. RLS 우회(`agent_id='system'`)가 필요하면 키 scope(`WHERE key_id = $X`)를 같은 함수 안에 강제한다.
+1. 코드 본문에 동시성 가드를 명시적으로 작성한다. 에이전트 범위 해제(`agent_id='system'`)가 필요하면 키 scope(`WHERE key_id = $X`)를 같은 함수 안에 강제한다.
 2. 본 문서 매트릭스에 행을 추가한다. 회귀 테스트 파일을 같은 PR에서 신설·등재한다.
 3. deadlock·TOCTOU 가드가 의심되는 경우 통합 테스트로 박제한다(`tests/integration/<topic>-concurrency.test.js`).
 4. `docs/features.md`의 관련 모듈 행이 영향받으면 함께 갱신한다.
@@ -47,7 +47,7 @@ read 경로는 write 경로와 달리 row-level lock을 사용하지 않는다. 
 
 |경로|진입점|필터 계약|격리 특성|비고|
 |-|-|-|-|-|
-|recall (HotCache)|`FragmentSearch._searchHotCache`|`SearchScope.applyTo(fragment)`|읽기 전용. RLS는 호출자 agent_id 적용|L1 캐시 히트. workspace/caseId/phase/affect/isAnchor를 단일 `applyTo` 호출로 판정|
+|recall (HotCache)|`FragmentSearch._searchHotCache`|`SearchScope.applyTo(fragment)`|읽기 전용. 호출자 agent_id는 SearchScope가 적용|L1 캐시 히트. workspace/caseId/phase/affect/isAnchor를 단일 `applyTo` 호출로 판정|
 |recall (L3 semantic)|`FragmentSearch._searchL3`|`SearchScope.applyTo(fragment)` post-filter|읽기 전용|pgvector KNN 후 `SearchScope`로 2차 필터하고 `search()` 최종 공통 필터로 다시 검증한다|
 |recall (graph)|`FragmentSearch._searchGraph`|호출 사이트에서 `SearchScope.applyTo` 직접 적용|읽기 전용|GraphExplorer가 반환한 fragment 각각에 applyTo 체크|
 |recall (side effects)|`commitSearchSideEffects` (`lib/memory/read/SearchSideEffects.js`)|없음 (결과 확정 후 별도 실행)|fire-and-forget `recordOutcome` + await `recordSearchEvent`|`searchEventId` 반환. tool_feedback FK 계약에 사용됨|

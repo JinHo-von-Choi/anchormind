@@ -539,7 +539,7 @@ reason code 목록 (최대 3개):
 | contextSummary | string | - | 이 기억이 생긴 맥락/배경 요약 (1-2문장). recall 시 함께 반환되어 전후관계를 복원한다. |
 | sessionId | string | - | 현재 세션 ID. 같은 세션 파편을 시간 인접 번들로 묶는 데 사용. |
 | workspace | string | - | 워크스페이스 이름. 미지정 시 키의 default_workspace 적용. |
-| agentId | string | - | 에이전트 ID (RLS 격리용) |
+| agentId | string | - | 에이전트 ID (에이전트 구분용) |
 | caseId | string | - | 이 파편이 속한 작업/케이스 식별자. 미설정 시 현재 session_id로 자동 설정. |
 | goal | string | - | 에피소드 파편의 목표 (episode 타입 권장) |
 | outcome | string | - | 에피소드 파편의 결과 |
@@ -673,7 +673,7 @@ violations 있는 경우 (soft gate — 저장됨):
 |------|------|------|------|
 | fragments | object[] | O | 저장할 파편 배열 (최대 200건). 각 항목은 content(string, 필수, 최대 4000자, 초과 시 해당 항목 `-32602` 거부), topic(string, 필수), type(string, 필수), importance(number), keywords(string[]), workspace(string), idempotencyKey(string, 최대 128자) 포함. |
 | workspace | string | - | 배치 기본 워크스페이스. 개별 파편에 workspace 미지정 시 이 값으로 대체. 미지정 시 키의 default_workspace 적용. |
-| agentId | string | - | 에이전트 ID (RLS 격리용) |
+| agentId | string | - | 에이전트 ID (에이전트 구분용) |
 | stream | boolean | - | deprecated: 더 이상 SSE progress 이벤트를 보내지 않는다. batch_remember는 표준 단일 JSON 응답으로 반환된다. 이 파라미터는 하위 호환성을 위해 유지되지만 동작에 영향을 주지 않는다. |
 | async | boolean | - | true 시 파이어앤포겟(비동기) 모드 (기본 false). 스키마 유효성·content_hash 중복·할당량 선검증만 동기 수행한 뒤 통과 파편을 Redis 큐에 적재하고 즉시 `{async: true, accepted: N, rejected: N, jobId: "..."}` 를 반환한다. 본 INSERT는 백그라운드 워커(BatchRememberWorker)가 처리한다. Redis 비활성(REDIS_ENABLED=false) 환경에서는 async=true여도 동기 모드로 폴백한다. |
 
