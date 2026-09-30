@@ -392,7 +392,7 @@ Symbolic Verification Layer는 확률론적 검색 파이프라인 위에 추가
 ### 인증 (Auth)
 
 - `MEMENTO_ACCESS_KEY` 필수화: 미설정 시 서버 기동이 거부된다. 개발/테스트 환경에서 인증을 비활성화하려면 `MEMENTO_AUTH_DISABLED=true`를 명시적으로 설정한다.
-- `ALLOWED_ORIGINS` 미설정 시 same-origin 요청만 허용된다. 크로스 오리진 접근이 필요하다면 허용할 오리진을 명시적으로 열거해야 한다.
+- `ALLOWED_ORIGINS` 미설정 시 모든 Origin에 응답하며 응답 방식은 `MEMENTO_CORS_MODE`(`reflect`, `observe`, `allowlist`)로 정한다. 접근을 제한하려면 허용할 오리진을 `ALLOWED_ORIGINS`에 명시적으로 열거한다.
 
 ### OAuth
 
@@ -408,7 +408,7 @@ Symbolic Verification Layer는 확률론적 검색 파이프라인 위에 추가
 |--------|------|--------|------|
 | `MEMENTO_ACCESS_KEY` | string | (없음, 필수) | 마스터 API 키. 미설정 시 기동 거부. |
 | `MEMENTO_AUTH_DISABLED` | boolean | `false` | `true` 설정 시 인증을 비활성화한다. 개발 전용. |
-| `ALLOWED_ORIGINS` | string | (없음) | CORS 허용 오리진 목록 (쉼표 구분). 미설정 시 same-origin만 허용. |
+| `ALLOWED_ORIGINS` | string | (없음) | CORS 허용 오리진 목록 (쉼표 구분). 미설정 시 모든 Origin에 응답하며 방식은 `MEMENTO_CORS_MODE`로 정한다. |
 | `ENABLE_OPENAPI` | boolean | `false` | `true` 설정 시 `/openapi.json` 엔드포인트 활성화. |
 | `OAUTH_TOKEN_TTL_SECONDS` | number | `2592000` | OAuth access token 유효 시간 (초). `SESSION_TTL_MINUTES * 60`으로 산출. 기본값 30일. |
 | `OAUTH_REFRESH_TTL_SECONDS` | number | `604800` | OAuth refresh token 유효 시간 (초). |

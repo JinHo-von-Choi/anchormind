@@ -63,7 +63,7 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 
 Even when Redis is disabled (`REDIS_ENABLED=false`) or connection fails, the server returns healthy (200). L1 cache and Working Memory are deactivated, but core memory storage/retrieval operates fully on PostgreSQL alone.
 
-Two authentication methods are available. Streamable HTTP authenticates via `Authorization: Bearer <MEMENTO_ACCESS_KEY>` header on the `initialize` request, then maintains the session. Legacy SSE authenticates via `/sse?accessKey=<MEMENTO_ACCESS_KEY>` query parameter.
+Two authentication methods are available. Streamable HTTP authenticates via `Authorization: Bearer <MEMENTO_ACCESS_KEY>` header on the `initialize` request, then maintains the session. Legacy SSE also authenticates with the `Authorization: Bearer` header by default. The `/sse?accessKey=<MEMENTO_ACCESS_KEY>` query parameter is a master-key-only compatibility path and can be turned off with `MEMENTO_SSE_QUERY_KEY=deny`. Query values are recorded in proxy access logs.
 
 ### HTTP Response Headers — Rate Limit
 

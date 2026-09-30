@@ -115,7 +115,7 @@ lib/
 +-- utils.js           Origin validation, JSON body parsing (2MB cap), SSE output
 
 lib/handlers/
-+-- _common.js         getAllowedOrigin, setWorkerRefs, recordConsolidateRun (shared utilities)
++-- _common.js         applyCorsOrigin, setWorkerRefs, recordConsolidateRun (shared utilities)
 +-- health-handler.js  handleHealth, handleMetrics
 +-- mcp-handler.js     handleMcpPost/Get/Delete (Streamable HTTP). handleMcpPost internally decomposes into 4 private functions: `_resolveExistingSession` / `_createInitializeSession` / `_validateProtocolVersion` / `_dispatchAndRespond`. `injectSessionContext(msg, ctx)` -- injects server-controlled context (_sessionId, _keyId, _groupKeyIds, _permissions, _defaultWorkspace) into tools/call message arguments. Client-supplied fields of the same name are overwritten with server values to prevent forgery
 +-- sse-handler.js     handleLegacySseGet/Post (Legacy SSE)

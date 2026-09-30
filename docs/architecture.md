@@ -118,7 +118,7 @@ lib/
 └── utils.js           Origin 검증, JSON 바디 파싱(2MB 상한), SSE 출력
 
 lib/handlers/
-├── _common.js         getAllowedOrigin, setWorkerRefs, recordConsolidateRun (공통 유틸리티)
+├── _common.js         applyCorsOrigin, setWorkerRefs, recordConsolidateRun (공통 유틸리티)
 ├── health-handler.js  handleHealth, handleMetrics
 ├── mcp-handler.js     handleMcpPost/Get/Delete (Streamable HTTP). handleMcpPost는 내부적으로 `_resolveExistingSession` / `_createInitializeSession` / `_validateProtocolVersion` / `_dispatchAndRespond` 4개 비공개 함수로 분해된다. `injectSessionContext(msg, ctx)` — tools/call 메시지의 arguments에 서버 제어 컨텍스트(_sessionId, _keyId, _groupKeyIds, _permissions, _defaultWorkspace) 주입. 클라이언트가 전달한 동명 필드는 서버값으로 덮어쓰기하여 위조 차단
 ├── sse-handler.js     handleLegacySseGet/Post (Legacy SSE)

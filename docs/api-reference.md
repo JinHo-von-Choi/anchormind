@@ -67,7 +67,7 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 Redis가 비활성화(`REDIS_ENABLED=false`)되거나 연결 실패해도 서버는 healthy(200)를 반환합니다.
 L1 캐시와 Working Memory가 비활성화되지만 핵심 기억 저장/검색은 PostgreSQL만으로 동작합니다.
 
-인증 방식은 두 가지다. Streamable HTTP는 `initialize` 요청 시 `Authorization: Bearer <MEMENTO_ACCESS_KEY>` 헤더로 인증하며 이후 세션으로 유지된다. Legacy SSE는 `/sse?accessKey=<MEMENTO_ACCESS_KEY>` 쿼리 파라미터로 인증한다.
+인증 방식은 두 가지다. Streamable HTTP는 `initialize` 요청 시 `Authorization: Bearer <MEMENTO_ACCESS_KEY>` 헤더로 인증하며 이후 세션으로 유지된다. Legacy SSE도 `Authorization: Bearer` 헤더로 인증하는 것을 기본으로 한다. `/sse?accessKey=<MEMENTO_ACCESS_KEY>` 쿼리 파라미터는 마스터 키 전용 하위 호환 경로이며 `MEMENTO_SSE_QUERY_KEY=deny`로 끌 수 있다. 쿼리 값은 프록시 접근 로그에 남는다.
 
 ### HTTP 응답 헤더 — Rate Limit
 

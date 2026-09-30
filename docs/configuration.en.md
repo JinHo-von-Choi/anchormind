@@ -25,6 +25,10 @@
 | EVALUATOR_MAX_QUEUE | 100 | MemoryEvaluator queue size cap (older jobs dropped on overflow) |
 | OAUTH_TRUSTED_ORIGINS | (none) | Additional OAuth redirect_uri trusted domains (comma-separated, origin level). Added on top of default trusted domains (claude.ai, chatgpt.com, platform.openai.com, copilot.microsoft.com, gemini.google.com). Only specify additional origins to allow |
 | MCP_STRICT_ORIGIN | false | When `true`, enables strict Origin header validation (DNS rebinding defense). Requests from Origins not in the allowlist (`OAUTH_TRUSTED_ORIGINS` + `ALLOWED_ORIGINS` + default trusted domains) are rejected with 403. Requests without an Origin header (CLI/curl) are always allowed. **opt-in** — defaults to `false` to preserve existing behavior |
+| MEMENTO_CORS_MODE | observe | Cross-origin response mode when `ALLOWED_ORIGINS` is unset. `reflect`: echoes the request Origin. `observe` (default): same response as `reflect`, and logs each newly seen Origin as `[CORS] cross-origin request from` (up to 256 per process). `allowlist`: sets `Access-Control-Allow-Origin` only for the default trusted domains and `OAUTH_TRUSTED_ORIGINS`. Responses to requests with an Origin carry `Vary: Origin`. When `ALLOWED_ORIGINS` is set, the list takes precedence regardless of mode. Read at call time, so changes apply without a restart |
+| MEMENTO_FRAME_OPTIONS | (none) | When `deny`, every response carries `X-Frame-Options: DENY`. Unset or any other value adds nothing. `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer` are always sent on every response |
+| MEMENTO_OAUTH_REDIRECT_CHECK | warn | Redirect target check for `/authorize` error responses. `warn` (default): redirects to an unregistered `redirect_uri` and logs an `error redirect target not registered` warning containing only the target host. `enforce`: returns a 400 JSON instead of redirecting. A missing or non-URL `redirect_uri` gets a 400 JSON in both modes |
+| MEMENTO_SSE_QUERY_KEY | allow | Legacy SSE `?accessKey=` query key handling. `allow` (default): accepted for the master key only. `deny`: not accepted; returns 401 pointing to the `Authorization` header. Query values are recorded in proxy access logs |
 | MCP_REJECT_NONAPIKEY_OAUTH | true | The default `true` rejects authentication with `is_api_key=false` OAuth tokens. `false` permits that authentication only and never grants master privileges. OAuth sessions without an API-key binding receive `-32001` on tool calls. API-key-based OAuth tokens (`is_api_key=true`) and direct Bearer ACCESS_KEY use are unaffected |
 | MCP_ALLOW_AUTO_DCR_REGISTER | false | Set to `true` to allow auto-registration of unregistered `client_id` in `/authorize` (legacy behavior). Default `false` — enforces RFC 7591 `POST /register` endpoint for client registration |
 | OAUTH_ALLOWED_REDIRECT_URIS | (none) | OAuth redirect_uri exact-match allowed list (comma-separated). Operates independently of OAUTH_TRUSTED_ORIGINS |
@@ -216,6 +220,22 @@ OAuth token TTLs are linked to the session TTL.
 | OAUTH_REFRESH_TTL_SECONDS | 5184000 | OAuth refresh token TTL (seconds). `OAUTH_TOKEN_TTL_SECONDS * 2`. Default 60 days |
 
 Sliding window: each time an OAuth-authenticated request arrives, the Redis TTL for that access token is reset to `OAUTH_TOKEN_TTL_SECONDS`. The token never expires as long as tools continue to be used.
+
+#### Response Headers and Connection Policy
+
+Recommended production settings are shown below. They assume a deployment used only by clients that send no browser Origin (CLI, desktop MCP clients, server-to-server calls), so check your own client mix before applying them. The defaults keep the responses unchanged.
+
+```bash
+ALLOWED_ORIGINS=https://memento.example.com
+MEMENTO_CORS_MODE=allowlist
+MEMENTO_FRAME_OPTIONS=deny
+MEMENTO_OAUTH_REDIRECT_CHECK=enforce
+MEMENTO_SSE_QUERY_KEY=deny
+```
+
+- Put only the service's own origin in `ALLOWED_ORIGINS`. When it is set, requests carrying an Origin outside the list end with 403, so the origin of the browser-based admin console must be in the list. Using `MEMENTO_CORS_MODE=allowlist` without a list omits `Access-Control-Allow-Origin` for Origins outside the default trusted domains (the request itself is still processed).
+- Before switching, check actual use with the `[CORS] cross-origin request from` log of `observe`, the `error redirect target not registered` log of `warn`, and the count of `GET /sse?` requests in the access log.
+- HSTS (`Strict-Transport-Security`) is not sent by the application. Set it on the reverse proxy that terminates TLS. In nginx, a single `add_header` inside a location block stops the server-level `add_header` directives (including HSTS) from being inherited, so repeat HSTS in that location when adding headers there.
 
 #### SSE Connection
 

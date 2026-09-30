@@ -26,6 +26,10 @@
 | EVALUATOR_MAX_QUEUE | 100 | MemoryEvaluator 큐 크기 상한 (초과 시 오래된 작업 드롭) |
 | OAUTH_TRUSTED_ORIGINS | (없음) | OAuth redirect_uri 신뢰 도메인 추가 목록 (쉼표 구분, origin 단위). 기본 신뢰 도메인(claude.ai, chatgpt.com, platform.openai.com, copilot.microsoft.com, gemini.google.com)에 추가로 허용할 origin만 지정 |
 | MCP_STRICT_ORIGIN | false | `true`로 설정 시 Origin 헤더 엄격 검증 활성화 (DNS rebinding 방어). 허용 목록(`OAUTH_TRUSTED_ORIGINS` + `ALLOWED_ORIGINS` + 기본 신뢰 도메인)에 없는 Origin에서 온 요청을 403으로 거부. Origin 헤더 없는 요청(CLI/curl)은 항상 허용. **opt-in** — 기본 `false`로 기존 동작 유지 |
+| MEMENTO_CORS_MODE | observe | `ALLOWED_ORIGINS` 미설정 시 교차 출처 응답 방식. `reflect`: 요청 Origin을 그대로 돌려준다. `observe`(기본): `reflect`와 응답이 같고 처음 본 Origin을 `[CORS] cross-origin request from` 로그로 프로세스당 256건까지 남긴다. `allowlist`: 기본 신뢰 도메인과 `OAUTH_TRUSTED_ORIGINS`에 있는 Origin에만 `Access-Control-Allow-Origin`을 붙인다. Origin이 있는 응답에는 `Vary: Origin`이 붙는다. `ALLOWED_ORIGINS`가 설정되면 모드와 무관하게 목록이 우선한다. 호출 시점에 읽으므로 재시작 없이 바뀐다 |
+| MEMENTO_FRAME_OPTIONS | (없음) | `deny`로 설정 시 모든 응답에 `X-Frame-Options: DENY`를 붙인다. 미설정이거나 다른 값이면 붙이지 않는다. `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`는 모든 응답에 항상 붙는다 |
+| MEMENTO_OAUTH_REDIRECT_CHECK | warn | `/authorize` 오류 응답의 리다이렉트 대상 확인. `warn`(기본): 등록되지 않은 `redirect_uri`로 이동시키되 `error redirect target not registered` 경고를 대상 호스트만 담아 남긴다. `enforce`: 그 경우 이동 대신 400 JSON을 준다. `redirect_uri`가 없거나 URL이 아니면 두 모드 모두 400 JSON을 준다 |
+| MEMENTO_SSE_QUERY_KEY | allow | Legacy SSE의 `?accessKey=` 쿼리 키 처리. `allow`(기본): 마스터 키 한정으로 받는다. `deny`: 받지 않고 `Authorization` 헤더 사용을 안내하는 401을 준다. 쿼리 값은 프록시 접근 로그에 남는다 |
 | MCP_REJECT_NONAPIKEY_OAUTH | true | 기본 `true`는 `is_api_key=false` OAuth 토큰 인증을 거부한다. `false`는 해당 인증만 허용하며 master 권한을 부여하지 않는다. API 키 바인딩이 없는 OAuth 세션의 도구 호출은 `-32001`로 거부된다. API 키 기반 OAuth 토큰(`is_api_key=true`)과 Bearer ACCESS_KEY 직접 사용은 영향 없음 |
 | MCP_ALLOW_AUTO_DCR_REGISTER | false | `true`로 설정 시 `/authorize`에서 미등록 `client_id`의 자동 등록 허용 (기존 동작). 기본 `false` — RFC 7591 `POST /register` 엔드포인트 경유 강제 |
 | OAUTH_ALLOWED_REDIRECT_URIS | (없음) | OAuth redirect_uri 정확 일치 허용 목록 (쉼표 구분). OAUTH_TRUSTED_ORIGINS와 별도로 동작 |
@@ -216,6 +220,22 @@ OAuth 토큰 TTL은 세션 TTL과 연동된다.
 | OAUTH_REFRESH_TTL_SECONDS | 5184000 | OAuth 리프레시 토큰 TTL (초). `OAUTH_TOKEN_TTL_SECONDS * 2`. 기본값 60일 |
 
 슬라이딩 윈도우: OAuth 인증된 요청이 들어올 때마다 해당 액세스 토큰의 Redis TTL을 `OAUTH_TOKEN_TTL_SECONDS`로 재설정한다. 도구를 계속 사용하는 한 토큰이 만료되지 않는다.
+
+#### 응답 헤더와 연결 정책
+
+권장 운영 설정 예시는 아래와 같다. 브라우저 Origin을 싣지 않는 클라이언트(CLI, 데스크톱 MCP 클라이언트, 서버 간 호출)만 쓰는 배포를 가정한 값이므로, 적용 전에 사용 중인 클라이언트 구성을 확인한다. 기본값은 모두 이전과 같은 응답을 유지하는 쪽이다.
+
+```bash
+ALLOWED_ORIGINS=https://memento.example.com
+MEMENTO_CORS_MODE=allowlist
+MEMENTO_FRAME_OPTIONS=deny
+MEMENTO_OAUTH_REDIRECT_CHECK=enforce
+MEMENTO_SSE_QUERY_KEY=deny
+```
+
+- `ALLOWED_ORIGINS`에는 서비스 자신의 origin만 둔다. 설정하면 목록 밖 Origin을 가진 요청은 403으로 끝나므로, 브라우저에서 쓰는 관리 화면의 origin이 목록에 있어야 한다. 목록을 두지 않고 `MEMENTO_CORS_MODE=allowlist`만 쓰면 기본 신뢰 도메인 밖 Origin의 응답에는 `Access-Control-Allow-Origin`이 붙지 않는다(요청 자체는 처리된다).
+- 승격 전에는 `observe`의 `[CORS] cross-origin request from` 로그와 `warn`의 `error redirect target not registered` 로그, 접근 로그의 `GET /sse?` 요청 건수로 실제 사용 여부를 확인한다.
+- HSTS(`Strict-Transport-Security`)는 앱이 붙이지 않는다. TLS를 종단하는 리버스 프록시에서 붙인다. nginx에서 location 블록에 `add_header`를 하나라도 두면 server 수준의 `add_header`(HSTS 포함)가 상속되지 않으므로, location에 헤더를 추가할 때는 HSTS를 같은 location에 다시 적는다.
 
 #### SSE 연결
 
