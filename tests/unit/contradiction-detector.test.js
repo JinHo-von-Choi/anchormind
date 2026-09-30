@@ -291,3 +291,25 @@ describe("ContradictionDetector.updateContradictionTimestamp", () => {
     assert.strictEqual(setCalls[0].value, iso);
   });
 });
+
+/* ── 13. 증분 탐지 진행 위치 ── */
+describe("ContradictionDetector.detectContradictions 진행 위치", () => {
+  it("검사 질의는 오래된 순으로 읽고 처리 완료 지점까지만 워터마크를 올린다", async () => {
+    const { readFileSync } = await import("node:fs");
+    const path             = (await import("node:path")).default;
+    const ROOT = path.resolve(import.meta.dirname, "../..");
+    const src  = readFileSync(path.join(ROOT, "lib/memory/link/ContradictionDetector.js"), "utf8");
+    assert.match(src, /ORDER BY created_at ASC, id ASC LIMIT 20/);
+    assert.match(src, /MAX_FRAG_FAILURES/);
+    assert.doesNotMatch(src, /ORDER BY created_at DESC LIMIT 20/);
+  });
+
+  it("폐기 경로는 RETURNING 행을 deindexRows 로 넘긴다", async () => {
+    const { readFileSync } = await import("node:fs");
+    const path             = (await import("node:path")).default;
+    const ROOT = path.resolve(import.meta.dirname, "../..");
+    const src  = readFileSync(path.join(ROOT, "lib/memory/link/ContradictionDetector.js"), "utf8");
+    const hits = src.match(/RETURNING id, keywords, topic, type, key_id`,\s*\[[^\]]+\], "write"\s*\)\.then\(r => deindexRows\(r\.rows\)\)/g) || [];
+    assert.equal(hits.length, 2);
+  });
+});
