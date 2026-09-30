@@ -1,23 +1,20 @@
 /**
- * MemoryRememberer.remember() 특성화(characterization) 테스트
+ * MemoryRememberer 저장 경로 단위 시험
  *
  * 작성자: 최진호
- * 작성일: 2026-06-15
+ * 작성일: 2026-09-30
  *
- * 목적: 리팩터링 전 현재 동작을 고정한다. "이상적인 동작"이 아니라
- *       "지금 실제로 일어나는 일"을 단언한다.
- *
- * 커버하는 분기 (기존 테스트 공백 기준):
- *   1. scope=session 경로 — Redis addToWorkingMemory에 위임, DB insert 미호출
- *   2. scope=session + sessionId 없는 경우 — 일반(permanent) 경로로 낙하
- *   3. idempotencyKey 재시도 — 두 번째 호출 시 store.insert 미호출 + existing=true
- *   4. quota 초과 — quotaChecker.check throw 시 저장 차단
- *   5. dryRun=true — store.insert 미호출, simulated 구조 반환
- *   6. supersedes 배열 — conflictResolver.supersede 호출 (자기 id 제외)
- *   7. validation_warnings soft gate — 결과에 validation_warnings 배열 노출
- *   8. validation_warnings hard gate — SymbolicPolicyViolationError throw
- *   9. importance < 0.3 — ttl_tier "short" 강제 + low_importance_warning 반환
- *  10. skipConflictDetection=true — detectConflicts 미호출
+ * 저장 경로의 분기별 계약을 하위 계층 대역 위에서 단언한다.
+ *   1. scope=session: 작업 기억에 위임하고 DB insert를 부르지 않는다
+ *   2. scope=session인데 sessionId가 없으면 영구 저장 경로를 탄다
+ *   3. idempotencyKey가 이미 있으면 insert를 부르지 않고 기존 id를 돌려준다
+ *   4. quota 초과 시 저장을 막는다
+ *   5. dryRun은 insert와 색인을 부르지 않고 실행 계획만 돌려준다
+ *   6. supersedes는 각 id에 대해 한 번씩 supersede를 부른다
+ *   7. 정책 위반이 soft gate면 경고만 싣고, hard gate면 예외로 막는다
+ *   8. importance가 0.3 미만이면 ttl_tier를 short로 낮추고 경고를 싣는다
+ *   9. skipConflictDetection이면 충돌 탐지를 부르지 않는다
+ *  10. amend와 자동 case 배정은 파편 소유 범위를 그대로 전달한다
  */
 
 import { describe, it, mock } from "node:test";
@@ -111,7 +108,7 @@ function buildDeps(overrides = {}) {
 // ---------------------------------------------------------------------------
 // 1. scope=session 경로
 // ---------------------------------------------------------------------------
-describe("scope=session — Working Memory 경로", async () => {
+describe("scope=session 작업 기억 경로", async () => {
   const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
 
   it("addToWorkingMemory가 호출되고 store.insert는 호출되지 않는다", async () => {
@@ -164,10 +161,10 @@ describe("scope=session — Working Memory 경로", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. idempotencyKey 재시도 — 기존 테스트(idempotency-remember.test.js)가 DB
+// 2. idempotencyKey 재시도: 기존 테스트(idempotency-remember.test.js)가 DB
 //    hit/miss 재현은 하지만, "store.insert 미호출" 단언을 명시적으로 추가한다.
 // ---------------------------------------------------------------------------
-describe("idempotencyKey — store.insert 미호출 재확인", async () => {
+describe("idempotencyKey 재시도", async () => {
   const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
 
   it("DB hit 시 store.insert가 호출되지 않고 existing=true이다", async () => {
@@ -197,9 +194,9 @@ describe("idempotencyKey — store.insert 미호출 재확인", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. quota 초과 — QuotaExceededError 시 저장 차단
+// 3. quota 초과: QuotaExceededError 시 저장 차단
 // ---------------------------------------------------------------------------
-describe("quota 초과 — 저장 차단", async () => {
+describe("quota 초과: 저장 차단", async () => {
   const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
 
   it("quotaChecker.check throw 시 store.insert가 호출되지 않는다", async () => {
@@ -222,9 +219,9 @@ describe("quota 초과 — 저장 차단", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 4. dryRun=true — store.insert 미호출, simulated 구조 반환
+// 4. dryRun=true: store.insert 미호출, simulated 구조 반환
 // ---------------------------------------------------------------------------
-describe("dryRun=true — 실행 계획 반환", async () => {
+describe("dryRun=true: 실행 계획 반환", async () => {
   const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
 
   it("dryRun=true이면 store.insert가 호출되지 않는다", async () => {
@@ -265,9 +262,9 @@ describe("dryRun=true — 실행 계획 반환", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 5. supersedes — conflictResolver.supersede 호출 확인
+// 5. supersedes: conflictResolver.supersede 호출 확인
 // ---------------------------------------------------------------------------
-describe("supersedes — conflictResolver.supersede 호출", async () => {
+describe("supersedes: conflictResolver.supersede 호출", async () => {
   const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
 
   it("supersedes 배열의 각 id에 대해 _supersede가 호출된다", async () => {
@@ -294,15 +291,10 @@ describe("supersedes — conflictResolver.supersede 호출", async () => {
 
   it("자기 id는 supersede 대상에서 제외된다", async () => {
     const supersedeFn = mock.fn(async () => {});
-    let generatedId;
 
     const deps = buildDeps({
-      store: {
-        insert: async (f) => {
-          generatedId = f.id;
-          return f.id;
-        }
-      },
+      factoryFragment: { id: "self-id" },
+      store: { insert: async (f) => f.id },
       conflictResolver: {
         detectConflicts    : async () => [],
         autoLinkOnRemember : async () => {},
@@ -315,19 +307,18 @@ describe("supersedes — conflictResolver.supersede 호출", async () => {
       content   : "자기 참조 supersede 방지 확인",
       topic     : "test",
       type      : "fact",
-      supersedes: ["other-id"]
+      supersedes: ["self-id", "other-id"]
     });
 
-    /** 자기 id가 supersedes에 있었어도 건너뛰는지는 소스 로직상
-     *  `if (oldId === id) continue;` 라인으로 보장된다.
-     *  여기서는 other-id에 대해 정확히 1회 호출됨을 검증한다. */
-    assert.strictEqual(supersedeFn.mock.calls.length, 1);
-    assert.ok(generatedId, "파편 id가 생성되지 않았다");
+    assert.strictEqual(supersedeFn.mock.calls.length, 1, "자기 id를 뺀 other-id에 대해서만 호출된다");
+    const [oldId, newId] = supersedeFn.mock.calls[0].arguments;
+    assert.strictEqual(oldId, "other-id", "대체 대상은 other-id여야 한다");
+    assert.strictEqual(newId, "self-id",  "새 파편 id가 두 번째 인자로 전달돼야 한다");
   });
 });
 
 // ---------------------------------------------------------------------------
-// 6. validation_warnings soft gate — 결과에 validation_warnings 노출
+// 6. validation_warnings soft gate: 결과에 validation_warnings 노출
 // ---------------------------------------------------------------------------
 describe("validation_warnings soft gate", async () => {
   const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
@@ -359,9 +350,9 @@ describe("validation_warnings soft gate", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 7. validation_warnings hard gate — SymbolicPolicyViolationError throw
+// 7. validation_warnings hard gate: SymbolicPolicyViolationError throw
 // ---------------------------------------------------------------------------
-describe("hard gate — SymbolicPolicyViolationError throw", async () => {
+describe("hard gate: SymbolicPolicyViolationError throw", async () => {
   const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
   const { SymbolicPolicyViolationError } = await import("../../lib/symbolic/errors.js");
 
@@ -393,9 +384,9 @@ describe("hard gate — SymbolicPolicyViolationError throw", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 8. importance < 0.3 — ttl_tier "short" 강제 + low_importance_warning
+// 8. importance < 0.3: ttl_tier "short" 강제 + low_importance_warning
 // ---------------------------------------------------------------------------
-describe("importance < 0.3 — ttl_tier 자동 하향", async () => {
+describe("importance < 0.3: ttl_tier 자동 하향", async () => {
   const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
 
   it("importance=0.2이면 결과에 low_importance_warning이 포함된다", async () => {
@@ -437,9 +428,9 @@ describe("importance < 0.3 — ttl_tier 자동 하향", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 9. skipConflictDetection=true — detectConflicts 미호출
+// 9. skipConflictDetection=true: detectConflicts 미호출
 // ---------------------------------------------------------------------------
-describe("skipConflictDetection=true — detectConflicts 미호출", async () => {
+describe("skipConflictDetection=true: detectConflicts 미호출", async () => {
   const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
 
   it("skipConflictDetection=true이면 detectConflicts가 호출되지 않는다", async () => {
@@ -454,7 +445,7 @@ describe("skipConflictDetection=true — detectConflicts 미호출", async () =>
     const r = new MemoryRememberer(deps);
 
     const result = await r.remember({
-      content               : "reflect 내부 episode 파편 — conflict 생략",
+      content               : "reflect 내부 episode 파편: conflict 생략",
       topic                 : "reflect",
       type                  : "episode",
       skipConflictDetection : true
@@ -476,7 +467,7 @@ describe("skipConflictDetection=true — detectConflicts 미호출", async () =>
     const r = new MemoryRememberer(deps);
 
     await r.remember({
-      content: "일반 파편 — conflict 검사 정상",
+      content: "일반 파편: conflict 검사 정상",
       topic  : "test",
       type   : "fact"
     });

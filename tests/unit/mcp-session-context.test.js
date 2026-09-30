@@ -1,32 +1,18 @@
 /**
- * mcp-handler.js 특성화(characterization) 테스트
+ * MCP 핸들러 세션 값 주입과 토큰 키 도출 단위 시험
  *
  * 작성자: 최진호
- * 작성일: 2026-06-15
+ * 작성일: 2026-09-30
  *
- * 목적: handleMcpPost()를 분해하기 전에 현재 동작을 고정한다.
+ * DB, Redis, 세션 저장소에 닿지 않는 순수 함수 두 개의 분기를 단언한다.
  *
- * handleMcpPost 자체는 DB·Redis·sessions 의존성이 복잡하므로
- * 단위 테스트 가능한 순수 함수 2개를 집중 커버한다.
- *
- *  A. injectSessionContext() — 기존 mcp-keyid-injection.test.js가 없는 분기
- *     - method !== "tools/call" 이면 msg 그대로 반환
- *     - msg.params.arguments 가 falsy 이면 빈 객체를 생성한 뒤 주입
- *     - _mode 필드도 클라이언트 위조 차단 후 서버 값으로 재주입
- *
- *  B. deriveTokenKey() — 기존 session-linker-token-reuse.test.js가 없는 분기
- *     - 동일 토큰 + keyId null(master) → "master:hash" 형식
- *     - memento-access-key 헤더 + keyId null → 정상 hash 생성
- *
- *  C. _resolveMode() — 완전 미테스트 (모듈 내부 private. 순수 함수 로직을 재현 검증)
- *     - 헤더 우선 > initialize params.mode > DB default_mode > null
- *     - 알 수 없는 preset → null
- *
- * handleMcpPost 자체의 세션/SSE/auth 분기는 아래 이유로 단위테스트에서 제외:
- *   - validateStreamableSession, validateAuthentication, getSessionFromRedis,
- *     dispatchJsonRpc 등이 실 DB/Redis를 요구함
- *   - mock.module이 필요하고 --experimental-test-module-mocks 없이는 모듈 부작용
- *     으로 실패함 (제외 분기를 하단 "단위테스트 불가 분기" 주석에 문서화)
+ *  A. injectSessionContext
+ *     - method가 tools/call이 아니면 메시지를 그대로 돌려준다
+ *     - arguments가 없으면 빈 객체를 만든 뒤 주입한다
+ *     - 클라이언트가 보낸 _mode는 버리고 서버 값으로 다시 넣는다
+ *  B. deriveTokenKey
+ *     - master는 "master:hash", 키 소유자는 "keyId:hash" 형식이다
+ *     - 같은 토큰이라도 keyId가 다르면 토큰 키가 다르다
  */
 
 import { describe, it } from "node:test";
@@ -34,11 +20,7 @@ import assert from "node:assert/strict";
 
 import { injectSessionContext, deriveTokenKey } from "../../lib/handlers/mcp-handler.js";
 
-// ---------------------------------------------------------------------------
-// A. injectSessionContext()
-// ---------------------------------------------------------------------------
-
-describe("injectSessionContext — 미커버 분기 보강", () => {
+describe("injectSessionContext 세션 값 주입", () => {
 
   const BASE_CTX = {
     sessionId              : "sess-001",
@@ -104,7 +86,7 @@ describe("injectSessionContext — 미커버 분기 보강", () => {
       method : "tools/call",
       params : {
         name     : "recall",
-        arguments: { query: "test", _mode: "ATTACKER_MODE" }
+        arguments: { query: "test", _mode: "forged-mode" }
       }
     };
     const ctx = { ...BASE_CTX, sessionMode: "lite" };
@@ -158,10 +140,10 @@ describe("injectSessionContext — 미커버 분기 보강", () => {
 });
 
 // ---------------------------------------------------------------------------
-// B. deriveTokenKey() — 미커버 분기
+// B. deriveTokenKey
 // ---------------------------------------------------------------------------
 
-describe("deriveTokenKey — 미커버 분기 보강", () => {
+describe("deriveTokenKey 토큰 키 도출", () => {
 
   it("keyId가 null(master)이면 'master:hash' 형식이다", () => {
     const req = { headers: { authorization: "Bearer master-token-xyz" } };
@@ -214,94 +196,3 @@ describe("deriveTokenKey — 미커버 분기 보강", () => {
     assert.notStrictEqual(k1, k2, "keyId 다르면 tokenKey도 달라야 한다");
   });
 });
-
-// ---------------------------------------------------------------------------
-// C. _resolveMode() — private 함수이므로 로직 재현 검증
-//    실제 함수는 export 없음. 동일 로직을 재현하여 현재 우선순위 동작을 고정한다.
-// ---------------------------------------------------------------------------
-
-/**
- * _resolveMode 로직 재현.
- * 우선순위: X-Memento-Mode 헤더 > initialize params.mode > dbDefaultMode > null
- * 알 수 없는 preset 이름이면 null 반환.
- */
-function simulateResolveMode(headerMode, msgMode, dbDefaultMode, knownPresets) {
-  const presets = new Set(knownPresets || []);
-  const getPreset = (name) => presets.has(name) ? { name } : null;
-
-  if (headerMode) {
-    return getPreset(headerMode) ? headerMode : null;
-  }
-  if (msgMode) {
-    return getPreset(msgMode) ? msgMode : null;
-  }
-  if (dbDefaultMode) {
-    return getPreset(dbDefaultMode) ? dbDefaultMode : null;
-  }
-  return null;
-}
-
-describe("_resolveMode — 우선순위 재현 검증", () => {
-
-  const KNOWN = ["default", "lite", "deep"];
-
-  it("헤더가 있으면 헤더가 최우선이다", () => {
-    const mode = simulateResolveMode("lite", "deep", "default", KNOWN);
-    assert.strictEqual(mode, "lite");
-  });
-
-  it("헤더가 없으면 initialize params.mode가 차순위이다", () => {
-    const mode = simulateResolveMode(null, "deep", "default", KNOWN);
-    assert.strictEqual(mode, "deep");
-  });
-
-  it("헤더와 params.mode가 없으면 DB default_mode를 사용한다", () => {
-    const mode = simulateResolveMode(null, null, "default", KNOWN);
-    assert.strictEqual(mode, "default");
-  });
-
-  it("모두 없으면 null이다", () => {
-    const mode = simulateResolveMode(null, null, null, KNOWN);
-    assert.strictEqual(mode, null);
-  });
-
-  it("헤더 preset이 알 수 없는 이름이면 null로 폴백한다", () => {
-    const mode = simulateResolveMode("unknown-preset", "lite", "default", KNOWN);
-    assert.strictEqual(mode, null);
-  });
-
-  it("params.mode preset이 알 수 없는 이름이면 null로 폴백한다", () => {
-    const mode = simulateResolveMode(null, "bad-preset", "default", KNOWN);
-    assert.strictEqual(mode, null);
-  });
-
-  it("DB default_mode가 알 수 없는 이름이면 null로 폴백한다", () => {
-    const mode = simulateResolveMode(null, null, "bad-db-preset", KNOWN);
-    assert.strictEqual(mode, null);
-  });
-});
-
-/**
- * 단위테스트 불가로 제외한 handleMcpPost 분기 목록:
- *
- * 1. sessionId 있고 validateStreamableSession 실패 → isRecoverable 분기
- *    (validateStreamableSession이 in-memory sessions 맵 + Redis 의존)
- *
- * 2. 세션 복구 중 getSessionFromRedis keyId mismatch → 403
- *    (mcp-session-recovery.test.js의 순수 재현 방식으로 간접 커버됨)
- *
- * 3. Stale 세션 groupKeyIds 재조회 → getGroupKeyIds(DB) + saveSessionToRedis
- *    (DB pool 의존)
- *
- * 4. session.authenticated=false → requireAuthentication
- *    (auth 검증 로직은 auth.js 단위 테스트로 분리됨)
- *
- * 5. isInitializeRequest + 토큰 재사용(getSessionIdByToken + validateStreamableSession)
- *    (Redis 의존; session-linker-token-reuse.test.js에서 deriveTokenKey 층만 커버)
- *
- * 6. (제거됨) batch_remember/memory_consolidate 는 일반 tools/call 응답 경로로 통합됨
- *    — 커스텀 SSE progress 스트리밍 분기 삭제
- *
- * 7. Rate Limit 429 응답
- *    (rate-limit-headers.test.js 등에서 별도 커버)
- */
