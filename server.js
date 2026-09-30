@@ -19,6 +19,7 @@
  */
 
 import http from "http";
+import { resolveClientIp } from "./lib/http/helpers.js";
 
 /** 설정 */
 import { PORT, ACCESS_KEY, AUTH_DISABLED, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI } from "./lib/config.js";
@@ -191,7 +192,7 @@ const server = http.createServer(async (req, res) => {
 
   if ((req.method === "GET" || req.method === "POST") && url.pathname === "/authorize") {
     if (req.method === "POST") {
-      const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+      const clientIp = resolveClientIp(req);
       if (!rateLimiter.allow(clientIp)) {
         res.writeHead(429, { "Retry-After": String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)) });
         res.end(JSON.stringify({ error: "too_many_requests" }));
@@ -203,7 +204,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === "POST" && url.pathname === "/token") {
-    const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+    const clientIp = resolveClientIp(req);
     if (!rateLimiter.allow(clientIp)) {
       res.writeHead(429, { "Retry-After": String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)) });
       res.end(JSON.stringify({ error: "too_many_requests" }));
@@ -214,7 +215,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === "POST" && url.pathname === "/register") {
-    const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+    const clientIp = resolveClientIp(req);
     if (!rateLimiter.allow(clientIp)) {
       res.writeHead(429, { "Retry-After": String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)) });
       res.end(JSON.stringify({ error: "too_many_requests" }));
@@ -254,7 +255,7 @@ const server = http.createServer(async (req, res) => {
       (req.method === "POST" && url.pathname === `${ADMIN_BASE}/import`);
 
     if (isRateLimitedAdminPath) {
-      const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+      const clientIp = resolveClientIp(req);
       if (!rateLimiter.allow(clientIp)) {
         res.writeHead(429, { "Content-Type": "application/json", "Retry-After": String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)) });
         res.end(JSON.stringify({ error: "Too Many Requests" }));

@@ -22,6 +22,7 @@ mock.module("../../lib/http/helpers.js", {
     readRawBody    : mock.fn(async () => Buffer.from("")),
     readJsonBody   : mock.fn(async () => ({})),
     getClientIp    : mock.fn(() => "127.0.0.1"),
+    resolveClientIp: mock.fn(() => "127.0.0.1"),
     validateOrigin : mock.fn(() => true),
   }
 });
