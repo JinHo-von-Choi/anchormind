@@ -43,7 +43,7 @@ claude mcp list
 claude mcp get memento
 ```
 
-`claude mcp list`에 `memento`가 보이고 `Connected` 상태면 정상. 이후 Claude Code 세션을 재시작하면 16개 MCP 도구가 로드된다.
+`claude mcp list`에 `memento`가 보이고 `Connected` 상태면 정상. 이후 Claude Code 세션을 재시작하면 MCP 도구가 로드된다. 발급 API 키는 16개, 마스터 키(MEMENTO_ACCESS_KEY)는 20개다.
 
 등록 제거:
 
@@ -94,7 +94,7 @@ access key를 커밋하지 않도록 `.gitignore`에 추가하거나 환경 변�
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s -X POST http://localhost:57332/mcp -H 'Authorization: Bearer YOUR_KEY' -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"context\",\"arguments\":{}}}'"
+            "command": "curl -s -X POST http://localhost:57332/mcp -H 'Authorization: Bearer YOUR_KEY' -H 'Content-Type: application/json' -H 'mcp-session-id: ${MCP_SESSION_ID}' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"context\",\"arguments\":{}}}'"
           }
         ]
       }
@@ -103,7 +103,7 @@ access key를 커밋하지 않도록 `.gitignore`에 추가하거나 환경 변�
 }
 ```
 
-`mcp-session-id` 헤더는 생략 가능하다. 서버가 세션 ID를 자동으로 생성하여 응답 헤더에 반환한다. 특정 세션을 지정해야 하는 경우에만 직접 전달한다.
+`tools/call`에는 세션이 필요하다. `initialize` 응답의 `MCP-Session-Id` 값을 `mcp-session-id` 헤더로 보내며(예시의 `${MCP_SESSION_ID}`), 헤더가 없으면 서버가 HTTP 400(`Session required`)으로 응답한다.
 
 ### Windows PowerShell 요청 예시
 

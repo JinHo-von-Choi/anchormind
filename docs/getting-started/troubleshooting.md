@@ -160,7 +160,7 @@ v2.10.0 이하에서 `remember()` 본문의 atomic 분기가 `fragment` 변수 �
 v2.10.1 이상으로 업그레이드한다. R12 핫픽스에서 해당 TDZ가 제거됐다.
 
 ```bash
-npm update memento-mcp
+npm install anchormind-mcp@latest
 # 또는 소스 설치 시
 git pull
 npm install

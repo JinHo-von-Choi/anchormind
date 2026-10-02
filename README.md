@@ -174,12 +174,13 @@ Claude.ai Web / ChatGPT 연동은 OAuth를 사용한다. 발급한 API 키(`mmcp
 | 확산 활성화 | `recall` 시 `contextText`를 전달하면 관련 파편의 activation_score를 선제적으로 부스트하여 맥락 연관성 높은 결과 우선 반환 (SpreadingActivation). |
 | 에피소드 연속성 | `reflect` 후 생성된 episode 파편 간 `preceded_by` 엣지를 자동 생성하여 경험 흐름을 그래프로 보존 (EpisodeContinuityService). |
 | 관리 콘솔 | 기억 탐색, 지식 그래프, 통계 대시보드, API 키 그룹/상태 필터, daily-limit 인라인 편집 |
-| OAuth 연동 | RFC 7591 Dynamic Client Registration, Claude.ai / ChatGPT Web 통합 지원 |
+| OAuth 연동 | RFC 7591 Dynamic Client Registration, Claude.ai / ChatGPT Web 통합 지원. 같은 토큰으로 재연결한 클라이언트는 새 세션 대신 기존 활성 세션을 이어 쓴다. |
 | Workspace 격리 | 같은 키 내에서도 프로젝트·직종·클라이언트 단위로 기억을 분리. 명시 workspace 또는 `api_keys.default_workspace`를 적용하고, 둘 다 없으면 전역(NULL)만 조회. 전체 조회는 master의 `allWorkspaces=true`만 허용. |
 | 배치 처리 | `batch_remember`는 multi-row 단일 INSERT(256KB 또는 500행 chunk) + 비동기 큐 워커(BatchRememberWorker)로 임베딩·후처리를 논블로킹 실행. `async: true` 시 ack·재시도(최대 3회)·dead-letter·기동 복구(RPOPLPUSH reliable queue)로 at-least-once 처리 보장. `batch_status(jobId)` 도구로 처리 상태(queued/processing/completed/dead) 조회 가능. 항상 표준 단일 JSON-RPC 응답 반환(`stream` deprecated). `reflect`는 5카테고리를 단일 배치 호출로 위임. EmbeddingWorker는 큐 묶음을 generateBatchEmbeddings + multi-row UPDATE로 처리. |
 | Consistency Gate | `fragments.morpheme_indexed` 컬럼으로 형태소 인덱스 완료 여부 추적. 미완료 파편은 L3 형태소 검색 경로에서 자동 제외. |
 | Mode preset | `recall-only` / `write-only` / `onboarding` / `audit` JSON preset. `X-Memento-Mode` 헤더 또는 `api_keys.default_mode`로 도구 노출 범위 제한. |
 | Affective tagging | `fragments.affect` 컬럼(neutral / frustration / confidence / surprise / doubt / satisfaction). remember / recall 시 감정 레이블로 필터링. |
+| Recall 제안 | `recall` 응답의 `_meta.suggestion`이 반복 질의, 맥락 없는 빈 결과, 예산 없는 과대 limit, 유형 미지정 잡음 질의를 표시한다. 클라이언트는 무시해도 된다. |
 | 로컬 임베딩 | `EMBEDDING_PROVIDER=transformers`로 외부 API 없이 `@huggingface/transformers` 파이프라인 기반 임베딩(`Xenova/multilingual-e5-small`, 384d 기본). |
 | 마이그레이션 lint | `npm run lint:migrations`로 신규 마이그레이션 파일의 번호 충돌·규약 위반을 커밋 전 자동 검사. |
 
@@ -217,7 +218,7 @@ memento-mcp recall "query" --format table --limit 5
 memento-mcp remember "내용" --topic 프로젝트명 --idempotency-key k1
 ```
 
-`--format table|json|csv` 출력 형식 선택, 14개 서브명령에 `--help`/`-h` 지원. 자세한 플래그는 [docs/cli.md](docs/cli.md).
+`--format table|json|csv` 출력 형식 선택, 16개 서브명령에 `--help`/`-h` 지원. 자세한 플래그는 [docs/cli.md](docs/cli.md).
 
 ## API 응답 메타
 
@@ -244,7 +245,7 @@ memento-mcp remember "내용" --topic 프로젝트명 --idempotency-key k1
 
 `remember` / `amend` / `forget`의 성공 응답에는 일정 확률로 `_meta.hints`에 `feedback_sampled` 신호가 실린다. 힌트의 `args`를 그대로 `tool_feedback`에 전달해 결과를 평가하면 된다(`MEMENTO_FEEDBACK_SAMPLING=false`로 비활성화).
 
-`remember` / `link` / `forget` / `amend`는 `dryRun: true` 파라미터로 부작용 없이 예상 결과만 반환한다. 모든 응답에 `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Resource` 헤더가 포함되며 master key 또는 limit=null 설정 시 헤더를 생략한다. `recall`은 `fields` 배열로 반환 필드를 17개 화이트리스트 범위로 제한할 수 있다. `remember` / `batchRemember`는 `idempotencyKey` 파라미터로 같은 key_id 범위 내 중복 저장을 방지한다(최대 128자). `remember` / `batchRemember` 항목 / `amend`의 `content`는 4000자를 초과하면 JSON-RPC -32602 에러로 거부된다. 위 파편 유형별 저장 절삭(1000자/300자)과는 별개로 그보다 앞단에서 적용되는 수신 게이트이며, `batchRemember`는 초과 항목만 실패 처리하고 나머지 배치는 그대로 진행한다.
+`remember` / `link` / `forget` / `amend`는 `dryRun: true` 파라미터로 부작용 없이 예상 결과만 반환한다. API 키 세션의 `POST /mcp` 응답에는 `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Resource: fragments` 헤더가 붙는다(파편 할당량 기준). master key이거나 할당량이 null이면 생략한다. `recall`은 `fields` 배열로 반환 필드를 19개 화이트리스트 범위로 제한할 수 있다. `remember` / `batchRemember`는 `idempotencyKey` 파라미터로 같은 key_id 범위 내 중복 저장을 방지한다(최대 128자). `remember` / `batchRemember` 항목 / `amend`의 `content`는 4000자를 초과하면 JSON-RPC -32602 에러로 거부된다. 위 파편 유형별 저장 절삭(1000자/300자)과는 별개로 그보다 앞단에서 적용되는 수신 게이트이며, `batchRemember`는 초과 항목만 실패 처리하고 나머지 배치는 그대로 진행한다.
 
 ## 보안
 
@@ -253,6 +254,7 @@ memento-mcp remember "내용" --topic 프로젝트명 --idempotency-key k1
 - injectSessionContext: 클라이언트가 전송한 `_keyId` / `_permissions` 등 내부 필드를 서버 인증 결과로 재주입하여 세션 컨텍스트 위조 차단.
 - Admin rate limit: `/auth`, `/keys` POST, `/import` POST에 IP 기반 rate limit.
 - OpenAPI: `GET /openapi.json` 엔드포인트(`ENABLE_OPENAPI=true`). master key는 전체 경로, API key는 permissions 필터 스펙 반환.
+- 응답 공통 헤더: 모든 응답에 `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`를 붙인다. `MEMENTO_FRAME_OPTIONS=deny`이면 `X-Frame-Options: DENY`도 붙인다. HSTS는 TLS를 종단하는 리버스 프록시에서 설정한다.
 
 ## Symbolic Verification Layer
 
@@ -351,7 +353,7 @@ docs/
 - Rate Limiting: API 키당 100/분, IP당 30/분. 환경변수로 조정 가능.
 - 워커 복구: 임베딩/평가 워커가 에러 시 지수 백오프(1s→60s)로 자동 재시도.
 - Graceful Shutdown: SIGTERM 시 진행 중 워커 완료 대기(30초) 후 세션 auto-reflect 실행.
-- OAuth 엔드포인트: 인증 실패 시 `WWW-Authenticate` 헤더를 반환하여 OAuth 클라이언트가 자동으로 인증 흐름을 시작할 수 있다. 세션 TTL 기본값은 240분이다.
+- OAuth 엔드포인트: 인증 실패 시 `WWW-Authenticate` 헤더를 반환하여 OAuth 클라이언트가 자동으로 인증 흐름을 시작할 수 있다. 세션 TTL 기본값은 43200분(30일)이며 `SESSION_TTL_MINUTES`로 조정한다.
 - 마이그레이션 lint: `npm run lint:migrations`로 번호 충돌 및 규약 위반을 커밋 전 검사.
 - 운영 가이드: [docs/operations/](docs/operations/) — LLM provider 체인, symbolic hard gate, agent worktree, upstream porting 등.
 - 외부 노출 점검: `docs/operations/maintenance.md`의 "외부 노출 점검" 절차로 listen 주소, 인증 키, Origin allowlist 상태를 확인.
@@ -361,8 +363,8 @@ docs/
 - L1 Redis 인덱스는 API 키 단위지만, Hot Cache/Working Memory hydration에서 effective agent 범위를 재검증한다. agent metadata가 없는 구형 캐시 항목은 fail-closed로 제외된다.
 - 자동 품질 평가는 decision, preference, relation 유형만 대상이다. fact, procedure, error는 평가 큐에서 제외된다.
 - MEMENTO_ACCESS_KEY를 설정하지 않으면 서버가 기동하지 않는다. 인증 없이 운용하려면 MEMENTO_AUTH_DISABLED=true를 함께 명시해야 한다.
-- ALLOWED_ORIGINS — 브라우저 기반 MCP 클라이언트 화이트리스트. 미설정 시 모든 Origin을 허용한다.
-  외부 노출 환경에서는 `MCP_STRICT_ORIGIN=true`와 함께 실제 사용하는 브라우저 Origin만 등록할 것.
+- ALLOWED_ORIGINS: 브라우저 기반 MCP 클라이언트 화이트리스트. 미설정 시 모든 Origin의 요청을 받으며, 교차 출처 응답 헤더는 `MEMENTO_CORS_MODE`(기본 `observe`: 요청 Origin을 돌려주고 처음 본 Origin을 로그에 남김, `reflect`, `allowlist`: `OAUTH_TRUSTED_ORIGINS`만)에 따른다. 설정하면 목록 밖 Origin을 가진 요청은 403으로 끝난다.
+  외부 노출 환경에서는 실제 사용하는 브라우저 Origin만 등록하고, `/mcp`까지 신뢰 도메인으로 좁히려면 `MCP_STRICT_ORIGIN=true`를 함께 쓴다.
   데스크탑/CLI/IDE 확장(Claude Code, Cursor, Windsurf, Continue, Cline, Zed, gemini CLI 등)은
   Origin 헤더를 보내지 않으므로 화이트리스트 불필요.
   브라우저 후보: claude.ai, claude.com, chatgpt.com, chat.openai.com, copilot.microsoft.com,
@@ -374,6 +376,9 @@ docs/
   직접 노출 시 0, 단일 프록시 뒤에서는 1.
 - OAUTH_TRUSTED_ORIGINS — 동의 자동 승인 대상 origin 화이트리스트. 동일 origin에서 여러 앱을 호스팅하면
   OAUTH_ALLOWED_REDIRECT_URIS의 전체 URI 매칭 사용을 권장.
+- MEMENTO_SSE_QUERY_KEY: Legacy SSE의 `?accessKey=` 쿼리 키 처리. 기본 `allow`는 master 키에 한해 받고, `deny`는 받지 않고 401로 `Authorization` 헤더 사용을 안내한다.
+- MEMENTO_OAUTH_REDIRECT_CHECK: `/authorize` 오류 응답의 리다이렉트 대상 확인. 기본 `warn`은 등록되지 않은 `redirect_uri`로도 이동시키고 경고를 남기며, `enforce`는 400 JSON으로 응답한다.
+- MEMENTO_FRAME_OPTIONS: `deny`일 때만 `X-Frame-Options: DENY`를 붙인다.
 
 ## 기술 스택
 
@@ -382,7 +387,7 @@ docs/
 - Redis 6+ (선택)
 - OpenAI Embedding API (선택) 또는 `EMBEDDING_PROVIDER=transformers` (로컬 저비용 모드)
 - garu-ko / natural PorterStemmer / @node-rs/jieba / kuromoji (로컬 형태소 분석, 언어별 CPU 라우팅; `MEMENTO_MORPHEME_TOKENIZER=local` 기본)
-- Gemini CLI / Codex CLI / GitHub Copilot CLI (품질 평가, 자동 reflect; 선택, LLM_PRIMARY / LLM_FALLBACKS로 체인 구성)
+- LLM provider 18종(CLI: gemini-cli, agy-cli, codex-cli, copilot-cli, qwen-cli, opencode-cli / HTTP: openai, anthropic, gemini, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai). 품질 평가, 자동 reflect 등에 선택 사용하며 LLM_PRIMARY / LLM_FALLBACKS로 체인을 구성한다(기본 `gemini-cli`).
 - @huggingface/transformers + ONNX Runtime (NLI 모순 분류 + 로컬 임베딩, CPU 전용)
 - MCP Protocol 2025-11-25
 

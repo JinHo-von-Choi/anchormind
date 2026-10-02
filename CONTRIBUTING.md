@@ -41,7 +41,7 @@ docker build -t memento-mcp .
 - MemoryRememberer: `remember` / `batchRemember`
 - MemoryRecaller: `recall` / `context`
 - MemoryReflector: `reflect`
-- MemoryLinker: `link` / `graph_explore`
+- MemoryLinker: `link`, `deleteByAgent` (`graph_explore`는 `lib/tools/memory.js`의 `tool_graphExplore`가 처리)
 
 facade와 프로세서 간 공유 프로퍼티(embedder, fragmentStore 등)는 `_installSharedSync` 패턴으로 동기화된다. 외부에서 facade의 세터를 호출하면 모든 프로세서에 자동 전파되므로 외부 인터페이스는 변경이 없다.
 
@@ -77,12 +77,12 @@ after(async () => {
 - prom-client default metrics는 `MEMENTO_METRICS_DEFAULT=off`로 무력화된다.
   `npm test` 스크립트가 이 환경변수를 자동 주입한다.
   단일 파일 실행 시에도 `MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test tests/unit/<file>.test.js`로 실행한다.
-- 회귀 가드: `tests/unit/test-lifecycle-guard.test.js` 5 케이스가 헬퍼 동작을 검증한다.
+- 회귀 가드: `tests/unit/test-lifecycle-guard.test.js` 4 케이스가 헬퍼 동작을 검증한다.
 - 상세 내용: `tests/README.md` §Lifecycle 가드 참조
 
 ## Pull Request Checklist
 
-- [ ] `npm run test:ci` passes (`npm test && npm run test:integration`) — CI single gate
+- [ ] `npm test` passes; with PostgreSQL available, `npm run test:integration` (integration + e2e) passes. CI runs these as separate jobs in `.github/workflows/test.yml`
 - [ ] `npx eslint . --max-warnings 0` passes
 - [ ] New migration file if DB schema changed; run `npm run lint:migrations` to verify body-only convention (see `docs/migration-conventions.md`)
 - [ ] `docs/features.md` ledger updated for any new or removed feature
@@ -93,5 +93,4 @@ after(async () => {
 
 ## Commit Messages
 
-Format: `type: description`
-Types: feat, fix, docs, chore, refactor, test
+Format: `[영역] 설명` (예: `[HTTP] 응답 공통 헤더 추가`, `[문서] 연결 설정 안내 현행화`)

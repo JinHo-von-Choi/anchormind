@@ -29,6 +29,7 @@ AnchorMind 서버는 AI 에이전트의 세션 간 장기 기억을 파편(Fragm
   - `LLM_CONCURRENCY_ENABLED=true|false` (기본 true, kill switch)
   - `LLM_CONCURRENCY_WAIT_MS=30000` (슬롯 대기 타임아웃 ms)
   - `LLM_CONCURRENCY` (JSON, chainKey 또는 provider name 기준 오버라이드)
+  - `MEMENTO_LLM_CLI_ENV_PASSTHROUGH` (쉼표 구분, 기본 없음): CLI provider 자식 프로세스는 기본 변수(PATH, HOME, 프록시, 인증서 등)와 CLI별 인증 변수만 받는다. 추가로 넘길 변수 이름을 여기에 적는다.
 - 메트릭: `memento_llm_provider_concurrency_active{provider}`, `memento_llm_provider_concurrency_wait_ms{provider}`, `memento_llm_provider_429_total{provider}`
 
 ### `_meta` 응답 필드 사용 의무
@@ -337,7 +338,7 @@ tools/list 응답이 mode의 excluded_tools 필터링 후 반환된다. get_skil
 
 #### Tool 메타 레지스트리
 
-tools/list 응답의 각 도구에 `meta` 필드가 포함된다.
+서버의 도구 레지스트리(`lib/tool-registry.js`)는 각 도구에 다음 `meta`를 두며 권한 판정에 쓴다. tools/list 응답 항목은 `name`, `title`, `annotations`, `description`, `inputSchema`로 구성되고 `meta`는 포함하지 않는다.
 
 - `capabilities`: `["memory:read" | "memory:write" | "memory:destructive" | "analytics:read" | "admin"]`
 - `riskLevel`: `"safe"` | `"caution"` | `"destructive"`
@@ -345,7 +346,7 @@ tools/list 응답의 각 도구에 `meta` 필드가 포함된다.
 - `beta`: boolean
 - `idempotent`: boolean
 
-클라이언트가 확인 프롬프트/감사 로그/권한 UI 구성 시 참조한다. `riskLevel=destructive` 도구는 사용자 확인을 권장한다.
+클라이언트는 `annotations`(`readOnlyHint`, `destructiveHint` 등)를 확인 프롬프트와 권한 UI 구성에 참조한다. `riskLevel=destructive` 도구는 사용자 확인을 권장한다.
 
 #### LLM Provider 체인 확장
 
@@ -396,11 +397,11 @@ Symbolic Verification Layer는 확률론적 검색 파이프라인 위에 추가
 
 ### OAuth
 
-- Silent consent 폐기: 모든 `/oauth/authorize` 요청은 사용자 동의 화면(consent screen)을 반드시 경유한다. 자동 승인(auto-approve) 로직에 의존하는 클라이언트는 consent 화면 처리를 추가해야 한다.
+- 동의 화면: `GET /authorize`는 `redirect_uri`가 localhost이거나 `OAUTH_ALLOWED_REDIRECT_URIS` 또는 `OAUTH_TRUSTED_ORIGINS`에 맞으면 동의 화면 없이 바로 인가 코드를 발급하고, 그 밖의 클라이언트에는 동의 화면을 보여 준다. 오류 응답의 리다이렉트 대상 확인은 `MEMENTO_OAUTH_REDIRECT_CHECK`(기본 `warn`, `enforce`면 미등록 대상에 400)로 정한다.
 
 ### RBAC
 
-- Default-deny 정책 적용: 도구 맵에 등록되지 않은 도구를 호출하면 `"Access denied: tool not permitted"` 오류가 반환된다. 커스텀 도구를 사용하는 경우 `RBAC_TOOL_MAP`에 명시적으로 등록해야 한다.
+- Default-deny: 등록되지 않은 도구 이름은 `Unknown tool: <name>`(-32601)으로 거부된다. `lib/rbac.js`의 `TOOL_PERMISSIONS`에 없는 도구는 권한과 무관하게 `Permission denied`(-32001)로 거부되므로, 도구를 추가할 때 `TOOL_PERMISSIONS`에 등록한다.
 
 ### 환경변수 주요 목록
 
@@ -410,12 +411,17 @@ Symbolic Verification Layer는 확률론적 검색 파이프라인 위에 추가
 | `MEMENTO_AUTH_DISABLED` | boolean | `false` | `true` 설정 시 인증을 비활성화한다. 개발 전용. |
 | `ALLOWED_ORIGINS` | string | (없음) | CORS 허용 오리진 목록 (쉼표 구분). 미설정 시 모든 Origin에 응답하며 방식은 `MEMENTO_CORS_MODE`로 정한다. |
 | `ENABLE_OPENAPI` | boolean | `false` | `true` 설정 시 `/openapi.json` 엔드포인트 활성화. |
-| `OAUTH_TOKEN_TTL_SECONDS` | number | `2592000` | OAuth access token 유효 시간 (초). `SESSION_TTL_MINUTES * 60`으로 산출. 기본값 30일. |
-| `OAUTH_REFRESH_TTL_SECONDS` | number | `604800` | OAuth refresh token 유효 시간 (초). |
+| `SESSION_TTL_MINUTES` | number | `43200` | 세션 TTL(분). OAuth access token 유효 시간도 이 값 × 60초로 산출된다(기본 30일). refresh token 유효 시간은 그 두 배(기본 60일)다. |
 | `MEMENTO_REMEMBER_ATOMIC` | boolean | `false` | `true` 시 remember()의 quota check + INSERT를 단일 트랜잭션으로 원자화(TOCTOU 완전 차단). 동시 요청이 드문 환경에서는 기본값 유지. |
 | `MEMENTO_CASE_BACKPROP_ENABLED` | boolean | `false` | `true` 시 case verification 이벤트마다 증거 파편 importance를 자동 역전파(CaseRewardBackprop). 비활성 시 no-op. |
 | `MEMENTO_STORAGE` | string | `pgvector` | storage 어댑터 선택. `pgvector`(기본, PgVectorStore) 또는 `sqlite-vec`(SqliteVecStore). |
 | `MIGRATION_LINT_FROM` | string | (없음) | `npm run lint:migrations` cutoff override. 지정 마이그레이션 번호 이후만 검사. |
+| `TRUST_PROXY_HOPS` | number | (없음) | 신뢰하는 리버스 프록시 hop 수. 미설정 시 `X-Forwarded-For` 첫 항목, `0`이면 소켓 주소, N이면 체인 오른쪽에서 N번째 항목을 클라이언트 주소로 쓴다. |
+| `MEMENTO_CORS_MODE` | string | `observe` | `ALLOWED_ORIGINS` 미설정 시 교차 출처 응답 방식(`observe`, `reflect`, `allowlist`). |
+| `MEMENTO_FRAME_OPTIONS` | string | (없음) | `deny`일 때만 `X-Frame-Options: DENY`를 붙인다. |
+| `MEMENTO_OAUTH_REDIRECT_CHECK` | string | `warn` | `/authorize` 오류 응답의 리다이렉트 대상 확인(`warn`, `enforce`). |
+| `MEMENTO_SSE_QUERY_KEY` | string | `allow` | Legacy SSE `?accessKey=` 처리(`allow`: master 키만, `deny`: 401). |
+| `MEMENTO_TOOL_ARGS_VALIDATION` | string | `warn` | tools/call 인자 inputSchema 점검 모드(`off`, `warn`, `enforce`: 위반 시 -32602). |
 
 ---
 
@@ -815,7 +821,7 @@ Codex Desktop 등 일부 MCP 클라이언트는 도구를 deferred/lazy 로딩�
 
 ## 도구 레퍼런스 (20개)
 
-RBAC default-deny: 도구 맵에 등록되지 않은 도구를 호출하면 `"Access denied: tool not permitted"` 오류가 반환된다. 서버 관리자가 허용 도구 목록(`RBAC_TOOL_MAP`)을 명시적으로 관리한다.
+RBAC default-deny: 등록되지 않은 도구 이름은 `Unknown tool: <name>`(-32601)으로, `TOOL_PERMISSIONS`에 없는 도구는 `Permission denied`(-32001)로 거부된다.
 
 ### remember
 
@@ -1185,9 +1191,11 @@ snake_case 파라미터에는 camelCase alias가 있다: `eventType`, `entityKey
 | step | string | O | 실행할 단계: `fetch` / `install` / `migrate` |
 | dryRun | boolean | - | true(기본)면 명령어 미리보기만. false면 실제 실행. |
 
+git 설치본에서 `UPDATE_REQUIRE_SIGNED_TAG=true`(기본 `false`)이면 `install` 단계가 checkout 앞에 `git verify-tag <대상 태그>`를 실행하고, 확인에 실패하면 업데이트를 중단한다.
+
 ## 자동 백그라운드 동작
 
-다음 3개 기능은 별도 도구 호출 없이 자동으로 동작한다.
+다음 3개 기능은 별도 도구 호출 없이 동작한다. CaseRewardBackprop은 설정으로 켜야 한다.
 
 ### ProactiveRecall
 - **트리거**: 모든 `remember()` 호출 직후
@@ -1202,6 +1210,7 @@ snake_case 파라미터에는 camelCase alias가 있다: `eventType`, `entityKey
   - verification_failed: importance -0.10
 - **영향**: 검증된 파편의 recall 우선순위가 자동 조정됨
 - **범위**: importance [0.0, 1.0] clamp
+- **제어**: `MEMENTO_CASE_BACKPROP_ENABLED=true`일 때만 동작한다(기본 `false`, 비활성 시 no-op).
 
 ### SearchParamAdaptor
 - **트리거**: 모든 `recall()` / 검색 호출 시

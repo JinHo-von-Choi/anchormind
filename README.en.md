@@ -180,7 +180,7 @@ See [integration guides](docs/getting-started/) for platform-specific setup.
 | Consistency Gate | The `fragments.morpheme_indexed` column tracks whether morpheme indexing has completed. Fragments not yet indexed are automatically excluded from the L3 morpheme search path. |
 | Mode preset | `recall-only` / `write-only` / `onboarding` / `audit` JSON presets. The `X-Memento-Mode` header or `api_keys.default_mode` restricts which tools are exposed. |
 | Affective tagging | `fragments.affect` column (neutral / frustration / confidence / surprise / doubt / satisfaction). Filter remember / recall results by emotional label. |
-| Recall suggestions | `recall` responses carry a `_meta.suggestion` field that flags repeat queries, empty results with no context, oversized limits with no budget, and noisy untyped queries — a non-invasive hint clients are free to ignore. |
+| Recall suggestions | `recall` responses carry a `_meta.suggestion` field that flags repeat queries, empty results with no context, oversized limits with no budget, and noisy untyped queries. Clients are free to ignore it. |
 | Local embedding | `EMBEDDING_PROVIDER=transformers` runs `@huggingface/transformers` pipeline-based embeddings without an external API call (`Xenova/multilingual-e5-small`, 384d by default). |
 | Migration lint | `npm run lint:migrations` checks new migration files for numbering conflicts and convention violations before commit. |
 
@@ -216,7 +216,7 @@ memento-mcp recall "query" --format table --limit 5
 memento-mcp remember "content" --topic project --idempotency-key k1
 ```
 
-`--format table|json|csv` selects the output format; all 14 subcommands support `--help` / `-h`. See [docs/cli.md](docs/cli.md) for the full flag reference.
+`--format table|json|csv` selects the output format; all 16 subcommands support `--help` / `-h`. See [docs/cli.md](docs/cli.md) for the full flag reference.
 
 ## API Response Meta
 
@@ -243,7 +243,7 @@ memento-mcp remember "content" --topic project --idempotency-key k1
 
 Successful `remember` / `amend` / `forget` responses carry a `feedback_sampled` signal in `_meta.hints` with a fixed probability. Pass the hint's `args` straight into `tool_feedback` to rate the result (disable with `MEMENTO_FEEDBACK_SAMPLING=false`).
 
-`remember` / `link` / `forget` / `amend` accept a `dryRun: true` parameter that returns the expected result with no side effects. All responses carry `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Resource` headers, omitted for the master key or when limit is null. `recall` accepts a `fields` array that restricts the returned fields to a whitelist of 17. `remember` / `batchRemember` accept an `idempotencyKey` parameter (max 128 chars) that prevents duplicate storage within the same key_id scope. `content` on `remember`, `batchRemember` items, and `amend` is rejected with a JSON-RPC -32602 error once it exceeds 4000 characters — a reception-side gate ahead of the per-type storage truncation (1000/300 chars) described above; `batchRemember` fails only the offending item and continues processing the rest of the batch.
+`remember` / `link` / `forget` / `amend` accept a `dryRun: true` parameter that returns the expected result with no side effects. `POST /mcp` responses for API-key sessions carry `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Resource: fragments` headers (fragment quota); they are omitted for the master key or when the quota is null. `recall` accepts a `fields` array that restricts the returned fields to a whitelist of 19. `remember` / `batchRemember` accept an `idempotencyKey` parameter (max 128 chars) that prevents duplicate storage within the same key_id scope. `content` on `remember`, `batchRemember` items, and `amend` is rejected with a JSON-RPC -32602 error once it exceeds 4000 characters. This reception gate runs ahead of the per-type storage truncation (1000/300 chars) described above, and `batchRemember` fails only the offending item and continues processing the rest of the batch.
 
 ## Security
 
@@ -252,6 +252,7 @@ Successful `remember` / `amend` / `forget` responses carry a `feedback_sampled` 
 - injectSessionContext: Client-supplied internal fields (`_keyId` / `_permissions`, etc.) are stripped and re-injected from the server-side authentication result, so session context cannot be forged.
 - Admin rate limit: IP-based rate limits apply to `/auth`, `/keys` POST, and `/import` POST.
 - OpenAPI: `GET /openapi.json` endpoint (`ENABLE_OPENAPI=true`). The master key receives the full spec; an API key receives a permissions-filtered spec.
+- Common response headers: every response carries `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`; `MEMENTO_FRAME_OPTIONS=deny` adds `X-Frame-Options: DENY`. HSTS belongs to the TLS-terminating reverse proxy.
 
 ## Symbolic Verification Layer
 
@@ -314,9 +315,10 @@ AnchorMind is optimized for fact caching. When narrative context matters:
 | [Architecture](docs/architecture.en.md) | System design, DB schema, 3-tier search, TTL |
 | [Configuration](docs/configuration.en.md) | Environment variables, MEMORY_CONFIG, embedding providers |
 | [API Reference](docs/api-reference.en.md) | HTTP endpoints, prompts, resources |
-| [CLI](docs/cli.en.md) | 9 terminal commands |
+| [CLI](docs/cli.en.md) | Terminal commands |
 | [Internals](docs/internals.en.md) | Evaluator, consolidator, contradiction detection |
 | [Benchmark](docs/benchmark.en.md) | Full LongMemEval-S benchmark analysis |
+| [Features](docs/features.md) | Module ledger, experimental flags, ENV mapping (Korean) |
 | [SKILL.md](SKILL.md) | Full MCP tool reference |
 | [INSTALL.md](docs/INSTALL.en.md) | Migrations, hook setup, detailed installation |
 | [CHANGELOG](CHANGELOG.md) | Version history |
@@ -327,24 +329,30 @@ AnchorMind is optimized for fact caching. When narrative context matters:
 - Rate Limiting: 100/min per API key, 30/min per IP. Configurable via environment variables.
 - Worker Recovery: Embedding/evaluator workers use exponential backoff (1s→60s) on errors.
 - Graceful Shutdown: On SIGTERM, waits up to 30s for workers to drain, then runs session auto-reflect.
-- OAuth Endpoints: On authentication failure, a `WWW-Authenticate` header is returned so OAuth clients can automatically initiate the auth flow. Session TTL defaults to 240 minutes.
+- OAuth Endpoints: On authentication failure, a `WWW-Authenticate` header is returned so OAuth clients can automatically initiate the auth flow. Session TTL defaults to 43200 minutes (30 days) and is set with `SESSION_TTL_MINUTES`.
+- Migration lint: `npm run lint:migrations` checks numbering conflicts and convention violations before commit.
+- Operations guides: [docs/operations/](docs/operations/) covers the LLM provider chain, symbolic hard gate, agent worktree, upstream porting and more.
+- External access check: follow the "외부 노출 점검" procedure in `docs/operations/maintenance.md` to verify the listen address, access key, and Origin allowlist state.
 
 ## Known Limitations
 
-- L1 Redis cache supports API key-based isolation only. Agent-level isolation in multi-agent deployments is enforced at L2/L3.
+- The L1 Redis index is keyed per API key, but Hot Cache and Working Memory hydration re-validate the effective agent scope. Legacy cache entries without agent metadata are excluded (fail-closed).
 - Automatic quality evaluation targets decision, preference, and relation types only. fact, procedure, and error types are excluded from the evaluation queue.
 - The server refuses to start when MEMENTO_ACCESS_KEY is not set. To run without authentication you must also set MEMENTO_AUTH_DISABLED=true.
-- ALLOWED_ORIGINS — Whitelist for browser-based MCP clients. When unset, only same-origin requests pass.
+- ALLOWED_ORIGINS: Whitelist for browser-based MCP clients. When unset, requests from every Origin are accepted and the cross-origin response header follows `MEMENTO_CORS_MODE` (default `observe`: echoes the request Origin and logs each newly seen Origin once; `reflect`; `allowlist`: only `OAUTH_TRUSTED_ORIGINS`). When set, requests with an Origin outside the list end with 403. On externally reachable deployments register only the browser Origins you actually use, and add `MCP_STRICT_ORIGIN=true` to narrow `/mcp` to trusted domains.
   Desktop/CLI/IDE clients (Claude Code, Cursor, Windsurf, Continue, Cline, Zed, gemini CLI, etc.)
   do not send Origin headers and need no whitelist entry.
   Browser candidates: claude.ai, claude.com, chatgpt.com, chat.openai.com, copilot.microsoft.com,
   gemini.google.com, aistudio.google.com, www.perplexity.ai, cursor.com, codeium.com,
   windsurf.com, sourcegraph.com, typingmind.com (enable only the clients you actually use).
-- ADMIN_ALLOWED_ORIGINS — Whitelist for Admin UI origins. When unset, only same-origin requests pass.
+- ADMIN_ALLOWED_ORIGINS: Whitelist for Admin UI origins. When unset, every Origin is accepted. On externally reachable deployments list the admin console Origin explicitly or restrict access at the reverse proxy or firewall.
 - TRUST_PROXY_HOPS — Trusted reverse-proxy hop count. When unset, retains legacy behavior
   (first XFF entry). Set 0 for direct exposure, 1 behind a single proxy.
 - OAUTH_TRUSTED_ORIGINS — Whitelist of origins for automatic consent. When hosting multiple apps
   on the same origin, prefer OAUTH_ALLOWED_REDIRECT_URIS for full URI matching.
+- MEMENTO_SSE_QUERY_KEY: Legacy SSE `?accessKey=` handling. Default `allow` accepts it for the master key only; `deny` rejects it with 401 pointing to the `Authorization` header.
+- MEMENTO_OAUTH_REDIRECT_CHECK: Redirect target check for `/authorize` error responses. Default `warn` still redirects to an unregistered `redirect_uri` and logs a warning; `enforce` answers with 400 JSON.
+- MEMENTO_FRAME_OPTIONS: Adds `X-Frame-Options: DENY` only when set to `deny`.
 
 ## Tech Stack
 
@@ -353,7 +361,7 @@ AnchorMind is optimized for fact caching. When narrative context matters:
 - Redis 6+ (optional)
 - OpenAI Embedding API (optional) or `EMBEDDING_PROVIDER=transformers` (local zero-cost mode)
 - garu-ko / natural PorterStemmer / @node-rs/jieba / kuromoji (local morpheme analysis, per-language CPU routing; default `MEMENTO_MORPHEME_TOKENIZER=local`)
-- Gemini CLI / Codex CLI / GitHub Copilot CLI (quality evaluation, auto-reflect; optional, chain-configurable via LLM_PRIMARY / LLM_FALLBACKS)
+- 18 LLM providers (CLI: gemini-cli, agy-cli, codex-cli, copilot-cli, qwen-cli, opencode-cli / HTTP: openai, anthropic, gemini, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai), optional, used for quality evaluation and auto-reflect; chain-configurable via LLM_PRIMARY / LLM_FALLBACKS (default `gemini-cli`)
 - @huggingface/transformers + ONNX Runtime (NLI contradiction classification + local embeddings, CPU-only)
 - MCP Protocol 2025-11-25
 
