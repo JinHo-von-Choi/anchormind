@@ -13,9 +13,9 @@
     "lib/cli/recall.js": 25,
     "lib/cli/remember.js": 39,
     "lib/handlers/health-handler.js": 28,
-    "lib/handlers/mcp-handler.js": 91,
-    "lib/handlers/oauth-handler.js": 50,
-    "lib/handlers/sse-handler.js": 28,
+    "lib/handlers/mcp-handler.js": 89,
+    "lib/handlers/oauth-handler.js": 29,
+    "lib/handlers/sse-handler.js": 25,
     "lib/jsonrpc.js": 98,
     "lib/llm/index.js": 37,
     "lib/llm/registry.js": 24,
@@ -51,7 +51,7 @@
   },
   "max-lines-per-function": {
     "lib/admin/admin-logs.js": 162,
-    "lib/admin/admin-routes.js": 160,
+    "lib/admin/admin-routes.js": 157,
     "lib/admin/admin-sessions.js": 188,
     "lib/cli/inspect.js": 142,
     "lib/cli/stats.js": 128,
@@ -69,7 +69,7 @@
   "max-lines": {
     "lib/memory/consolidate/MemoryConsolidator.js": 845,
     "lib/memory/read/FragmentSearch.js": 885,
-    "lib/tools/memory-schemas.js": 1332
+    "lib/tools/memory-schemas.js": 1322
   },
   "max-depth": {
     "lib/llm/util/retry-hints.js": 6,
@@ -97,7 +97,7 @@
     "lib/llm/util/retry-hints.js": 1,
     "lib/memory/FragmentIndex.js": 9,
     "lib/memory/QuotaChecker.js": 1,
-    "lib/memory/consolidate/ConsolidatorGC.js": 6,
+    "lib/memory/consolidate/ConsolidatorGC.js": 2,
     "lib/memory/consolidate/MemoryConsolidator.js": 1,
     "lib/memory/consolidate/proper-nouns.js": 2,
     "lib/memory/embedding/EmbeddingCache.js": 2,
@@ -126,7 +126,6 @@
     "lib/oauth.js": 3,
     "lib/redis.js": 1,
     "lib/sessions.js": 10,
-    "lib/storage/PgVectorStore.js": 1,
     "lib/symbolic/rules/v1/proactive-gate.js": 1,
     "lib/tools/db.js": 2,
     "lib/tools/memory.js": 13,
@@ -138,12 +137,11 @@
     "scripts/check-embedding-consistency.js": 3,
     "scripts/migrate.js": 2,
     "scripts/post-migrate-flexible-embedding-dims.js": 1,
-    "server.js": 3
+    "server.js": 1
   },
   "no-restricted-properties": {
     "lib/admin/ApiKeyStore.js": 1,
     "lib/admin/admin-metrics.js": 1,
-    "lib/admin/key-state-cache.js": 1,
     "lib/cli/backfill.js": 7,
     "lib/cli/cleanup.js": 7,
     "lib/cli/inspect.js": 2,
@@ -161,15 +159,12 @@
     "lib/handlers/sse-handler.js": 1,
     "lib/http/helpers.js": 1,
     "lib/jsonrpc.js": 2,
-    "lib/llm/util/circuit-breaker.js": 3,
     "lib/llm/util/cli-env.js": 1,
     "lib/logger.js": 2,
-    "lib/memory/consolidate/idOrderedUpdate.js": 1,
     "lib/memory/embedding/EmbeddingCache.js": 1,
     "lib/memory/processors/EpisodeContinuityService.js": 1,
     "lib/memory/processors/MemoryRecaller.js": 1,
     "lib/memory/processors/MemoryRememberer.js": 2,
-    "lib/memory/read/FragmentReader.js": 1,
     "lib/memory/read/QueryProfile.js": 2,
     "lib/memory/signals/CaseRewardBackprop.js": 1,
     "lib/memory/signals/MemoryEvaluator.js": 1,
@@ -177,12 +172,10 @@
     "lib/memory/write/BatchRememberProcessor.js": 1,
     "lib/memory/write/ConflictResolver.js": 1,
     "lib/metrics.js": 1,
-    "lib/storage/index.js": 1,
-    "lib/tools/db.js": 3,
+    "lib/tools/db.js": 2,
     "lib/tools/memory.js": 1,
-    "lib/tools/update-tools.js": 2,
+    "lib/tools/update-tools.js": 1,
     "lib/updater/install-detector.js": 1,
-    "lib/updater/update-executor.js": 1,
-    "server.js": 3
+    "lib/updater/update-executor.js": 1
   }
 }
