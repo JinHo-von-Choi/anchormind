@@ -42,6 +42,17 @@ describe("minDeltaFromEnv", () => {
     assert.equal(minDeltaFromEnv("MEMENTO_DECAY_MIN_DELTA"), 1);
   });
 
+  it("양의 무한대는 1로 제한하고 음의 무한대와 NaN은 0이다", () => {
+    for (const v of ["1e400", "Infinity", "+Infinity"]) {
+      process.env.MEMENTO_DECAY_MIN_DELTA = v;
+      assert.equal(minDeltaFromEnv("MEMENTO_DECAY_MIN_DELTA"), 1, v);
+    }
+    for (const v of ["-1e400", "-Infinity", "NaN"]) {
+      process.env.MEMENTO_DECAY_MIN_DELTA = v;
+      assert.equal(minDeltaFromEnv("MEMENTO_DECAY_MIN_DELTA"), 0, v);
+    }
+  });
+
   it("값을 바꿀 때만 경고를 한 번 남긴다", () => {
     for (const v of [undefined, "", "0", "0.01", "1"]) {
       if (v === undefined) delete process.env.MEMENTO_DECAY_MIN_DELTA;
