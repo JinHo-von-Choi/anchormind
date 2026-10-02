@@ -37,7 +37,7 @@ The fastest path for someone new to this repository is to hand the work to an AI
 After the assistant finishes, all of the following must hold:
 
 - `.env` exists, with `MEMENTO_ACCESS_KEY`, `POSTGRES_*`, and `REDIS_*` populated
-- `npm run migrate` succeeds through `migration-039`
+- `npm run migrate` succeeds through `migration-049`
 - `node bin/memento.js health` returns OK for DB, Redis, and the embedding provider
 - The AI client lists `mcp__*__remember`, `recall`, and `reflect`
 - A `memory_stats` call returns a valid response (zero fragments is fine)
@@ -243,9 +243,38 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-038-fragment-versions-case
 
 # task_feedback outcome/evaluator/evidence/unmet_requirements + tool_feedback irrelevance_reason
 psql $DATABASE_URL -f lib/memory/migrations/migration-039-feedback-instrumentation.sql
+
+# fragments.workspace_source + quality_rationale columns
+psql $DATABASE_URL -f lib/memory/migrations/migration-040-workspace-audit-columns.sql
+
+# Columns recording inferred workspace values
+psql $DATABASE_URL -f lib/memory/migrations/migration-041-workspace-backfill-inference.sql
+
+# api_keys.allowed_workspaces column
+psql $DATABASE_URL -f lib/memory/migrations/migration-042-api-keys-allowed-workspaces.sql
+
+# fragment_synthetic_query auxiliary vector table
+psql $DATABASE_URL -f lib/memory/migrations/migration-043-fragment-synthetic-query.sql
+
+# idempotency_records table
+psql $DATABASE_URL -f lib/memory/migrations/migration-044-idempotency-records.sql
+
+# RLS enabled on fragments and fragment_links with isolation policies
+psql $DATABASE_URL -f lib/memory/migrations/migration-045-fragment-rls.sql
+
+# search_events scope columns + fragment_versions agent snapshot columns
+psql $DATABASE_URL -f lib/memory/migrations/migration-047-agent-scope-audit.sql
+
+# case_closed added to case_events.event_type
+psql $DATABASE_URL -f lib/memory/migrations/migration-048-case-events-case-closed.sql
+
+# Synthetic query embedding alignment marker (the DDL is applied by scripts/migrate.js)
+psql $DATABASE_URL -f lib/memory/migrations/migration-049-align-synthetic-query-embedding.sql
 ```
 
-> **Re-running migration-007**: If you change `EMBEDDING_DIMENSIONS` or switch embedding providers, re-run `scripts/post-migrate-flexible-embedding-dims.js` to update the vector column dimensions in both the `fragments` and `morpheme_dict` tables simultaneously.
+There is no migration-046. Prefer `npm run migrate`, which records applied files and substitutes the vector opclass automatically.
+
+> **Re-running migration-007**: If you change `EMBEDDING_DIMENSIONS` or switch embedding providers, re-run `scripts/post-migrate-flexible-embedding-dims.js` to update the vector column dimensions in the `fragments`, `morpheme_dict`, and `fragment_synthetic_query` tables simultaneously.
 
 Since v1.8.0, automatic migration is supported. Instead of running each file manually:
 
@@ -488,7 +517,7 @@ curl -s http://localhost:57332/health | jq .status
 node bin/memento.js health
 ```
 
-The embedding consistency check is silent on success and startup proceeds. When it prints `[embedding-consistency] 차원 불일치 발견:` with a per-table `DB=Nd, config=Nd` breakdown and halts startup, `EMBEDDING_DIMENSIONS` disagrees with the dimensions actually stored in the database. Either revert to the previous provider, or run `EMBEDDING_DIMENSIONS=N npm run migrate-007` followed by `node scripts/backfill-embeddings.js`, then restart the server.
+The embedding consistency check is silent on success and startup proceeds. When it prints `[embedding-consistency] 차원 불일치 발견:` with a per-table `DB=Nd, config=Nd` breakdown and halts startup, `EMBEDDING_DIMENSIONS` disagrees with the dimensions actually stored in the database. Either revert to the previous provider, or run `EMBEDDING_DIMENSIONS=N DATABASE_URL=$DATABASE_URL node scripts/post-migrate-flexible-embedding-dims.js` followed by `node scripts/backfill-embeddings.js`, then restart the server.
 
 ## Starting the Server
 

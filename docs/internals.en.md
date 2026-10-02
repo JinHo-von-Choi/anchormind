@@ -33,7 +33,7 @@ Search-related modules are separated into `lib/memory/read/`.
 
 Search-related modules live under `lib/memory/read/`; import paths follow the actual file locations directly.
 
-**Facade constructor flow:** Initializes 20 shared objects → injects into 4 processors via DI → calls `_installSharedSync()`. All 15 public methods are implemented as single-line delegations.
+**Facade constructor flow:** Initializes 20 shared objects → injects into 4 processors via DI → calls `_installSharedSync()`. Public methods are implemented as delegations to the processors.
 
 **_installSharedSync:** Wraps each shared property setter on the facade (store, index, factory, etc.) with `Object.defineProperty`. A single assignment like `mm.store = stub` is automatically propagated to the facade and all processors (test DI compatibility).
 
@@ -242,13 +242,30 @@ Authentication preserves an explicit `isMaster` decision instead of inferring ma
 
 OAuth authentication first tries `bound_key_id` via `validateApiKeyById`, then `is_api_key=true` via `validateApiKeyFromDB(client_id)`. Generic non-API-key OAuth is rejected by default with `MCP_REJECT_NONAPIKEY_OAUTH=true`; setting false permits authentication only, not memory tool/resource access without a bound key/permission identity.
 
+### OAuth name-based client_id Binding
+
+On `POST /register`, when the `Authorization: Bearer <API key>` header is valid:
+
+- `client_id = "<name>_<keyIdHex8>"`: the API key `name` field plus the first 8 hex characters of the UUID as a suffix. URL-safe, unpredictable, collision-free.
+- `client_name = "apikey:<keyId UUID>"`: an internal server binding marker. It reuses the existing `client_name` column of the `oauth_clients` table, with no schema change.
+
+During `/authorize`, the registered client is looked up with `getClient(client_id)`; when `client_name` matches the `apikey:<uuid>` pattern, validity is checked with `validateApiKeyById(uuid)`. On success `bound_key_id` is recorded in codeData and propagated through `/token` issuance. `validateAccessToken` also returns `bound_key_id`.
+
+When the header is missing or invalid, a random client_id is generated as a fallback, and the token is then rejected by the `REJECT_NONAPIKEY_OAUTH` policy.
+
+Existing Redis tokens that registered the raw API key as client_id have `bound_key_id=null`, so they are handled normally by the second-priority `is_api_key` path (backward compatibility).
+
+**AUTO-REGISTRATION blocked**: on `/authorize` GET, the path that automatically created a client for an unregistered `client_id` with a valid `redirect_uri` is blocked by `MCP_ALLOW_AUTO_DCR_REGISTER=false` (default). Unregistered clients must be registered in advance via `POST /register` (RFC 7591). Each block increments the `mcp_oauth_auto_register_blocked_total` counter.
+
+**Direct ACCESS_KEY use**: the `Authorization: Bearer <ACCESS_KEY>` header is handled by `safeCompare` before the OAuth branch, so it is unrelated to the branches above.
+
 ### OAuth refresh_token is_api_key Propagation
 
 When refreshing a token via `POST /token` with `grant_type=refresh_token`, the `is_api_key` flag from the original token is propagated to the newly issued access_token and refresh_token. API key-based clients retain the same isolation context after a refresh.
 
-### SESSION_TTL Default
+### SESSION_TTL_MINUTES Default
 
-The `SESSION_TTL` environment variable defaults to 43200 minutes (30 days). Sessions use a sliding window — the TTL is extended on every tool use, so sessions expire only after 30 days of inactivity. Actively used sessions effectively never expire.
+The `SESSION_TTL_MINUTES` environment variable defaults to 43200 minutes (30 days). Sessions use a sliding window: the TTL is extended on every tool use, so sessions expire only after 30 days of inactivity. Actively used sessions effectively never expire.
 
 ### initialize request pre-auth IP rate limit
 
@@ -589,14 +606,63 @@ The `run()` method in `lib/memory/write/RememberPostProcessor.js` executes 8 sta
 
 ### FragmentSearch Hook Chain Insertion Points
 
-Three hooks execute in order after line 88 in `lib/memory/read/FragmentSearch.js`:
-1. **shadow hook** (line 99): `SYMBOLIC_CONFIG.enabled && SYMBOLIC_CONFIG.shadow` → records `symbolicMetrics.observeLatency("shadow_recall", ...)` only
-2. **explain hook** (line 107): `SYMBOLIC_CONFIG.enabled && SYMBOLIC_CONFIG.explain` → `explanationBuilder.annotate(clean, { searchPath, layerLatency, query, caseContext })`
-3. **cbr filter** (line 124): `SYMBOLIC_CONFIG.enabled && SYMBOLIC_CONFIG.cbrFilter && sq.caseId` → `cbrEligibility.filter(clean, sq)`. Pre-filter `rawResultCount` is preserved separately to protect the SearchParamAdaptor learning signal.
+Three hooks run in order inside `search()` in `lib/memory/read/FragmentSearch.js`, right after the probabilistic result:
+1. **shadow hook**: `SYMBOLIC_CONFIG.enabled && SYMBOLIC_CONFIG.shadow` → records `symbolicMetrics.observeLatency("shadow_recall", ...)` only
+2. **explain hook**: `SYMBOLIC_CONFIG.enabled && SYMBOLIC_CONFIG.explain` → `explanationBuilder.annotate(clean, { searchPath, layerLatency, query, caseContext })`
+3. **cbr filter**: `SYMBOLIC_CONFIG.enabled && SYMBOLIC_CONFIG.cbrFilter && sq.caseId` → `cbrEligibility.filter(clean, sq)`. Pre-filter `rawResultCount` is preserved separately to protect the SearchParamAdaptor learning signal.
 
 ### ConflictResolver.checkAssertionConsistency and validationWarnings Addition
 
 `checkAssertionConsistency` in `lib/memory/write/ConflictResolver.js` runs the Jaccard pipeline (`JACCARD_THRESHOLD=0.3`, up to 10 fragments within a 7-day window) together with a symbolic polarity conflict check. Within the `SYMBOLIC_CONFIG.enabled && SYMBOLIC_CONFIG.polarityConflict` guard, `ClaimConflictDetector.detectPolarityConflicts` is called; exceptions are logged with logWarn and swallowed. `conflictWith` IDs found in polarity conflicts are merged into `supersedeCandidates`. The return type is a 3-tuple `{ assertionStatus, supersedeCandidates, validationWarnings }`, returning `validationWarnings: []` as an empty array when the flag is off.
+
+---
+
+## MCP 2025-06-18 Spec Compliance
+
+### Session 404 Response
+
+The MCP 2025-06-18 spec requires the server to return HTTP 404 for requests that carry a sessionId after the server has terminated that session.
+
+Implementation: `lib/handlers/mcp-handler.js#handleMcpPost`
+
+When a `sessionId` header is present but `validateStreamableSession` fails, HTTP 404 + JSON-RPC `-32000 "Session not found"` is returned on the following two paths:
+
+- `reason === "Session not found"` && authentication failure: the session does not exist and re-authentication also fails, so recovery is not possible
+- `reason === "Session expired"` && authentication failure: the session has expired and recovery is not possible
+
+When authentication succeeds (recoverable), the request proceeds through the same-ID re-creation path and no 404 is returned. A keyId mismatch returns 403.
+
+Metric: `mcp_session_404_total` (no labels)
+
+### Origin Header Validation (DNS rebinding defense)
+
+With `MCP_STRICT_ORIGIN=true`, `isOriginAllowed(req)` is evaluated at the top of the POST/GET/DELETE `/mcp` entry points. The function lives in `lib/handlers/_common.js`.
+
+Allowed when:
+- No Origin header (non-browser clients such as CLI/curl)
+- `STRICT_ORIGIN=false` (default, opt-in)
+- The Origin is in the allowlist: `https://claude.ai`, `https://chatgpt.com`, `https://platform.openai.com`, the `OAUTH_TRUSTED_ORIGINS` list, the `ALLOWED_ORIGINS` Set
+
+Rejected when: any other Origin -> HTTP 403 + JSON-RPC `-32000 "Origin not allowed"`
+
+Metric: `mcp_origin_rejected_total` (label: `origin`)
+
+### MCP-Protocol-Version Header Validation
+
+After initialize, the `MCP-Protocol-Version` header is checked on every request. Implementation: `lib/handlers/mcp-handler.js#handleMcpPost`
+
+Processing order:
+1. `method === "initialize"`: header validation is skipped (pre-negotiation stage)
+2. No header: spec fallback uses `2025-03-26`, an info log is written, and the request passes
+3. Header present and not in `SUPPORTED_PROTOCOL_VERSIONS`: HTTP 400 + `-32000 "Unsupported protocol version"`
+4. Header present and different from the session `negotiatedVersion`: the request is not rejected; the session value is reset to the header value and the request passes. Metric `mcp_protocol_version_reanchored_total` (labels: `from`, `to`)
+5. Pass: the existing path continues
+
+`negotiatedVersion` storage: after `dispatchJsonRpc` completes, `result.protocolVersion` of the initialize response is stored in `streamableSessions.get(sessionId).negotiatedVersion`.
+
+The session data field `negotiatedVersion` is initialized to `null` in `lib/sessions.js#createStreamableSessionWithId`.
+
+Metric: `mcp_protocol_version_rejected_total` (label: `version`)
 
 ---
 
@@ -786,3 +852,12 @@ The chain is an array of provider configurations. Providers are tried in order; 
 Migration-047 only adds snapshot columns to `fragment_versions`/`case_events`. Inspect pending warnings from `migrate`, stop old writers, then run the CLI backfill. NULL snapshots are quarantined from reads, including peer reads. Backfill recounts after a zero-update batch; remaining backfillable or sourceMissing/sourceDeleted rows produce `SNAPSHOT_BACKFILL_INCOMPLETE`. Shared normalization moves the fragment and version agent snapshots in one transaction. Rollback drops snapshot columns but does not undo normalization.
 
 Old sessions require reconnection and initialize. Old sessions reused without bearer credentials and without isMaster are denied tool access. `memory://stats`/`memory://topics` aggregate only current default-agent fragments and expose no master peer input. `search_traces`/`reconstruct_history` also default to the default-agent scope.
+
+## Process Error Guards
+
+`installProcessGuards({ proc, logError, onFatal })` in `lib/process-guards.js` installs process-wide listeners at server startup (server.js).
+
+- `unhandledRejection`: records the reason (message/stack) with `logError` and keeps the process alive. This keeps sporadic rejections in a long-running daemon from escalating into a full outage.
+- `uncaughtException`: records the error and calls `onFatal` only once. `onFatal` is not called again if a second exception occurs during shutdown (re-entry guard).
+
+The server.js `onFatal` calls `gracefulShutdown("uncaughtException", { exitCode: 1 })` and arms a 35-second forced `process.exit(1)` timer (unref) in case the drain hangs. `gracefulShutdown(signal, { exitCode })` exits with 0 on the SIGTERM/SIGINT path and 1 on the uncaught path, so systemd `Restart=on-failure` restarts only on crashes.

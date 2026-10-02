@@ -14,21 +14,25 @@ server.js  (HTTP server)
     +-- POST /message      Legacy SSE -- JSON-RPC receiver
     +-- GET  /health       Health check
     +-- GET  /metrics      Prometheus metrics
-    +-- GET  /authorize    OAuth 2.0 authorization endpoint
+    +-- GET|POST /authorize  OAuth 2.0 authorization endpoint
     +-- POST /token        OAuth 2.0 token endpoint
+    +-- POST /register     OAuth 2.0 dynamic client registration
+    +-- POST /session/rotate  Session ID rotation
+    +-- GET  /openapi.json OpenAPI document
+    +-- /v1/internal/model/nothing/*  Admin console
     +-- GET  /.well-known/oauth-authorization-server
     +-- GET  /.well-known/oauth-protected-resource
     |
     +-- lib/jsonrpc.js        JSON-RPC 2.0 parsing and method dispatch. `dispatchJsonRpc` uses a METHOD_MAP object for static method-name-to-handler routing
-    +-- lib/tool-registry.js  16 memory tool registration and routing
+    +-- lib/tool-registry.js  Registration and routing for 20 tools (16 for every key, 4 master-only: memory_stats, memory_consolidate, check_update, apply_update)
     |
     +-- lib/memory/
-            +-- MemoryManager.js          Business logic orchestration facade (259 lines, singleton). Routes 15 public methods to 4 processors via 1-line delegation. Shared properties synchronized via _installSharedSync
+            +-- MemoryManager.js          Business logic orchestration facade (singleton). Routes public methods to 4 processors via delegation. Shared properties synchronized via _installSharedSync
             +-- processors/               remember/recall/reflect/link domain processors
-            |   +-- MemoryRememberer.js   Dedicated remember() (~695 lines). _runPolicyGate helper evaluates dryRun/atomic/non-atomic branches at the same point, declaring related variables before use to avoid TDZ (Temporal Dead Zone) reference errors
-            |   +-- MemoryRecaller.js     Dedicated recall() (~405 lines). fields pick step, depth filter, CBR path
-            |   +-- MemoryReflector.js    Dedicated reflect() (~89 lines). session summary->fragment conversion
-            |   +-- MemoryLinker.js       Dedicated link()/forget()/amend() (~80 lines)
+            |   +-- MemoryRememberer.js   Dedicated remember(). _runPolicyGate helper evaluates dryRun/atomic/non-atomic branches at the same point, declaring related variables before use to avoid TDZ (Temporal Dead Zone) reference errors
+            |   +-- MemoryRecaller.js     Dedicated recall(). fields pick step, depth filter, CBR path
+            |   +-- MemoryReflector.js    Dedicated reflect(). session summary->fragment conversion
+            |   +-- MemoryLinker.js       Dedicated link()/forget()/amend()
             |   +-- ReflectProcessor.js   Dedicated reflect() logic. summary->fragment conversion, episode creation, Working Memory cleanup
             |   +-- AutoReflect.js        Session-end auto reflect orchestrator
             |   +-- EpisodeContinuityService.js Inserts case_events milestone_reached + preceded_by edge after reflect() (idempotency_key-based dedup)
@@ -84,13 +88,13 @@ server.js  (HTTP server)
             |   +-- SearchEventAnalyzer.js Search event analysis, query pattern tracking (reads from SearchEventRecorder)
             |   +-- SearchEventRecorder.js FragmentSearch.search() result to search_events table recording
             |   +-- EvaluationMetrics.js  tool_feedback-based implicit Precision@5 and downstream task success rate computation
-            |   +-- SearchParamAdaptor.js key_id x query_type x hour minSimilarity online learning, atomic UPSERT (116 lines)
+            |   +-- SearchParamAdaptor.js key_id x query_type x hour minSimilarity online learning, atomic UPSERT
             +-- QuotaChecker.js           API key fragment quota check (fragment_limit based)
             +-- FragmentIndex.js          Redis L1 index management, getFragmentIndex() singleton factory
             +-- keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` shared helper. Generates key_id-scoped WHERE clauses. Used by FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js
             +-- CaseEventStore.js         Semantic milestone log (case_events CRUD, DAG edges, evidence join)
             +-- memory-schema.sql         PostgreSQL schema definition
-            +-- migrations/               37 DB migration SQL files (migration-001 through migration-037, applied sequentially against the schema_migrations table). Used by `scripts/migrate.js` and `scripts/lint-migrations.js`
+            +-- migrations/               48 DB migration SQL files (migration-001 through migration-049; 046 is unused), applied sequentially against the schema_migrations table. Used by `scripts/migrate.js` and `scripts/lint-migrations.js`
 ```
 
 Supporting modules:
@@ -109,7 +113,7 @@ lib/
 +-- openapi.js         OpenAPI 3.1.0 spec generator. Enabled when `ENABLE_OPENAPI=true` via `GET /openapi.json`. Auth-level-based tool list filtering: master key -> all paths (including Admin REST API), API key -> permissions-based tool list
 +-- rate-limiter.js    IP-based sliding window rate limiter
 +-- rbac.js            RBAC authorization (read/write/admin tool-level permissions)
-+-- http-handlers.js   HTTP handler re-export hub (21 lines). Actual implementations in lib/handlers/ submodules
++-- http-handlers.js   HTTP handler re-export hub. Actual implementations in lib/handlers/ submodules
 +-- scheduler.js       Periodic task scheduler (setInterval task management)
 +-- scheduler-registry.js Scheduler task registry (per-task success/failure tracking)
 +-- utils.js           Origin validation, JSON body parsing (2MB cap), SSE output
@@ -134,7 +138,7 @@ lib/admin/
 assets/admin/
 +-- index.html         Admin SPA app shell (login form + container)
 +-- admin.css          Admin UI stylesheet
-+-- admin.js           Admin UI logic (7 navigation sections: overview, API keys, groups, memory ops, sessions, logs, knowledge graph)
++-- admin.js           Admin UI logic (8 navigation sections: overview, API keys, groups, memory ops, sessions, logs, knowledge graph, metrics)
 
 lib/http/
 +-- helpers.js         HTTP SSE stream helpers and request parsing utilities
@@ -169,9 +173,11 @@ lib/tools/
 +-- reconstruct.js  reconstruct_history, search_traces tool handlers (Narrative Reconstruction)
 +-- memory-schemas.js  Tool schema definitions (inputSchema)
 +-- db.js        PostgreSQL connection pool, agent session variable query helper (not exposed via MCP). getPrimaryPool(), getBatchPool(), queryWithAgentVector()
-+-- db-tools.js  MCP DB tool handlers (per-tool logic split from db.js)
 +-- embedding.js OpenAI text embedding generation
 +-- stats.js     Access statistics collection and storage
++-- pool-gate.js Caps background use of the primary pool
++-- serverTime.js Server time helper
++-- update-tools.js check_update / apply_update definitions and handlers (master key only)
 +-- prompts.js   MCP Prompts definitions (analyze-session, retrieve-relevant-memory, etc.)
 +-- resources.js MCP Resources definitions (memory://stats, memory://topics, etc.)
 +-- index.js     Tool handler exports
@@ -213,14 +219,14 @@ scripts/
 
 ## MemoryManager Facade Decomposition
 
-MemoryManager is a 259-line thin facade. Business logic is separated into 4 processors under `lib/memory/processors/`.
+MemoryManager is a thin facade. Business logic is separated into 4 processors under `lib/memory/processors/`.
 
 ```
-MemoryManager (259 lines, facade)
-  +-- MemoryRememberer  (~695 lines) -- remember(), batchRemember()
-  +-- MemoryRecaller    (~405 lines) -- recall(), context()
-  +-- MemoryReflector   ( ~89 lines) -- reflect()
-  +-- MemoryLinker      ( ~80 lines) -- link(), forget(), amend()
+MemoryManager (facade)
+  +-- MemoryRememberer  -- remember(), batchRemember()
+  +-- MemoryRecaller    -- recall(), context()
+  +-- MemoryReflector   -- reflect()
+  +-- MemoryLinker      -- link(), forget(), amend()
 ```
 
 Dependency direction: processors -> shared modules (FragmentStore, FragmentSearch, etc.) / external callers -> facade -> processors.
@@ -593,14 +599,21 @@ Evidence join table linking fragments to case_events. Connects fragments that su
 
 ### Row-Level Security
 
-RLS is enabled on the fragments table under the policy name `fragment_isolation_policy`, which evaluates the session variable `app.current_agent_id`. Database-level isolation is not active, however. The application account owns the table and `FORCE ROW LEVEL SECURITY` is not set, so the policy does not apply to runtime queries, and many paths query directly without setting the session variable. Isolation between keys is performed by the application query filter (`lib/memory/keyScope.js`). The procedure for establishing database-level isolation is in `docs/operations/row-level-security.md`.
+RLS is enabled on fragments and fragment_links (migration-045). The fragments policy `fragment_isolation_policy` checks `app.current_agent_id` (agent axis) and, only when set, `app.current_key_id` (key axis). The fragment_links policy follows access to the from_id fragment. Database-level isolation is not active, however. The application account owns the table and `FORCE ROW LEVEL SECURITY` is not set, so the policy does not apply to runtime queries, and many paths query directly without setting the session variable. Isolation between keys is performed by the application query filter (`lib/memory/keyScope.js`). The procedure for establishing database-level isolation is in `docs/operations/row-level-security.md`.
 
 ```sql
 CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
     USING (
-        agent_id = current_setting('app.current_agent_id', true)
-        OR agent_id = 'default'
-        OR current_setting('app.current_agent_id', true) IN ('system', 'admin')
+        (
+            agent_id = current_setting('app.current_agent_id', true)
+            OR agent_id = 'default'
+            OR current_setting('app.current_agent_id', true) IN ('system', 'admin')
+        )
+        AND (
+            COALESCE(current_setting('app.current_key_id', true), '') = ''
+            OR key_id IS NOT DISTINCT FROM current_setting('app.current_key_id', true)
+            OR current_setting('app.current_agent_id', true) IN ('system', 'admin')
+        )
     );
 ```
 
@@ -677,7 +690,7 @@ Memory isolation is composed of three layers. The layers that operate today are 
 
 | Layer | Isolation Key | Behavior |
 |-------|--------------|----------|
-| RLS (Row-Level Security) | `agent_id` | Policy is defined but inactive because it does not apply to the table owner account. Based on session variable `app.current_agent_id`; shared access for `default` agent and `system`/`admin` sessions |
+| RLS (Row-Level Security) | `agent_id`, `key_id` | Policy is defined but inactive because it does not apply to the table owner account. Uses session variables `app.current_agent_id` and, when set, `app.current_key_id`. Shared access for the `default` agent and `system`/`admin` sessions |
 | key_id isolation | `key_id` column | master key: `key_id = NULL` (full access), API key: `key_id = <that key's ID>` (own fragments only) |
 | Group isolation | `groupKeyIds` array | Fragments shared among keys in the same group. `COALESCE(group_id, api_keys.id)` used as effective_key_id |
 
@@ -691,7 +704,7 @@ Memory isolation is composed of three layers. The layers that operate today are 
 
 ### Admin Console Structure
 
-The Admin UI is built as an app shell architecture (`assets/admin/index.html` + `assets/admin/admin.css` + `assets/admin/admin.js`). It is divided into 7 navigation sections:
+The Admin UI is built as an app shell architecture (`assets/admin/index.html` + `assets/admin/admin.css` + `assets/admin/admin.js`). It is divided into 8 navigation sections:
 
 | Section | Description | Status |
 |---------|-------------|--------|
@@ -702,6 +715,7 @@ The Admin UI is built as an app shell architecture (`assets/admin/index.html` + 
 | Sessions | Session list, detail view, activity tracking, manual reflect, terminate, expired cleanup, bulk unreflected reflect | Implemented |
 | Logs | Log file listing, content viewing (reverse tail), level/search filters, statistics | Implemented |
 | Knowledge Graph | Fragment relationship visualization (D3.js force-directed), topic filter, node detail | Implemented |
+| Metrics | In-process metric cards, time-series sparklines, time range toggle | Implemented |
 
 See [Admin Console Guide](admin-console-guide.md) for screen layouts and operation details for each tab.
 
@@ -709,7 +723,7 @@ The `/stats` response includes `searchMetrics`, `observability`, `queues`, and `
 
 **Admin UI ESM Structure** (`assets/admin/`):
 
-Operates as browser-native ESM without a bundler. `admin.js` is a 58-line entry point that dynamically imports 13 domain-specific modules from `assets/admin/modules/`.
+Operates as browser-native ESM without a bundler. `admin.js` is the entry point and statically imports the 15 modules under `assets/admin/modules/`.
 
 | Module | Role |
 |--------|------|
@@ -726,6 +740,8 @@ Operates as browser-native ESM without a bundler. `admin.js` is a 58-line entry 
 | `graph.js` | D3.js force-directed knowledge graph |
 | `logs.js` | Log file viewing (reverse tail, level/search filters) |
 | `memory.js` | Fragment search/filter, anomaly detection, search observability |
+| `metrics.js` | Metric cards, time range toggle |
+| `metrics-sparkline.js` | Pure SVG sparkline renderer |
 
 **Graph Rendering Optimizations** (`modules/graph.js`):
 
@@ -944,7 +960,7 @@ A verification-only layer placed on top of the probabilistic search pipeline. Di
 - Fail-open: detector errors are swallowed; on SymbolicOrchestrator timeout (50ms), fallback applies
 - Tenant isolation: SessionLinker.wouldCreateCycle included, 14 call sites fully covered
 
-### Hook Chain (FragmentSearch.search after line 88)
+### Hook Chain (FragmentSearch.search, right after the probabilistic result)
 
 ```
 probabilistic result
@@ -1142,7 +1158,7 @@ Response returned (fragments + _suggestion)
 
 ### DB Schema -- Migrations
 
-**migration-034: api_keys.default_mode**
+**migration-034-v2.16.0-bundle: api_keys.default_mode**
 - Adds `TEXT DEFAULT NULL` column
 - Allowed values: `recall-only`, `write-only`, `onboarding`, `audit`, NULL (unrestricted)
 - Set via the key editor in the admin console
@@ -1167,10 +1183,40 @@ lib/memory/
 +-- embedding/     EmbeddingWorker, EmbeddingCache, MorphemeIndex, MorphemeTokenizer
 +-- signals/       SpreadingActivation, CaseRewardBackprop, NLIClassifier, MemoryEvaluator, SearchMetrics, SearchEventAnalyzer, SearchEventRecorder, EvaluationMetrics, SearchParamAdaptor
 +-- processors/    MemoryRememberer, MemoryRecaller, MemoryReflector, MemoryLinker, ReflectProcessor, AutoReflect, EpisodeContinuityService, SessionActivityTracker
-+-- migrations/    37 migration SQL files
++-- migrations/    48 migration SQL files (001 through 049, 046 unused)
 ```
 
 Modules kept directly at the root are MemoryManager, ModeRegistry, keyId, keyScope, QuotaChecker, CaseEventStore, FragmentIndex, and contentGuard. No re-export shim exists for modules moved into the subdirectories above — import paths follow the actual file locations directly.
+
+## Reflect Processing Flow
+
+### Reflect Processing Flow
+
+ReflectProcessor.process() merges the five categories (summary/decisions/errors_resolved/new_procedures/open_questions) into a single `allFragmentItems[]` array and delegates it to `batchRememberProcessor.process()` in one call.
+
+Each item carries a `_category` tag, and the returned `results` are re-aggregated per category to preserve the existing breakdown shape (`{summary, decisions, errors, procedures, questions}`). Where `batchRememberProcessor` is not injected (legacy mock environments), the path falls back to `store.insert + index.index`.
+
+Related code: `lib/memory/processors/ReflectProcessor.js` (`allFragmentItems` build -> `batchRememberProcessor.process` delegation -> result re-aggregation).
+
+```
+reflect() call
+    |
+    v
+5 categories -> allFragmentItems[] (each item tagged with _category)
+    |
+    v
+batchRememberProcessor.process({ fragments: batchFragments })
+    |
+    +-- Phase A: validation (rejects null content / missing type / Content too short)
+    +-- Phase B: chunked multi-row INSERT (split at 256KB or 500 rows)
+    +-- Phase C: embedding queue + Redis index post-processing
+    |
+    v
+results re-aggregated per category -> breakdown shape preserved
+    |
+    v
+autoLinkSessionFragments (batch processing)
+```
 
 ## Rewrite-Loop Mitigation
 
@@ -1190,6 +1236,48 @@ The ProactiveRecall caseIdPolicy operates as `"strict-or-adjacent"` by default. 
 autoLinkSessionFragments returns a `linkSuggestions[]` array; ReflectProcessor propagates it via the `_meta.link_suggestions` path.
 
 ---
+
+### autoLinkSessionFragments Batch Processing
+
+The errors x decisions and procedures x errors cross products run through a four-step batch process.
+
+1. Build errors x decisions (`caused_by`) and procedures x errors (`resolved_by`) pairs
+2. Assign each pair a `sortedKey(min, max)` and sort lexicographically ascending (deadlock avoidance)
+3. Record `wouldCreateCycle` results in a `Map` cache to remove duplicate DB round trips for the same pair
+4. Pass all pairs that clear the cycle check to a single-transaction `store.createLinks()` call
+
+On partial failure the whole batch is rolled back and the path switches to single-row `createLink` fallback. `LinkStore.createLinks` runs `SET LOCAL lock_timeout='5s'`, bulk advisory lock acquisition, multi-row INSERT ON CONFLICT, and RETURNING id in a single transaction.
+
+Related code: `lib/memory/link/SessionLinker.js`, `lib/memory/link/LinkStore.js`.
+
+### EmbeddingWorker._embedMany Batching
+
+Embedding is processed with one `generateBatchEmbeddings` call plus one `multi-row UPDATE FROM (VALUES ...) v(id, vec)` per chunk.
+
+Retry policy:
+1. First batch attempt -> on an HTTP 400 response, the offending row is identified by parsing with the regex `/Invalid 'input\[(\d+)\]'/`
+2. The identified row moves to the dead-letter queue (`queue:{queueKey}:dead`) and the rest is re-batched (`_embedChunk` recursion)
+3. Errors without an index (regex does not match) -> the whole chunk falls back to single-row `_embedOne`
+
+Chunking: split at 256KB accumulated or 200 items, whichever is reached first (inside `_embedMany`).
+
+SQL type note: `fragments.id` is a `frag-{16 hex chars}` TEXT value, so the multi-row UPDATE placeholders use `::text` and `::vector`. Do not use a `::uuid` cast (type mismatch error).
+
+Related code: `lib/memory/embedding/EmbeddingWorker.js` -- `_embedMany`, `_embedChunk`, `_embedOne`.
+
+### MorphemeIndex Async Separation + Consistency Gate
+
+`RememberPostProcessor` registers morphemes asynchronously in fire-and-forget fashion. On completion it sets `fragments.morpheme_indexed = true`.
+
+Morpheme extraction is done by `MorphemeTokenizer.tokenize()` (default `MEMENTO_MORPHEME_TOKENIZER=local`). It splits Unicode script runs and routes each to a language-specific analyzer: Korean garu-ko (`filterHangulMorphemes` removes particles, endings and single syllables), English natural PorterStemmer, Chinese @node-rs/jieba, Japanese kuromoji (skipped when `MEMENTO_ENABLE_KUROMOJI=false`). Setting `MEMENTO_MORPHEME_TOKENIZER=llm` switches to the `_tokenizeViaLLM()` path.
+
+`getOrRegisterEmbeddings` handles all missing morphemes with one `generateBatchEmbeddings` call plus one multi-row INSERT (`ON CONFLICT DO NOTHING`). Chunks: 200 items or 256KB accumulated, whichever is reached first. On batch failure, the problem items are isolated with the `_parseBadIndexes` regex and the rest retried; errors without an index take the single-row `_fallbackSingleRegister` path.
+
+Consistency Gate: when `FragmentReader.searchBySemantic` receives `morphemeOnly=true`, the condition `f.morpheme_indexed = true` is added to the WHERE clause (`lib/memory/read/FragmentReader.js`). The `_searchL3` morpheme sub-path in `lib/memory/read/FragmentSearch.js` passes this flag. Fragments whose morpheme registration is incomplete remain eligible for keyword matching (L2) but are excluded from morpheme-based L3 semantic search.
+
+migration-035 (`lib/memory/migrations/migration-035-morpheme-indexed.sql`): adds the `fragments.morpheme_indexed BOOLEAN NOT NULL DEFAULT false` column, backfills existing fragments, and creates a partial index (`WHERE morpheme_indexed = false`).
+
+Related code: `lib/memory/embedding/MorphemeTokenizer.js`, `lib/memory/embedding/MorphemeIndex.js`, `lib/memory/write/RememberPostProcessor.js`.
 
 ## SearchScope Contract
 
@@ -1293,7 +1381,7 @@ Unless the `MEMENTO_CASE_BACKPROP_ENABLED` environment variable is set to `"true
 
 ## migration body-only Convention
 
-`scripts/migrate.js` does not rewrite migration file content via regex. Migration files must conform to the body-only convention (pure SQL ending with SET statements and semicolons), and the `lint:migrations` script blocks violations in CI.
+`scripts/migrate.js` wraps each file in a transaction and records schema_migrations itself, so migration bodies must not contain BEGIN/COMMIT or a schema_migrations INSERT. The only content substitution is replacing `vector_cosine_ops` with the opclass of the embedding column. `lint:migrations` checks this in CI. See `docs/migration-conventions.md`.
 
 ## Related Documents
 

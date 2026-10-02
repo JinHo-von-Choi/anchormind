@@ -37,7 +37,7 @@
 위 프롬프트를 받은 AI가 정상적으로 처리했다면 다음이 모두 충족되어야 한다.
 
 - `.env` 파일이 생성되고 `MEMENTO_ACCESS_KEY`·`POSTGRES_*`·`REDIS_*` 키가 모두 채워져 있다
-- `npm run migrate`가 `migration-039`까지 통과한다
+- `npm run migrate`가 `migration-049`까지 통과한다
 - `node bin/memento.js health`가 DB/Redis/임베딩 제공자 모두 OK를 반환한다
 - AI 클라이언트 도구 목록에 `mcp__*__remember`·`recall`·`reflect`가 노출된다
 - `memory_stats` 호출이 0건이라도 정상 응답을 반환한다
@@ -160,9 +160,20 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-036-split-attempt-failed-a
 psql $DATABASE_URL -f lib/memory/migrations/migration-037-hnsw-index-rename.sql                     # HNSW 인덱스 이름 정합화
 psql $DATABASE_URL -f lib/memory/migrations/migration-038-fragment-versions-case-fields.sql         # fragment_versions에 resolution_status·outcome·phase 컬럼 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-039-feedback-instrumentation.sql              # task_feedback outcome/evaluator/evidence/unmet_requirements + tool_feedback irrelevance_reason
+psql $DATABASE_URL -f lib/memory/migrations/migration-040-workspace-audit-columns.sql                # fragments.workspace_source + quality_rationale 컬럼 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-041-workspace-backfill-inference.sql          # workspace 추론 결과 기록 컬럼 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-042-api-keys-allowed-workspaces.sql           # api_keys.allowed_workspaces 컬럼 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-043-fragment-synthetic-query.sql              # fragment_synthetic_query 보조 벡터 테이블 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-044-idempotency-records.sql                   # idempotency_records 테이블 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-045-fragment-rls.sql                          # fragments, fragment_links RLS 활성화와 격리 정책
+psql $DATABASE_URL -f lib/memory/migrations/migration-047-agent-scope-audit.sql                     # search_events 검색 범위 컬럼 + fragment_versions agent snapshot 컬럼
+psql $DATABASE_URL -f lib/memory/migrations/migration-048-case-events-case-closed.sql               # case_events.event_type에 case_closed 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-049-align-synthetic-query-embedding.sql       # synthetic query 임베딩 정합 마커 (DDL은 scripts/migrate.js가 적용)
 ```
 
-> **migration-007 재실행**: `EMBEDDING_DIMENSIONS`를 변경하거나 임베딩 제공자를 전환한 경우, `scripts/post-migrate-flexible-embedding-dims.js`를 재실행하면 `fragments` 테이블과 `morpheme_dict` 테이블의 벡터 차원이 동시에 갱신된다.
+migration-046은 결번이다. 수동 적용보다 `npm run migrate`를 권장한다(적용 이력과 opclass 치환을 자동 처리).
+
+> **migration-007 재실행**: `EMBEDDING_DIMENSIONS`를 변경하거나 임베딩 제공자를 전환한 경우, `scripts/post-migrate-flexible-embedding-dims.js`를 재실행하면 `fragments`, `morpheme_dict`, `fragment_synthetic_query` 테이블의 벡터 차원이 동시에 갱신된다.
 
 > **migration-034-v2.16.0 CONCURRENTLY 옵션**: migration-034-v2.16.0-bundle은 트랜잭션 내에서 실행되므로 `CREATE UNIQUE INDEX`를 사용한다. 수백만 건 이상의 대규모 운영 테이블에서 잠금 최소화가 필요한 경우, `npm run migrate` 실행 전에 아래 두 문을 수동으로 실행하면 IF NOT EXISTS 가드에 의해 자동 실행 시 안전하게 SKIP된다.
 >
@@ -436,7 +447,7 @@ curl -s http://localhost:57332/health | jq .status
 node bin/memento.js health
 ```
 
-임베딩 일관성 검사는 통과 시 아무 로그도 남기지 않고 기동을 이어간다. `[embedding-consistency] 차원 불일치 발견:` 뒤에 테이블별 `DB=Nd, config=Nd`가 출력되고 기동이 중단되면 `EMBEDDING_DIMENSIONS` 설정과 실제 DB 차원이 어긋난 상태다. 이전 provider로 되돌리거나, `EMBEDDING_DIMENSIONS=N npm run migrate-007` 실행 후 `node scripts/backfill-embeddings.js`로 재생성한 뒤 서버를 재시작한다.
+임베딩 일관성 검사는 통과 시 아무 로그도 남기지 않고 기동을 이어간다. `[embedding-consistency] 차원 불일치 발견:` 뒤에 테이블별 `DB=Nd, config=Nd`가 출력되고 기동이 중단되면 `EMBEDDING_DIMENSIONS` 설정과 실제 DB 차원이 어긋난 상태다. 이전 provider로 되돌리거나, `EMBEDDING_DIMENSIONS=N DATABASE_URL=$DATABASE_URL node scripts/post-migrate-flexible-embedding-dims.js` 실행 후 `node scripts/backfill-embeddings.js`로 재생성한 뒤 서버를 재시작한다.
 
 ## CLI 사용법
 

@@ -200,6 +200,30 @@ Unlike LongMemEval-S, which requires an external dataset and a separate harness,
 | Query classes | exact_symbol 25, concept_intent 35, hybrid 25, temporal 15 |
 | Command | `node bin/memento.js benchmark --repeat 2` |
 
+There are two measurement modes. `isolated` keeps only the seeded goldset fragments as candidates, so results are identical between runs. `corpus` competes against production fragments to show how recall behaves in a real haystack.
+
+### Reproduction
+
+The goldset and the baselines ship together in the repository, so the same numbers can be produced without external assets.
+
+```
+npm ci
+cp .env.example .env       # fill in POSTGRES_* and MEMENTO_ACCESS_KEY
+npm run migrate
+node bin/memento.js benchmark --repeat 3
+node bin/memento.js benchmark --key-scope corpus --repeat 3
+```
+
+| Asset | Path |
+|-|-|
+| Goldset, 100 entries | `tests/fixtures/recall-goldset.jsonl` |
+| Baseline figures | `scripts/baseline-recall.json` |
+| Measurement implementation | `lib/memory/signals/RecallBenchmark.js` |
+
+To compare against the baseline, add `--baseline scripts/baseline-recall.json`. Regression decisions are made with this comparison.
+
+`isolated` keeps only the seeded goldset fragments as candidates, so results are identical between runs. Use this mode for regression decisions. `corpus` fluctuates by about 3 points depending on when it runs, because production data keeps changing. When quoting an absolute figure, state the run time and the repeat count together.
+
 ### Intent profile, before and after
 
 | Metric | Profile off | Profile on |
@@ -211,6 +235,15 @@ Unlike LongMemEval-S, which requires an external dataset and a separate harness,
 | p95 latency (isolated) | 299ms | 316ms |
 | Recall@5 (corpus) | 50.0% | 76.0% |
 | p95 latency (corpus) | 1001ms | 996ms |
+
+### Recall@5 by query class (isolated, profile on)
+
+| Class | Entries | Recall@5 |
+|-------|---------|----------|
+| exact_symbol | 25 | 72.0% |
+| concept_intent | 35 | 80.0% |
+| hybrid | 25 | 100.0% |
+| temporal | 15 | 100.0% |
 
 ### Synthetic reverse-query augmentation, before and after
 
@@ -233,6 +266,35 @@ The accuracy gain actually came from ordering the auxiliary results. `id = ANY(.
 ### Embedding similarity distribution
 
 The default semantic threshold of 0.40 sat above the actual similarity distribution. With text-embedding-3-small, a paraphrase pair mixing a Korean query with an English technical term measured 0.2621 cosine, while the distribution against 5000 arbitrary fragments was p50 0.228 / p95 0.335. Correct fragments were filtered out below the threshold while unrelated fragments in the 0.39 to 0.43 range were returned instead. This measurement is the basis for the intent-based threshold adjustment.
+
+### Embedding model replacement (2026-08-28)
+
+The model was replaced from `text-embedding-3-small` (OpenAI API, 1536 dimensions) with `Xenova/bge-m3` (local transformers, 1024 dimensions), and 13,814 fragments, 28,247 morpheme dictionary entries, and 2,257 auxiliary vectors were re-embedded.
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Recall@1 (corpus) | 69.0% | 74.0% |
+| Recall@5 (corpus) | 76.0% | 94.0% |
+| MRR (corpus) | 0.7225 | 0.8249 |
+| p95 latency (corpus) | 996ms | 667ms |
+| Recall@5 (isolated) | 86.0% | 67.0% |
+
+In corpus competition mode Recall@5 rose by 18pp, and latency dropped because the API round trip is gone. By query class: concept_intent 97.1%, hybrid 100%, temporal 93.3%, exact_symbol 84%.
+
+Isolated mode moved the other way, which reflects a broken harness assumption rather than a quality drop. The final ranking is `importance 0.4 + recency 0.3 + similarity 0.3`, multiplying similarity as a raw 0 to 1 value, and the value bands of the two models differ.
+
+| Model | Similarity range of correct pairs | Ranking contribution width |
+|-------|-----------------------------------|----------------------------|
+| text-embedding-3-small | 0.26 to 0.52 | 0.078 |
+| Xenova/bge-m3 | 0.65 to 0.85 | 0.060 |
+
+bge-m3 values cluster in a high band, which reduces discrimination in a linear weighted sum. In isolated mode the importance and storage time of all 100 candidates are identical, so only this weakness remains and the figure drops sharply. In corpus mode the vector layer pre-filters the top 30, so the effect is small.
+
+The threshold is not the cause. Raising the semantic floor from 0.40 to 0.72 moved the result only from 66% to 67%.
+
+Isolated-mode figures are therefore not compared across the point where the model was replaced. The baselines are also kept separately as `scripts/baseline-recall.json` (isolated) and `scripts/baseline-recall-corpus.json` (corpus).
+
+The follow-up item is score normalization. Making similarity relative within the result set before applying the weights keeps discrimination independent of the model's value band.
 
 ### Reproducibility
 

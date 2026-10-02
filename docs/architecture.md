@@ -17,21 +17,25 @@ server.js  (HTTP 서버)
     ├── POST /message      Legacy SSE — JSON-RPC 수신
     ├── GET  /health       헬스 체크
     ├── GET  /metrics      Prometheus 메트릭
-    ├── GET  /authorize    OAuth 2.0 인가 엔드포인트
+    ├── GET|POST /authorize  OAuth 2.0 인가 엔드포인트
     ├── POST /token        OAuth 2.0 토큰 엔드포인트
+    ├── POST /register     OAuth 2.0 동적 클라이언트 등록
+    ├── POST /session/rotate  세션 ID 회전
+    ├── GET  /openapi.json OpenAPI 문서
+    ├── /v1/internal/model/nothing/*  Admin 콘솔
     ├── GET  /.well-known/oauth-authorization-server
     └── GET  /.well-known/oauth-protected-resource
     │
     ├── lib/jsonrpc.js        JSON-RPC 2.0 파싱 및 메서드 디스패치. `dispatchJsonRpc`는 METHOD_MAP 객체로 메서드명→핸들러를 정적 매핑
-    ├── lib/tool-registry.js  16개 기억 도구 등록 및 라우팅
+    ├── lib/tool-registry.js  20개 도구 등록 및 라우팅 (일반 키 16개, 마스터 키 전용 4개: memory_stats, memory_consolidate, check_update, apply_update)
     │
     └── lib/memory/
-            ├── MemoryManager.js          비즈니스 로직 조율 facade (259줄, 싱글턴). 15개 공개 메서드를 1줄 위임으로 4개 processor에 라우팅. 공유 프로퍼티는 _installSharedSync로 동기화
+            ├── MemoryManager.js          비즈니스 로직 조율 facade (싱글턴). 공개 메서드를 4개 processor에 위임하여 라우팅. 공유 프로퍼티는 _installSharedSync로 동기화
             ├── processors/               remember/recall/reflect/link 도메인 처리기 모듈
-            │   ├── MemoryRememberer.js   remember() 전담 (~695줄). _runPolicyGate 헬퍼로 dryRun·atomic·non-atomic 분기를 동일 시점에 평가하며, 관련 변수를 사용 전에 선언하여 TDZ(Temporal Dead Zone) 참조 오류를 방지한다
-            │   ├── MemoryRecaller.js     recall() 전담 (~405줄). fields pick 단계, depth 필터, CBR 경로
-            │   ├── MemoryReflector.js    reflect() 전담 (~89줄). session 요약→파편 변환
-            │   ├── MemoryLinker.js       link()/forget()/amend() 전담 (~80줄)
+            │   ├── MemoryRememberer.js   remember() 전담. _runPolicyGate 헬퍼로 dryRun·atomic·non-atomic 분기를 동일 시점에 평가하며, 관련 변수를 사용 전에 선언하여 TDZ(Temporal Dead Zone) 참조 오류를 방지한다
+            │   ├── MemoryRecaller.js     recall() 전담. fields pick 단계, depth 필터, CBR 경로
+            │   ├── MemoryReflector.js    reflect() 전담. session 요약→파편 변환
+            │   ├── MemoryLinker.js       link()/forget()/amend() 전담
             │   ├── ReflectProcessor.js   reflect() 로직 전담. summary→파편 변환, episode 생성, Working Memory 정리
             │   ├── AutoReflect.js        세션 종료 시 자동 reflect 오케스트레이터
             │   ├── EpisodeContinuityService.js reflect() 호출 후 case_events milestone_reached + preceded_by 엣지 연결 (idempotency_key 기반 중복 방지)
@@ -87,13 +91,13 @@ server.js  (HTTP 서버)
             │   ├── SearchEventAnalyzer.js 검색 이벤트 분석, 쿼리 패턴 추적 (SearchEventRecorder로부터 읽음)
             │   ├── SearchEventRecorder.js FragmentSearch.search() 결과 to search_events 테이블 기록
             │   ├── EvaluationMetrics.js   tool_feedback 기반 implicit Precision@5 및 downstream task 성공률 계산
-            │   └── SearchParamAdaptor.js  key_id x query_type x hour별 minSimilarity 온라인 학습, 원자적 UPSERT (116줄)
+            │   └── SearchParamAdaptor.js  key_id x query_type x hour별 minSimilarity 온라인 학습, 원자적 UPSERT
             ├── QuotaChecker.js           API 키 파편 할당량 검사 (fragment_limit 기반)
             ├── FragmentIndex.js          Redis L1 인덱스 관리, getFragmentIndex() 싱글톤 팩토리
             ├── keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` 공유 헬퍼. key_id 범위 WHERE 절 생성. FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js에서 공유 사용
             ├── CaseEventStore.js         semantic milestone 로그 (case_events CRUD, DAG 엣지, 증거 조인)
             ├── memory-schema.sql         PostgreSQL 스키마 정의
-            └── migrations/               DB 마이그레이션 SQL 37개 (migration-001 ~ migration-037, schema_migrations 테이블 기준 순차 적용). `scripts/migrate.js`·`scripts/lint-migrations.js`가 이 경로를 사용
+            └── migrations/               DB 마이그레이션 SQL 48개 (migration-001 ~ migration-049, 046 결번, schema_migrations 테이블 기준 순차 적용). `scripts/migrate.js`·`scripts/lint-migrations.js`가 이 경로를 사용
 ```
 
 지원 모듈:
@@ -112,7 +116,7 @@ lib/
 ├── openapi.js         OpenAPI 3.1.0 스펙 생성기. `ENABLE_OPENAPI=true` 시 `GET /openapi.json` 활성화. 인증 레벨 기반 도구 목록 필터: master key → 전체 경로(Admin REST API 포함), API key → permissions 기반 도구 목록
 ├── rate-limiter.js    IP 기반 sliding window rate limiter
 ├── rbac.js            RBAC 권한 검사 (read/write/admin 도구 레벨 권한 적용)
-├── http-handlers.js   HTTP 핸들러 re-export 허브 (21줄). 실제 구현은 lib/handlers/ 하위 모듈
+├── http-handlers.js   HTTP 핸들러 re-export 허브. 실제 구현은 lib/handlers/ 하위 모듈
 ├── scheduler.js       주기 작업 스케줄러 (setInterval 작업 관리)
 ├── scheduler-registry.js 스케줄러 작업 레지스트리 (작업별 성공/실패 추적)
 └── utils.js           Origin 검증, JSON 바디 파싱(2MB 상한), SSE 출력
@@ -137,7 +141,7 @@ lib/admin/
 assets/admin/
 ├── index.html         Admin SPA app shell (로그인 폼 + 컨테이너)
 ├── admin.css          Admin UI 스타일시트
-└── admin.js           Admin UI 로직 (7개 내비게이션: 개요, API 키, 그룹, 메모리 운영, 세션, 로그, 지식 그래프)
+└── admin.js           Admin UI 로직 (8개 내비게이션: 개요, API 키, 그룹, 메모리 운영, 세션, 로그, 지식 그래프, 메트릭)
 
 lib/http/
 └── helpers.js         HTTP SSE 스트림 헬퍼 및 요청 파싱 유틸리티
@@ -172,9 +176,11 @@ lib/tools/
 ├── reconstruct.js  reconstruct_history, search_traces 도구 핸들러 (Narrative Reconstruction)
 ├── memory-schemas.js  도구 스키마 정의 (inputSchema)
 ├── db.js        PostgreSQL 연결 풀, 에이전트 세션 변수 설정 쿼리 헬퍼 (MCP 미노출). getPrimaryPool(), getBatchPool(), queryWithAgentVector()
-├── db-tools.js  MCP DB 도구 핸들러 (db.js에서 분리된 도구별 로직)
 ├── embedding.js OpenAI 텍스트 임베딩 생성
 ├── stats.js     접근 통계 수집 및 저장
+├── pool-gate.js 백그라운드 작업의 Primary 풀 점유 상한 관리
+├── serverTime.js 서버 시각 헬퍼
+├── update-tools.js check_update / apply_update 도구 정의와 핸들러 (마스터 키 전용)
 ├── prompts.js   MCP Prompts 정의 (analyze-session, retrieve-relevant-memory 등)
 ├── resources.js MCP Resources 정의 (memory://stats, memory://topics 등)
 └── index.js     도구 핸들러 export
@@ -216,14 +222,14 @@ scripts/
 
 ## MemoryManager Facade 분해
 
-MemoryManager는 259줄의 thin facade이며 비즈니스 로직은 `lib/memory/processors/` 하위 4개 processor로 분리되어 있다.
+MemoryManager는 thin facade이며 비즈니스 로직은 `lib/memory/processors/` 하위 4개 processor로 분리되어 있다.
 
 ```
-MemoryManager (259줄, facade)
-  ├── MemoryRememberer  (~695줄) — remember(), batchRemember()
-  ├── MemoryRecaller    (~405줄) — recall(), context()
-  ├── MemoryReflector   ( ~89줄) — reflect()
-  └── MemoryLinker      ( ~80줄) — link(), forget(), amend()
+MemoryManager (facade)
+  ├── MemoryRememberer  - remember(), batchRemember()
+  ├── MemoryRecaller    - recall(), context()
+  ├── MemoryReflector   - reflect()
+  └── MemoryLinker      - link(), forget(), amend()
 ```
 
 의존 방향: processors → 공용 모듈 (FragmentStore, FragmentSearch 등) / 외부 호출자 → facade → processors.
@@ -596,14 +602,21 @@ fragment_links의 weight/confidence 변경 이력을 기록하는 감사 테이�
 
 ### Row-Level Security
 
-fragments 테이블에 RLS가 켜져 있고 정책명은 `fragment_isolation_policy`, 판단 기준은 세션 변수 `app.current_agent_id`다. 다만 DB 수준 격리는 활성 상태가 아니다. 애플리케이션 계정이 표 소유자이고 `FORCE ROW LEVEL SECURITY`가 없어 정책이 런타임 질의에 적용되지 않으며, 다수 경로가 세션 변수를 설정하지 않고 직접 질의한다. 키 간 격리는 애플리케이션 질의 필터(`lib/memory/keyScope.js`)가 담당한다. DB 격리를 세우는 절차는 `docs/operations/row-level-security.md`에 있다.
+fragments와 fragment_links에 RLS가 켜져 있다(migration-045). fragments 정책 `fragment_isolation_policy`는 `app.current_agent_id`(에이전트 축)와, 값이 있을 때만 `app.current_key_id`(키 축)를 본다. fragment_links 정책은 from_id 파편의 접근 가능성을 따른다. 다만 DB 수준 격리는 활성 상태가 아니다. 애플리케이션 계정이 표 소유자이고 `FORCE ROW LEVEL SECURITY`가 없어 정책이 런타임 질의에 적용되지 않으며, 다수 경로가 세션 변수를 설정하지 않고 직접 질의한다. 키 간 격리는 애플리케이션 질의 필터(`lib/memory/keyScope.js`)가 담당한다. DB 격리를 세우는 절차는 `docs/operations/row-level-security.md`에 있다.
 
 ```sql
 CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
     USING (
-        agent_id = current_setting('app.current_agent_id', true)
-        OR agent_id = 'default'
-        OR current_setting('app.current_agent_id', true) IN ('system', 'admin')
+        (
+            agent_id = current_setting('app.current_agent_id', true)
+            OR agent_id = 'default'
+            OR current_setting('app.current_agent_id', true) IN ('system', 'admin')
+        )
+        AND (
+            COALESCE(current_setting('app.current_key_id', true), '') = ''
+            OR key_id IS NOT DISTINCT FROM current_setting('app.current_key_id', true)
+            OR current_setting('app.current_agent_id', true) IN ('system', 'admin')
+        )
     );
 ```
 
@@ -680,7 +693,7 @@ MCP 클라이언트는 RFC 8414/RFC 7591/RFC 7636 기반 OAuth 2.0 흐름으로 
 
 | 레이어 | 격리 기준 | 동작 |
 |--------|----------|------|
-| RLS (Row-Level Security) | `agent_id` | 정책은 걸려 있으나 표 소유자 계정에는 적용되지 않아 비활성. 세션 변수 `app.current_agent_id` 기준이며 `default` 에이전트와 `system`/`admin` 세션 공통 접근 허용 |
+| RLS (Row-Level Security) | `agent_id`, `key_id` | 정책은 걸려 있으나 표 소유자 계정에는 적용되지 않아 비활성. 세션 변수 `app.current_agent_id`와 (설정된 경우) `app.current_key_id` 기준. `default` 에이전트와 `system`/`admin` 세션 공통 접근 허용 |
 | key_id 격리 | `key_id` 컬럼 | master key: `key_id = NULL` (전체 접근), API key: `key_id = <해당 키 ID>` (자기 소유 파편만) |
 | 그룹 격리 | `groupKeyIds` 배열 | 동일 그룹 소속 키들 간 파편 공유. `COALESCE(group_id, api_keys.id)` 를 effective_key_id로 사용 |
 
@@ -694,7 +707,7 @@ MCP 클라이언트는 RFC 8414/RFC 7591/RFC 7636 기반 OAuth 2.0 흐름으로 
 
 ### Admin 콘솔 구조
 
-Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + `assets/admin/admin.css` + `assets/admin/admin.js`). 7개 내비게이션 영역으로 나뉜다:
+Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + `assets/admin/admin.css` + `assets/admin/admin.js`). 8개 내비게이션 영역으로 나뉜다:
 
 | 영역 | 설명 | 상태 |
 |------|------|------|
@@ -705,6 +718,7 @@ Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + 
 | 세션 | 세션 목록, 상세 조회, 활동 추적, 수동 reflect, 종료, 만료 정리, 미반영 일괄 reflect | 구현 완료 |
 | 로그 | 로그 파일 목록, 내용 조회(역순 tail), 레벨/검색 필터, 통계 | 구현 완료 |
 | 지식 그래프 | 파편 관계 시각화 (D3.js force-directed), 토픽 필터, 노드 상세 | 구현 완료 |
+| 메트릭 | 프로세스 내 메트릭 카드, 시계열 sparkline, 시간 범위 토글 | 구현 완료 |
 
 각 탭의 화면 구성과 조작 방법은 [관리자 콘솔 사용 안내](admin-console-guide.md)를 참고한다.
 
@@ -712,7 +726,7 @@ Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + 
 
 **Admin UI ESM 구조** (`assets/admin/`):
 
-번들러 없이 브라우저 네이티브 ESM으로 동작한다. `admin.js`는 58줄의 엔트리포인트로 `assets/admin/modules/` 하위 13개 도메인별 모듈을 동적으로 임포트한다.
+번들러 없이 브라우저 네이티브 ESM으로 동작한다. `admin.js`는 엔트리포인트로 `assets/admin/modules/` 하위 15개 모듈을 정적 import로 불러온다.
 
 | 모듈 | 역할 |
 |------|------|
@@ -729,6 +743,8 @@ Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + 
 | `graph.js` | D3.js force-directed 지식 그래프 |
 | `logs.js` | 로그 파일 조회 (역순 tail, 레벨/검색 필터) |
 | `memory.js` | 파편 검색/필터, 이상 탐지, 검색 관측성 |
+| `metrics.js` | 메트릭 카드, 시간 범위 토글 |
+| `metrics-sparkline.js` | 순수 SVG sparkline 렌더러 |
 
 **Graph 렌더링 최적화** (`modules/graph.js`):
 
@@ -947,7 +963,7 @@ recall 호출 시 `contextText` 파라미터를 전달하면 관련 파편의 `e
 - Fail-open: detector 오류는 swallow, SymbolicOrchestrator timeout(50ms) 초과 시 fallback
 - Tenant isolation: SessionLinker.wouldCreateCycle 포함 14건 전수 커버
 
-### Hook Chain (FragmentSearch.search 라인 88 이후)
+### Hook Chain (FragmentSearch.search, 확률적 결과 산출 직후)
 
 ```
 probabilistic result
@@ -1145,7 +1161,7 @@ RecallSuggestionEngine.analyze()
 
 ### DB 스키마 — 마이그레이션
 
-**migration-034: api_keys.default_mode**
+**migration-034-v2.16.0-bundle: api_keys.default_mode**
 - `TEXT DEFAULT NULL` 컬럼 추가
 - 허용값: `recall-only`, `write-only`, `onboarding`, `audit`, NULL(제한 없음)
 - Admin console에서 키 편집 시 설정
@@ -1165,7 +1181,7 @@ ReflectProcessor.process()는 5개 카테고리(summary/decisions/errors_resolve
 
 각 항목에 `_category` 메타를 부여하고 반환 `results`를 카테고리별로 재집계하여 기존 breakdown shape(`{summary, decisions, errors, procedures, questions}`)을 보존한다. `batchRememberProcessor`가 주입되지 않은 레거시 mock 환경에서는 `store.insert + index.index` 경로로 폴백한다.
 
-관련 코드: `lib/memory/processors/ReflectProcessor.js` line 81~258 (`allFragmentItems` 빌드 → `batchRememberProcessor.process` 위임 → 결과 재집계).
+관련 코드: `lib/memory/processors/ReflectProcessor.js` (`allFragmentItems` 빌드 → `batchRememberProcessor.process` 위임 → 결과 재집계).
 
 ```
 reflect() 호출
@@ -1217,7 +1233,7 @@ errors×decisions, procedures×errors 곱집합을 다음 4단계 배치 처리�
 
 부분 실패 시 전체 롤백 후 단건 `createLink` fallback으로 전환한다. `LinkStore.createLinks`는 `SET LOCAL lock_timeout='5s'`, advisory lock 일괄 획득, multi-row INSERT ON CONFLICT, RETURNING id를 단일 트랜잭션으로 실행한다.
 
-관련 코드: `lib/memory/link/SessionLinker.js` line 105~177, `lib/memory/link/LinkStore.js` line 94~195.
+관련 코드: `lib/memory/link/SessionLinker.js`, `lib/memory/link/LinkStore.js`.
 
 ### EmbeddingWorker._embedMany 배치화
 
@@ -1246,7 +1262,7 @@ Consistency Gate: `FragmentReader.searchBySemantic` 파라미터 `morphemeOnly=t
 
 migration-035(`lib/memory/migrations/migration-035-morpheme-indexed.sql`): `fragments.morpheme_indexed BOOLEAN NOT NULL DEFAULT false` 컬럼 추가, 기존 파편 백필, 부분 인덱스(`WHERE morpheme_indexed = false`) 생성.
 
-관련 코드: `lib/memory/embedding/MorphemeTokenizer.js`, `lib/memory/embedding/MorphemeIndex.js` line 116~266, `lib/memory/write/RememberPostProcessor.js` line 107~214.
+관련 코드: `lib/memory/embedding/MorphemeTokenizer.js`, `lib/memory/embedding/MorphemeIndex.js`, `lib/memory/write/RememberPostProcessor.js`.
 
 ### lib/memory 서브디렉토리 구조
 
@@ -1261,7 +1277,7 @@ lib/memory/
 ├── embedding/     EmbeddingWorker, EmbeddingCache, MorphemeIndex, MorphemeTokenizer
 ├── signals/       SpreadingActivation, CaseRewardBackprop, NLIClassifier, MemoryEvaluator, SearchMetrics, SearchEventAnalyzer, SearchEventRecorder, EvaluationMetrics, SearchParamAdaptor
 ├── processors/    MemoryRememberer, MemoryRecaller, MemoryReflector, MemoryLinker, ReflectProcessor, AutoReflect, EpisodeContinuityService, SessionActivityTracker
-└── migrations/    마이그레이션 SQL 37개
+└── migrations/    마이그레이션 SQL 48개 (001 ~ 049, 046 결번)
 ```
 
 루트 직속으로 유지되는 모듈은 MemoryManager, ModeRegistry, keyId, keyScope, QuotaChecker, CaseEventStore, FragmentIndex, contentGuard이다. 위 서브디렉토리로 이동한 모듈에 대한 재-export 심(re-export shim)은 존재하지 않는다 — 임포트 경로는 실제 파일 위치를 그대로 따른다.
@@ -1340,7 +1356,7 @@ BatchRememberProcessor는 `_getPool()` 내부에서 `getBatchPool()`을 기본 �
 
 스케줄러(`lib/scheduler.js`)가 1분 간격으로 Batch pool 통계를 수집한다.
 
-관련 코드: `lib/tools/db.js` line 67~121.
+관련 코드: `lib/tools/db.js`.
 
 ### batch_remember 비동기 처리
 
@@ -1371,7 +1387,7 @@ migration SQL: `lib/memory/migrations/migration-035-morpheme-indexed.sql`.
 - `_mergeDuplicates`: `GROUP BY key_id, workspace, content_hash`. master 키 파편은 자동 병합 제외, scope 불일치 그룹은 경고 후 건너뜀.
 - `MemoryRememberer._runPolicyGate(fragment, { keyId, mode })`: dryRun·atomic·non-atomic 세 분기에서 PolicyRules 평가를 동일 시점에 수행. mode는 `"dryRun"` 또는 `"production"`.
 - `CaseRewardBackprop`: `MEMENTO_CASE_BACKPROP_ENABLED=true`일 때만 `backprop()`이 fragment_evidence 조회 및 importance 역전파를 수행.
-- migration body-only 규약: `scripts/migrate.js`는 정규식 재작성을 수행하지 않는다. 마이그레이션 파일은 SET 문과 세미콜론으로 끝나는 순수 SQL만 포함해야 하며 `lint:migrations`가 이를 CI에서 강제한다.
+- migration body-only 규약: `scripts/migrate.js`가 파일마다 트랜잭션과 schema_migrations 기록을 처리하므로 파일 본문에 BEGIN/COMMIT과 schema_migrations INSERT를 쓰지 않는다. 본문 치환은 `vector_cosine_ops`를 실제 opclass로 바꾸는 것 하나뿐이다. `lint:migrations`가 CI에서 검사한다. 상세는 `docs/migration-conventions.md`.
 
 ## 관련 문서
 

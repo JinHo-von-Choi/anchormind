@@ -46,11 +46,11 @@ Flags available for all subcommands.
 
 ### Local-only (remote access not supported)
 
-`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, and `import` access the DB or process directly and return an error when used with `--remote`.
+`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, and `anchor-scope` access the DB or process directly and return an error when used with `--remote`.
 
 ### Remote-capable
 
-`recall`, `remember`, `stats`, `inspect` can be executed through a remote MCP server via `--remote URL --key KEY`.
+`recall`, `remember`, `stats`, `inspect`, `session` can be executed through a remote MCP server via `--remote URL --key KEY`.
 
 ---
 
@@ -72,6 +72,8 @@ Flags available for all subcommands.
 | `export [--topic x] [--type t]` | Dump fragments as JSONL | No |
 | `import [--input FILE]` | Ingest JSONL (file or stdin) | No |
 | `completion <shell>` | Print bash/zsh completion script | Yes |
+| `benchmark [--goldset FILE]` | Measure recall quality against a goldset | No |
+| `anchor-scope [--execute]` | Inventory and normalize approved shared anchors, snapshot backfill (dry-run by default) | No |
 
 ---
 
@@ -486,7 +488,7 @@ EMBEDDING_DIMENSIONS=384 DATABASE_URL=$DATABASE_URL \
   node scripts/post-migrate-flexible-embedding-dims.js
 ```
 
-Updates the vector column dimensions in both `fragments` and `morpheme_dict` simultaneously. The skip decision compares the (type, declared dimension) pair, and `--dry-run` previews the conversion targets without applying changes. Each table converts inside a transaction and rolls back on mid-step failure. After conversion, `fragments` is re-embedded automatically by the server scheduler, while `morpheme_dict` requires a separate run of `node scripts/backfill-morpheme-dict.js`.
+Updates the vector column dimensions in `fragments`, `morpheme_dict`, and `fragment_synthetic_query` simultaneously. The skip decision compares the (type, declared dimension) pair, and `--dry-run` previews the conversion targets without applying changes. Each table converts inside a transaction and rolls back on mid-step failure. After conversion, `fragments` is re-embedded automatically by the server scheduler, while `morpheme_dict` requires a separate run of `node scripts/backfill-morpheme-dict.js`.
 
 ### Embedding Backfill
 

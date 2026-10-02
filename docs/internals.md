@@ -33,7 +33,7 @@ MemoryManager는 thin facade다. 비즈니스 로직은 `lib/memory/processors/`
 
 검색 관련 모듈은 `lib/memory/read/`에 위치하며, 임포트 경로는 실제 파일 위치를 그대로 따른다.
 
-**facade 생성자 흐름:** 20개 공유 객체 초기화 → 4 프로세서 DI 주입 → `_installSharedSync()` 호출. 15개 공개 메서드는 1줄 위임으로 구현된다.
+**facade 생성자 흐름:** 20개 공유 객체 초기화 → 4 프로세서 DI 주입 → `_installSharedSync()` 호출. 공개 메서드는 processor 위임으로 구현된다.
 
 **_installSharedSync:** facade의 각 공유 프로퍼티(store, index, factory 등) setter를 `Object.defineProperty`로 래핑한다. `mm.store = stub` 한 줄이 facade와 모든 프로세서에 자동 전파된다 (테스트 DI 호환).
 
@@ -272,9 +272,9 @@ API 키 원문을 client_id로 등록한 기존 Redis 토큰은 `bound_key_id=nu
 
 `POST /token` 에서 `grant_type=refresh_token`으로 토큰을 갱신할 때, 원본 토큰의 `is_api_key` 플래그가 새로 발급되는 access_token과 refresh_token에 그대로 전파된다. API 키 기반 클라이언트가 갱신 후에도 동일한 격리 컨텍스트를 유지한다.
 
-### SESSION_TTL 기본값
+### SESSION_TTL_MINUTES 기본값
 
-`SESSION_TTL` 환경변수의 기본값은 43200분(30일)이다. 슬라이딩 윈도우 방식으로 도구 사용 시마다 TTL이 갱신되므로, 30일 비활동 후에만 만료된다. 활발히 사용 중인 세션은 사실상 만료되지 않는다.
+`SESSION_TTL_MINUTES` 환경변수의 기본값은 43200분(30일)이다. 슬라이딩 윈도우 방식으로 도구 사용 시마다 TTL이 갱신되므로, 30일 비활동 후에만 만료된다. 활발히 사용 중인 세션은 사실상 만료되지 않는다.
 
 ### initialize 요청 IP rate limit 선차단
 
@@ -626,10 +626,10 @@ architecture.md의 Symbolic Memory Layer 섹션이 전체 설계를 다룬다. �
 
 ### FragmentSearch Hook Chain 삽입 위치
 
-`lib/memory/read/FragmentSearch.js` 라인 88 이후 3개 hook이 순서대로 실행된다:
-1. **shadow hook** (라인 99): `SYMBOLIC_CONFIG.enabled && SYMBOLIC_CONFIG.shadow` → `symbolicMetrics.observeLatency("shadow_recall", ...)` 기록만
-2. **explain hook** (라인 107): `SYMBOLIC_CONFIG.enabled && SYMBOLIC_CONFIG.explain` → `explanationBuilder.annotate(clean, { searchPath, layerLatency, query, caseContext })`
-3. **cbr filter** (라인 124): `SYMBOLIC_CONFIG.enabled && SYMBOLIC_CONFIG.cbrFilter && sq.caseId` → `cbrEligibility.filter(clean, sq)`. pre-filter `rawResultCount`는 SearchParamAdaptor 학습 신호 보호를 위해 별도 보존.
+`lib/memory/read/FragmentSearch.js`의 `search()`에서 확률적 결과 산출 직후 3개 hook이 순서대로 실행된다:
+1. **shadow hook**: `SYMBOLIC_CONFIG.enabled && SYMBOLIC_CONFIG.shadow` → `symbolicMetrics.observeLatency("shadow_recall", ...)` 기록만
+2. **explain hook**: `SYMBOLIC_CONFIG.enabled && SYMBOLIC_CONFIG.explain` → `explanationBuilder.annotate(clean, { searchPath, layerLatency, query, caseContext })`
+3. **cbr filter**: `SYMBOLIC_CONFIG.enabled && SYMBOLIC_CONFIG.cbrFilter && sq.caseId` → `cbrEligibility.filter(clean, sq)`. pre-filter `rawResultCount`는 SearchParamAdaptor 학습 신호 보호를 위해 별도 보존.
 
 ### ConflictResolver.checkAssertionConsistency 및 validationWarnings 병기
 
@@ -673,9 +673,9 @@ initialize 이후 모든 요청에서 `MCP-Protocol-Version` 헤더를 검사한
 
 처리 순서:
 1. `method === "initialize"`: 헤더 검증 생략 (협상 이전 단계)
-2. 헤더 없음: 스펙 fallback → `2025-03-26` 사용, WARNING 로그 기록 후 통과
+2. 헤더 없음: 스펙 fallback으로 `2025-03-26`을 사용하고 info 로그를 남긴 뒤 통과
 3. 헤더 있음 + `SUPPORTED_PROTOCOL_VERSIONS`에 없음: HTTP 400 + `-32000 "Unsupported protocol version"`
-4. 헤더 있음 + 세션 `negotiatedVersion`과 불일치: HTTP 400 + `-32000 "Protocol version mismatch"`
+4. 헤더 있음 + 세션 `negotiatedVersion`과 불일치: 거부하지 않고 세션 값을 헤더 값으로 재설정한 뒤 통과. 메트릭 `mcp_protocol_version_reanchored_total` (label: `from`, `to`)
 5. 통과: 기존 경로 진행
 
 `negotiatedVersion` 저장: `dispatchJsonRpc` 완료 후 initialize 응답의 `result.protocolVersion`을 `streamableSessions.get(sessionId).negotiatedVersion`에 저장한다.
