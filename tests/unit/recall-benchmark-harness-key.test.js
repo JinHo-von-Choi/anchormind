@@ -76,3 +76,21 @@ describe("embeddingMismatch", () => {
     assert.match(msg, /Xenova\/bge-m3/);
   });
 });
+
+describe("embeddingMismatch 차원 비교", () => {
+  const current = { provider: "transformers", model: "Xenova/bge-m3", dimensions: 1024 };
+
+  it("기준선에 차원이 없고 모델이 같으면 null", () => {
+    assert.equal(embeddingMismatch({ model: "Xenova/bge-m3" }, current), null);
+  });
+
+  it("기준선에 차원이 없고 모델이 다르면 NaN이나 undefined 없이 문구를 돌려준다", () => {
+    const msg = embeddingMismatch({ model: "text-embedding-3-small" }, current);
+    assert.match(msg, /text-embedding-3-small/);
+    assert.doesNotMatch(msg, /NaN|undefined/);
+  });
+
+  it("모델이 같고 두 차원이 모두 숫자이며 다르면 문구를 돌려준다", () => {
+    assert.match(embeddingMismatch({ model: "Xenova/bge-m3", dimensions: 384 }, current), /384/);
+  });
+});

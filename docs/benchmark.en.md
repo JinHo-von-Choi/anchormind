@@ -222,15 +222,9 @@ node bin/memento.js benchmark --key-scope corpus --repeat 3
 
 To compare against the baseline, add `--baseline scripts/baseline-recall.json`. Regression decisions are made with this comparison.
 
-Baselines are produced in isolated mode with `Xenova/bge-m3` (1024 dimensions) and `--repeat 3` on a freshly migrated database. `--save-baseline` records the embedding provider, model and dimensions, and `--baseline` warns when the model differs. The regression tolerance is 2pp for Recall and MRR and 15% for p95 latency. Isolated seeding first creates the `benchmark-harness-key` row in `api_keys` (inactive) when it is missing.
+Baselines are produced in isolated mode with `Xenova/bge-m3` (1024 dimensions) and `--repeat 3` on a freshly migrated database. `--save-baseline` records the embedding provider, model and dimensions, and `--baseline` warns when the model differs. When the baseline file has no `embedding` field, no warning is printed, so the absence of a warning does not mean the models match. A run that embedded 0 fragments is refused by `--save-baseline` and exits with code 1. The regression tolerance is 2pp for Recall and MRR and 15% for p95 latency.
 
-To refresh the baseline:
-
-```bash
-npm run migrate
-EMBEDDING_PROVIDER=transformers EMBEDDING_MODEL=Xenova/bge-m3 EMBEDDING_DIMENSIONS=1024 EMBEDDING_ENABLED=true \
-  node bin/memento.js benchmark --repeat 3 --save-baseline scripts/baseline-recall.json
-```
+`scripts/baseline-recall.json` is the stored baseline. It is refreshed by running the procedure below with an embedding model and overwriting it with `--save-baseline`. The table below holds measurements taken on 2026-10-03 on a fresh isolated database with `Xenova/bge-m3`, the 100-entry goldset and `--repeat 3`; it is separate from the contents of the stored baseline file.
 
 | Item (2026-10-03, isolated, bge-m3) | Value |
 |-|-|
@@ -238,6 +232,23 @@ EMBEDDING_PROVIDER=transformers EMBEDDING_MODEL=Xenova/bge-m3 EMBEDDING_DIMENSIO
 | MRR | 0.8523 |
 | Misses | 7 |
 | p50 / p95 latency | 88ms / 102ms |
+
+Baseline refresh procedure: the run migrates, seeds and deletes data, so `DATABASE_URL` and `POSTGRES_*` must point at a throwaway or staging database and never at production. The benchmark prints one stderr line with the target host, port and database name at start. Check that line before seeding.
+
+```bash
+export DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<throwaway_db>
+export POSTGRES_HOST=<host> POSTGRES_PORT=<port> POSTGRES_DB=<throwaway_db> POSTGRES_USER=<user> POSTGRES_PASSWORD=<password>
+export EMBEDDING_PROVIDER=transformers EMBEDDING_MODEL=Xenova/bge-m3 EMBEDDING_DIMENSIONS=1024
+npm run migrate
+node scripts/post-migrate-flexible-embedding-dims.js
+EMBEDDING_ENABLED=true node bin/memento.js benchmark --repeat 3 --save-baseline scripts/baseline-recall.json
+```
+
+Seeding creates one `api_keys` row with id `benchmark-harness-key` and status `inactive`. This is expected. To remove it, first confirm that no fragments reference the key, then run:
+
+```sql
+DELETE FROM agent_memory.api_keys WHERE id = 'benchmark-harness-key' AND status = 'inactive';
+```
 
 `isolated` keeps only the seeded goldset fragments as candidates, so results are identical between runs. Use this mode for regression decisions. `corpus` fluctuates by about 3 points depending on when it runs, because production data keeps changing. When quoting an absolute figure, state the run time and the repeat count together.
 

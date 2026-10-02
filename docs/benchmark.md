@@ -123,15 +123,9 @@ node bin/memento.js benchmark --key-scope corpus --repeat 3
 
 기준선과 비교하려면 `--baseline scripts/baseline-recall.json`을 붙인다. 회귀 판정은 이 비교로 한다.
 
-기준선은 isolated 모드, `Xenova/bge-m3`(1024차원), `--repeat 3`으로 새로 마이그레이션한 DB에서 만든다. `--save-baseline`은 임베딩 provider, 모델, 차원을 함께 기록하고, `--baseline` 비교 시 모델이 다르면 경고한다. 회귀 판정 허용 하락폭은 Recall과 MRR 2pp, p95 지연 15%다. isolated 적재는 `benchmark-harness-key` 행이 `api_keys`에 없으면 inactive 상태로 먼저 만든다.
+기준선은 isolated 모드, `Xenova/bge-m3`(1024차원), `--repeat 3`으로 새로 마이그레이션한 DB에서 만든다. `--save-baseline`은 임베딩 provider, 모델, 차원을 함께 기록하고, `--baseline` 비교 시 모델이 다르면 경고한다. 기준선 파일에 `embedding` 필드가 없으면 경고를 내지 않으므로, 경고가 없다는 사실이 모델이 같다는 뜻은 아니다. 임베딩된 파편이 0건인 실행은 `--save-baseline`을 거부하고 종료 코드 1로 끝난다. 회귀 판정 허용 하락폭은 Recall과 MRR 2pp, p95 지연 15%다.
 
-기준선 갱신 절차는 다음과 같다.
-
-```bash
-npm run migrate
-EMBEDDING_PROVIDER=transformers EMBEDDING_MODEL=Xenova/bge-m3 EMBEDDING_DIMENSIONS=1024 EMBEDDING_ENABLED=true \
-  node bin/memento.js benchmark --repeat 3 --save-baseline scripts/baseline-recall.json
-```
+`scripts/baseline-recall.json`은 저장된 기준선이다. 임베딩 모델을 지정해 아래 절차를 실행하고 `--save-baseline`으로 덮어써서 갱신한다. 아래 표는 2026-10-03에 isolated 새 DB, `Xenova/bge-m3`, 골드셋 100문항, `--repeat 3`으로 측정한 값이며 저장된 기준선 파일의 내용과는 별개다.
 
 | 항목 (2026-10-03, isolated, bge-m3) | 값 |
 |-|-|
@@ -139,6 +133,23 @@ EMBEDDING_PROVIDER=transformers EMBEDDING_MODEL=Xenova/bge-m3 EMBEDDING_DIMENSIO
 | MRR | 0.8523 |
 | 미검출 | 7 |
 | p50 / p95 지연 | 88ms / 102ms |
+
+기준선 갱신 절차: 실행은 마이그레이션, 적재, 삭제를 수행하므로 `DATABASE_URL`과 `POSTGRES_*`는 일회용 DB 또는 스테이징 DB를 가리켜야 하고, 운영 DB를 가리켜서는 안 된다. 벤치마크는 시작 시 stderr에 대상 host, port, database 이름을 한 줄로 출력한다. 적재 전에 이 줄을 확인한다.
+
+```bash
+export DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<throwaway_db>
+export POSTGRES_HOST=<host> POSTGRES_PORT=<port> POSTGRES_DB=<throwaway_db> POSTGRES_USER=<user> POSTGRES_PASSWORD=<password>
+export EMBEDDING_PROVIDER=transformers EMBEDDING_MODEL=Xenova/bge-m3 EMBEDDING_DIMENSIONS=1024
+npm run migrate
+node scripts/post-migrate-flexible-embedding-dims.js
+EMBEDDING_ENABLED=true node bin/memento.js benchmark --repeat 3 --save-baseline scripts/baseline-recall.json
+```
+
+적재는 `api_keys`에 id `benchmark-harness-key`, 상태 `inactive` 행을 하나 만든다. 정상 동작이다. 지우려면 해당 키를 참조하는 파편이 없음을 확인한 뒤 실행한다.
+
+```sql
+DELETE FROM agent_memory.api_keys WHERE id = 'benchmark-harness-key' AND status = 'inactive';
+```
 
 `isolated`는 적재한 골드셋 파편만 후보로 두므로 회차 간 결과가 동일하다. 회귀 판정에는 이 모드를 쓴다. `corpus`는 운영 데이터가 계속 변하므로 실행 시점에 따라 3포인트 안팎으로 흔들린다. 절대 수치를 인용할 때는 실행 시각과 반복 횟수를 함께 적는다.
 
