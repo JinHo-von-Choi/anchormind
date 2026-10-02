@@ -19,7 +19,7 @@
  */
 
 import http from "http";
-import { resolveClientIp, applyBaseResponseHeaders } from "./lib/http/helpers.js";
+import { resolveClientIp, applyBaseResponseHeaders, recommendedSettingsGap } from "./lib/http/helpers.js";
 
 /** 설정 */
 import { PORT, ACCESS_KEY, AUTH_DISABLED, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI, SHUTDOWN_DEADLINE_MS, envInt, CONFIG_STRICT, getConfigIssues } from "./lib/config.js";
@@ -358,6 +358,11 @@ server.listen(PORT, () => {
   }
 
   console.log(`Session TTL: ${SESSION_TTL_MS / 60000} minutes`);
+
+  const settingsGap = recommendedSettingsGap();
+  if (settingsGap.length > 0) {
+    console.log(`[Startup] Recommended settings not applied: ${settingsGap.join(", ")} (docs/configuration.md)`);
+  }
 
   /** pgvector 스키마 자동 감지 (PGVECTOR_SCHEMA 미설정 시) */
   const pool = getPrimaryPool();

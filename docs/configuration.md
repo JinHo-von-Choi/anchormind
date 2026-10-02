@@ -75,7 +75,7 @@
 | UPDATE_CHECK_DISABLED | false | `true`로 설정 시 신규 버전 확인을 수행하지 않는다 |
 | UPDATE_CHECK_INTERVAL_HOURS | 24 | 신규 버전 확인 주기(시간) |
 | UPDATE_REQUIRE_SIGNED_TAG | false | `true`로 설정 시 git 설치본 업데이트의 install 단계에 `git verify-tag <대상 태그>`가 checkout 앞에 추가된다. 서명 확인에 실패하면 업데이트가 중단된다 |
-| TRUST_PROXY_HOPS | (없음) | 신뢰하는 리버스 프록시 hop 수. `X-Forwarded-For` 체인의 오른쪽에서 이 수번째 항목을 클라이언트 주소로 채택하고, `0`이면 헤더를 무시하고 소켓 주소를 쓴다. 미설정 시 기존 동작(첫 항목 사용). 실제 프록시 단수와 정확히 일치시켜야 하며, 실제보다 크게 잡으면 클라이언트가 보낸 값이 채택된다. 단일 nginx 뒤에서는 `1` |
+| TRUST_PROXY_HOPS | (없음) | 신뢰하는 리버스 프록시 hop 수. `X-Forwarded-For` 체인의 오른쪽에서 이 수번째 항목을 클라이언트 주소로 채택하고, `0`이면 헤더를 무시하고 소켓 주소를 쓴다. 미설정 시 기존 동작(첫 항목 사용)이며, 이 상태에서 `X-Forwarded-For`를 처음 받으면 `[Proxy]` 경고를 프로세스당 한 번 남기고 관리 `/stats`의 `healthFlags`에 `trust_proxy_hops_unset`이 더해진다. 기동 시 운영 권장 설정 중 빠진 이름은 `[Startup] Recommended settings not applied:` 한 줄로 나열한다. 실제 프록시 단수와 정확히 일치시켜야 하며, 실제보다 크게 잡으면 클라이언트가 보낸 값이 채택된다. 단일 nginx 뒤에서는 `1` |
 | MEMENTO_TOOL_ARGS_VALIDATION | warn | tools/call 인자를 도구의 inputSchema와 대조하는 모드. `off`: 점검 생략, `warn`: 위반을 `[ToolArgs]` 경고 로그로만 남기고 통과, `enforce`: 위반 시 JSON-RPC `-32602`로 거부. 호출 시점에 읽으므로 재시작 없이 바뀐다 |
 | MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN | false | `true`로 설정 시 스키마에 없는 필드를 위반으로 세지 않는다. `enforce` 모드에서 별칭 필드를 쓰는 클라이언트를 수용할 때 쓴다 |
 | MEMENTO_LLM_CLI_ENV_PASSTHROUGH | (없음) | CLI provider(gemini-cli, codex-cli, copilot-cli, qwen-cli, agy-cli, opencode-cli) 자식 프로세스에 추가로 전달할 환경변수 이름(쉼표 구분). 기본으로는 PATH, HOME 등 기본 변수와 CLI별 인증 변수만 전달된다 |

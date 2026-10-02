@@ -46,7 +46,7 @@ assets/admin/
 
 상단 커맨드바:
 - MASTER KEY 배지 -- 현재 세션이 master key 인증임을 표시한다.
-- HEALTH -- `/stats`의 healthFlags 실측 기반. 플래그가 없으면 OK(녹색), 있으면 개수를 적색으로 표시하며 마우스를 올리면 플래그 이름(redis_disconnected, db_pool_pressure 등)이 보인다. 미로드 시 --.
+- HEALTH -- `/stats`의 healthFlags 실측 기반. 플래그가 없으면 OK(녹색), 있으면 개수를 적색으로 표시하며 마우스를 올리면 플래그 이름(redis_disconnected, db_pool_pressure, trust_proxy_hops_unset 등)이 보인다. 미로드 시 --.
 - SYNCED -- 마지막 데이터 동기화 시각. 새로고침 버튼으로 stats를 재조회한다.
 - 768px 이하 화면에서는 좌측 메뉴 버튼으로 사이드바를 여닫는다(오버레이·ESC로 닫기).
 
