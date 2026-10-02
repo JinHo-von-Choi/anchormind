@@ -204,7 +204,13 @@ const SESSION_ID_NAME  = /^(sid|[a-z]*Sid|[a-zA-Z]*SessionId|sessionId|session_i
  *
  * @type {Array<{ file: string, snippet: string, reason: string }>}
  */
-const RAW_SESSION_ID_ALLOWLIST = [];
+const RAW_SESSION_ID_ALLOWLIST = [
+  {
+    file   : "lib/cli/session.js",
+    snippet: "",
+    reason : "CLI 명령이 운영자 터미널에 보여 주는 출력이며 운영자가 지정하거나 조회한 ID를 그대로 보여 준다"
+  }
+];
 
 function listJsFiles(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -245,13 +251,24 @@ function collectRawSessionIds(node, hits) {
   }
 }
 
+/**
+ * 로거 호출 판정: logInfo류 함수, console.<메서드>, 그리고 객체 사슬이 logger로 끝나는
+ * 호출(logger.info, this.logger.warn, deps.logger.error 등).
+ */
+function isLoggerCallee(callee) {
+  if (callee.type === "Identifier") return LOGGER_FUNCTIONS.has(callee.name);
+  if (callee.type !== "MemberExpression") return false;
+  const owner = callee.object;
+  if (owner.type === "Identifier" && owner.name === "console") return true;
+  const ownerName = owner.type === "Identifier" ? owner.name : owner.property?.name;
+  return ownerName === "logger" && LOGGER_METHODS.has(callee.property.name);
+}
+
 function findLoggerCalls(node, calls) {
   if (!node || typeof node.type !== "string") return;
   if (node.type === "CallExpression") {
     const callee = node.callee;
-    const isLogger = (callee.type === "Identifier" && LOGGER_FUNCTIONS.has(callee.name))
-      || (callee.type === "MemberExpression" && callee.object.name === "logger" && LOGGER_METHODS.has(callee.property.name));
-    if (isLogger) calls.push(node);
+    if (isLoggerCallee(callee)) calls.push(node);
   }
   for (const [key, value] of Object.entries(node)) {
     if (key === "loc" || key === "range") continue;
@@ -295,13 +312,20 @@ describe("세션 ID 로그 구조", () => {
       "logError('x', err, { sessionId });",
       "logInfo(`ok ${sessionId}`);",
       "logWarn('x', { sid: req.headers['mcp-session-id'] });",
-      "logger.info('x', { id: session.sessionId });"
+      "logger.info('x', { id: session.sessionId });",
+      "console.log(`x ${sessionId}`);",
+      "console.error('x', { sessionId });",
+      "console.warn('a' + sessionId);",
+      "this.logger.info(`${sessionId}`);",
+      "deps.logger.error('x', { sid });"
     ];
     for (const src of raw) assert.ok(scanRawSessionIdLogs(src, "t.js").length > 0, src);
     const safe = [
       "logError('x', err, { sessionId: sessionId.substring(0, 8) });",
       "logInfo(`ok ${sessionRef(sessionId)}`);",
       "logInfo(`ok ${sessionId?.slice(0, 8)}...`);",
+      "console.log(`x ${sessionRef(sessionId)}`);",
+      "this.logger.info(`${sessionRef(sessionId)}`);",
       "const a = sessionId; doSomething(sessionId);"
     ];
     for (const src of safe) assert.equal(scanRawSessionIdLogs(src, "t.js").length, 0, src);
