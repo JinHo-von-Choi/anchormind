@@ -2,7 +2,7 @@
 title: "Windows PowerShell Setup"
 date: 2026-03-13
 author: 최진호
-updated: 2026-04-20
+updated: 2026-10-03
 ---
 
 # Windows PowerShell Setup
@@ -72,6 +72,12 @@ psql -d "postgresql://postgres:change-me@localhost:5432/memento" -c "CREATE EXTE
 psql -d "postgresql://postgres:change-me@localhost:5432/memento" -f lib/memory/memory-schema.sql
 ```
 
+마지막으로 마이그레이션을 실행한다. `.env`의 DB 설정을 읽는다.
+
+```powershell
+npm run migrate
+```
+
 ## 5. 서버 실행
 
 ```powershell
@@ -86,12 +92,32 @@ Invoke-RestMethod -Method Get -Uri "http://localhost:57332/health"
 
 ## 7. JSON-RPC 호출 예시
 
+`tools/call`은 세션이 필요하다. 먼저 `initialize`로 `MCP-Session-Id`를 받는다.
+
 ```powershell
 $headers = @{
-  Authorization = "Bearer change-me"
+  Authorization  = "Bearer change-me"
   "Content-Type" = "application/json"
 }
 
+$initBody = @{
+  jsonrpc = "2.0"
+  id      = 0
+  method  = "initialize"
+  params  = @{
+    protocolVersion = "2025-11-25"
+    capabilities    = @{}
+    clientInfo      = @{ name = "powershell"; version = "1" }
+  }
+} | ConvertTo-Json -Depth 6
+
+$init = Invoke-WebRequest -Method Post -Uri "http://localhost:57332/mcp" -Headers $headers -Body $initBody -UseBasicParsing
+$headers["MCP-Session-Id"] = @($init.Headers["MCP-Session-Id"])[0]
+```
+
+받은 세션으로 `remember`를 호출한다.
+
+```powershell
 $body = @{
   jsonrpc = "2.0"
   id      = 1
@@ -120,7 +146,7 @@ node server.js
 
 반복 사용 환경이라면 WSL2로 전환하는 것이 낫다.
 
-## 9. CLI 원격 접속 환경변수 설정 (v2.12.0 M1)
+## 9. CLI 원격 접속 환경변수 설정
 
 PowerShell에서 CLI 원격 접속 환경변수를 설정할 때 따옴표에 주의한다. `$env:` 접두어를 사용하며, 값에 `$` 문자가 포함되면 큰따옴표 내부에서 해석될 수 있으므로 작은따옴표로 감싼다.
 
@@ -144,4 +170,4 @@ node bin/memento.js stats --remote "https://memento.anchormind.net/mcp" --key "m
 Docker 기반으로 상시 운영하는 경우, restart 정책과 Windows 로그인 시 복구 패턴은
 [Production Docker](../operations/production-docker.md)를 따른다. 요지: Docker Desktop의
 "Start when you sign in" 활성화 + compose `restart: unless-stopped` 조합으로 대부분 해결되고,
-`/health` 게이트를 쓸 때는 HTTP 200이 아니라 응답의 `status === "healthy"`를 확인해야 한다.
+상태 게이트를 쓸 때는 `/health`의 HTTP 200이 아니라 응답의 `status === "healthy"`를 확인해야 한다. DB 준비 여부만 보려면 `/health/ready`(주 DB 응답 시 200, 아니면 503)를 쓴다.

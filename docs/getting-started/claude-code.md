@@ -2,7 +2,7 @@
 title: "Claude Code Configuration"
 date: 2026-03-13
 author: 최진호
-updated: 2026-04-20
+updated: 2026-10-03
 ---
 
 # Claude Code Configuration
@@ -94,7 +94,7 @@ access key를 커밋하지 않도록 `.gitignore`에 추가하거나 환경 변�
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s -X POST http://localhost:57332/mcp -H 'Authorization: Bearer YOUR_KEY' -H 'Content-Type: application/json' -H 'mcp-session-id: ${MCP_SESSION_ID}' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"context\",\"arguments\":{}}}'"
+            "command": "SID=$(curl -s -D - -o /dev/null -X POST http://localhost:57332/mcp -H 'Authorization: Bearer YOUR_KEY' -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"hook\",\"version\":\"1\"}}}' | awk 'tolower($1)==\"mcp-session-id:\"{print $2}' | tr -d '\\r'); curl -s -X POST http://localhost:57332/mcp -H 'Authorization: Bearer YOUR_KEY' -H 'Content-Type: application/json' -H \"MCP-Session-Id: $SID\" -d '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"context\",\"arguments\":{}}}'"
           }
         ]
       }
@@ -103,7 +103,7 @@ access key를 커밋하지 않도록 `.gitignore`에 추가하거나 환경 변�
 }
 ```
 
-`tools/call`에는 세션이 필요하다. `initialize` 응답의 `MCP-Session-Id` 값을 `mcp-session-id` 헤더로 보내며(예시의 `${MCP_SESSION_ID}`), 헤더가 없으면 서버가 HTTP 400(`Session required`)으로 응답한다.
+`tools/call`에는 세션이 필요하다. 예시의 첫 `curl`이 `initialize` 응답 헤더의 `MCP-Session-Id` 값을 `SID`에 담고, 두 번째 `curl`이 그 값을 `MCP-Session-Id` 헤더로 보낸다. 헤더가 없으면 서버가 HTTP 400(`Session required`)으로 응답한다.
 
 ### Windows PowerShell 요청 예시
 
@@ -111,10 +111,23 @@ access key를 커밋하지 않도록 `.gitignore`에 추가하거나 환경 변�
 
 ```powershell
 $headers = @{
-  Authorization   = "Bearer $env:MEMENTO_ACCESS_KEY"
-  "Content-Type"  = "application/json"
-  "mcp-session-id" = "test-session"
+  Authorization  = "Bearer $env:MEMENTO_ACCESS_KEY"
+  "Content-Type" = "application/json"
 }
+
+$initBody = @{
+  jsonrpc = "2.0"
+  id      = 0
+  method  = "initialize"
+  params  = @{
+    protocolVersion = "2025-11-25"
+    capabilities    = @{}
+    clientInfo      = @{ name = "powershell"; version = "1" }
+  }
+} | ConvertTo-Json -Depth 6
+
+$init = Invoke-WebRequest -Method Post -Uri "http://localhost:57332/mcp" -Headers $headers -Body $initBody -UseBasicParsing
+$headers["MCP-Session-Id"] = @($init.Headers["MCP-Session-Id"])[0]
 
 $body = @{
   jsonrpc = "2.0"
@@ -136,7 +149,8 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:57332/mcp" -Headers $heade
 - `~/.claude.json`을 직접 열어 `mcpServers.memento` 항목이 실제 저장됐는지 확인한다.
 
 **`Connected` 대신 에러가 표시된다**
-- memento 서버가 실제 실행 중인지 확인: `curl http://localhost:57332/health` → `{"status":"healthy"}` 기대
+- memento 서버가 실제 실행 중인지 확인: `curl http://localhost:57332/health` → `{"status":"healthy", ...}` 기대 (`/health/live`는 항상 200, `/health/ready`는 DB 응답 시 200)
+- API 키 세션이 `404 Session not found`를 받으면 키가 비활성화 또는 삭제되었거나 세션이 만료된 것이다. 키 상태를 확인하고 연결을 새로 시작한다
 - access key가 유효한지 확인 (Admin UI에서 재발급 또는 상태 확인)
 - 방화벽·포트포워딩 점검
 
@@ -169,7 +183,7 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:57332/mcp" -Headers $heade
 
 > 버전 마이그레이션 참고: top-level mirror 필드(`_searchEventId` 등)는 v3.1.0에서 제거됐다. 구버전 클라이언트는 `_meta` 내부 필드로 전환한다.
 
-## dryRun 사전 시뮬레이션 (v2.12.0 M5)
+## dryRun 사전 시뮬레이션
 
 `remember`, `link`, `forget`, `amend` 도구에서 `dryRun: true`를 설정하면 실제 저장 없이 실행 결과를 미리 확인할 수 있다.
 

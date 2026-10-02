@@ -2,7 +2,7 @@
 title: "Troubleshooting"
 date: 2026-03-13
 author: 최진호
-updated: 2026-04-20
+updated: 2026-10-03
 ---
 
 # Troubleshooting
@@ -98,7 +98,7 @@ netstat -ano | findstr 57332
 
 해결 방법:
 - access key를 다시 맞춘다.
-- 인증을 비활성화하려면 `.env`에서 `MEMENTO_ACCESS_KEY`를 비워 둔다.
+- 개발이나 시험에서 인증 없이 쓰려면 `.env`에 `MEMENTO_AUTH_DISABLED=true`를 명시한다. `MEMENTO_ACCESS_KEY`를 비워 두기만 하면 서버가 기동하지 않는다(문제 12 참조).
 
 ## 6. Windows quoting 문제
 
@@ -166,36 +166,76 @@ git pull
 npm install
 ```
 
-## 10. migration-034-v2.16.0-bundle 적용 실패 (CONCURRENTLY 에러)
+## 10. migration-034-v2.16.0-bundle의 인덱스 생성이 대형 테이블에서 오래 걸림
 
 문제:
-`npm run migrate` 실행 시 migration-034-v2.16.0-bundle 단계에서 에러 발생.
+`npm run migrate`가 migration-034-v2.16.0-bundle 단계에서 `fragments` 테이블을 오래 잠근다.
 
 원인:
-`CREATE INDEX CONCURRENTLY`는 트랜잭션 블록 안에서 실행할 수 없다. 마이그레이션 스크립트가 트랜잭션을 사용하는 환경에서 CONCURRENTLY 구문이 실패한다.
+마이그레이션은 트랜잭션 안에서 실행되므로 `CREATE UNIQUE INDEX`를 일반 형태로 만든다. `CREATE INDEX CONCURRENTLY`는 트랜잭션 블록 안에서 실행할 수 없다.
 
 해결 방법:
-트랜잭션 외부에서 수동으로 인덱스를 생성한 뒤 migration-034-v2.16.0-bundle을 완료로 표시한다.
+`npm run migrate` 전에 아래 두 문을 `psql`에서 트랜잭션 없이 직접 실행한다. 마이그레이션은 `IF NOT EXISTS`로 같은 이름의 인덱스를 건너뛴다.
 
 ```sql
--- 반드시 BEGIN/COMMIT 없이 독립 실행
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_fragments_idempotency_key_tenant
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_fragments_idempotency_tenant
   ON agent_memory.fragments (key_id, idempotency_key)
   WHERE idempotency_key IS NOT NULL AND key_id IS NOT NULL;
 
-CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uq_fragments_idempotency_key_master
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_fragments_idempotency_master
   ON agent_memory.fragments (idempotency_key)
   WHERE idempotency_key IS NOT NULL AND key_id IS NULL;
-
--- 완료 표시
-INSERT INTO agent_memory.schema_migrations (version) VALUES ('036')
-  ON CONFLICT DO NOTHING;
 ```
 
-주의: 위 명령은 `psql`에서 직접 실행하거나 트랜잭션 없이 실행해야 한다. `BEGIN;` 블록 안에서 실행하면 오류가 반복된다.
+주의: `BEGIN;` 블록 안에서 실행하면 오류가 난다. 적용 이력은 `agent_memory.schema_migrations`(`filename` 열)에 기록되며 이 문을 실행해도 이력은 바뀌지 않는다.
 
 ## 11. 버전 마이그레이션 참고: `_searchEventId` 필드를 찾을 수 없음
 
 구버전 클라이언트에서 발생할 수 있는 호환성 항목.
 
 응답 메타데이터는 `_meta.searchEventId` / `_meta.hints` / `_meta.suggestion`에서만 읽는다. top-level mirror 필드는 v3.1.0에서 제거됐으므로 `response._meta.searchEventId` 경로로 클라이언트 코드를 전환한다.
+
+## 12. 서버가 기동하지 않고 종료 코드 78로 끝남
+
+문제:
+`node server.js`가 `[Startup] MEMENTO_ACCESS_KEY가 설정되지 않았습니다.`를 출력하고 종료한다.
+
+원인:
+`MEMENTO_ACCESS_KEY`가 비어 있고 `MEMENTO_AUTH_DISABLED=true`도 없다. 키 없이 뜨는 서버는 모든 도구를 무인증으로 열기 때문에 기동을 거부한다. `MEMENTO_CONFIG_STRICT=true`일 때 숫자, 열거, 불리언 환경 변수에 값 문제가 있어도 같은 코드로 종료한다.
+
+해결 방법:
+- `.env`에 `MEMENTO_ACCESS_KEY`를 채운다.
+- 개발이나 시험에서만 `MEMENTO_AUTH_DISABLED=true`를 명시한다.
+- `MEMENTO_CONFIG_STRICT` 때문이면 기동 로그의 `[Startup] 환경 변수 값 ... 기대와 다르다` 줄에서 이름을 확인해 값을 고친다.
+
+## 13. `404 Session not found`
+
+문제:
+이미 연결해 둔 클라이언트의 호출이 `Session not found`(JSON-RPC `-32000`)로 끝난다.
+
+원인:
+- API 키가 비활성화 또는 삭제됐다. API 키 세션은 `MEMENTO_SESSION_KEY_RECHECK_MS`(기본 30000ms) 주기로 키 상태를 다시 읽으며, 비활성 또는 삭제된 키의 세션은 닫힌다.
+- 세션이 만료됐거나 서버가 세션을 복구하지 못했다.
+- `MEMENTO_SESSION_ID_POLICY=enforce`에서 UUID 형식이 아닌 세션 ID로 복구를 시도했다.
+
+해결 방법:
+- 관리 콘솔에서 키 상태를 확인한다.
+- 클라이언트가 `initialize`부터 다시 연결하도록 한다. 세션 ID는 `MCP-Session-Id` 헤더로 보낸다.
+
+## 14. `/health/ready`가 503
+
+문제:
+`/health/ready`가 `{"status":"not_ready","reason":"db_timeout"}` 또는 `db_error`로 503을 돌려준다.
+
+원인:
+주 DB가 `MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`(기본 2000) 안에 응답하지 않거나 연결에 실패했다.
+
+확인 방법:
+
+```bash
+psql "$DATABASE_URL" -c "SELECT 1;"
+curl -s http://localhost:57332/health/live
+```
+
+해결 방법:
+- DB 연결 설정과 DB 부하를 점검한다. `/health/live`는 DB와 무관하게 200이므로 프로세스 재시작 판정에는 `/health/live`만 쓴다.

@@ -2,7 +2,7 @@
 title: "Windows WSL2 Setup"
 date: 2026-03-13
 author: 최진호
-updated: 2026-04-20
+updated: 2026-10-03
 ---
 
 # Windows WSL2 Setup
@@ -72,6 +72,7 @@ Windows 호스트의 PostgreSQL을 사용할 수도 있고, WSL 내부 PostgreSQ
 npm install
 psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS vector;"
 psql "$DATABASE_URL" -f lib/memory/memory-schema.sql
+npm run migrate
 ```
 
 ## 6. 서버 실행
@@ -106,7 +107,7 @@ Invoke-RestMethod -Method Get -Uri "http://localhost:57332/health"
 
 오류가 나면 [Troubleshooting](troubleshooting.md)을 확인한다.
 
-## 9. CLI 원격 접속 설정 (v2.12.0 M1)
+## 9. CLI 원격 접속 설정
 
 WSL 환경에서는 Bash 문법으로 환경변수를 설정한다.
 
