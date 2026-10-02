@@ -88,6 +88,22 @@ export function defaultIgnore() {
 }
 
 /**
+ * 표준 출력 또는 표준 오류에 대한 쓰기 요청인지 판정한다.
+ *
+ * 시험 실행기는 자식 프로세스의 표준 출력을 파이프로 읽는다. 부모 프로세스가
+ * 바쁘면 파이프 버퍼가 차서 쓰기 요청(WriteWrap)이 잠시 남는다. 이 요청은 시험이
+ * 연 자원이 아니므로 잔여 판정에서 뺀다. 소켓에 대한 쓰기 요청은 그대로 센다.
+ *
+ * @param {object} req - process._getActiveRequests()의 항목
+ * @returns {boolean}
+ */
+export function isStdioWriteRequest(req) {
+  const handle = req?.handle;
+  if (handle == null) return false;
+  return handle === process.stdout?._handle || handle === process.stderr?._handle;
+}
+
+/**
  * 활성 handle/request 누수가 없음을 검증한다.
  *
  * 한 틱 양보 후 process._getActiveHandles() / process._getActiveRequests()를
@@ -118,7 +134,7 @@ export async function assertCleanShutdown({
     const requests = ignoreRequests
       ? []
       : (process._getActiveRequests() ?? []).filter(
-          (r) => !allowed.has(r.constructor.name),
+          (r) => !allowed.has(r.constructor.name) && !isStdioWriteRequest(r),
         );
     return { handles, requests };
   };

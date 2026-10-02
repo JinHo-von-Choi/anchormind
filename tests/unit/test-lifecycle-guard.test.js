@@ -12,14 +12,16 @@
  * Case 3: setInterval + unref 없음 → assertCleanShutdown이 누수 감지 (negative case)
  * Case 4: lib/sessions.js import + after 훅 정리 → clean (CP2 MEMENTO_METRICS_DEFAULT=off 의존)
  * Case 5: lib/memory/processors/ReflectProcessor.js import + after 훅 정리 → clean
+ * Case 6: 표준 출력 쓰기 요청과 소켓 쓰기 요청 구분
  *
  * 환경: MEMENTO_METRICS_DEFAULT=off (npm test 에서 주입됨)
  */
 
 import { describe, it, after } from "node:test";
 import assert                  from "node:assert/strict";
+import net                     from "node:net";
 
-import { teardownTestResources, assertCleanShutdown } from "../_lifecycle.js";
+import { teardownTestResources, assertCleanShutdown, isStdioWriteRequest } from "../_lifecycle.js";
 
 /* ── Case 1: 기본 import만 한 빈 테스트 ── */
 describe("Case 1: 빈 테스트 — clean shutdown", () => {
@@ -106,5 +108,40 @@ describe("Case 5: ReflectProcessor.js import + cleanup → clean shutdown", () =
     const { ReflectProcessor } = await import("../../lib/memory/processors/ReflectProcessor.js");
 
     assert.ok(typeof ReflectProcessor === "function", "ReflectProcessor export 확인");
+  });
+});
+
+/* ── Case 6: 표준 출력 쓰기 요청과 소켓 쓰기 요청 구분 ── */
+describe("Case 6: 표준 출력 쓰기 요청과 소켓 쓰기 요청 구분", () => {
+  it("표준 출력 handle에 대한 요청은 표준 출력 쓰기로 판정된다", (t) => {
+    if (process.stdout._handle == null) { t.skip("표준 출력 handle 없음"); return; }
+    assert.equal(isStdioWriteRequest({ handle: process.stdout._handle }), true);
+    assert.equal(isStdioWriteRequest({ handle: process.stderr._handle }), process.stderr._handle != null);
+  });
+
+  it("다른 handle이거나 handle이 없으면 표준 출력 쓰기가 아니다", () => {
+    assert.equal(isStdioWriteRequest({ handle: {} }), false);
+    assert.equal(isStdioWriteRequest({}), false);
+    assert.equal(isStdioWriteRequest(null), false);
+  });
+
+  it("읽지 않는 상대에게 보내는 소켓 쓰기는 잔여 요청으로 검출된다", async () => {
+    const peers  = new Set();
+    const server = net.createServer((sock) => { sock.pause(); peers.add(sock); });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const client = net.connect(server.address().port, "127.0.0.1");
+    await new Promise((resolve) => client.once("connect", resolve));
+    client.write(Buffer.alloc(64 * 1024 * 1024));
+    try {
+      await assert.rejects(() => assertCleanShutdown(), (err) => {
+        assert.match(err.message, /Active requests after test/);
+        assert.match(err.message, /WriteWrap/);
+        return true;
+      });
+    } finally {
+      client.destroy();
+      for (const sock of peers) sock.destroy();
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 });
