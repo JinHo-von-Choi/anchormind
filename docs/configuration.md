@@ -95,6 +95,7 @@
 | MEMENTO_WORKSPACE_DECAY | true | `false` 시 workspace 랭킹 감쇠를 비활성화한다. 활성 시 검색 scope에 workspace가 지정되면 불일치·전역(NULL) 파편의 랭킹 점수에 감쇠 배율을 적용한다(반환 자체는 유지). recall과 context 주입 경로 공통 적용 |
 | MEMENTO_WORKSPACE_DECAY_PENALTY | 0.7 | workspace 불일치·전역 파편 랭킹 점수에 곱하는 감쇠 배율(0~1) |
 | MEMENTO_SESSION_SEGMENT | true | `false` 시 세션 세그먼트 회전을 비활성화하고 전송계층 세션 ID를 그대로 사용한다 |
+| MEMENTO_SESSION_KEY_RECHECK_MS | 30000 | 세션 사용 시 API 키 상태를 다시 읽는 주기(ms). 비활성 또는 삭제된 키의 세션은 닫히고 권한 변경은 열린 세션에 반영된다. `0`이면 재확인하지 않는다 |
 | MEMENTO_SEGMENT_IDLE_MS | 2700000 | 세션 유휴 시간이 이 값(ms)을 초과하면 다음 도구 호출 시 세그먼트를 회전한다. 기본 45분 |
 | MEMENTO_SEGMENT_MAX_AGE_MS | 43200000 | 세그먼트 시작 후 이 값(ms)을 초과하면 유휴 여부와 무관하게 세그먼트를 회전한다. 기본 12시간 |
 | MEMENTO_SEGMENT_MIN_ACTIVITY | 3 | 세그먼트 회전 시 직전 세그먼트에 대한 AutoReflect 발동에 필요한 세그먼트당 최소 활동(파편+도구 호출) 수 |

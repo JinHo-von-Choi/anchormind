@@ -94,6 +94,7 @@
 | MEMENTO_WORKSPACE_DECAY | true | When `false`, disables workspace ranking decay. When enabled, if the search scope specifies a workspace, a decay multiplier is applied to the ranking score of mismatched or global (NULL) fragments (the fragments themselves are still returned). Applies to both the recall and context injection paths |
 | MEMENTO_WORKSPACE_DECAY_PENALTY | 0.7 | Decay multiplier (0-1) applied to the ranking score of workspace-mismatched or global fragments |
 | MEMENTO_SESSION_SEGMENT | true | When `false`, disables session segment rotation and uses the transport-layer session ID as-is |
+| MEMENTO_SESSION_KEY_RECHECK_MS | 30000 | Interval (ms) at which a session re-reads its API key state. Sessions of inactive or deleted keys are closed and permission changes reach open sessions. `0` disables the recheck |
 | MEMENTO_SEGMENT_IDLE_MS | 2700000 | When session idle time exceeds this value (ms), the segment rotates on the next tool call. Default 45 minutes |
 | MEMENTO_SEGMENT_MAX_AGE_MS | 43200000 | When a segment's age exceeds this value (ms), it rotates regardless of idle state. Default 12 hours |
 | MEMENTO_SEGMENT_MIN_ACTIVITY | 3 | Minimum activity (fragments + tool calls) required in the previous segment for AutoReflect to fire on segment rotation |
