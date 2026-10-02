@@ -1,0 +1,34 @@
+name: Dependency Audit
+
+# 런타임 의존성 자문은 시험 결과와 별개의 상태로 보고한다. 매일 예약 실행으로
+# 코드 변경이 없어도 새 자문이 드러난다. 상류에 패치 판이 없는 권고는
+# audit-ci.jsonc 의 allowlist 에 사유와 함께 적는다.
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Audit runtime dependencies
+        run: npm run audit:ci
+      - name: Audit all dependencies (report only)
+        if: always()
+        run: npm audit --audit-level=high || true
