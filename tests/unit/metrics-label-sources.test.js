@@ -38,7 +38,8 @@ const LABEL_PARAMS = new Map([
   ["recordSplitSkip",               [0]],
   ["recordSplitStepFailure",        [0]],
   ["recordWarning",                 [0, 1]],
-  ["recordClaim",                   [0, 1]]
+  ["recordClaim",                   [0, 1]],
+  ["recordRememberDuplicate",       [0]]
 ]);
 
 /** 기록 함수 안에서 protocolVersionLabel로 값을 닫는 함수 */
@@ -78,6 +79,7 @@ const REVIEWED = new Map([
   ["lib/memory/processors/MemoryRememberer.js|recordWarning|`policy.${v.rule}`",  "PolicyRules 규칙 이름"],
   ["lib/memory/processors/MemoryRememberer.js|recordWarning|v.severity || \"low\"", "PolicyRules 심각도 상수"],
   ["lib/memory/processors/MemoryRememberer.js|recordGateBlock|gateEligible[0]?.rule ?? \"unknown\"", "PolicyRules 규칙 이름"],
+  ["lib/memory/processors/RememberDuplicate.js|recordRememberDuplicate|kind",      "classifyDuplicate가 돌려주는 네 값이고 기록 함수가 그 밖의 값을 unknown으로 닫는다"],
   ["lib/memory/write/RememberPostProcessor.js|recordClaim|c.extractor ?? \"morpheme-rule\"", "ClaimExtractor 추출기 이름"],
   ["lib/memory/write/RememberPostProcessor.js|recordClaim|c.polarity ?? \"uncertain\"",       "ClaimExtractor 극성 상수"],
   ["lib/memory/write/RememberPostProcessor.js|recordGateBlock|gateResult.reason",            "proactive-gate 판정 사유 상수"],

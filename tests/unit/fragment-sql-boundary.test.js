@@ -55,7 +55,7 @@ const ALLOWED = {
   "memory/read/CaseRecall.js": 2,
   "memory/CaseEventStore.js": 1,
   "memory/read/ContextBuilder.js": 1,
-  "memory/read/FragmentReader.js": 14,
+  "memory/read/FragmentReader.js": 15,
   "memory/read/HistoryReconstructor.js": 1,
   "memory/read/KeyNameEnricher.js": 1,
   "memory/read/RecallSuggestionEngine.js": 2,
