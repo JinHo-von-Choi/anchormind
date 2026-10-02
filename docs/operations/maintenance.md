@@ -14,14 +14,14 @@ memento-mcp가 localhost 밖에 노출되는지와 브라우저 Origin 정책이
 
 ```bash
 ss -ltnp | grep ':57332'
-grep -E '^(MEMENTO_ACCESS_KEY|MCP_STRICT_ORIGIN|ALLOWED_ORIGINS|ADMIN_ALLOWED_ORIGINS|TRUST_PROXY_HOPS)=' .env | sed -E 's/=.*/=<set>/'
+grep -E '^(MEMENTO_ACCESS_KEY|MCP_STRICT_ORIGIN|ALLOWED_ORIGINS|ADMIN_ALLOWED_ORIGINS|TRUST_PROXY_HOPS|MEMENTO_CORS_MODE|MEMENTO_SSE_QUERY_KEY|MEMENTO_OAUTH_REDIRECT_CHECK|MEMENTO_FRAME_OPTIONS)=' .env | sed -E 's/=.*/=<set>/'
 ```
 
 판단 기준:
 
 - `*:57332` 또는 `0.0.0.0:57332`이면 네트워크 전체 인터페이스에 노출된다.
 - 외부 노출 환경에서는 `MEMENTO_ACCESS_KEY`를 반드시 설정한다.
-- 브라우저 기반 MCP 클라이언트를 허용할 때는 `MCP_STRICT_ORIGIN=true`와 `ALLOWED_ORIGINS`를 함께 설정한다.
+- 브라우저 기반 MCP 클라이언트를 허용할 때는 `ALLOWED_ORIGINS`에 실제 Origin만 둔다. 설정하면 목록 밖 Origin은 403이다. 미설정으로 둘 때의 응답 방식은 `MEMENTO_CORS_MODE`(기본 `observe`)로 정한다.
 - Admin UI를 브라우저에서 열면 `ADMIN_ALLOWED_ORIGINS`를 명시하거나 리버스 프록시/방화벽에서 접근을 제한한다.
 - 리버스 프록시 뒤에서 IP 기반 제한을 쓰면 실제 프록시 hop 수에 맞춰 `TRUST_PROXY_HOPS`를 설정한다.
 
@@ -32,7 +32,7 @@ curl -si http://localhost:57332/health | head
 curl -si -H 'Origin: https://evil.example' http://localhost:57332/mcp | head
 ```
 
-`MCP_STRICT_ORIGIN=false`에서는 등록되지 않은 Origin도 CORS만으로 차단되지 않을 수 있다. `MCP_STRICT_ORIGIN=true`에서는 허용 목록에 없는 Origin이 403이어야 한다.
+`ALLOWED_ORIGINS`를 설정했다면 목록 밖 Origin은 403이어야 한다. 미설정이면 요청은 통과하며, `MEMENTO_CORS_MODE=allowlist`일 때만 신뢰 도메인 밖 Origin에 `Access-Control-Allow-Origin`이 붙지 않는다. `MCP_STRICT_ORIGIN=true`이면 `/mcp`는 신뢰 도메인과 `ALLOWED_ORIGINS` 밖의 Origin을 403으로 거부한다.
 
 ---
 
@@ -153,11 +153,11 @@ CONCURRENTLY 실행은 트랜잭션 외부에서 이루어지므로 반드시 BE
 
 ## X-RateLimit-* 모니터링
 
-HTTP 응답에 `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` 헤더가 포함된다.
+API 키 세션의 `POST /mcp` 응답에 `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Resource: fragments` 헤더가 포함된다(파편 할당량 기준, master 키와 null 할당량은 생략).
 
 ### 구현 특성
 
-- `QuotaChecker.getUsage()`: 모듈 레벨 Map 캐시, TTL 10초, 상한 1000 파편/창
+- `QuotaChecker.getUsage()`: 모듈 레벨 Map 캐시, TTL 10초, 최대 1000개 키 항목
 - in-memory 캐시이므로 서버 재시작 시 초기화된다. 다중 인스턴스 배포에서는 인스턴스별로 독립 집계된다.
 
 ### nginx access log 기반 수집
@@ -171,14 +171,7 @@ log_format memento_main '$remote_addr - $upstream_http_x_ratelimit_remaining '
 
 ### Prometheus/Grafana 연동
 
-서버의 `/metrics` 엔드포인트(인증 필요)에서 아래 메트릭으로 rate limit 상태를 확인할 수 있다.
-
-```
-memento_quota_used_total   — 창 내 사용된 파편 수 (레이블: key_id)
-memento_quota_limit        — 설정된 상한 (레이블: key_id)
-```
-
-Grafana 알림 권장 임계값: `memento_quota_used_total / memento_quota_limit > 0.8` 시 경고.
+`/metrics`에는 키별 할당량 게이지가 없다. 할당량 상태는 응답 헤더(`X-RateLimit-Remaining`)나 Admin API 키 목록의 `fragment_count`, `fragment_limit`에서 확인한다. 캐시 통과 횟수는 `mcp_quota_cache_pass_total`로 노출된다.
 
 ---
 
@@ -186,7 +179,7 @@ Grafana 알림 권장 임계값: `memento_quota_used_total / memento_quota_limit
 
 스케줄러가 기본 6시간 주기로 실행하는 것과 같은 경로다. 점검이나 마이그레이션 직후 확인 목적으로만 수동 호출한다.
 
-MCP `memory_consolidate` 도구는 `admin` 권한을 요구하며, 권한이 없으면 `-32600 Internal error`가 반환되고 실제 사유는 서버 로그에만 남는다. 마스터 컨텍스트로 직접 실행하려면 다음을 쓴다.
+MCP `memory_consolidate` 도구는 master 키 세션 전용이다. 일반 키 세션에는 tools/list에 나오지 않고, 호출하면 `Permission denied: 'memory_consolidate' requires master authentication`(-32001)이 반환된다. 마스터 컨텍스트로 직접 실행하려면 다음을 쓴다.
 
     node -e "import('dotenv/config').then(async()=>{const {MemoryManager}=await import('./lib/memory/MemoryManager.js');console.log(JSON.stringify(await MemoryManager.create().consolidate(),null,1));process.exit(0)})"
 

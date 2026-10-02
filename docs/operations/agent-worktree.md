@@ -122,7 +122,7 @@ git -C "$REPO" worktree remove --force <path>
 
 ```crontab
 # 매일 03:00 에이전트 워크트리 GC
-0 3 * * * /path/to/memento-mcp/.claude/scripts/gc-worktrees.sh >> /var/log/memento-gc.log 2>&1
+0 3 * * * /usr/local/bin/gc-worktrees.sh >> /var/log/memento-gc.log 2>&1   # 아래 흐름으로 직접 작성한 스크립트
 ```
 
 스크립트 흐름(`gc-worktrees.sh`):

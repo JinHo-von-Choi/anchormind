@@ -11,7 +11,7 @@
 
 ### npm 패키지
 
-- `@huggingface/transformers` 3.8.1 (이미 설치됨)
+- `@huggingface/transformers` ^4.3.0 (package.json 의존성)
   - `EMBEDDING_PROVIDER=transformers` 또는 `MEMENTO_RERANKER_ENABLED=true` 또는 `NLI_SERVICE_URL` 미설정 시 활성화
   - 별도 설치 없이 `node_modules`에 포함됨
 
@@ -37,8 +37,9 @@
 | `migration-034-v2.16.0-bundle.sql` | `fragments.affect TEXT CHECK(...)` 컬럼 + partial 인덱스 |
 | `migration-036-split-attempt-failed-at.sql` | `fragments.split_attempt_failed_at TIMESTAMPTZ` 컬럼 추가 |
 | `migration-037-hnsw-index-rename.sql` | HNSW 인덱스 이름 정합화 |
+| `migration-038` ~ `migration-049` | fragment_versions case 필드, feedback 계측, workspace 감사 컬럼, allowed_workspaces, synthetic query, idempotency_records, fragment RLS(ENABLE만), agent scope 감사, case_closed, synthetic query 임베딩 정합. 번호 046은 비어 있다 |
 
-`post-migrate-flexible-embedding-dims.js`: `EMBEDDING_DIMENSIONS` 변경 또는 임베딩 제공자 전환 시 `fragments`와 `morpheme_dict` 두 테이블의 벡터 컬럼 차원을 동시에 갱신한다. 임베딩 제공자 전환마다 재실행이 필요하다.
+`post-migrate-flexible-embedding-dims.js`: `EMBEDDING_DIMENSIONS` 변경 또는 임베딩 제공자 전환 시 `fragments`, `morpheme_dict`, `fragment_synthetic_query` 세 테이블의 벡터 컬럼 차원을 함께 갱신한다. 임베딩 제공자 전환마다 재실행이 필요하다.
 
 ### 선택적 CLI 바이너리 (LLM provider)
 

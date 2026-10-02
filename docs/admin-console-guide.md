@@ -315,15 +315,15 @@ API: `GET /memory/graph?topic=xxx&limit=50` -> `{ nodes: [...], edges: [...] }` 
 
 ## X-RateLimit 응답 헤더
 
-MCP 엔드포인트와 Admin API 응답 모두에 `X-RateLimit-*` 헤더가 포함된다.
+API 키 세션의 MCP(`POST /mcp`) 응답에 `X-RateLimit-*` 헤더가 포함된다. Admin API 응답에는 붙지 않는다.
 
 | 헤더 | 설명 |
 |------|------|
-| `X-RateLimit-Limit` | 해당 리소스의 윈도우 내 최대 요청 허용 횟수 |
-| `X-RateLimit-Remaining` | 현재 윈도우에서 남은 요청 횟수 |
-| `X-RateLimit-Resource` | 제한이 적용된 리소스 식별자 (ip, key 등) |
+| `X-RateLimit-Limit` | 키의 파편 할당량 |
+| `X-RateLimit-Remaining` | 남은 파편 수 |
+| `X-RateLimit-Resource` | 항상 `fragments` |
 
-이 헤더는 Admin UI의 브라우저 개발자 도구 > Network 탭에서 확인할 수 있다. 클라이언트 측에서 `Remaining` 값을 모니터링하여 429 오류 전에 요청 속도를 조절할 수 있다.
+이 헤더는 MCP 클라이언트가 받는 응답 헤더에서 확인할 수 있다. 클라이언트 측에서 `Remaining` 값을 모니터링하여 파편 할당량 초과 전에 저장량을 조절할 수 있다.
 
 ## _meta 응답 구조 호환성
 

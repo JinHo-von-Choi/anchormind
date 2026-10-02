@@ -9,6 +9,8 @@
 저장소의 `docker-compose.dev.yml`·`docker-compose.test.yml`은 개발·테스트 전용으로
 restart 정책이 없다. 프로덕션은 아래 예시를 프로젝트 외부 경로에 복사해 사용한다.
 
+이미지는 `node` 사용자로 실행된다. 볼륨을 마운트할 때는 이 사용자가 쓸 수 있는 경로(`/app/logs`, `/home/node/.cache` 등)를 쓴다.
+
 ## Compose 예시
 
 ```yaml
@@ -70,11 +72,11 @@ services:
     environment:
       POSTGRES_HOST: postgres
       REDIS_HOST: redis
-      HF_HOME: /root/.cache/huggingface
+      HF_HOME: /home/node/.cache/huggingface
     ports:
       - "127.0.0.1:57332:57332"   # 외부 노출은 리버스 프록시 뒤에서만
     volumes:
-      - hf_cache:/root/.cache/huggingface   # 로컬 임베딩 모델 재다운로드 방지
+      - hf_cache:/home/node/.cache/huggingface   # 로컬 임베딩 모델 재다운로드 방지
     depends_on:
       postgres:
         condition: service_healthy

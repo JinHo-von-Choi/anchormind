@@ -8,27 +8,27 @@ AnchorMind의 주요 모듈을 한 페이지로 정리한 ledger. 새 모듈 추
 
 |모듈|입력|출력|주된 실패 모드|관련 ENV|관련 메트릭|관련 migration|
 |-|-|-|-|-|-|-|
-|`MemoryRememberer` (`lib/memory/processors/MemoryRememberer.js`)|remember params (content/type/topic/keywords/importance 등)|`{id, keywords, ttl_tier, scope, conflicts, validation_warnings?}`|quota 초과(`fragment_limit_exceeded`), hard gate `SymbolicPolicyViolationError`, idempotency 충돌|`MEMENTO_REMEMBER_ATOMIC`, `MEMENTO_POLICY_RULES`|`memento_policy_warning_total`, `memento_policy_gate_block_total`|migration-031 (per-key content_hash), migration-034 (idempotency tenant/master unique)|
+|`MemoryRememberer` (`lib/memory/processors/MemoryRememberer.js`)|remember params (content/type/topic/keywords/importance 등)|`{id, keywords, ttl_tier, scope, conflicts, validation_warnings?}`|quota 초과(`fragment_limit_exceeded`), hard gate `SymbolicPolicyViolationError`, idempotency 충돌|`MEMENTO_REMEMBER_ATOMIC`, `MEMENTO_SYMBOLIC_POLICY_RULES`|`memento_symbolic_warning_total`, `memento_symbolic_gate_blocked_total`|migration-031 (per-key content_hash), migration-034 (idempotency tenant/master unique)|
 |`BatchRememberProcessor`|fragment 배열 + keyId (async=true 시 Redis 큐 적재 후 즉시 반환)|`{insertedIds, skipped, conflicts}` 또는 `{async:true, accepted, rejected, jobId}`|quota Phase B 초과 시 ROLLBACK, 256KB/500행 chunk 한도; async=true 시 Redis 미연결이면 동기 경로 폴백|`BATCH_DATABASE_URL`|`mcp_batch_pool_active_connections`, `mcp_batch_pool_idle_connections`, `mcp_batch_pool_waiting_count`|migration-035 (morpheme_indexed)|
-|`FragmentSearch` (`lib/memory/read/FragmentSearch.js`)|`recall` params (text/keywords/topic/type/timeRange/contextText)|`{fragments[], searchPath, _meta:{searchEventId,hints,suggestion}}`|empty results, similarity 임계 미달, NLI 실패 (soft fallback)|`ENABLE_SPREADING_ACTIVATION`, `MEMENTO_SYMBOLIC_EXPLAIN`|`memento_recall_*`, `memento_search_event_total`|migration-027 (reconsolidation/episode/spreading)|
-|`FragmentWriter` (`lib/memory/write/FragmentWriter.js`)|fragment 객체|insert/update id|content_hash 충돌, `validation_warnings` 누적 후 INSERT|`MEMENTO_SCHEMA`|`memento_fragment_writes_total`|core schema|
-|`MemoryConsolidator` (`lib/memory/consolidate/MemoryConsolidator.js`)|cycle trigger|stage 결과 23항목 + per-stage timing|stage별 query error는 stage 결과에 잡힘, 다음 stage 진행|`MEMENTO_CONSOLIDATE_*`, `MEMENTO_CONSOLIDATE_TIMEOUT_MS`, `MEMENTO_AUTO_PROMOTE_ANCHORS`|`memento_consolidation_stage_ms`, `mcp_anchor_auto_promotion_enabled`|해당 없음 (로직 전용)|
-|`ReconsolidationEngine` (`lib/memory/link/ReconsolidationEngine.js`)|tool_feedback 누적|link weight 갱신|fragment_links 부재, search_event_id 무효|`MEMENTO_RECONSOLIDATION_ENABLED`|`memento_link_weight_*`|migration-027|
-|`SpreadingActivation` (`lib/memory/signals/SpreadingActivation.js`)|contextText + 시드 파편|ema_activation boost|graph 부재 시 noop|`ENABLE_SPREADING_ACTIVATION`|`memento_spreading_activation_total`|migration-027|
-|`CaseRewardBackprop` (`lib/memory/signals/CaseRewardBackprop.js`)|case_event outcome|case_events DAG 보상|case_id 없는 fragment는 skip|`MEMENTO_CASE_BACKPROP_ENABLED`|`memento_case_reward_total`|migration-027|
-|`EmbeddingWorker` (`lib/memory/embedding/EmbeddingWorker.js`)|orphan fragment 배치|embedding INSERT, morpheme INSERT|external embedding provider 장애 시 row 단위 dead-letter|`EMBEDDING_PROVIDER`, `EMBEDDING_DIMENSIONS`, `BATCH_DATABASE_URL`|`memento_embedding_jobs_total`, batch pool|`scripts/post-migrate-flexible-embedding-dims.js`|
-|`EmbeddingCache` (`lib/memory/embedding/EmbeddingCache.js`)|텍스트 hash|cache hit/miss|Redis 장애 시 noop|`CACHE_ENABLED`, `CACHE_DB_TTL`|`memento_embedding_cache_*`|—|
-|`MorphemeIndex` (`lib/memory/embedding/MorphemeIndex.js`)|fragment 텍스트|morpheme 토큰 + 임베딩|형태소 분석 실패 시 fragment의 `morpheme_indexed=false` 유지|`MORPHEME_PROVIDER`, `MORPHEME_TIMEOUT_MS`|`memento_morpheme_index_*`|migration-035|
-|`NLIClassifier` (`lib/memory/signals/NLIClassifier.js`)|premise/hypothesis 텍스트 쌍|entail / contradict / neutral 라벨|NLI 서비스 미도달 시 LLM fallback 또는 soft skip|`NLI_SERVICE_URL`, `NLI_TIMEOUT_MS`|`memento_nli_total`|—|
-|`AutoReflect` (`lib/memory/processors/AutoReflect.js`)|long session events|reflect 파편 자동 생성|LLM 응답 파싱 실패 시 skip|`GEMINI_TIMEOUT_MS`(코드 상수)|`memento_autoreflect_total`|없음|
-|`RecallSuggestionEngine` (`lib/memory/read/RecallSuggestionEngine.js`)|recall 응답 메타|`_meta.suggestion.recommendedTool` 권고|graph 신호 부재 시 suggestion 미발행|—|`memento_recall_suggestion_total`|—|
-|`MemoryLinker` (`lib/memory/processors/MemoryLinker.js`)|fromId/toId/relationType|link 생성/모순 격리|cycle detection 거부|-|`memento_link_create_total`|core schema|
+|`FragmentSearch` (`lib/memory/read/FragmentSearch.js`)|`recall` params (text/keywords/topic/type/timeRange/contextText)|`{fragments[], searchPath, _meta:{searchEventId,hints,suggestion}}`|empty results, similarity 임계 미달, NLI 실패 (soft fallback)|`ENABLE_SPREADING_ACTIVATION`, `MEMENTO_SYMBOLIC_EXPLAIN`|`mcp_tool_executions_total{tool="recall"}`, `mcp_tool_execution_duration_seconds{tool="recall"}`|migration-027 (reconsolidation/episode/spreading)|
+|`FragmentWriter` (`lib/memory/write/FragmentWriter.js`)|fragment 객체|insert/update id|content_hash 충돌, `validation_warnings` 누적 후 INSERT|-|-|core schema|
+|`MemoryConsolidator` (`lib/memory/consolidate/MemoryConsolidator.js`)|cycle trigger|stage 결과 23항목 + per-stage timing|stage별 query error는 stage 결과에 잡힘, 다음 stage 진행|`CONSOLIDATE_INTERVAL_MS`, `MEMENTO_CONSOLIDATE_*`(COMPRESS_OLD, DETECT_CONTRADICT, GATE_MODE, SPLIT_LONG), `MEMENTO_AUTO_PROMOTE_ANCHORS`|`memento_consolidate_gate_allowed_total`, `memento_consolidate_gate_blocked_total`, `memento_consolidate_split_skipped_total`, `mcp_anchor_auto_promotion_enabled`|해당 없음 (로직 전용)|
+|`ReconsolidationEngine` (`lib/memory/link/ReconsolidationEngine.js`)|tool_feedback 누적|link weight 갱신|fragment_links 부재, search_event_id 무효|`ENABLE_RECONSOLIDATION`|-|migration-027|
+|`SpreadingActivation` (`lib/memory/signals/SpreadingActivation.js`)|contextText + 시드 파편|ema_activation boost|graph 부재 시 noop|`ENABLE_SPREADING_ACTIVATION`|-|migration-027|
+|`CaseRewardBackprop` (`lib/memory/signals/CaseRewardBackprop.js`)|case_event outcome|case_events DAG 보상|case_id 없는 fragment는 skip|`MEMENTO_CASE_BACKPROP_ENABLED`|-|migration-027|
+|`EmbeddingWorker` (`lib/memory/embedding/EmbeddingWorker.js`)|orphan fragment 배치|embedding INSERT, morpheme INSERT|external embedding provider 장애 시 row 단위 dead-letter|`EMBEDDING_PROVIDER`, `EMBEDDING_DIMENSIONS`, `BATCH_DATABASE_URL`|`mcp_embedding_semaphore_wait_exceeded_total`, `mcp_batch_pool_*`|`scripts/post-migrate-flexible-embedding-dims.js`|
+|`EmbeddingCache` (`lib/memory/embedding/EmbeddingCache.js`)|텍스트 hash|cache hit/miss|Redis 장애 시 noop|`CACHE_ENABLED`, `CACHE_DB_TTL`|-|-|
+|`MorphemeIndex` (`lib/memory/embedding/MorphemeIndex.js`)|fragment 텍스트|morpheme 토큰 + 임베딩|형태소 분석 실패 시 fragment의 `morpheme_indexed=false` 유지|`MEMENTO_MORPHEME_TOKENIZER`|-|migration-035|
+|`NLIClassifier` (`lib/memory/signals/NLIClassifier.js`)|premise/hypothesis 텍스트 쌍|entail / contradict / neutral 라벨|NLI 서비스 미도달 시 LLM fallback 또는 soft skip|`NLI_SERVICE_URL`, `NLI_TIMEOUT_MS`|-|-|
+|`AutoReflect` (`lib/memory/processors/AutoReflect.js`)|long session events|reflect 파편 자동 생성|LLM 응답 파싱 실패 시 skip|`GEMINI_TIMEOUT_MS`(코드 상수)|-|없음|
+|`RecallSuggestionEngine` (`lib/memory/read/RecallSuggestionEngine.js`)|recall 응답 메타|`_meta.suggestion.recommendedTool` 권고|graph 신호 부재 시 suggestion 미발행|-|-|-|
+|`MemoryLinker` (`lib/memory/processors/MemoryLinker.js`)|fromId/toId/relationType|link 생성/모순 격리|cycle detection 거부|-|-|core schema|
 |`MemoryReflector` (`lib/memory/processors/MemoryReflector.js`)|session reflect params|batchRemember 결과 + episode 생성|상속 (batch)|—|상속|—|
-|`dispatchChain` (`lib/llm/index.js`)|provider chain + prompt + options + deps|첫 성공 provider 응답|429 cooldown, semaphore timeout, chain deadline|`LLM_PRIMARY`, `LLM_FALLBACKS`, `LLM_CHAIN_TIMEOUT_MS`, `LLM_CONCURRENCY_*`|`llm_provider_calls_total`, `llm_provider_latency_ms`, `llm_provider_concurrency_*`, `llm_provider_429_total`, `llm_fallback_triggered_total`|—|
-|`SessionLinker` (`lib/memory/link/SessionLinker.js`)|session_id + 시간 인접 파편|temporal 링크|deadlock 회피 위해 sortedKey 정렬|`SESSION_LINKER_ENABLED`|`memento_session_link_total`|—|
+|`dispatchChain` (`lib/llm/index.js`)|provider chain + prompt + options + deps|첫 성공 provider 응답|429 cooldown, semaphore timeout, chain deadline|`LLM_PRIMARY`, `LLM_FALLBACKS`, `LLM_CHAIN_TIMEOUT_MS`, `LLM_CONCURRENCY_*`|`memento_llm_provider_calls_total`, `memento_llm_provider_latency_ms`, `memento_llm_provider_concurrency_active`, `memento_llm_provider_concurrency_wait_ms`, `memento_llm_provider_429_total`, `memento_llm_fallback_triggered_total`, `memento_llm_token_usage_total`|-|
+|`SessionLinker` (`lib/memory/link/SessionLinker.js`)|session_id + 시간 인접 파편|temporal 링크|deadlock 회피 위해 sortedKey 정렬|-|-|-|
 |`DeterministicRanking` (`lib/memory/read/DeterministicRanking.js`)|검색 결과와 기존 primary score|`created_at DESC, id ASC` 동점 정렬 및 offset cursor 페이지|동적 후보 집합에서는 페이지 간 snapshot을 보장하지 않음; ANN은 선택 후보 내부 동점만 정렬|—|—|—|
 |`SearchScope` (`lib/memory/read/SearchScope.js`)|sq (검색 쿼리 파라미터 객체)|검색 레이어별 scope 정합 객체 `(workspace, caseId, resolutionStatus, phase, affect, type, topic, isAnchor, keyId)`|없음 (순수 변환)|—|—|—|
-|`SearchSideEffects` (`lib/memory/read/SearchSideEffects.js`)|검색 결과 배열 + ctx|searchEventId, co_retrieved 업데이트, EMA 갱신|DB 장애 시 soft fail. topic 정확일치로 0건인 검색은 SearchParamAdaptor 학습에서 제외(search_events 기록은 유지)|—|`memento_search_event_total`|migration-027|
+|`SearchSideEffects` (`lib/memory/read/SearchSideEffects.js`)|검색 결과 배열 + ctx|searchEventId, co_retrieved 업데이트, EMA 갱신|DB 장애 시 soft fail. topic 정확일치로 0건인 검색은 SearchParamAdaptor 학습에서 제외(search_events 기록은 유지)|-|-|migration-027|
 |`TopicResolver` (`lib/memory/read/TopicResolver.js`)|store + 키 스코프 + 요청 topic|근접 topic 후보 `[{topic, count}]`. recall `_meta.hints`의 `topic_mismatch` 재료|후보 없으면 빈 배열 → 힌트 미발행|—|—|—|
 |`FeedbackSampler` (`lib/memory/signals/FeedbackSampler.js`)|도구명 + sessionId|`feedback_sampled` 힌트 객체 또는 null|Redis 미가용 시 세션 상한·쿨다운 미적용(fail-open)|`MEMENTO_FEEDBACK_SAMPLING`|—|migration-039 (irrelevance_reason 수집처)|
 |`PgVectorStore` / `SqliteVecStore` (`lib/storage/`)|SQL 문 + 파라미터|rows 배열|연결 오류 시 throw; SqliteVecStore는 미구현 스텁|`MEMENTO_STORAGE`|—|—|
@@ -41,6 +41,7 @@ AnchorMind의 주요 모듈을 한 페이지로 정리한 ledger. 새 모듈 추
 |-|-|-|-|-|
 |SpreadingActivation|`ENABLE_SPREADING_ACTIVATION=true`|off|`lib/memory/processors/MemoryRecaller.js`|recall 시 contextText 기반 graph 부스트. recall precision 개선치 확보 후 기본 on 승급 검토|
 |CaseRewardBackprop|`MEMENTO_CASE_BACKPROP_ENABLED=true`|off|`lib/memory/signals/CaseRewardBackprop.js` (호출 시점 매번 평가, 런타임 토글 가능)|case verification 결과를 증거 파편 importance에 역전파. 비활성 시 호출 자체가 no-op (DB·메트릭 영향 0). DAG 일관성 베이스라인 확보 후 승급 검토|
+|ReconsolidationEngine|`ENABLE_RECONSOLIDATION=true`|off|`lib/tools/memory.js` tool_feedback, `lib/memory/write/ConflictResolver.js`|tool_feedback의 fragment_ids 기반 링크 weight 갱신과 supersede 강등 시 재통합. 미설정 시 호출하지 않는다|
 
 ## 실험 플래그 아닌 dual-mode·항상 활성 기능
 
@@ -51,14 +52,13 @@ AnchorMind의 주요 모듈을 한 페이지로 정리한 ledger. 새 모듈 추
 |HNSW 인덱스 강제 검색|—|벡터 검색 트랜잭션 시작 시 `SET LOCAL enable_seqscan = off`, `SET LOCAL enable_bitmapscan = off`, `SET LOCAL hnsw.iterative_scan = relaxed_order` 적용. planner가 seqscan·bitmap scan으로 우회하는 것을 차단하여 HNSW index scan 경로를 강제하며, 필터 조건이 붙는 쿼리에서 308ms→7ms 단축 확인. `lib/tools/db.js` L3 검색 경로 고정|
 |NLIClassifier|`NLI_SERVICE_URL`|설정 시 외부 HTTP 서비스 호출, 미설정 시 in-process ONNX 모델로 동일 분류를 수행. 항상 활성|
 |AutoReflect|—|`sessions.js`의 세션 종료/회전 흐름에서 자동 호출. 비활성화하면 세션 학습이 손실되므로 운영에서 항상 활성|
-|ReconsolidationEngine|—|`tools/memory.js`의 `tool_feedback`이 직접 호출하는 핵심 경로. ENV 게이트로 막지 않는다|
 |storage 어댑터|`MEMENTO_STORAGE`|`pgvector`(기본) → `PgVectorStore` / `sqlite-vec` → `SqliteVecStore`. `getStorage()` 팩토리가 반환 타입을 결정. 호출 사이트 마이그레이션은 향후 점진 수행 예정|
 |recall 적응형 임계값 하한|`MEMENTO_RECALL_MIN_SIM_FLOOR`|미설정 시 `SearchParamAdaptor.getMinSimilarity`의 반환값을 그대로 사용. 설정 시 `Math.max(floor, learned)`로 하한 강제. 한국어 long-tail query에서 노이즈 fragment 통과를 차단|
 
 ## 새 모듈 추가 규약
 
 1. 모듈을 `lib/memory/` 또는 적절한 도메인 디렉토리에 신설한다.
-2. 본 표에 행을 추가한다. 컬럼 7개 모두 채운다(없으면 `—`).
+2. 본 표에 행을 추가한다. 컬럼 7개 모두 채운다(없으면 `-`).
 3. 새 ENV가 도입되면 `docs/configuration.md`에도 반영한다.
 4. 새 메트릭이 도입되면 `lib/metrics.js`에 등록되었는지 확인하고 본 표에 메트릭 이름을 적는다.
 5. migration이 따라오면 `lib/memory/migrations/migration-*.sql` 번호와 본 표 행을 연결한다.

@@ -53,9 +53,7 @@ RRF 컷오프, 키워드 추출 등)에서 뽑은 대표 스모크 쌍이다. �
 
 실행:
 
-    node scripts/mcp-smoke-recall.js --pairs docs/operations/recall-pairs.json
-
-(기존 스모크 러너가 없으면 recall MCP 도구 또는 anchor_recall_text로 각 쌍을 수동 검증한다.)
+저장소에는 스모크 러너가 없다. recall MCP 도구 또는 `memento-mcp recall`로 위 10쌍을 차례로 질의해 확인한다.
 
 합격 기준: 10쌍 전부 count > 0, 정답 파편 상위 노출.
 

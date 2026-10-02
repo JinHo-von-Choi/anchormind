@@ -60,7 +60,8 @@ EMBEDDING_DIMENSIONS=384
 초기화 및 서버 기동:
 
 ```bash
-npm run migrate   # migration-007 자동 적용, fragments + morpheme_dict를 vector(384)로 생성
+npm run migrate   # 기반 스키마는 vector(1536)으로 생성된다
+EMBEDDING_DIMENSIONS=384 node scripts/post-migrate-flexible-embedding-dims.js   # fragments, morpheme_dict, fragment_synthetic_query를 vector(384)로 맞춘다
 node server.js
 ```
 

@@ -41,9 +41,10 @@ CLI provider(`gemini-cli`, `agy-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`, `o
 | codex-cli | - | 선택 | - | (CLI 바이너리 + Codex 인증) |
 | copilot-cli | - | - | - | (CLI 바이너리 + GitHub Copilot 인증) |
 | qwen-cli | - | 선택 | - | (CLI 바이너리 + Qwen 인증) |
+| opencode-cli | - | 선택 | - | (CLI 바이너리 + OpenCode 설정) |
 | anthropic | 필수 | 필수 | 선택 | https://api.anthropic.com/v1 |
 | openai | 필수 | 필수 | 선택 | https://api.openai.com/v1 |
-| google-gemini-api | 필수 | 필수 | 선택 | https://generativelanguage.googleapis.com/v1beta |
+| gemini | 필수 | 필수 | 선택 | https://generativelanguage.googleapis.com/v1beta |
 | groq | 필수 | 필수 | 선택 | https://api.groq.com/openai/v1 |
 | openrouter | 필수 | 필수 | 선택 | https://openrouter.ai/api/v1 |
 | xai | 필수 | 필수 | 선택 | https://api.x.ai/v1 |
@@ -69,8 +70,9 @@ CLI provider(`gemini-cli`, `agy-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`, `o
 | qwen-cli | 1 |
 | opencode-cli | 1 |
 | ollama | 16 |
+| openai\|https://token-plan-sgp.xiaomimimo.com/v1\|mimo-v2-pro | 8 |
 
-미설정 항목은 상한 없음(세마포어 미적용). `LLM_CONCURRENCY_ENABLED=false`로 세마포어 전체 우회 가능. 슬롯 대기 타임아웃은 `LLM_CONCURRENCY_WAIT_MS`(기본 30000ms).
+표에 없는 provider는 기본 10슬롯이다. `LLM_CONCURRENCY`는 기본값 위에 병합된다. `LLM_CONCURRENCY_ENABLED=false`로 세마포어 전체 우회 가능. 슬롯 대기 타임아웃은 `LLM_CONCURRENCY_WAIT_MS`(기본 30000ms).
 
 재정의 예시:
 ```bash
@@ -109,6 +111,8 @@ rate(memento_llm_token_usage_total{direction="input"}[1h])
 **프롬프트 redaction**: Winston REDACT_PATTERNS + LLM 특화 패턴(`sk-ant-`, `sk-`, `gsk_`) 적용. API 키/세션 쿠키/OAuth 토큰은 자동 마스킹되지만 도메인 특화 PII(이름, 주소)는 마스킹 대상 아님.
 
 **외부 provider 차단**: `LLM_FALLBACKS`에서 해당 provider 항목 제거. `LLM_PRIMARY=gemini-cli`만 남기면 외부 LLM 전면 차단.
+
+**CLI 자식 환경**: CLI provider 자식 프로세스는 기본 변수(PATH, HOME, LANG, 프록시, 인증서 경로 등)와 CLI별 인증 변수만 받는다. 그 밖의 변수가 필요하면 `MEMENTO_LLM_CLI_ENV_PASSTHROUGH`에 이름을 쉼표로 적는다(기본 없음).
 
 ## 장애 대응
 
@@ -206,6 +210,8 @@ OpenAICompatibleProvider를 상속하면 callText 구현이 자동으로 제공�
 | AgyCliProvider | LlmProvider | stdio, constrained Antigravity CLI |
 | CodexCliProvider | LlmProvider | stdio, codex CLI 바이너리 |
 | CopilotCliProvider | LlmProvider | stdio, gh copilot CLI 바이너리 |
+| QwenCliProvider | LlmProvider | stdio, qwen CLI 바이너리 |
+| OpenCodeCliProvider | LlmProvider | stdio, opencode CLI 바이너리 |
 | AnthropicProvider | LlmProvider | POST /v1/messages, 고유 스키마 |
 | GoogleGeminiProvider | LlmProvider | POST /v1beta/...generateContent, 고유 스키마 |
 | CohereProvider | LlmProvider | POST /v1/chat, 고유 스키마 |

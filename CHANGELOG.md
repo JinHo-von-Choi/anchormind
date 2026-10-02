@@ -2,6 +2,39 @@
 
 ## [Unreleased]
 
+### 업그레이드 주의
+
+- 응답 헤더 `Access-Control-Allow-Origin`은 `ALLOWED_ORIGINS`가 비어 있을 때 `MEMENTO_CORS_MODE`(기본 `observe`)를 따른다. Origin이 있는 응답에는 `Vary: Origin`이 붙는다.
+- 메트릭 라벨 값은 고정 집합이다. 지원하지 않는 프로토콜 버전 거부는 `unsupported` 또는 `missing`, Origin 거부는 `rejected`, 404 응답의 경로 라벨은 `__not_found__`로 기록한다. 이 라벨로 집계하는 대시보드는 위 값에 맞춰 조건을 둔다.
+- `symbolic` 정책 위반이 있는 저장에서 hard gate 설정 조회가 실패하면 저장을 거부하고 `hardGateLookupFailed`를 돌려준다. 정책 규칙 평가 자체가 예외를 던지면 `policyCheckFailed` 위반으로 기록한다.
+- 컨테이너 이미지는 `node` 사용자로 실행한다. `/app` 아래 쓰기 경로(`logs/` 등)를 볼륨으로 붙였다면 소유자를 맞춘다.
+
+### Added
+
+- `MEMENTO_CORS_MODE`(`reflect`, `observe`, `allowlist`, 기본 `observe`): `ALLOWED_ORIGINS` 미설정 시 교차 출처 응답 방식.
+- 모든 응답에 `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`를 붙인다. `MEMENTO_FRAME_OPTIONS=deny`이면 `X-Frame-Options: DENY`도 붙인다.
+- `MEMENTO_OAUTH_REDIRECT_CHECK`(`warn`, `enforce`, 기본 `warn`): `/authorize` 오류 응답을 등록되지 않은 `redirect_uri`로 보낼지 정한다. `redirect_uri`가 없거나 URL이 아니면 400 JSON을 준다.
+- `MEMENTO_SSE_QUERY_KEY`(`allow`, `deny`, 기본 `allow`): Legacy SSE `?accessKey=` 쿼리 키 처리.
+- `MEMENTO_TOOL_ARGS_VALIDATION`(`off`, `warn`, `enforce`, 기본 `warn`)과 `MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN`(기본 `false`): tools/call 인자를 도구 inputSchema와 대조한다.
+- `MEMENTO_LLM_CLI_ENV_PASSTHROUGH`: CLI provider 자식 프로세스에는 기본 변수와 CLI별 인증 변수만 전달하며, 이 변수에 적은 이름을 추가로 전달한다.
+- `UPDATE_REQUIRE_SIGNED_TAG`(기본 `false`): `true`면 git 설치본 업데이트가 checkout 전에 `git verify-tag`를 실행한다.
+
+### Changed
+
+- 관리 콘솔 인증, `/session/rotate` 호출 제한, MCP 핸들러, 서버 요청 기록은 클라이언트 주소를 `TRUST_PROXY_HOPS` 기준의 한 경로(`resolveClientIp`)로 판정한다.
+- `/register`에 넘긴 `client_name`이 `apikey:`로 시작하면 저장하지 않는다. `/authorize`는 서버가 발급한 형식의 `client_id`일 때만 API 키 바인딩을 인정한다.
+- `/authorize` 처리 중 저장소 조회 등에서 예외가 나면 기록 후 500 JSON(`server_error`)으로 응답한다.
+- Google Gemini HTTP provider는 API 키를 `x-goog-api-key` 헤더로 보낸다. LLM HTTP 호출의 타임아웃 오류 메시지와 로그에는 쿼리 문자열을 뺀 URL만 남기고, 타이머는 응답 본문 읽기가 끝날 때까지 유지한다. provider 실패와 성공 기록을 기다린 뒤 다음 단계로 넘어간다.
+- 통합(consolidate)의 압축 그룹과 이웃 탐색은 같은 `key_id`와 `workspace` 안으로 한정하고, 삭제·폐기한 파편을 색인에서 지운다.
+- 모순 탐지는 `(created_at, id)` 워터마크로 진행 위치를 기록하고, 반복 실패하는 파편이 뒤 파편의 검사를 막지 않도록 파편별 실패 상한을 둔다.
+- `reconstruct_history`는 이벤트별 근거 파편을 한 번의 질의로 조회한다. 근거 조회가 실패하면 빈 근거와 `evidence_error`를 붙인다.
+- 접근 기록 갱신은 대상 행을 id 오름차순으로 먼저 잠근 뒤 갱신한다. 연결 파편 접근 기록이 실패하면 경고 로그를 남긴다.
+- 임베딩 워커는 대상 행을 id 오름차순으로 먼저 잠근 뒤 갱신한다.
+- 링크 일괄 생성(`LinkStore.createLinks`)은 `fragment_links`에 존재하는 열만 갱신하며 링크를 정상 삽입한다.
+- CLI: `inspect`의 `--include-nli`, `cleanup`의 `--execute`·`--redetect` 인자를 올바르게 해석한다. npm 로컬 설치본 업데이트는 `npm install anchormind-mcp@<버전>`으로 대상 버전을 고정한다. git 설치본 업데이트에서 `git status` 확인이 실패하면 업데이트를 멈춘다.
+- `npm run lint:migrations`는 `MIGRATION_LINT_FROM`이 없으면 전체 마이그레이션을 검사한다(`migration-034-v2.16.0-bundle.sql`은 파일명 규칙 예외).
+- GitHub Actions의 외부 액션 참조는 커밋 해시로 고정한다.
+
 ### Fixed
 
 - 의미 중복 병합(`semantic_dedup`)이 폐기되는 파편의 링크를 남기는 파편으로 옮기지 못하던 문제를 고쳤다. 링크 이전 쿼리가 PostgreSQL이 지원하지 않는 `UPDATE ... ON CONFLICT` 구문이라 매번 실패했고, 실패가 기록되지 않았다. 이제 같은 (from_id, to_id) 쌍이 이미 있는 링크만 건너뛰고 나머지는 옮기며, 실패하면 경고를 남긴다.

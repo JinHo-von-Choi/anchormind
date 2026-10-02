@@ -74,9 +74,9 @@ curl -H "Authorization: Bearer <MEMENTO_ACCESS_KEY>" http://localhost:57332/metr
 
 `MEMENTO_ACCESS_KEY`로 인증된 요청(keyId=null)은 대상에서 제외된다. `api_keys` 행이 없기 때문이다. 마스터 키 레벨 hard gate 적용은 `MEMENTO_SYMBOLIC_HARD_GATE_MASTER` 환경변수 지원이 필요하며 향후 과제로 보류됐다.
 
-## Fail-open
+## 조회 실패 시 동작
 
-`ApiKeyStore.getSymbolicHardGate()` 조회가 예외를 던지면 `false`로 폴백한다. DB 장애 시 전면 차단 사고를 방지하기 위한 설계다.
+`ApiKeyStore.getSymbolicHardGate()` 조회가 실패하면 예외를 그대로 올리고, 해당 remember에 정책 위반이 있으면 `hardGateLookupFailed` 규칙과 함께 `-32003`으로 저장을 거부한다(fail-closed). 위반이 없는 저장은 조회 자체를 하지 않으므로 영향이 없다.
 
 ## 캐시 무효화
 
