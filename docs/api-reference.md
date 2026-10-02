@@ -17,6 +17,8 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | GET | /sse | Legacy SSE. 세션 생성. `Authorization: Bearer` 헤더로 인증한다. `?accessKey=` 쿼리는 마스터 키 전용 하위 호환 경로이며 `MEMENTO_SSE_QUERY_KEY=deny`면 401 |
 | POST | /message?sessionId= | Legacy SSE. JSON-RPC 요청 수신. 응답은 SSE 스트림으로 전달 |
 | GET | /health | 헬스 체크. DB 쿼리(SELECT 1), 세션 상태, Redis 연결을 확인하고 JSON으로 반환. `REDIS_ENABLED=false` 시 Redis는 `disabled`로 표시되며 200 반환. DB 장애 시 503. 마스터 키 인증이 없으면 `{status, timestamp}`만 반환하고, 인증 시 services·workers 상세를 포함한다 |
+| GET | /health/live | 프로세스 생존 확인. 인증 없이 항상 200 `{status: "alive", uptime}`. DB와 Redis를 보지 않는다 |
+| GET | /health/ready | 준비 확인. 주 DB가 `MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`(기본 2000) 안에 응답하면 200 `{status: "ready"}`, 아니면 503 `{status: "not_ready", reason}`. `reason`은 `db_timeout` 또는 `db_error`. 인증 없음 |
 | GET | /metrics | Prometheus 메트릭. prom-client가 수집한 HTTP 요청 카운터, 세션 게이지 등. `MEMENTO_ACCESS_KEY`가 설정되어 있으면 마스터 키 인증 필요(없으면 401) |
 | GET | /openapi.json | OpenAPI 3.1.0 스펙. 인증 필수. master key는 Admin REST API 포함 전체 경로를 반환하며, API key는 해당 키의 `permissions` 배열에 맞게 도구 목록이 필터된 스펙을 반환. `ENABLE_OPENAPI=true` 환경변수로 활성화. 비활성 시 404 반환. |
 | GET, HEAD | /.well-known/oauth-authorization-server | OAuth 2.0 인가 서버 메타데이터 |

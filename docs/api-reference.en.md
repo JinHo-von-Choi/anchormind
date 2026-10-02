@@ -14,6 +14,8 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | GET | /sse | Legacy SSE. Session creation. Authenticate with the `Authorization: Bearer` header. The `?accessKey=` query is a master-key-only compatibility path; `MEMENTO_SSE_QUERY_KEY=deny` returns 401 |
 | POST | /message?sessionId= | Legacy SSE. JSON-RPC request receiver. Responses delivered via SSE stream |
 | GET | /health | Health check. Verifies DB query (SELECT 1), session state, and Redis connection, returning JSON. When `REDIS_ENABLED=false`, Redis shows as `disabled` with 200 returned. DB failure returns 503. Without master key authentication the body is only `{status, timestamp}`; services and worker details are included when authenticated |
+| GET | /health/live | Process liveness. Always 200 `{status: "alive", uptime}` without authentication. Does not check the DB or Redis |
+| GET | /health/ready | Readiness. 200 `{status: "ready"}` when the primary DB responds within `MEMENTO_HEALTH_READY_DB_TIMEOUT_MS` (default 2000), otherwise 503 `{status: "not_ready", reason}` where `reason` is `db_timeout` or `db_error`. No authentication |
 | GET | /metrics | Prometheus metrics. HTTP request counters, session gauges, etc. collected by prom-client. Requires the master key when `MEMENTO_ACCESS_KEY` is set (otherwise 401) |
 | GET | /openapi.json | OpenAPI 3.1.0 spec. Authentication required. Master key returns full paths including Admin REST API; API key returns a spec filtered to tools matching the key's `permissions` array. Enabled via `ENABLE_OPENAPI=true` env var. Returns 404 when disabled. |
 | GET, HEAD | /.well-known/oauth-authorization-server | OAuth 2.0 authorization server metadata |
