@@ -6,8 +6,11 @@
  * 더한 합이고, 크기가 없는 규칙은 경고 수다. 기준선(scripts/lint-baseline.json)보다
  * 커지면 실패한다. 작아지면 낮출 수 있다는 안내만 낸다.
  * 기준선은 --update가 현재 값으로 다시 쓰며, 같은 코드에서는 항상 같은 파일을 만든다.
+ * --update는 어느 값이든 기준선보다 커졌으면 아무것도 쓰지 않고 실패한다. 값을 올리는
+ * 갱신은 --allow-increase를 함께 줄 때만 하며, 이 옵션은 통합 담당자나 소유자가 승인한
+ * 재생성에만 쓴다.
  *
- * 사용: node scripts/lint-ratchet.js [--update | --init]
+ * 사용: node scripts/lint-ratchet.js [--update [--allow-increase] | --init]
  * 종료 코드: 0 통과, 1 기준선 초과, 2 실행 실패
  *
  * 작성자: 최진호
@@ -105,16 +108,67 @@ export function serializeBaseline(counts) {
   return `${JSON.stringify(ordered, null, 2)}\n`;
 }
 
+/**
+ * 명령줄 인자를 해석한다. 옵션은 순서와 무관하다.
+ *
+ * @param {string[]} args process.argv.slice(2)
+ * @returns {{ mode: "--check"|"--init"|"--update", allowIncrease: boolean, unknown: string[] }}
+ */
+export function parseArgs(args) {
+  const isMode        = a => a === "--init" || a === "--update" || a === "--check";
+  const modes         = args.filter(isMode);
+  const allowIncrease = args.includes("--allow-increase");
+  const unknown       = args.filter(a => !isMode(a) && a !== "--allow-increase");
+  if (modes.length > 1) unknown.push(...modes);
+  return { mode: modes.length === 1 ? modes[0] : "--check", allowIncrease, unknown };
+}
+
+/**
+ * 기준선 파일을 현재 값으로 갱신한다. 값이 늘어난 항목이 있고 allowIncrease가 아니면
+ * 파일을 건드리지 않고 1을 돌려준다. 줄어든 값은 항상 기록한다.
+ *
+ * @param {{ current: Record<string, Record<string, number>>, baselinePath: string, allowIncrease: boolean }} opts
+ * @returns {{ code: number, out: string[], err: string[] }}
+ */
+export function updateBaseline({ current, baselinePath, allowIncrease }) {
+  const baseline      = JSON.parse(fs.readFileSync(baselinePath, "utf8"));
+  const { increased } = compareCounts(current, baseline);
+
+  if (increased.length > 0 && !allowIncrease) {
+    return {
+      code: 1,
+      out : [],
+      err : [
+        "[lint-ratchet] 기준선을 올릴 수 없다. 기준선은 기록하지 않았다:",
+        ...increased.map(line => `  ${line}`),
+        "[lint-ratchet] 승인된 재생성이면 --update --allow-increase 를 쓴다."
+      ]
+    };
+  }
+  fs.writeFileSync(baselinePath, serializeBaseline(current));
+  return { code: 0, out: [`[lint-ratchet] 기준선 갱신: ${summary(current)}`], err: [] };
+}
+
 function summary(counts) {
-  return RATCHET_RULES.map(r => `${r}=${Object.values(counts[r]).reduce((a, b) => a + b, 0)}`).join(" ");
+  return RATCHET_RULES.map(r => `${r}=${Object.values(counts[r] ?? {}).reduce((a, b) => a + b, 0)}`).join(" ");
 }
 
 async function main(argv) {
+  const { mode, allowIncrease, unknown } = parseArgs(argv.slice(2));
+
+  if (unknown.length > 0) {
+    console.error(`[lint-ratchet] 알 수 없는 옵션: ${unknown.join(" ")}`);
+    return 2;
+  }
+  if (allowIncrease && mode !== "--update") {
+    console.error("[lint-ratchet] --allow-increase는 --update와 함께만 쓴다.");
+    return 2;
+  }
+
   const { ESLint } = await import("eslint");
   const eslint     = new ESLint({ cwd: ROOT });
   const results    = await eslint.lintFiles(TARGETS);
   const current    = countByRule(results, ROOT);
-  const mode       = argv[2] ?? "--check";
 
   if (mode === "--init") {
     if (fs.existsSync(BASELINE_PATH)) {
@@ -127,14 +181,10 @@ async function main(argv) {
   }
 
   if (mode === "--update") {
-    fs.writeFileSync(BASELINE_PATH, serializeBaseline(current));
-    console.log(`[lint-ratchet] 기준선 갱신: ${summary(current)}`);
-    return 0;
-  }
-
-  if (mode !== "--check") {
-    console.error(`[lint-ratchet] 알 수 없는 옵션: ${mode}`);
-    return 2;
+    const { code, out, err } = updateBaseline({ current, baselinePath: BASELINE_PATH, allowIncrease });
+    out.forEach(line => console.log(line));
+    err.forEach(line => console.error(line));
+    return code;
   }
 
   const baseline                 = JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8"));

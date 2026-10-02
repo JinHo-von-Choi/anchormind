@@ -91,6 +91,8 @@ after(async () => {
 - [ ] SKILL.md updated if tool parameters changed
 - [ ] 신규 unit 테스트에 `assertCleanShutdown()` 추가 (lifecycle 가드 — `tests/README.md` 참조)
 
+`npm run lint:ratchet` compares per-file lint metrics with `scripts/lint-baseline.json`. When a metric drops, lower the ceiling with `node scripts/lint-ratchet.js --update`; the command refuses to write if any metric grew. Raising a ceiling needs `node scripts/lint-ratchet.js --update --allow-increase`, which is reserved for the integration owner or an owner-approved regeneration.
+
 ## Commit Messages
 
 Format: `[영역] 설명` (예: `[HTTP] 응답 공통 헤더 추가`, `[문서] 연결 설정 안내 현행화`)

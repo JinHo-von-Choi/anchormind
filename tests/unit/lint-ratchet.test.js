@@ -6,13 +6,17 @@
  */
 import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
+import fs               from "node:fs";
+import os               from "node:os";
 import path             from "node:path";
 import {
   RATCHET_RULES,
   messageWeight,
   countByRule,
   compareCounts,
-  serializeBaseline
+  serializeBaseline,
+  parseArgs,
+  updateBaseline
 } from "../../scripts/lint-ratchet.js";
 
 describe("messageWeight", () => {
@@ -86,5 +90,82 @@ describe("serializeBaseline", () => {
     const parsed = JSON.parse(serializeBaseline({ "complexity": { "lib/a.js": 0, "lib/b.js": 3 } }));
     assert.deepEqual(parsed["complexity"], { "lib/b.js": 3 });
     assert.deepEqual(Object.keys(parsed), RATCHET_RULES);
+  });
+});
+
+describe("parseArgs", () => {
+  it("인자가 없으면 검사 모드다", () => {
+    assert.deepEqual(parseArgs([]), { mode: "--check", allowIncrease: false, unknown: [] });
+  });
+
+  it("옵션은 순서와 무관하게 해석된다", () => {
+    assert.deepEqual(parseArgs(["--update", "--allow-increase"]), { mode: "--update", allowIncrease: true, unknown: [] });
+    assert.deepEqual(parseArgs(["--allow-increase", "--update"]), { mode: "--update", allowIncrease: true, unknown: [] });
+    assert.deepEqual(parseArgs(["--init"]),                       { mode: "--init",   allowIncrease: false, unknown: [] });
+  });
+
+  it("모르는 옵션과 중복 모드는 unknown으로 모은다", () => {
+    assert.deepEqual(parseArgs(["--bogus"]).unknown, ["--bogus"]);
+    assert.deepEqual(parseArgs(["--init", "--update"]).unknown, ["--init", "--update"]);
+  });
+});
+
+describe("updateBaseline", () => {
+  const withBaseline = (baseline, fn) => {
+    const dir  = fs.mkdtempSync(path.join(os.tmpdir(), "lint-ratchet-"));
+    const file = path.join(dir, "baseline.json");
+    fs.writeFileSync(file, serializeBaseline(baseline));
+    try { return fn(file); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  };
+  const base = { "complexity": { "lib/a.js": 50, "lib/b.js": 20 } };
+
+  it("값이 늘었으면 종료 코드 1을 돌려주고 파일을 건드리지 않는다", () => {
+    withBaseline(base, (file) => {
+      const before = fs.readFileSync(file, "utf8");
+      const res    = updateBaseline({ current: { "complexity": { "lib/a.js": 51, "lib/b.js": 20 } }, baselinePath: file, allowIncrease: false });
+      assert.equal(res.code, 1);
+      assert.deepEqual(res.out, []);
+      assert.ok(res.err.some(line => line.includes("complexity lib/a.js: 50 -> 51")));
+      assert.ok(res.err.some(line => line.includes("--allow-increase")));
+      assert.equal(fs.readFileSync(file, "utf8"), before);
+    });
+  });
+
+  it("기준선에 없던 항목이 생겨도 거부한다", () => {
+    withBaseline(base, (file) => {
+      const before = fs.readFileSync(file, "utf8");
+      const res    = updateBaseline({ current: { "local/no-silent-catch": { "lib/c.js": 1 }, "complexity": base.complexity }, baselinePath: file, allowIncrease: false });
+      assert.equal(res.code, 1);
+      assert.equal(fs.readFileSync(file, "utf8"), before);
+    });
+  });
+
+  it("--allow-increase가 있으면 더 큰 기준선을 쓴다", () => {
+    withBaseline(base, (file) => {
+      const current = { "complexity": { "lib/a.js": 80, "lib/b.js": 20 } };
+      const res     = updateBaseline({ current, baselinePath: file, allowIncrease: true });
+      assert.equal(res.code, 0);
+      assert.equal(fs.readFileSync(file, "utf8"), serializeBaseline(current));
+    });
+  });
+
+  it("값이 줄기만 했으면 옵션 없이 낮춘 기준선을 기록한다", () => {
+    withBaseline(base, (file) => {
+      const current = { "complexity": { "lib/a.js": 40 } };
+      const res     = updateBaseline({ current, baselinePath: file, allowIncrease: false });
+      assert.equal(res.code, 0);
+      assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8"))["complexity"], { "lib/a.js": 40 });
+    });
+  });
+
+  it("두 번째 갱신은 같은 파일을 만든다", () => {
+    withBaseline(base, (file) => {
+      const current = { "complexity": { "lib/a.js": 40, "lib/b.js": 20 } };
+      updateBaseline({ current, baselinePath: file, allowIncrease: false });
+      const first = fs.readFileSync(file, "utf8");
+      const res   = updateBaseline({ current, baselinePath: file, allowIncrease: false });
+      assert.equal(res.code, 0);
+      assert.equal(fs.readFileSync(file, "utf8"), first);
+    });
   });
 });
