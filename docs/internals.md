@@ -654,6 +654,10 @@ MCP 2025-06-18 스펙은 서버가 세션을 종료한 후 해당 sessionId를 �
 
 메트릭: `mcp_session_404_total` (label 없음)
 
+### API 키 저장소 조회 실패 지표
+
+`api_keys` 조회가 실패해 키 판정을 내리지 못하면 `mcp_auth_store_errors_total{operation}`을 증가시킨다. `operation`은 `validate_raw_key`(원문 키 조회), `validate_by_id`(키 id 조회), `session_recheck`(열린 세션의 키 상태 재확인) 세 값이다. 인증 판정이 막힌 initialize와 세션 자동 복구는 `memento_auth_denied_total{reason="store_unavailable"}`로도 집계한다. 세션 재확인 조회가 실패하면 세션은 저장된 identity를 유지하고, 같은 키의 조회는 5초 동안 건너뛰며 경고와 지표는 그 기간에 한 번만 남긴다.
+
 ### Origin 헤더 검증 (DNS rebinding 방어)
 
 `MCP_STRICT_ORIGIN=true` 설정 시 POST/GET/DELETE `/mcp` 진입점 최상단에서 `isOriginAllowed(req)` 검증을 수행한다. 함수는 `lib/handlers/_common.js`에 위치한다.

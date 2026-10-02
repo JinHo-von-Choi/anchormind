@@ -634,6 +634,10 @@ When authentication succeeds (recoverable), the request proceeds through the sam
 
 Metric: `mcp_session_404_total` (no labels)
 
+### API Key Store Lookup Failure Metrics
+
+When an `api_keys` lookup fails before a key decision can be made, `mcp_auth_store_errors_total{operation}` is incremented. `operation` takes three values: `validate_raw_key` (raw key lookup), `validate_by_id` (key id lookup) and `session_recheck` (key state recheck of an open session). Initialize and session auto-recovery that could not be decided are also counted in `memento_auth_denied_total{reason="store_unavailable"}`. When a session recheck lookup fails the session keeps its stored identity, lookups for the same key are skipped for 5 seconds, and the warning and metric are emitted once in that window.
+
 ### Origin Header Validation (DNS rebinding defense)
 
 With `MCP_STRICT_ORIGIN=true`, `isOriginAllowed(req)` is evaluated at the top of the POST/GET/DELETE `/mcp` entry points. The function lives in `lib/handlers/_common.js`.
