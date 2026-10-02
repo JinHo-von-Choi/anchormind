@@ -123,6 +123,23 @@ node bin/memento.js benchmark --key-scope corpus --repeat 3
 
 기준선과 비교하려면 `--baseline scripts/baseline-recall.json`을 붙인다. 회귀 판정은 이 비교로 한다.
 
+기준선은 isolated 모드, `Xenova/bge-m3`(1024차원), `--repeat 3`으로 새로 마이그레이션한 DB에서 만든다. `--save-baseline`은 임베딩 provider, 모델, 차원을 함께 기록하고, `--baseline` 비교 시 모델이 다르면 경고한다. 회귀 판정 허용 하락폭은 Recall과 MRR 2pp, p95 지연 15%다. isolated 적재는 `benchmark-harness-key` 행이 `api_keys`에 없으면 inactive 상태로 먼저 만든다.
+
+기준선 갱신 절차는 다음과 같다.
+
+```bash
+npm run migrate
+EMBEDDING_PROVIDER=transformers EMBEDDING_MODEL=Xenova/bge-m3 EMBEDDING_DIMENSIONS=1024 EMBEDDING_ENABLED=true \
+  node bin/memento.js benchmark --repeat 3 --save-baseline scripts/baseline-recall.json
+```
+
+| 항목 (2026-10-03, isolated, bge-m3) | 값 |
+|-|-|
+| Recall@1 / @5 / @10 | 81.0% / 90.0% / 93.0% |
+| MRR | 0.8523 |
+| 미검출 | 7 |
+| p50 / p95 지연 | 88ms / 102ms |
+
 `isolated`는 적재한 골드셋 파편만 후보로 두므로 회차 간 결과가 동일하다. 회귀 판정에는 이 모드를 쓴다. `corpus`는 운영 데이터가 계속 변하므로 실행 시점에 따라 3포인트 안팎으로 흔들린다. 절대 수치를 인용할 때는 실행 시각과 반복 횟수를 함께 적는다.
 
 ### 질의 의도 프로파일 적용 전후

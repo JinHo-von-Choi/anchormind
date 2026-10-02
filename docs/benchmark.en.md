@@ -222,6 +222,23 @@ node bin/memento.js benchmark --key-scope corpus --repeat 3
 
 To compare against the baseline, add `--baseline scripts/baseline-recall.json`. Regression decisions are made with this comparison.
 
+Baselines are produced in isolated mode with `Xenova/bge-m3` (1024 dimensions) and `--repeat 3` on a freshly migrated database. `--save-baseline` records the embedding provider, model and dimensions, and `--baseline` warns when the model differs. The regression tolerance is 2pp for Recall and MRR and 15% for p95 latency. Isolated seeding first creates the `benchmark-harness-key` row in `api_keys` (inactive) when it is missing.
+
+To refresh the baseline:
+
+```bash
+npm run migrate
+EMBEDDING_PROVIDER=transformers EMBEDDING_MODEL=Xenova/bge-m3 EMBEDDING_DIMENSIONS=1024 EMBEDDING_ENABLED=true \
+  node bin/memento.js benchmark --repeat 3 --save-baseline scripts/baseline-recall.json
+```
+
+| Item (2026-10-03, isolated, bge-m3) | Value |
+|-|-|
+| Recall@1 / @5 / @10 | 81.0% / 90.0% / 93.0% |
+| MRR | 0.8523 |
+| Misses | 7 |
+| p50 / p95 latency | 88ms / 102ms |
+
 `isolated` keeps only the seeded goldset fragments as candidates, so results are identical between runs. Use this mode for regression decisions. `corpus` fluctuates by about 3 points depending on when it runs, because production data keeps changing. When quoting an absolute figure, state the run time and the repeat count together.
 
 ### Intent profile, before and after
