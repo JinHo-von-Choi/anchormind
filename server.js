@@ -335,7 +335,9 @@ validateMemoryConfig(MEMORY_CONFIG);
  */
 const configIssues = getConfigIssues();
 if (configIssues.length > 0) {
-  const detail = configIssues.map(i => `${i.name}="${i.value}" ${i.problem} -> ${i.used}`).join("; ");
+  const detail = configIssues
+    .map(i => `${i.name}="${i.value}" ${i.problem}, using ${i.usedDefault ? "default " : ""}${i.used}`)
+    .join("; ");
   logWarn(`[Startup] 환경 변수 값 ${configIssues.length}건이 기대와 다르다: ${detail}`);
   if (CONFIG_STRICT) {
     console.error("[Startup] MEMENTO_CONFIG_STRICT=true: 환경 변수 값을 고친 뒤 다시 기동한다.");

@@ -7,7 +7,10 @@
 import { describe, it, afterEach } from "node:test";
 import assert                      from "node:assert/strict";
 import { readFileSync }            from "node:fs";
-import { execFileSync }            from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync }     from "node:fs";
+import { tmpdir }                  from "node:os";
+import path                        from "node:path";
 
 import { envInt, envFloat, envBool, envEnum, getConfigIssues } from "../../lib/config.js";
 
@@ -120,7 +123,7 @@ describe("모듈 적재 시점의 값 검사", () => {
   const load = (env) => JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", `
     const c = await import("./lib/config.js");
     console.log(JSON.stringify({
-      port: c.PORT, ttl: c.SESSION_TTL_MS, ready: c.HEALTH_READY_DB_TIMEOUT_MS, deadline: c.SHUTDOWN_DEADLINE_MS,
+      port: c.PORT, dbPort: c.DB_PORT, ttl: c.SESSION_TTL_MS, ready: c.HEALTH_READY_DB_TIMEOUT_MS, deadline: c.SHUTDOWN_DEADLINE_MS,
       strict: c.CONFIG_STRICT, issues: c.getConfigIssues().map(i => [i.name, i.problem, i.used])
     }));
   `], {
@@ -165,8 +168,63 @@ describe("모듈 적재 시점의 값 검사", () => {
     assert.deepEqual(r.issues, [["RATE_LIMIT_PER_IP", "below_min", -1]]);
   });
 
+  it("POSTGRES_PORT가 유효하면 DB_PORT는 읽지 않는다", () => {
+    const r = load({ POSTGRES_PORT: "5433", DB_PORT: "abc" });
+    assert.equal(r.dbPort, 5433);
+    assert.deepEqual(r.issues, []);
+  });
+
+  it("POSTGRES_PORT가 없거나 숫자가 아니면 DB_PORT가 기본이다", () => {
+    const a = load({ DB_PORT: "6000" });
+    assert.equal(a.dbPort, 6000);
+    assert.deepEqual(a.issues, []);
+    const b = load({ POSTGRES_PORT: "abc", DB_PORT: "6001" });
+    assert.equal(b.dbPort, 6001);
+    assert.deepEqual(b.issues.map(i => i[0]), ["POSTGRES_PORT"]);
+    const c = load({ DB_PORT: "abc" });
+    assert.equal(c.dbPort, 5432);
+    assert.deepEqual(c.issues.map(i => i[0]), ["DB_PORT"]);
+  });
+
   it("기동 파일은 기록 뒤 엄격 모드에서 종료 코드 78로 멈춘다", () => {
     const server = readFileSync(new URL("../../server.js", import.meta.url), "utf8");
     assert.match(server, /getConfigIssues\(\)[\s\S]*CONFIG_STRICT[\s\S]*process\.exit\(78\)/);
+  });
+});
+
+describe("호출 시점에 읽는 변수의 기동 검사", () => {
+  const GARBAGE = {
+    MEMENTO_SCORE_UPDATE_BATCH     : "-5",
+    MEMENTO_SESSION_KEY_RECHECK_MS : "abc",
+    DB_STATEMENT_TIMEOUT_MS        : "soon",
+    MEMENTO_SEMANTIC_THRESHOLD_MODE: "sideways",
+    MEMENTO_HEALTH_READY_DB_TIMEOUT_MS: "50"
+  };
+
+  const runServer = (extra) => {
+    const logDir = mkdtempSync(path.join(tmpdir(), "memento-cfg-"));
+    try {
+      return spawnSync(process.execPath, ["server.js"], {
+        cwd     : new URL("../../", import.meta.url),
+        env     : {
+          PATH: process.env.PATH, DOTENV_CONFIG_PATH: "/nonexistent.env", PORT: "19201",
+          MEMENTO_ACCESS_KEY: "scratch", REDIS_ENABLED: "false", CACHE_ENABLED: "false",
+          MEMENTO_METRICS_DEFAULT: "off", LOG_DIR: logDir, ...GARBAGE, ...extra
+        },
+        encoding: "utf8",
+        timeout : 20000
+      });
+    } finally {
+      rmSync(logDir, { recursive: true, force: true });
+    }
+  };
+
+  it("엄격 모드에서 각 변수를 이름으로 지목하고 종료 코드 78로 멈춘다", () => {
+    const r   = runServer({ MEMENTO_CONFIG_STRICT: "true" });
+    const out = `${r.stdout}${r.stderr}`;
+    assert.equal(r.status, 78);
+    for (const name of Object.keys(GARBAGE)) assert.ok(out.includes(`${name}="`), `${name} 누락`);
+    assert.match(out, /MEMENTO_HEALTH_READY_DB_TIMEOUT_MS="50" below_min, using default 2000/);
+    assert.match(out, /MEMENTO_SCORE_UPDATE_BATCH="-5" below_min, using default 200/);
   });
 });

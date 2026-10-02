@@ -13,7 +13,7 @@
 | MEMENTO_AUTH_DISABLED | false | When `true`, completely disables authentication and processes all requests with master privileges. Development/testing only. Only effective when `MEMENTO_ACCESS_KEY` is unset |
 | DB_STATEMENT_TIMEOUT_MS | 30000 | Query time limit (ms) for user request paths. 0 means unlimited. Not applied to system and admin maintenance paths |
 | REQUEST_TIMEOUT_MS | 60000 | Request receive limit (ms). 0 means unlimited |
-| MEMENTO_CONFIG_STRICT | false | Reports problems in numeric and enumerated environment variables as one startup log line. A non-numeric value falls back to the default; a non-integer or out-of-range value is used as given and only reported (`MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`, `MEMENTO_SHUTDOWN_DEADLINE_MS`, `MEMENTO_SCORE_UPDATE_BATCH` and `MEMENTO_SESSION_KEY_RECHECK_MS` fall back to the default when out of range). A whitespace-only value counts as unset. When `true`, startup stops with exit code 78 if any problem is found |
+| MEMENTO_CONFIG_STRICT | false | Reports problems in numeric, enumerated and boolean environment variables as one startup log line. A non-numeric value falls back to the default; a non-integer or out-of-range value is used as given and only reported (`MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`, `MEMENTO_SHUTDOWN_DEADLINE_MS`, `MEMENTO_SCORE_UPDATE_BATCH` and `MEMENTO_SESSION_KEY_RECHECK_MS` fall back to the default when out of range). A whitespace-only value counts as unset. When `true`, startup stops with exit code 78 if any problem is found |
 | KEEP_ALIVE_TIMEOUT_MS | 75000 | Keep-Alive connection lifetime (ms). Match the proxy setting |
 | HEADERS_TIMEOUT_MS | 76000 | Request header receive limit (ms). Keep it larger than KEEP_ALIVE_TIMEOUT_MS |
 | LOG_LEVEL | info (debug when NODE_ENV is not production) | winston log level |
@@ -283,8 +283,8 @@ POSTGRES_* prefixes take precedence over DB_* prefixes. Both formats can be mixe
 | DB_IDLE_TIMEOUT_MS | Idle connection return timeout ms. Default 30000 |
 | DB_CONN_TIMEOUT_MS | Connection acquisition timeout ms. Default 10000 |
 | DB_QUERY_TIMEOUT | Query timeout ms. Default 30000 |
-| MEMENTO_HEALTH_READY_DB_TIMEOUT_MS | How long `GET /health/ready` waits for the primary DB, in ms. Default 2000, allowed range 100 to 4500 (the default is used outside it). Keep it below the 5 second watchdog curl limit |
-| MEMENTO_SHUTDOWN_DEADLINE_MS | Upper bound for the whole SIGTERM/SIGINT shutdown sequence, in ms. Forces exit code 1 when exceeded. Default 60000, 0 means no limit, a negative value falls back to the default |
+| MEMENTO_HEALTH_READY_DB_TIMEOUT_MS | How long `GET /health/ready` waits for the primary DB, in ms. Default 2000, only integers from 100 to 4500 are accepted and any other value uses 2000. Keep it below the 5 second watchdog curl limit |
+| MEMENTO_SHUTDOWN_DEADLINE_MS | Upper bound for the whole SIGTERM/SIGINT shutdown sequence, in ms. Forces exit code 1 when exceeded. Default 60000, 0 means no limit. Only integers of 0 or more are accepted; a negative or non-integer value uses 60000 |
 | DB_BACKGROUND_MAX_CONNECTIONS | Primary pool connections that schedulers and workers may hold at once. Default 40% of DB_MAX_CONNECTIONS (min 1). Capped at DB_MAX_CONNECTIONS-1. Excess acquisitions wait in FIFO order |
 | DB_BACKGROUND_WAIT_MAX_MS | Background slot wait limit (ms). Default 120000. Only the waiting job fails and retries on the next cycle |
 | PGVECTOR_SCHEMA | Schema where the pgvector extension is installed. Detected automatically at startup when unset |
