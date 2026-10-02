@@ -22,6 +22,7 @@
 | MEMENTO_SPLIT_LLM_PRIMARY / MEMENTO_SPLIT_LLM_FALLBACKS | (none) | Dedicated LLM chain for long-fragment splitting. The global chain is used when unset |
 | MEMENTO_VECTOR_FORCE_INDEX | (applied) | `off` disables the index-forcing planner hint for vector search |
 | MEMENTO_SEMANTIC_THRESHOLD_MODE | inner | `outer` selects max(limit, 80) nearest neighbours first and applies the similarity threshold outside the KNN query |
+| MEMENTO_SCORE_UPDATE_BATCH | 200 | Batch size for id-ordered importance decay and utility updates. 0 runs a single UPDATE statement |
 | MEMENTO_RUNTIME | (none) | `docker` marks the installation as Docker |
 | GITHUB_TOKEN | (none) | GitHub API authentication token for update checks |
 | WORKER_ID | single | workerId shown in the health response |

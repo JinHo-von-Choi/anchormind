@@ -22,6 +22,7 @@
 | MEMENTO_SPLIT_LLM_PRIMARY / MEMENTO_SPLIT_LLM_FALLBACKS | (없음) | 장문 분할 전용 LLM 체인. 미설정 시 전역 체인 사용 |
 | MEMENTO_VECTOR_FORCE_INDEX | (적용) | `off`면 벡터 검색의 인덱스 강제 planner 힌트를 끈다 |
 | MEMENTO_SEMANTIC_THRESHOLD_MODE | inner | `outer`면 시맨틱 검색이 이웃 max(limit, 80)개를 먼저 고르고 유사도 임계값을 바깥에서 적용한다 |
+| MEMENTO_SCORE_UPDATE_BATCH | 200 | 감쇠와 utility 갱신을 id 오름차순 묶음으로 나눌 때의 묶음 크기. 0이면 단일 UPDATE 문장 |
 | MEMENTO_RUNTIME | (없음) | `docker`면 Docker 설치로 판정한다 |
 | GITHUB_TOKEN | (없음) | 업데이트 확인 시 GitHub API 인증 토큰 |
 | WORKER_ID | single | health 응답의 workerId 표기 |

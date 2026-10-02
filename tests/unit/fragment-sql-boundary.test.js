@@ -43,6 +43,7 @@ const ALLOWED = {
   "memory/consolidate/MemoryConsolidator.js": 26, // semantic_dedup 병합은 잠금, 폐기, linked_to, 합산을 한 트랜잭션 클라이언트로 쓴다
   "memory/consolidate/MorphemeBackfill.js": 2,
   "memory/consolidate/UtilityBaseline.js": 1,
+  "memory/consolidate/idOrderedUpdate.js": 2, // id 순 묶음 갱신은 잠금 CTE와 갱신 문장을 함께 쓴다
   "memory/embedding/EmbeddingWorker.js": 5, // 배치 저장은 id 순 잠금 CTE와 갱신 문장을 함께 쓴다
   "memory/embedding/SyntheticQueryWorker.js": 3,
   "memory/link/ContradictionDetector.js": 12,
@@ -67,7 +68,7 @@ const ALLOWED = {
   "memory/signals/SpreadingActivation.js": 2,
   "memory/write/BatchRememberProcessor.js": 1,
   "memory/write/ConflictResolver.js": 2,
-  "memory/write/FragmentWriter.js": 25, // archive 전에 현재 파편을 FOR UPDATE로 재조회, 접근 기록 갱신 3경로는 id 순 잠금 CTE와 갱신 문장을 함께 쓴다
+  "memory/write/FragmentWriter.js": 27, // archive 전에 현재 파편을 FOR UPDATE로 재조회, 접근 기록 갱신 3경로와 linked_to 정리 2경로는 id 순 잠금 CTE와 갱신 문장을 함께 쓴다
   "memory/write/RememberPostProcessor.js": 1,
   "tools/reconstruct.js": 1,
   "tools/resources.js": 4,

@@ -10,6 +10,8 @@
 import { describe, it, mock } from "node:test";
 import assert                  from "node:assert/strict";
 
+process.env.MEMENTO_SCORE_UPDATE_BATCH = "0";
+
 const calls = [];
 mock.module("../../lib/tools/db.js", {
   namedExports: {
