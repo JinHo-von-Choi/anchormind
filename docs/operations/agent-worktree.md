@@ -151,17 +151,16 @@ REMOVED=0
 for WT in "${WORKTREES[@]}"; do
   if [ ! -d "$WT" ]; then
     git -C "$REPO" worktree remove --force "$WT" 2>/dev/null || true
-    ((REMOVED++))
+    REMOVED=$((REMOVED + 1))
     continue
   fi
-  AGE=$(find "$WT" -maxdepth 1 -newer /proc/1 -printf '%T@\n' 2>/dev/null | sort -n | tail -1)
   MTIME=$(stat -c %Y "$WT" 2>/dev/null || echo 0)
   NOW=$(date +%s)
   if (( NOW - MTIME > STALE_DAYS * 86400 )); then
     git -C "$REPO" worktree unlock "$WT" 2>/dev/null || true
     git -C "$REPO" worktree remove --force "$WT"
     rm -rf "$WT"
-    ((REMOVED++))
+    REMOVED=$((REMOVED + 1))
   fi
 done
 

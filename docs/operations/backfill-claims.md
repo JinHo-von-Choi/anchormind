@@ -60,13 +60,13 @@ DATABASE_URL    PostgreSQL 연결 문자열 (필수)
      --batch-size 500 --rate-limit-ms 200
    ```
 
-4. 진행률 확인: Prometheus 메트릭 `memento_symbolic_claim_total` 모니터링
+4. 진행률 확인: `--verbose` 배치별 로그와 종료 시 요약의 `claims_inserted`. 스크립트는 별도 프로세스이며 서버의 `/metrics`에는 반영되지 않는다
 
 ## Prometheus Metrics
 
 | 메트릭 | 설명 |
 |--------|------|
-| `memento_symbolic_claim_total` | 누적 claim 삽입 건수 (backfill 중 실시간 증가) |
+| `memento_symbolic_claim_extracted_total{extractor,polarity}` | 서버의 `remember` 후처리가 추출한 claim 누적 건수. 이 스크립트의 추출은 집계하지 않는다 |
 | `memento_symbolic_gate_blocked_total{phase=cbr}` | CBR 필터에 의한 차단 건수 |
 
 ## Output Summary

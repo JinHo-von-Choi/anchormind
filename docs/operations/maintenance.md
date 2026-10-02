@@ -2,7 +2,7 @@
 
 작성자: 최진호
 작성일: 2026-04-19
-수정일: 2026-04-20
+수정일: 2026-10-03
 
 운영 중 필요에 따라 실행하는 유지보수 스크립트 목록이다. 각 스크립트의 목적, 선행 조건, 실행 명령, 권장 빈도를 기술한다.
 
@@ -126,7 +126,7 @@ rate 값(authDeniedRate5m, toolErrorRate5m 등)은 서버 메모리의 직전 sn
 
 ### 배치 풀 메트릭
 
-`BATCH_DATABASE_URL`이 설정된 경우 `EmbeddingWorker`와 `BatchRememberProcessor`가 전용 연결 풀(`application_name=memento-mcp:batch`)을 사용한다. 풀 상태는 아래 세 게이지로 관찰한다.
+`BatchRememberProcessor`가 전용 연결 풀(`application_name=memento-mcp:batch`)을 사용한다. 풀 크기는 주 풀 최대 연결 수의 30%(최소 2)이며, `BATCH_DATABASE_URL`이 설정되면 별도 DB로, 미설정이면 같은 DB의 별도 풀로 연결한다. 스케줄러가 1분 간격으로 수집하는 풀 상태를 아래 세 게이지로 관찰한다.
 
 ```
 mcp_batch_pool_active_connections   — 체크아웃된 연결 수

@@ -81,10 +81,10 @@ LLM_CONCURRENCY='{"gemini-cli":2,"ollama":8}'
 
 ## Circuit Breaker
 
-연속 실패 시 provider 자동 격리:
-- 기본 5회 연속 실패 → 60초 OPEN 상태
+실패가 쌓이면 provider를 자동 격리한다.
+- 실패 집계 창(`LLM_CB_FAILURE_WINDOW_MS`, 기본 60초) 안에 `LLM_CB_FAILURE_THRESHOLD`(기본 5)회 실패하면 `LLM_CB_OPEN_DURATION_MS`(기본 60초) 동안 OPEN 상태
 - OPEN 중 해당 provider 호출은 즉시 건너뛰고 다음 체인으로 이동
-- 60초 경과 후 자동 CLOSE, 다음 호출에서 재시도
+- OPEN 기간이 지나면 자동으로 닫히고 다음 호출에서 재시도, 성공하면 실패 기록 초기화
 - REDIS_ENABLED=true 시 상태가 Redis에 저장되어 프로세스 재시작에도 유지됨
 
 ## Monitoring
@@ -114,7 +114,7 @@ rate(memento_llm_token_usage_total{direction="input"}[1h])
 
 **CLI 자식 환경**: CLI provider 자식 프로세스는 기본 변수(PATH, HOME, LANG, 프록시, 인증서 경로 등)와 CLI별 인증 변수만 받는다. 그 밖의 변수가 필요하면 `MEMENTO_LLM_CLI_ENV_PASSTHROUGH`에 이름을 쉼표로 적는다(기본 없음).
 
-**CLI 도구 승인**: gemini-cli, copilot-cli, opencode-cli는 기본(`MEMENTO_LLM_CLI_TOOL_APPROVAL=none`)에서 쓰기, 셸, 네트워크 도구를 거부하고 빈 임시 디렉터리에서 실행한다. 이 호출들은 JSON 텍스트 생성만 요구한다. gemini-cli, copilot-cli, opencode-cli를 쓰는 배포는 기본에서 제한된 호출을 받으며, `MEMENTO_LLM_CLI_TOOL_APPROVAL=all`로 설정하면 승인 제한이 없는 호출을 쓴다. 특정 CLI가 도구 승인 없이는 JSON을 돌려주지 못하면 `MEMENTO_LLM_CLI_TOOL_APPROVAL=all`로 전체 자동 승인 인자와 서버 작업 디렉터리 실행으로 전환한다. 값은 호출 시점에 읽는다.
+**CLI 도구 승인**: gemini-cli, copilot-cli, opencode-cli는 기본(`MEMENTO_LLM_CLI_TOOL_APPROVAL=none`)에서 빈 임시 디렉터리에서 실행한다. gemini는 `-y` 없이, copilot은 쓰기, 셸, URL 도구와 내장 MCP를 거부하는 인자와 함께, opencode는 모든 권한을 거부하는 `OPENCODE_PERMISSION`으로 실행된다. 이 호출들은 JSON 텍스트 생성만 요구한다. `MEMENTO_LLM_CLI_TOOL_APPROVAL=all`로 설정하면 서버 작업 디렉터리에서 gemini `-y`, copilot `--allow-all-tools`로 실행하고 opencode에는 승인 관련 설정을 더하지 않는다. 특정 CLI가 도구 승인 없이는 JSON을 돌려주지 못할 때 `all`로 전환한다. 값은 호출 시점에 읽는다. codex-cli, qwen-cli, agy-cli에는 적용되지 않는다.
 
 ## 장애 대응
 
@@ -211,7 +211,7 @@ OpenAICompatibleProvider를 상속하면 callText 구현이 자동으로 제공�
 | GeminiCliProvider | LlmProvider | stdio, gemini CLI 바이너리 |
 | AgyCliProvider | LlmProvider | stdio, constrained Antigravity CLI |
 | CodexCliProvider | LlmProvider | stdio, codex CLI 바이너리 |
-| CopilotCliProvider | LlmProvider | stdio, gh copilot CLI 바이너리 |
+| CopilotCliProvider | LlmProvider | stdio, `copilot` CLI 바이너리 |
 | QwenCliProvider | LlmProvider | stdio, qwen CLI 바이너리 |
 | OpenCodeCliProvider | LlmProvider | stdio, opencode CLI 바이너리 |
 | AnthropicProvider | LlmProvider | POST /v1/messages, 고유 스키마 |

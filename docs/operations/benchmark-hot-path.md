@@ -101,10 +101,10 @@ DATABASE_URL=postgresql://... node scripts/benchmark-hot-path.js \
 
 | 메트릭 | 설명 |
 |--------|------|
-| `memento_symbolic_latency_seconds` | Symbolic 계층 처리 시간 히스토그램 |
-| `memento_symbolic_claim_total` | claim 추출 누적 건수 |
+| `memento_symbolic_op_latency_ms{op}` | Symbolic 연산 처리 시간 히스토그램(ms). `op`는 `shadow_recall`, `explain`, `cbr_filter`, `claim_extraction` |
+| `memento_symbolic_claim_extracted_total{extractor,polarity}` | claim 추출 누적 건수 |
 
-benchmark 실행 중 Prometheus 메트릭을 함께 관찰하면 hot path 오버헤드의 원인을 symbolic 계층 내 세부 단계별로 분리할 수 있다.
+벤치마크 스크립트는 자체 프로세스의 레지스트리를 쓰므로 서버의 `/metrics`에는 반영되지 않는다. 위 지표는 symbolic 플래그를 켠 서버를 운영할 때 hot path 오버헤드를 연산별로 나누어 보는 데 쓴다.
 
 ## HNSW 인덱스 강제 검색 (v4.6.0)
 
