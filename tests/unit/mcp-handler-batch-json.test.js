@@ -23,6 +23,8 @@ mock.module("../../lib/http/helpers.js", {
     readJsonBody   : mock.fn(async () => ({})),
     getClientIp    : mock.fn(() => "127.0.0.1"),
     resolveClientIp: mock.fn(() => "127.0.0.1"),
+    authStoreUnavailableStatus: () => null,
+    AUTH_STORE_RETRY_AFTER_SEC: 10,
     validateOrigin : mock.fn(() => true),
   }
 });

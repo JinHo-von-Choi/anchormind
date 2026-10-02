@@ -24,6 +24,7 @@ const LABEL_PARAMS = new Map([
   ["recordError",                   [0, 1]],
   ["recordAuthenticationAttempt",   [0, 1]],
   ["recordAuthDenied",              [0]],
+  ["recordAuthStoreError",          [0]],
   ["recordCorsDenied",              [0]],
   ["recordRbacDenied",              [0, 1]],
   ["recordTenantIsolationBlocked",  [0]],

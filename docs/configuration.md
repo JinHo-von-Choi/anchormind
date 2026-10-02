@@ -45,6 +45,7 @@
 | MEMENTO_OAUTH_REDIRECT_CHECK | warn | `/authorize` 오류 응답의 리다이렉트 대상 확인. `warn`(기본): 등록되지 않은 `redirect_uri`로 이동시키되 `error redirect target not registered` 경고를 대상 호스트만 담아 남긴다. `enforce`: 그 경우 이동 대신 400 JSON을 준다. `redirect_uri`가 없거나 URL이 아니면 두 모드 모두 400 JSON을 준다 |
 | MEMENTO_SSE_QUERY_KEY | allow | Legacy SSE의 `?accessKey=` 쿼리 키 처리. `allow`(기본): 마스터 키 한정으로 받는다. `deny`: 받지 않고 `Authorization` 헤더 사용을 안내하는 401을 준다. 쿼리 값은 프록시 접근 로그에 남는다 |
 | MCP_REJECT_NONAPIKEY_OAUTH | true | 기본 `true`는 `is_api_key=false` OAuth 토큰 인증을 거부한다. `false`는 해당 인증만 허용하며 master 권한을 부여하지 않는다. API 키 바인딩이 없는 OAuth 세션의 도구 호출은 `-32001`로 거부된다. API 키 기반 OAuth 토큰(`is_api_key=true`)과 Bearer ACCESS_KEY 직접 사용은 영향 없음 |
+| MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS | 401 | `api_keys` 조회 실패로 인증을 판정하지 못한 MCP `initialize`와 세션 자동 복구의 응답 상태. `401`(기본)은 키 무효와 같은 응답이며 세션 복구는 404다. `503`은 `Retry-After: 10`을 붙인 일시 장애 응답이다. 마스터 키 인증은 저장소와 무관하다. 조회 실패는 `mcp_auth_store_errors_total{operation}`과 `memento_auth_denied_total{reason="store_unavailable"}`로 집계한다 |
 | MCP_ALLOW_AUTO_DCR_REGISTER | false | `true`로 설정 시 `/authorize`에서 미등록 `client_id`의 자동 등록 허용 (기존 동작). 기본 `false` — RFC 7591 `POST /register` 엔드포인트 경유 강제 |
 | OAUTH_ALLOWED_REDIRECT_URIS | (없음) | OAuth redirect_uri 정확 일치 허용 목록 (쉼표 구분). OAUTH_TRUSTED_ORIGINS와 별도로 동작 |
 | DEFAULT_DAILY_LIMIT | 10000 | API 키 생성 시 기본 일일 호출 한도 |

@@ -7,6 +7,8 @@
 - `GET /health/live`(항상 200)와 `GET /health/ready`(주 DB가 상한 안에 응답하면 200, 아니면 `db_timeout` 또는 `db_error` 사유의 503). `GET /health`의 응답은 같다.
 - `MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`(기본 2000): `/health/ready`의 DB 확인 상한.
 - `MEMENTO_SHUTDOWN_DEADLINE_MS`(기본 60000, 0은 상한 없음): 종료 절차 전체 상한. 두 번째 종료 신호는 기록만 한다.
+- `MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS`(`401`, `503`, 기본 `401`): API 키 저장소 조회 실패로 인증을 판정하지 못한 initialize와 세션 자동 복구의 응답 상태. `503`이면 `Retry-After: 10`을 붙인다.
+- 지표 `mcp_auth_store_errors_total{operation}`. `memento_auth_denied_total`의 `reason`에 `store_unavailable`.
 
 ### Changed
 
