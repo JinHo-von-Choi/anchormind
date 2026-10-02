@@ -19,7 +19,7 @@
 > 4. 마이그레이션(`npm run migrate`) 실행
 > 5. `node bin/memento.js health`로 헬스 체크 통과 확인
 > 6. 현재 사용 중인 AI 클라이언트(Claude Code/Cursor/Codex)의 MCP 설정에 memento-mcp 등록
-> 7. `mcp__memento__memory_stats` 호출로 동작 검증
+> 7. `mcp__memento__context` 호출로 동작 검증 (master 키이면 `mcp__memento__memory_stats`도 가능)
 >
 > 각 단계 결과를 표로 보고하고, 실패 시 `docs/getting-started/troubleshooting.md` 참고해서 자동 복구를 시도해 줘."
 
@@ -40,7 +40,7 @@
 - `npm run migrate`가 `migration-049`까지 통과한다
 - `node bin/memento.js health`가 DB/Redis/임베딩 제공자 모두 OK를 반환한다
 - AI 클라이언트 도구 목록에 `mcp__*__remember`·`recall`·`reflect`가 노출된다
-- `memory_stats` 호출이 0건이라도 정상 응답을 반환한다
+- `context` 호출이 기억 0건이라도 정상 응답을 반환한다 (master 키의 `memory_stats`도 같다)
 
 ### AI가 막혔을 때 사람이 봐야 할 문서
 
@@ -351,6 +351,10 @@ LLM_FALLBACKS                 - JSON 배열. 각 원소: {"provider":"anthropic"
 MEMENTO_REMEMBER_ATOMIC       - true로 설정 시 remember() quota 체크+INSERT를 단일 트랜잭션으로 원자화 (기본: false)
 MEMENTO_CASE_BACKPROP_ENABLED - true로 설정 시 CaseRewardBackprop 활성화 — case_id 단위 reward 역전파 (기본: false)
 MEMENTO_STORAGE               - 저장소 백엔드 이름. 현재 pgvector 하나이며 이 값은 동작에 영향을 주지 않는다
+MEMENTO_CONFIG_STRICT         - true로 설정 시 숫자·열거·불리언 환경 변수의 값 문제가 있으면 기동 시 종료 코드 78로 멈춘다 (기본: false, 문제는 기동 로그 한 줄로 기록)
+MEMENTO_HEALTH_READY_DB_TIMEOUT_MS - /health/ready의 DB 확인 상한 (기본: 2000)
+MEMENTO_SHUTDOWN_DEADLINE_MS  - 종료 절차 전체 상한 (기본: 60000, 0은 상한 없음)
+MEMENTO_LLM_CLI_TOOL_APPROVAL - gemini-cli, copilot-cli, opencode-cli의 도구 실행 승인 방식. none(기본)은 제한된 승인과 빈 임시 디렉터리 실행, all은 승인 제한 해제
 MEMENTO_FEEDBACK_SAMPLING     - remember/amend/forget 성공 응답에 tool_feedback 요청 힌트를 확률적으로 동봉 (기본: true)
 MEMENTO_SPLIT_SUBJECT_GATE    - 분할 자식이 부모의 주어 앵커를 하나도 담지 못하면 폐기 (기본: true)
 MEMENTO_SPLIT_MODALITY_GATE   - 분할 자식이 부모에 없던 양상(예정·의도·추측·당위)을 도입하면 폐기 (기본: true)
@@ -423,11 +427,12 @@ codex auth login
 ### Copilot CLI (LLM fallback 시)
 
 ```bash
-npm install -g @githubnext/github-copilot-cli
-github-copilot-cli auth
+npm install -g @github/copilot
 ```
 
-CLI provider를 사용하려면 `LLM_PRIMARY` 또는 `LLM_FALLBACKS`에 `"codex"` / `"copilot"` 값을 설정하면 된다.
+`copilot` 실행 파일이 PATH에 있고 로그인이 끝난 상태여야 한다.
+
+CLI provider를 사용하려면 `LLM_PRIMARY` 또는 `LLM_FALLBACKS`에 `gemini-cli`, `codex-cli`, `copilot-cli` 같은 provider 이름을 설정하면 된다. gemini-cli, copilot-cli, opencode-cli는 기본(`MEMENTO_LLM_CLI_TOOL_APPROVAL=none`)에서 제한된 도구 승인으로 서버 작업 디렉터리가 아닌 빈 임시 디렉터리에서 실행된다.
 
 ---
 
@@ -438,6 +443,8 @@ CLI provider를 사용하려면 `LLM_PRIMARY` 또는 `LLM_FALLBACKS`에 `"codex"
 ```bash
 # 1. 헬스 엔드포인트 200 확인
 curl -s http://localhost:57332/health | jq .status
+curl -s http://localhost:57332/health/live    # 항상 200 (프로세스 생존)
+curl -s http://localhost:57332/health/ready   # 주 DB 응답 시 200, 아니면 503 (db_timeout, db_error)
 
 # 2. 임베딩 일관성 검사 결과 확인 (서버 로그)
 # 정상: 관련 로그 없이 기동 계속
@@ -487,7 +494,7 @@ memento-mcp는 `initialize` 응답의 `instructions` 필드에서 AI에게 기�
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s -X POST http://localhost:57332/mcp -H 'Authorization: Bearer YOUR_KEY' -H 'Content-Type: application/json' -H 'mcp-session-id: ${MCP_SESSION_ID}' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"context\",\"arguments\":{}}}'"
+            "command": "SID=$(curl -s -D - -o /dev/null -X POST http://localhost:57332/mcp -H 'Authorization: Bearer YOUR_KEY' -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"hook\",\"version\":\"1\"}}}' | awk 'tolower($1)==\"mcp-session-id:\"{print $2}' | tr -d '\\r'); curl -s -X POST http://localhost:57332/mcp -H 'Authorization: Bearer YOUR_KEY' -H 'Content-Type: application/json' -H \"MCP-Session-Id: $SID\" -d '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"context\",\"arguments\":{}}}'"
           }
         ]
       }

@@ -19,7 +19,7 @@ The fastest path for someone new to this repository is to hand the work to an AI
 > 4. Run `npm run migrate`
 > 5. Confirm `node bin/memento.js health` passes
 > 6. Register memento-mcp in my current AI client's MCP settings (Claude Code / Cursor / Codex)
-> 7. Call `mcp__memento__memory_stats` to verify wiring
+> 7. Call `mcp__memento__context` to verify wiring (`mcp__memento__memory_stats` also works with a master key)
 >
 > Report each step as a table. On failure, consult `docs/getting-started/troubleshooting.md` and try to recover."
 
@@ -40,7 +40,7 @@ After the assistant finishes, all of the following must hold:
 - `npm run migrate` succeeds through `migration-049`
 - `node bin/memento.js health` returns OK for DB, Redis, and the embedding provider
 - The AI client lists `mcp__*__remember`, `recall`, and `reflect`
-- A `memory_stats` call returns a valid response (zero fragments is fine)
+- A `context` call returns a valid response (zero fragments is fine; so does `memory_stats` with a master key)
 
 ### When the AI Gets Stuck
 
@@ -380,6 +380,8 @@ node server.js
 
 Applied migrations are tracked in `agent_memory.schema_migrations`. Only unapplied files are executed in order.
 
+> **MEMENTO_ACCESS_KEY**: The server does not start and exits with code 78 when it is unset, because a server without a key would expose every tool and master scope without authentication. To run without authentication for development or testing, set `MEMENTO_AUTH_DISABLED=true` explicitly in `.env`.
+
 > **Upgrading from v1.1.0 or earlier**: If migration-006 is not applied, any operation that creates a `superseded_by` link — `amend`, `memory_consolidate`, and automatic relationship generation in GraphLinker — will fail with a DB constraint error. This migration is mandatory when upgrading an existing database.
 
 ```bash
@@ -417,6 +419,10 @@ LLM_FALLBACKS                 - JSON array of fallback providers: [{"provider":"
 MEMENTO_REMEMBER_ATOMIC       - When true, atomizes quota check + INSERT in remember() into a single transaction to eliminate TOCTOU (default: false)
 MEMENTO_CASE_BACKPROP_ENABLED - When true, enables CaseRewardBackprop — reward back-propagation per case_id (default: false)
 MEMENTO_STORAGE               - Storage backend name. Currently pgvector only; this value does not affect behavior
+MEMENTO_CONFIG_STRICT         - When true, a problem in a numeric, enum or boolean environment variable stops startup with exit code 78 (default: false; problems are logged as one startup line)
+MEMENTO_HEALTH_READY_DB_TIMEOUT_MS - Upper bound of the DB check behind /health/ready (default: 2000)
+MEMENTO_SHUTDOWN_DEADLINE_MS  - Upper bound of the whole shutdown sequence (default: 60000, 0 means no bound)
+MEMENTO_LLM_CLI_TOOL_APPROVAL - Tool approval mode of gemini-cli, copilot-cli and opencode-cli. none (default) runs with restricted approval in an empty temporary directory; all lifts the approval restriction
 MEMENTO_FEEDBACK_SAMPLING     - Attaches a tool_feedback request hint to successful remember/amend/forget responses with a fixed probability (default: true)
 MEMENTO_SPLIT_SUBJECT_GATE    - Discards a split child carrying none of the parent's subject anchors (default: true)
 MEMENTO_SPLIT_MODALITY_GATE   - Discards a split child introducing a modality absent from the parent (default: true)
@@ -493,11 +499,12 @@ codex auth login
 ### Copilot CLI (LLM fallback)
 
 ```bash
-npm install -g @githubnext/github-copilot-cli
-github-copilot-cli auth
+npm install -g @github/copilot
 ```
 
-To use a CLI provider, set `LLM_PRIMARY` or `LLM_FALLBACKS` to `"codex"` or `"copilot"`.
+The `copilot` executable must be on the PATH and logged in.
+
+To use a CLI provider, set `LLM_PRIMARY` or `LLM_FALLBACKS` to a provider name such as `gemini-cli`, `codex-cli` or `copilot-cli`. By default (`MEMENTO_LLM_CLI_TOOL_APPROVAL=none`), gemini-cli, copilot-cli and opencode-cli run with restricted tool approval in an empty temporary directory instead of the server working directory.
 
 ---
 
@@ -508,6 +515,8 @@ After the server starts, verify the following in order:
 ```bash
 # 1. Health endpoint returns 200
 curl -s http://localhost:57332/health | jq .status
+curl -s http://localhost:57332/health/live    # always 200 (process is alive)
+curl -s http://localhost:57332/health/ready   # 200 when the primary DB answers, otherwise 503 (db_timeout, db_error)
 
 # 2. Check server log for embedding consistency (evaluated at startup)
 # Success: no log line — startup simply continues
@@ -548,7 +557,7 @@ AnchorMind's `instructions` field encourages the AI to use memory tools actively
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s -X POST http://localhost:57332/mcp -H 'Authorization: Bearer YOUR_KEY' -H 'Content-Type: application/json' -H 'mcp-session-id: ${MCP_SESSION_ID}' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"context\",\"arguments\":{}}}'"
+            "command": "SID=$(curl -s -D - -o /dev/null -X POST http://localhost:57332/mcp -H 'Authorization: Bearer YOUR_KEY' -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"hook\",\"version\":\"1\"}}}' | awk 'tolower($1)==\"mcp-session-id:\"{print $2}' | tr -d '\\r'); curl -s -X POST http://localhost:57332/mcp -H 'Authorization: Bearer YOUR_KEY' -H 'Content-Type: application/json' -H \"MCP-Session-Id: $SID\" -d '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"context\",\"arguments\":{}}}'"
           }
         ]
       }
