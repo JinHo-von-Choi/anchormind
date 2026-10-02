@@ -55,6 +55,14 @@ describe("관리 인증 지연 계산", () => {
     assert.equal(checkAdminAuthAttempt(T0).retryAfterSec, 60);
   });
 
+  it("마지막 실패로부터 60초가 지나면 누적을 새로 센다", () => {
+    process.env.MEMENTO_ADMIN_AUTH_BACKOFF = "on";
+    for (let i = 0; i < 4; i++) recordAdminAuthFailure(T0);
+    assert.equal(recordAdminAuthFailure(T0 + 61_000), 1);
+    assert.equal(checkAdminAuthAttempt(T0 + 61_000).allowed, true);
+    assert.equal(recordAdminAuthFailure(T0 + 61_500), 2);
+  });
+
   it("성공하면 누적과 지연이 사라진다", () => {
     process.env.MEMENTO_ADMIN_AUTH_BACKOFF = "on";
     for (let i = 0; i < 8; i++) recordAdminAuthFailure(T0);

@@ -67,8 +67,8 @@ function auditLines() {
 }
 
 /** finish 이벤트 뒤 비동기 기록이 끝나기를 기다린다 */
-async function settle() {
-  for (let i = 0; i < 50 && auditLines().length === 0; i++) await new Promise((r) => setTimeout(r, 10));
+async function settle(needle = "") {
+  for (let i = 0; i < 50 && !auditLines().some((l) => l.includes(needle)); i++) await new Promise((r) => setTimeout(r, 10));
 }
 
 function loginForm(key) {
@@ -121,8 +121,9 @@ describe("관리 감사와 인증 실패", () => {
     });
     assert.equal(res.status, 200);
     await settle();
-    const line = auditLines().find((l) => l.includes(`admin PUT /keys/${KEY_ID}`));
+    const line = auditLines().find((l) => l.includes("admin PUT /keys/7a1e0000 "));
     assert.match(line, /\| OK \| status=200; key=master; sid=bearer; ip=/);
+    assert.doesNotMatch(line, new RegExp(KEY_ID));
     assert.doesNotMatch(line, new RegExp(ACCESS_KEY.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   });
 
@@ -147,7 +148,16 @@ describe("관리 감사와 인증 실패", () => {
       await fetch(`${base}/keys`, { headers: { authorization: `Bearer wrong-${i}` } });
     }
     const blocked = await fetch(`${base}/keys`, { headers: { authorization: `Bearer ${ACCESS_KEY}` } });
-    assert.equal(blocked.status, 401);
+    assert.equal(blocked.status, 429);
+    assert.ok(Number(blocked.headers.get("retry-after")) >= 1);
+  });
+
+  it("Bearer 로그인 성공을 감사 기록에 남긴다", async () => {
+    const res = await fetch(`${base}/auth`, { method: "POST", headers: { authorization: `Bearer ${ACCESS_KEY}` } });
+    assert.equal(res.status, 200);
+    await settle("| OK | channel=bearer");
+    const line = auditLines().find((l) => l.includes("| admin_auth |") && l.includes("| OK |"));
+    assert.match(line, /\| OK \| channel=bearer; key=master; ip=/);
   });
 
   it("기본(off)은 연속 실패 뒤에도 올바른 키로 로그인한다", async () => {
@@ -155,5 +165,32 @@ describe("관리 감사와 인증 실패", () => {
     const ok = await loginForm(ACCESS_KEY);
     assert.equal(ok.status, 302);
     assert.equal(ok.headers.get("location"), ADMIN_BASE);
+  });
+});
+
+describe("관리 감사 기록의 경로 표기", () => {
+  const FULL_SID = "e9509944-0482-4e7e-9a69-78cfb07b2f5a";
+
+  it("경로의 세션 ID 전체는 앞 8자로 줄여 남긴다", async () => {
+    await fetch(`${base}/sessions/${FULL_SID}`, { method: "DELETE", headers: { authorization: `Bearer ${ACCESS_KEY}` } });
+    await settle("admin DELETE /sessions/");
+    const line = auditLines().find((l) => l.includes("admin DELETE /sessions/"));
+    assert.ok(line);
+    assert.match(line, /admin DELETE \/sessions\/e9509944 \|/);
+    assert.doesNotMatch(line, new RegExp(FULL_SID));
+  });
+
+  it("경로의 구분자 문자는 일곱 열 형식을 깨지 않는다", async () => {
+    await new Promise((resolve, reject) => {
+      const req = http.request(`${base}/x|y;z`, { method: "DELETE", headers: { authorization: `Bearer ${ACCESS_KEY}` } },
+        (res) => { res.resume(); res.on("end", resolve); });
+      req.on("error", reject);
+      req.end();
+    });
+    await settle("admin DELETE /x");
+    const line = auditLines().find((l) => l.includes("admin DELETE /x"));
+    assert.ok(line);
+    assert.equal(line.split(" | ").length, 7);
+    assert.equal(line.split("|").length, 7);
   });
 });
