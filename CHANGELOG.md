@@ -41,7 +41,7 @@
 ### Changed
 
 - API 키로 연 MCP 세션은 사용할 때 키 상태를 `MEMENTO_SESSION_KEY_RECHECK_MS`(기본 30000ms, `0`이면 끔) 주기로 다시 읽는다. 비활성 또는 삭제된 키의 세션은 닫히고 404 `Session not found`를 받으며, 권한 변경은 열린 세션에 반영된다. 관리 API로 키를 비활성화하거나 삭제하면 이 프로세스의 그 키 세션이 즉시 닫힌다.
-- 런타임 의존성 `moment`를 2.31.0으로 올렸다.
+- 전이 의존성 `moment`를 2.31.0으로 올렸다(`package-lock.json`).
 - `initialize`의 협상 프로토콜 버전은 항상 지원 목록(2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05) 중 하나다. YYYY-MM-DD 형식이 아닌 값은 가장 오래된 지원 버전으로, 목록 사이의 날짜는 그 이하의 가장 가까운 지원 버전으로 협상한다. `mcp_protocol_version_negotiations_total`의 `requested_version`, `negotiated_version`과 `mcp_protocol_version_reanchored_total`의 `from`, `to` 라벨 값은 지원 버전, `none`, `other`(from은 `null` 포함)다.
 - README와 벤치마크 문서의 LongMemEval 수치에 측정 조건(데이터셋, 단계별 소요 시간)과 논문 링크(arXiv 2410.10813)를 맞춘다. 임베딩 없이 동작하는 회상 범위를 명시한다.
 - 키에 묶인 OAuth 클라이언트의 토큰 교환은 해당 키를 `client_secret`(또는 Basic 인증)으로 제시한 요청에서만 성립한다. API 키 원문 형식의 `client_id`는 클라이언트 행으로 등록하지 않는다.
@@ -74,7 +74,7 @@
 
 ### Removed
 
-- `lib/symbolic/SymbolicOrchestrator.js`, `lib/symbolic/rules/`, 저장소 어댑터 `lib/storage/`와 각각의 시험, 이 모듈들의 문서 서술. `MEMENTO_STORAGE`, `MEMENTO_SYMBOLIC_TIMEOUT_MS`, `MEMENTO_SYMBOLIC_MAX_CANDIDATES`를 사용하는 처리가 없으며 설정해도 동작에 영향이 없다.
+- `lib/symbolic/SymbolicOrchestrator.js`, `lib/symbolic/rules/index.js`, `lib/symbolic/rules/v1/claim-conflict.js`, `link-integrity.js`, `policy.js`, 저장소 어댑터 `lib/storage/`와 각각의 시험, 이 모듈들의 문서 서술. `lib/symbolic/rules/v1/explain.js`와 `proactive-gate.js`는 남는다. `MEMENTO_STORAGE`, `MEMENTO_SYMBOLIC_TIMEOUT_MS`, `MEMENTO_SYMBOLIC_MAX_CANDIDATES`를 사용하는 처리가 없으며 설정해도 동작에 영향이 없다.
 
 ## [5.12.0] - 2026-10-02
 
