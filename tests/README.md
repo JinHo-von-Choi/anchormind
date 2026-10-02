@@ -16,7 +16,7 @@
 | `npm test` | unit 전체 (`tests/unit/*.test.js`, `tests/unit/**/*.test.js`) |
 | `npm run test:integration` | 통합 + e2e (DB/Redis 필요) |
 | `npm run test:e2e` | e2e만 |
-| `npm run test:db` | DB 동시성 시험만 (마이그레이션된 PostgreSQL 필요, POSTGRES_* 지정) |
+| `npm run test:db` | DB 동시성 시험만 (로컬 시험 PostgreSQL 서버 필요, 실행마다 전용 DB 생성과 삭제) |
 | `npm run test:ci` | 단위(test) + 통합·e2e(test:integration) — CI 단일 게이트 |
 | `DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false node --experimental-test-module-mocks --test tests/unit/<file>.test.js` | 단일 파일 실행 |
 

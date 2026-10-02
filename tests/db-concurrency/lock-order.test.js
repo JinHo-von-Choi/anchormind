@@ -18,11 +18,13 @@ import pg                              from "pg";
 import { appendFileSync }              from "node:fs";
 
 const {
-  SCHEMA, assertDatabaseReady, readDeadlockCount, deadlockDelta, directClientConfig,
-  seedFragments, removeTopic, shuffled, directQuery,
-  installDeadlockProbe, observedDeadlockStatements
+  SCHEMA, prepareLaneDatabase, dropLaneDatabase, readDeadlockCount, deadlockDelta, directClientConfig,
+  seedFragments, shuffled, directQuery,
+  installDeadlockProbe, uninstallDeadlockProbe, observedDeadlockStatements
 } = await import("./_harness.js");
 
+/** 앱 모듈이 풀을 만들기 전에 실행 전용 데이터베이스를 준비한다. */
+await prepareLaneDatabase();
 installDeadlockProbe();
 
 const { FragmentWriter }  = await import("../../lib/memory/write/FragmentWriter.js");
@@ -40,7 +42,6 @@ let ids    = [];
 let vector = [];
 
 before(async () => {
-  await assertDatabaseReady();
   ids = await seedFragments(topic, FRAGMENTS);
   /** 연결 파편 접근 기록이 실제로 행을 잠그도록 co_retrieved 링크를 둔다. */
   for (let i = 0; i < FRAGMENTS; i += 2) {
@@ -58,7 +59,12 @@ before(async () => {
 });
 
 after(async () => {
-  await removeTopic(topic);
+  uninstallDeadlockProbe();
+  try {
+    await shutdownPool();
+  } finally {
+    await dropLaneDatabase();
+  }
 });
 
 /**

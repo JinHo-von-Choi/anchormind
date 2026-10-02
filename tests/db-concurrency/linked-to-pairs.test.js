@@ -8,25 +8,28 @@
  * 자기 쌍의 상대만 더해져야 한다. fragment_links 행도 쌍과 같아야 한다.
  */
 
-import { describe, it, before, after } from "node:test";
+import { describe, it, after } from "node:test";
 import assert                          from "node:assert/strict";
 import crypto                          from "node:crypto";
 
 const {
-  SCHEMA, assertDatabaseReady, seedFragments, removeTopic, directQuery
+  SCHEMA, prepareLaneDatabase, dropLaneDatabase, seedFragments, directQuery
 } = await import("./_harness.js");
+
+/** 앱 모듈이 풀을 만들기 전에 실행 전용 데이터베이스를 준비한다. */
+await prepareLaneDatabase();
+
 const { LinkStore }    = await import("../../lib/memory/link/LinkStore.js");
 const { shutdownPool } = await import("../../lib/tools/db.js");
 
 const topic = `db-lane-pairs-${crypto.randomUUID().slice(0, 8)}`;
 
-before(async () => {
-  await assertDatabaseReady();
-});
-
 after(async () => {
-  await shutdownPool();
-  await removeTopic(topic);
+  try {
+    await shutdownPool();
+  } finally {
+    await dropLaneDatabase();
+  }
 });
 
 describe("LinkStore.createLinks linked_to", () => {

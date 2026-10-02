@@ -4,33 +4,194 @@
  * 작성자: 최진호
  * 작성일: 2026-10-03
  *
- * 실제 PostgreSQL에 붙는 시험이 쓰는 접속 확인, 시드 파편 생성, 정리,
- * 교착 계측을 모은다. DB에 닿지 못하면 건너뛰지 않고 실패한다.
+ * 실제 PostgreSQL에 붙는 시험이 쓰는 데이터베이스 준비와 정리, 시드 파편 생성,
+ * 교착 계측을 모은다. 시험은 실행마다 자기 데이터베이스를 만들어 쓰고 끝나면
+ * 지운다. 접속 값은 prepareLaneDatabase 한 곳에서 정해 process.env에 넣으며,
+ * 앱 풀과 직접 연결 모두 그 값을 쓴다. 따라서 앱 모듈은 이 함수가 끝난 뒤에
+ * 불러와야 한다. DB에 닿지 못하면 건너뛰지 않고 실패한다.
  *
  * 교착은 두 곳에서 센다. 하나는 pg 클라이언트의 질의 결과로, 던져진 오류든
  * 호출자가 삼킨 오류든 SQLSTATE 40P01이면 질의 문장과 함께 기록한다. 다른 하나는
- * 서버가 집계한 pg_stat_database.deadlocks 증가분이다.
+ * 서버가 집계한 이 실행 데이터베이스의 pg_stat_database.deadlocks 증가분이다.
  */
 
-import crypto from "node:crypto";
-import pg     from "pg";
+import crypto           from "node:crypto";
+import os               from "node:os";
+import path             from "node:path";
+import fs               from "node:fs";
+import { execFile }     from "node:child_process";
+import { promisify }    from "node:util";
+import pg               from "pg";
+import {
+  resolveLaneServer, assertLaneServer, assertLaneDatabaseName, newLaneDatabaseName
+} from "./_guard.js";
+
+const execFileAsync = promisify(execFile);
 
 export const SCHEMA = "agent_memory";
 
-/** lib 풀과 같은 DB를 보도록 POSTGRES_* 값을 그대로 쓴다. */
+const MIGRATE_SCRIPT = path.join(import.meta.dirname, "../../scripts/migrate.js");
+
+/** 준비된 실행 데이터베이스. {name, server} */
+let lane = null;
+
+/**
+ * 준비된 실행 데이터베이스 이름.
+ *
+ * @returns {string}
+ */
+export function laneDatabaseName() {
+  if (!lane) throw new Error("prepareLaneDatabase()를 먼저 호출해야 한다");
+  return lane.name;
+}
+
+/**
+ * 실행 데이터베이스에 붙는 pg 연결 설정. 값은 prepareLaneDatabase가 정한 것뿐이다.
+ *
+ * @returns {pg.ClientConfig}
+ */
 export function directClientConfig() {
-  return {
-    host    : process.env.POSTGRES_HOST     || "localhost",
-    port    : Number(process.env.POSTGRES_PORT || 35433),
-    user    : process.env.POSTGRES_USER     || "memento",
-    password: process.env.POSTGRES_PASSWORD || "",
-    database: process.env.POSTGRES_DB       || "memento_test"
-  };
+  if (!lane) throw new Error("prepareLaneDatabase()를 먼저 호출해야 한다");
+  const { server, name } = lane;
+  return { host: server.host, port: server.port, user: server.user, password: server.password, database: name };
+}
+
+/**
+ * 같은 서버의 관리용 데이터베이스(postgres)에 붙는 연결 설정.
+ *
+ * @param {{host: string, port: number, user: string, password: string}} server
+ * @returns {pg.ClientConfig}
+ */
+function maintenanceConfig(server) {
+  return { host: server.host, port: server.port, user: server.user, password: server.password, database: "postgres" };
+}
+
+/**
+ * 연결 하나로 질의를 실행하고 연결을 닫는다.
+ *
+ * @param {pg.ClientConfig} config
+ * @param {string} sql
+ * @param {unknown[]} [params]
+ * @returns {Promise<pg.QueryResult>}
+ */
+async function queryOnce(config, sql, params = []) {
+  const client = new pg.Client(config);
+  await client.connect();
+  try {
+    return await client.query(sql, params);
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * 이번 실행의 데이터베이스를 만들고 확장과 마이그레이션을 적용한 뒤, 앱 풀이 그
+ * 데이터베이스를 보도록 process.env를 설정한다. 서버 검사가 통과하기 전에는 어떤
+ * 연결도 열지 않고 process.env의 접속 값도 바꾸지 않는다. .env 파일은 읽지 않는다.
+ *
+ * @param {Record<string, string|undefined>} [env=process.env] 접속 값을 읽을 환경
+ * @returns {Promise<{name: string}>}
+ */
+export async function prepareLaneDatabase(env = process.env) {
+  if (lane) return { name: lane.name };
+
+  const server = resolveLaneServer(env);
+  assertLaneServer(server, env);
+
+  /** 앱 설정 모듈이 cwd의 .env를 읽지 못하도록 존재하지 않는 경로를 가리킨다. */
+  process.env.DOTENV_CONFIG_PATH = path.join(os.tmpdir(), `dbl-no-dotenv-${process.pid}`);
+
+  const name = newLaneDatabaseName();
+  await queryOnce(maintenanceConfig(server), `CREATE DATABASE "${name}"`);
+  lane = { name, server };
+
+  try {
+    await queryOnce(directClientConfig(), "CREATE EXTENSION IF NOT EXISTS vector");
+    await queryOnce(directClientConfig(), "CREATE EXTENSION IF NOT EXISTS pg_trgm");
+    await migrateLaneDatabase(server, name);
+  } catch (err) {
+    await dropLaneDatabase().catch(() => {});
+    throw new Error(`DB 동시성 시험 데이터베이스 준비 실패 (${name}): ${err.message}`, { cause: err });
+  }
+
+  process.env.POSTGRES_HOST     = server.host;
+  process.env.POSTGRES_PORT     = String(server.port);
+  process.env.POSTGRES_DB       = name;
+  process.env.POSTGRES_USER     = server.user;
+  process.env.POSTGRES_PASSWORD = server.password;
+  process.env.DATABASE_URL      = laneUrl(server, name);
+  delete process.env.BATCH_DATABASE_URL;
+
+  return { name };
+}
+
+/**
+ * @param {{host: string, port: number, user: string, password: string}} server
+ * @param {string} name
+ * @returns {string}
+ */
+function laneUrl(server, name) {
+  const host = server.host.includes(":") ? `[${server.host}]` : server.host;
+  return `postgresql://${server.user}:${encodeURIComponent(server.password)}@${host}:${server.port}/${name}`;
+}
+
+/**
+ * 저장소의 마이그레이션 러너를 실행 데이터베이스에 적용한다. 러너는 cwd의 .env를
+ * 읽으므로 빈 임시 디렉터리에서, 필요한 값만 담은 환경으로 실행한다.
+ *
+ * @param {{host: string, port: number, user: string, password: string}} server
+ * @param {string} name
+ * @returns {Promise<void>}
+ */
+async function migrateLaneDatabase(server, name) {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "dbl-migrate-"));
+  try {
+    await execFileAsync(process.execPath, [MIGRATE_SCRIPT], {
+      cwd,
+      env: {
+        PATH              : process.env.PATH,
+        DATABASE_URL      : laneUrl(server, name),
+        EMBEDDING_ENABLED : "false",
+        REDIS_ENABLED     : "false",
+        DOTENV_CONFIG_PATH: path.join(cwd, "none")
+      },
+      maxBuffer: 16 * 1024 * 1024
+    });
+  } catch (err) {
+    throw new Error(`마이그레이션 실패: ${String(err.stderr || err.message).slice(-800)}`, { cause: err });
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+/**
+ * 실행 데이터베이스를 지운다. 남은 연결을 먼저 끊는다. 이름이 시험 형식이 아니면
+ * 지우지 않는다. 준비되지 않았으면 아무것도 하지 않는다.
+ *
+ * @returns {Promise<void>}
+ */
+export async function dropLaneDatabase() {
+  if (!lane) return;
+  const { name, server } = lane;
+  assertLaneDatabaseName(name);
+
+  const client = new pg.Client(maintenanceConfig(server));
+  await client.connect();
+  try {
+    await client.query(
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
+      [name]
+    );
+    await client.query(`DROP DATABASE IF EXISTS "${name}"`);
+  } finally {
+    await client.end();
+  }
+  lane = null;
 }
 
 /** SQLSTATE 40P01(deadlock_detected)를 받은 질의 기록. */
 const observedDeadlocks = [];
-let   probeInstalled    = false;
+let   probeOriginal     = null;
 
 /**
  * 문장을 한 줄로 줄인다. 어느 경로의 질의였는지 알아볼 수 있도록 문장 앞부분과
@@ -53,10 +214,10 @@ function sqlHead(sql) {
  * @returns {void}
  */
 export function installDeadlockProbe() {
-  if (probeInstalled) return;
-  probeInstalled = true;
+  if (probeOriginal) return;
 
   const original = pg.Client.prototype.query;
+  probeOriginal  = original;
   pg.Client.prototype.query = function probedQuery(...args) {
     const text   = typeof args[0] === "string" ? args[0] : args[0]?.text;
     const result = original.apply(this, args);
@@ -71,6 +232,17 @@ export function installDeadlockProbe() {
 }
 
 /**
+ * installDeadlockProbe가 바꾼 pg.Client#query를 원래대로 되돌린다.
+ *
+ * @returns {void}
+ */
+export function uninstallDeadlockProbe() {
+  if (!probeOriginal) return;
+  pg.Client.prototype.query = probeOriginal;
+  probeOriginal             = null;
+}
+
+/**
  * 계측 시작 이후 기록된 40P01 질의 문장 목록의 사본.
  *
  * @returns {string[]}
@@ -80,47 +252,26 @@ export function observedDeadlockStatements() {
 }
 
 /**
- * 짧은 질의 하나를 별도 연결로 실행한다.
+ * 짧은 질의 하나를 실행 데이터베이스에 별도 연결로 실행한다.
  *
  * @param {string} sql
  * @param {unknown[]} [params]
  * @returns {Promise<pg.QueryResult>}
  */
 export async function directQuery(sql, params = []) {
-  const client = new pg.Client(directClientConfig());
-  await client.connect();
-  try {
-    return await client.query(sql, params);
-  } finally {
-    await client.end();
-  }
+  return queryOnce(directClientConfig(), sql, params);
 }
 
 /**
- * 시험 DB에 마이그레이션된 스키마가 있는지 확인한다. 없으면 원인을 담아 던진다.
- *
- * @returns {Promise<void>}
- */
-export async function assertDatabaseReady() {
-  const cfg = directClientConfig();
-  try {
-    await directQuery(`SELECT 1 FROM ${SCHEMA}.fragments LIMIT 0`);
-  } catch (err) {
-    throw new Error(
-      `DB 동시성 시험에는 마이그레이션된 PostgreSQL이 필요하다 (${cfg.host}:${cfg.port}/${cfg.database}): ${err.message}`,
-      { cause: err }
-    );
-  }
-}
-
-/**
- * 서버가 집계한 현재 DB의 교착 누계를 읽는다.
+ * 서버가 집계한 실행 데이터베이스의 교착 누계를 읽는다.
  *
  * @returns {Promise<number>}
  */
 export async function readDeadlockCount() {
-  const { rows } = await directQuery(
-    "SELECT deadlocks FROM pg_stat_database WHERE datname = current_database()"
+  const { rows } = await queryOnce(
+    maintenanceConfig(lane.server),
+    "SELECT deadlocks FROM pg_stat_database WHERE datname = $1",
+    [lane.name]
   );
   return Number(rows[0].deadlocks);
 }
@@ -161,22 +312,6 @@ export async function seedFragments(topic, count, type = "fact") {
     [ids, topic, type]
   );
   return ids;
-}
-
-/**
- * topic으로 만든 파편과 그 링크를 지운다.
- *
- * @param {string} topic
- * @returns {Promise<void>}
- */
-export async function removeTopic(topic) {
-  await directQuery(
-    `DELETE FROM ${SCHEMA}.fragment_links fl
-      USING ${SCHEMA}.fragments f
-      WHERE (fl.from_id = f.id OR fl.to_id = f.id) AND f.topic = $1`,
-    [topic]
-  );
-  await directQuery(`DELETE FROM ${SCHEMA}.fragments WHERE topic = $1`, [topic]);
 }
 
 /**
