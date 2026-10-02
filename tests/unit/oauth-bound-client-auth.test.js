@@ -5,7 +5,7 @@
  * 작성자: 최진호
  * 작성일: 2026-10-03
  */
-import { describe, it, before, after, mock, beforeEach } from "node:test";
+import { describe, it, before, after, afterEach, mock, beforeEach } from "node:test";
 import assert                                            from "node:assert/strict";
 import http                                              from "node:http";
 import { createHash }                                    from "node:crypto";
@@ -19,6 +19,8 @@ const VICTIM     = "550e8400-e29b-41d4-a716-446655440000";
 const OTHER      = "660e8400-e29b-41d4-a716-446655440000";
 const RAW_VICTIM = `mmcp_victim_${"a".repeat(32)}`;
 const RAW_OTHER  = `mmcp_other_${"b".repeat(32)}`;
+const RAW_LIMIT  = `mmcp_limit_${"d".repeat(32)}`;
+const RAW_IDLE   = `mmcp_idle_${"e".repeat(32)}`;
 const BOUND_ID   = "victim-conn_550e8400";
 const LOCAL_CB   = "http://localhost:33418/callback";
 const APP_CB     = "https://victim-app.example/cb";
@@ -48,13 +50,20 @@ mock.module("../../lib/admin/OAuthClientStore.js", {
 mock.module("../../lib/admin/ApiKeyStore.js", {
   namedExports: {
     ...realKeys,
-    validateApiKeyFromDB: async (raw) => (raw === RAW_VICTIM ? keyRecord[VICTIM] : raw === RAW_OTHER ? keyRecord[OTHER] : { valid: false }),
+    validateApiKeyFromDB: async (raw) => {
+      if (raw === RAW_VICTIM) return keyRecord[VICTIM];
+      if (raw === RAW_OTHER)  return keyRecord[OTHER];
+      if (raw === RAW_LIMIT)  return { valid: false, reason: "limit_exceeded" };
+      if (raw === RAW_IDLE)   return { valid: false, reason: "inactive" };
+      return { valid: false };
+    },
     validateApiKeyById  : async (id) => keyRecord[id] ?? { valid: false }
   }
 });
 
 const { handleOAuthAuthorize, handleOAuthToken, handleOAuthRegister } = await import("../../lib/handlers/oauth-handler.js");
 const { validateAuthentication }                                      = await import("../../lib/auth.js");
+const { default: logger }                                             = await import("../../lib/logger.js");
 
 const VERIFIER  = "v".repeat(64);
 const CHALLENGE = createHash("sha256").update(VERIFIER).digest("base64url");
@@ -75,6 +84,22 @@ before(async () => {
 after(() => new Promise((resolve) => server.close(resolve)));
 
 beforeEach(() => { registered.length = 0; });
+
+/** 로거 호출 인자를 형식 처리 이전 상태로 수집한다. */
+const logged = [];
+const spies  = [];
+
+function captureLogs() {
+  beforeEach(() => {
+    logged.length = 0;
+    for (const level of ["debug", "info", "warn", "error"]) {
+      spies.push(mock.method(logger, level, (...args) => { logged.push(JSON.stringify(args)); return logger; }));
+    }
+  });
+  afterEach(() => {
+    for (const spy of spies.splice(0)) spy.mock.restore();
+  });
+}
 
 function authorizeQuery(clientId, redirectUri) {
   return new URLSearchParams({
@@ -161,6 +186,45 @@ describe("묶이지 않은 흐름", () => {
     assert.equal(res.status, 302);
     assert.equal(registered.length, 0);
   });
+});
+
+describe("API 키 원문 client_id가 유효하지 않은 키일 때", () => {
+  captureLogs();
+
+  for (const [label, raw] of [["일일 한도 초과", RAW_LIMIT], ["비활성", RAW_IDLE]]) {
+    it(`${label} 키는 클라이언트 행으로 저장하지 않고 원문을 기록하지 않으며 invalid_client로 끝낸다`, async () => {
+      const res = await fetch(`${base}/authorize?${authorizeQuery(raw, LOCAL_CB)}`, { redirect: "manual" });
+      assert.equal(res.status, 302);
+      const loc = new URL(res.headers.get("location"));
+      assert.equal(loc.searchParams.get("error"), "invalid_client");
+      assert.equal(loc.searchParams.get("code"), null);
+      assert.equal(registered.length, 0);
+      assert.ok(logged.length > 0);
+      assert.equal(logged.some((line) => line.includes(raw)), false);
+    });
+  }
+
+  it("형식이 맞지 않는 미등록 client_id는 기존 자동 등록 경로를 유지한다", async () => {
+    const res = await fetch(`${base}/authorize?${authorizeQuery("claude-connector", LOCAL_CB)}`, { redirect: "manual" });
+    assert.equal(res.status, 302);
+    assert.equal(registered.length, 1);
+  });
+});
+
+describe("/token 본문 형식", () => {
+  const basic = Buffer.from(`${BOUND_ID}:${RAW_VICTIM}`).toString("base64");
+
+  for (const [label, raw] of [["문자열", "\"abc\""], ["null", "null"], ["배열", "[1]"]]) {
+    it(`JSON ${label} 본문은 Basic 헤더가 있어도 400으로 응답한다`, async () => {
+      const res = await fetch(`${base}/token`, {
+        method : "POST",
+        headers: { "content-type": "application/json", authorization: `Basic ${basic}` },
+        body   : raw
+      });
+      assert.equal(res.status, 400);
+      assert.equal((await res.json()).error, "unsupported_grant_type");
+    });
+  }
 });
 
 describe("/register 응답", () => {
