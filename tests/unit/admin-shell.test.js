@@ -72,8 +72,8 @@ describe("admin index.html shell structure", () => {
     );
   });
 
-  test("includes Tailwind CDN script", () => {
-    assert.ok(html.includes("cdn.tailwindcss.com"), "Tailwind CDN not found");
+  test("includes Tailwind script from the console asset path", () => {
+    assert.ok(html.includes("/v1/internal/model/nothing/assets/vendor/tailwindcss-"), "Tailwind script not found");
   });
 
   test("includes JetBrains Mono font", () => {
