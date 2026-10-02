@@ -32,6 +32,11 @@
 - 기동 점검 실패는 `[Startup]` 오류 로그로, 리랭커 사전 적재 실패는 `[Reranker] preload failed (non-fatal)` 경고로 남는다.
 - `MEMENTO_DECAY_MIN_DELTA`(기본 0): 묶음 갱신에서 감쇠량이 이 값보다 작은 행을 건너뛴다. 마지막 감쇠 후 24시간이 지난 행은 항상 갱신한다. 숫자가 아니거나 음수인 값은 0으로 처리하고 경고를 남기며 1을 넘는 값은 1로 제한한다. `MEMENTO_SCORE_UPDATE_BATCH`가 0이면 적용하지 않는다.
 - `MEMENTO_UTILITY_MIN_DELTA`(기본 0): 묶음 갱신에서 저장된 `utility_score`와의 차이가 이 값 이하인 행을 다시 쓰지 않는다. 값 처리와 적용 조건은 `MEMENTO_DECAY_MIN_DELTA`와 같다.
+- `node scripts/import-cycles.js`: `lib`, `config`, `server.js`의 상대 경로 import에서 크기 2 이상의 순환을 찾아 정적 import만 본 결과와 동적 import를 포함한 결과를 따로 출력한다. 단위 시험은 정적 순환이 없고 동적 포함 순환이 허용 목록 안에 있는지 확인한다.
+- `docs/operations/monitoring.md`: 공유 Prometheus 인스턴스용 스크레이프 잡과 경보 규칙. 문서의 규칙이 참조하는 지표 이름과 라벨은 단위 시험이 등록된 지표와 대조한다.
+- 지표 `mcp_session_rotation_total{outcome}`(`rotated`, `not_found`, `expired`, `forbidden`, `unavailable`, `error`)와 `mcp_rotate_rate_limited_total`: 세션 회전 요청의 결과와 rate limit 거부를 센다.
+- `MEMENTO_LLM_CLI_TOOL_APPROVAL`(`none`, `all`, 기본 `none`): gemini-cli, copilot-cli, opencode-cli의 도구 실행 승인 방식. 기본에서 세 CLI는 제한된 승인으로 실행된다. gemini는 `-y` 없이, copilot은 쓰기, 셸, URL 도구와 내장 MCP를 거부하는 인자와 함께, opencode는 `OPENCODE_PERMISSION={"*":"deny"}`로 실행되며, 세 CLI 모두 서버 작업 디렉터리가 아닌 빈 임시 디렉터리에서 시작한다. `all`이면 gemini `-y`, copilot `--allow-all-tools`를 쓰고 서버 작업 디렉터리에서 실행하며 opencode에는 승인 관련 설정을 더하지 않는다.
+- 벤치마크 `isolated` 모드는 격리 키 `benchmark-harness-key`(상태 `inactive`) 행을 `api_keys`에 한 번 만든다. `--save-baseline`은 임베딩 provider, 모델, 차원을 기준선 파일에 함께 기록하고, `--baseline` 비교는 모델이나 차원이 다르면 경고한다.
 
 ### Changed
 
@@ -61,6 +66,15 @@
 - 도구 감사 기록의 `ip=`는 `resolveClientIp`가 채택한 클라이언트 주소다. 관리 감사 기록의 경로 표기는 세션과 키의 UUID 구간을 앞 8자로 줄인다.
 - `SECURITY.md`의 지원 버전 표는 5.12.x까지를 지원으로 적는다.
 - `npm run test:db`는 감쇠와 utility 묶음 갱신의 잠금 순서, 무변경 재기록, 최소 변화량 시험도 실행한다. 표 전체를 갱신하는 시험은 이 직렬 레인에만 둔다.
+- `GET /sse`(레거시 SSE 연결)는 클라이언트 IP별 요청 제한을 받는다. 한도(`RATE_LIMIT_PER_IP`, 기본 분당 30)는 `/token`, `/register`, `/authorize`, `initialize`의 IP 한도와 같은 버킷을 쓰며, 초과하면 429와 `Retry-After`(창 길이 초)를 돌려준다.
+- 관리 콘솔은 Tailwind CSS 3.4.17과 d3 7.9.0 스크립트를 `assets/admin/vendor/`에서 제공한다. 콘솔 응답의 CSP 헤더는 `script-src 'self' 'unsafe-inline'`이며 외부 스크립트 호스트를 허용하지 않는다. 사본의 출처와 sha256은 `assets/admin/vendor/PROVENANCE.md`에 있다.
+- 벤치마크 CLI는 적재 전에 대상 DB(host, port, database)를 한 줄로 출력한다. 임베딩된 파편이 0건인 실행(`--no-seed` 포함)은 `--save-baseline`을 거부한다. 기준선 갱신 절차와 측정 조건은 `docs/benchmark.md`에 있다.
+- 모듈 사이에 정적 import 순환이 없다. 공용 부분은 `lib/safe-compare.js`, `lib/memory/write/affect.js`, `lib/embeddings/normalize.js`가 가진다.
+- 설정 문서(`docs/configuration.md`, `docs/configuration.en.md`)와 `.env.example`에 숫자, 열거, 불리언 환경 변수의 허용 범위와 와치독 환경 변수(`MEMENTO_WATCHDOG_*`)를 싣는다.
+
+### Removed
+
+- `lib/symbolic/SymbolicOrchestrator.js`, `lib/symbolic/rules/`, 저장소 어댑터 `lib/storage/`와 각각의 시험, 이 모듈들의 문서 서술. `MEMENTO_STORAGE`, `MEMENTO_SYMBOLIC_TIMEOUT_MS`, `MEMENTO_SYMBOLIC_MAX_CANDIDATES`를 사용하는 처리가 없으며 설정해도 동작에 영향이 없다.
 
 ## [5.12.0] - 2026-10-02
 
