@@ -960,7 +960,7 @@ recall 호출 시 `contextText` 파라미터를 전달하면 관련 파편의 `e
 
 - 검증만 담당. FragmentSearch/RRF/Reranker/SpreadingActivation 경로는 불변
 - 모든 플래그 기본 false → 기본값 상태에서 기존 확률론적 경로 동작 바이트 단위 동일
-- Fail-open: detector 오류는 swallow, SymbolicOrchestrator timeout(50ms) 초과 시 fallback
+- Fail-open: detector 오류는 swallow 후 기존 경로 계속 진행
 - Tenant isolation: SessionLinker.wouldCreateCycle 포함 14건 전수 커버
 
 ### Hook Chain (FragmentSearch.search, 확률적 결과 산출 직후)
@@ -981,11 +981,10 @@ probabilistic result
     └── annotated result → caller
 ```
 
-### 9 Core Modules + 5 Rule Files
+### 8 Core Modules + 2 Rule Files
 
 | 모듈 | 역할 |
 |------|------|
-| SymbolicOrchestrator | rule_version / correlation_id / timeout / fallback 관리 |
 | SymbolicMetrics | prom-client 4종 (claim/warning/gate_blocked/latency) |
 | ClaimExtractor | 형태소 기반 polarity claim 추출 |
 | ClaimStore | TEXT key_id + `IS NOT DISTINCT FROM` 격리 |
@@ -995,7 +994,7 @@ probabilistic result
 | PolicyRules | 5 predicate soft gating |
 | CbrEligibility | 4 제약 CBR 필터 |
 
-Rule files (`lib/symbolic/rules/v1/`): `explain.js`, `link-integrity.js`, `claim-conflict.js`, `policy.js`, `proactive-gate.js`
+Rule files (`lib/symbolic/rules/v1/`): `explain.js`, `proactive-gate.js`. `PolicyRules`, `LinkIntegrityChecker`, `ClaimConflictDetector`는 각 호출부에서 직접 쓰인다.
 
 ### Storage Schema
 
@@ -1017,7 +1016,7 @@ Prometheus 메트릭 4종 (label: `rule`, `phase`):
 - `memento_symbolic_claim_extracted_total` — ClaimExtractor 추출 건수
 - `memento_symbolic_warning_total` — advisory warning 생성 건수
 - `memento_symbolic_gate_blocked_total{phase}` — phase별 block 건수 (phase=cbr|proactive 등)
-- `memento_symbolic_op_latency_ms` — orchestrator 호출 latency histogram
+- `memento_symbolic_op_latency_ms`: symbolic 연산 latency histogram (op=shadow_recall|explain|cbr_filter|claim_extraction)
 
 ### 단계적 활성화
 

@@ -553,12 +553,6 @@ case_events에 verification 이벤트가 추가되면, 해당 케이스의 증�
 
 architecture.md의 Symbolic Memory Layer 섹션이 전체 설계를 다룬다. 이 챕터는 각 모듈의 구현 세부사항 중심으로 서술한다.
 
-### SymbolicOrchestrator
-
-`lib/symbolic/SymbolicOrchestrator.js`. 생성자: `({ config, metrics, rulePackLoader })`. 세 의존성 모두 기본값(프로덕션 싱글톤)이 제공되며 테스트에서 교체 가능한 DI 구조다. `evaluate({ mode, candidates, ctx, timeoutMs, ruleVersion, correlationId })` 진입점은 5개 모드(`recall|remember|link|explain|shadow`)를 처리한다.
-
-`config.enabled=false`이면 즉시 noop 결과를 반환하여 CPU 비용 0. timeout은 `Promise.race([evalPromise, timeoutPromise])`로 구현하며 초과 시 `degraded=true`를 반환하고 절대 throw하지 않는다. `clearTimeout` 처리로 타이머 누수를 방지한다. `rule_version`과 `correlation_id`는 모든 evaluate 호출에 수반되며, 결과 객체에 `ruleVersion`으로 반영된다.
-
 ### SymbolicMetrics
 
 `lib/symbolic/SymbolicMetrics.js`. prom-client 4종 메트릭을 모듈 로드 시 즉시 등록한다:
@@ -606,15 +600,9 @@ architecture.md의 Symbolic Memory Layer 섹션이 전체 설계를 다룬다. �
 
 `lib/symbolic/CbrEligibility.js`. 비동기 DB 조회 없이 인메모리 fragment 필드만으로 동기 결정 가능한 4제약을 적용한다: `tenant_match`, `has_case_id`, `not_quarantine` (quarantine_state !== 'soft'), `resolved_state` (resolution_status 가 `resolved`이거나 null/undefined). 차단된 각 fragment에 대해 `symbolicMetrics.recordGateBlock('cbr', reason)`을 호출한다. DI: `({ metrics })`.
 
-### 5 Rule Files (lib/symbolic/rules/v1/)
+### 2 Rule Files (lib/symbolic/rules/v1/)
 
 **explain.js**: `buildReasonCodes(fragment, searchContext)` 함수. 입력: fragment (searchPath, layerLatency 메타데이터 포함) + searchContext. 출력: 최대 3개 reason code 배열. L3 형태소 경로는 `direct_keyword_match`, pgvector L2는 `semantic_similarity`, 그래프 1-hop은 `graph_neighbor_1hop`, timeRange 매칭은 `temporal_proximity`, case cohort는 `case_cohort_member`, EMA 활성화(`>= 0.5`)는 `recent_activity_ema`.
-
-**link-integrity.js**: `checkCycle(input, ctx)` rule function. `LinkIntegrityChecker` 인스턴스를 생성하여 `sessionLinker`를 ctx에서 주입받아 호출한다. DIRECTIONAL_RELATIONS 외 타입은 `{ hasCycle: false, reason: 'non_directional' }` early return.
-
-**claim-conflict.js**: `detectPolarityConflict({ fragmentId, keyId }, { detector })`. `ClaimConflictDetector` DI 주입으로 테스트 격리. 입력 fragmentId에 대한 polarity 충돌을 탐지하고 severity 포함 결과를 반환한다.
-
-**policy.js**: `evaluatePolicy(fragment, _ctx)`. `PolicyRules` 싱글톤 인스턴스를 모듈 로드 시 생성한다. `_ctx`는 현재 미사용이며 future signature 호환용으로 보존된다.
 
 **proactive-gate.js**: `evaluateProactiveGate({ source, target, keyId }, _ctx)`. 비용 순 우선 검사: `invalid_target` → `quarantine` → `cohort_mismatch` → `polarity_conflict`. `ClaimConflictDetector` throw는 fail-open(allowed=true 반환). 반환: `{ allowed, reason, ruleVersion }`.
 

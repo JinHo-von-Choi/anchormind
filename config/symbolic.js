@@ -31,8 +31,8 @@ const parseInt10 = (v, def) => {
  * proactiveGate     : ProactiveRecall polarity gate (Phase 5)
  * shadow            : shadow mode - symbolic 결과를 기록만 하고 미적용 (Phase 1)
  * ruleVersion       : 규칙 패키지 버전 식별자 (fragment_claims.rule_version 컬럼에 기록)
- * timeoutMs         : SymbolicOrchestrator 단일 호출 timeout (ms)
- * maxCandidates     : symbolic 처리 대상 후보 수 상한 (폭주 방지)
+ * timeoutMs         : MEMENTO_SYMBOLIC_TIMEOUT_MS 설정값 (ms). 현재 이 값을 읽는 처리는 없다
+ * maxCandidates     : MEMENTO_SYMBOLIC_MAX_CANDIDATES 설정값. 현재 이 값을 읽는 처리는 없다
  */
 export const SYMBOLIC_CONFIG = Object.freeze({
   enabled         : parseBool(process.env.MEMENTO_SYMBOLIC_ENABLED, false),

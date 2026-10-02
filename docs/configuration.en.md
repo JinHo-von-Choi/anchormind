@@ -140,8 +140,8 @@ All flags default to `false` / noop. For phased activation, follow the recommend
 | MEMENTO_SYMBOLIC_CBR_FILTER | false | 5 | Applies symbolic filter to CaseRecall |
 | MEMENTO_SYMBOLIC_PROACTIVE_GATE | false | 6 | ProactiveRecall polarity gate |
 | MEMENTO_SYMBOLIC_RULE_VERSION | v1 | - | Rule package version identifier (fragment_claims.rule_version column) |
-| MEMENTO_SYMBOLIC_TIMEOUT_MS | 50 | - | SymbolicOrchestrator single call timeout (ms) |
-| MEMENTO_SYMBOLIC_MAX_CANDIDATES | 32 | - | Candidate count cap for symbolic processing |
+| MEMENTO_SYMBOLIC_TIMEOUT_MS | 50 | - | Symbolic evaluation timeout setting (ms). No code currently reads this value |
+| MEMENTO_SYMBOLIC_MAX_CANDIDATES | 32 | - | Symbolic candidate count cap setting. No code currently reads this value |
 
 The `api_keys.symbolic_hard_gate` column (migration-033) enables per-key hard gate switching. Defaults to false. When set to true, PolicyRules violations cause the remember() call to be rejected with a JSON-RPC **protocol-level** error `-32003` (not an MCP tool error — `error.data.violations: string[]` included). Master keys (keyId=NULL) are excluded. Cache TTL is 30 seconds.
 

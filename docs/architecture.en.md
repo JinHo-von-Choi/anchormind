@@ -957,7 +957,7 @@ A verification-only layer placed on top of the probabilistic search pipeline. Di
 
 - Verification-only. The FragmentSearch/RRF/Reranker/SpreadingActivation paths are immutable
 - All flags default to false — behavior in default state is byte-for-byte identical to the existing probabilistic path
-- Fail-open: detector errors are swallowed; on SymbolicOrchestrator timeout (50ms), fallback applies
+- Fail-open: detector errors are swallowed and the existing path continues
 - Tenant isolation: SessionLinker.wouldCreateCycle included, 14 call sites fully covered
 
 ### Hook Chain (FragmentSearch.search, right after the probabilistic result)
@@ -978,11 +978,10 @@ probabilistic result
     └── annotated result → caller
 ```
 
-### 9 Core Modules + 5 Rule Files
+### 8 Core Modules + 2 Rule Files
 
 | Module | Role |
 |--------|------|
-| SymbolicOrchestrator | rule_version / correlation_id / timeout / fallback management |
 | SymbolicMetrics | prom-client 4 metrics (claim/warning/gate_blocked/latency) |
 | ClaimExtractor | Morpheme-based polarity claim extraction |
 | ClaimStore | TEXT key_id + `IS NOT DISTINCT FROM` isolation |
@@ -992,7 +991,7 @@ probabilistic result
 | PolicyRules | 5 predicate soft gating |
 | CbrEligibility | 4-constraint CBR filter |
 
-Rule files (`lib/symbolic/rules/v1/`): `explain.js`, `link-integrity.js`, `claim-conflict.js`, `policy.js`, `proactive-gate.js`
+Rule files (`lib/symbolic/rules/v1/`): `explain.js`, `proactive-gate.js`. `PolicyRules`, `LinkIntegrityChecker`, and `ClaimConflictDetector` are used directly by their callers.
 
 ### Storage Schema
 
@@ -1014,7 +1013,7 @@ Rule files (`lib/symbolic/rules/v1/`): `explain.js`, `link-integrity.js`, `claim
 - `memento_symbolic_claim_extracted_total` — ClaimExtractor extraction count
 - `memento_symbolic_warning_total` — advisory warning generation count
 - `memento_symbolic_gate_blocked_total{phase}` — block count per phase (phase=cbr|proactive etc.)
-- `memento_symbolic_op_latency_ms` — orchestrator call latency histogram
+- `memento_symbolic_op_latency_ms`: symbolic operation latency histogram (op=shadow_recall|explain|cbr_filter|claim_extraction)
 
 ### Staged Rollout
 

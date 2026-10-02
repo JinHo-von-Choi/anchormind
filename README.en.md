@@ -256,7 +256,7 @@ Successful `remember` / `amend` / `forget` responses carry a `feedback_sampled` 
 
 ## Symbolic Verification Layer
 
-Optional explainability, advisory link integrity, polarity conflict detection, and policy-rule soft gating. 9 core modules plus 5 rule files. All flags are off by default.
+Optional explainability, advisory link integrity, polarity conflict detection, and policy-rule soft gating. 8 core modules plus 2 rule files. All flags are off by default.
 
 ## Smart Recall
 

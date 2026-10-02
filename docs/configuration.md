@@ -135,8 +135,8 @@
 | MEMENTO_SYMBOLIC_CBR_FILTER | false | 5 | CaseRecall symbolic 필터 적용 |
 | MEMENTO_SYMBOLIC_PROACTIVE_GATE | false | 6 | ProactiveRecall polarity gate |
 | MEMENTO_SYMBOLIC_RULE_VERSION | v1 | - | 규칙 패키지 버전 식별자 (fragment_claims.rule_version 컬럼) |
-| MEMENTO_SYMBOLIC_TIMEOUT_MS | 50 | - | SymbolicOrchestrator 단일 호출 timeout (ms) |
-| MEMENTO_SYMBOLIC_MAX_CANDIDATES | 32 | - | symbolic 처리 대상 후보 수 상한 |
+| MEMENTO_SYMBOLIC_TIMEOUT_MS | 50 | - | symbolic 평가 timeout 설정값 (ms). 현재 이 값을 읽는 처리는 없다 |
+| MEMENTO_SYMBOLIC_MAX_CANDIDATES | 32 | - | symbolic 후보 수 상한 설정값. 현재 이 값을 읽는 처리는 없다 |
 
 `api_keys.symbolic_hard_gate` 컬럼 (migration-033)으로 키 단위 hard gate 전환 가능. 기본 false. true로 설정 시 PolicyRules violations 발생 시 저장이 거부되고 JSON-RPC **프로토콜 레벨** 에러 `-32003`으로 응답한다 (MCP 도구 에러 아님 — `error.data.violations: string[]` 포함). 마스터 키(keyId=NULL) 제외. 캐시 TTL 30초.
 

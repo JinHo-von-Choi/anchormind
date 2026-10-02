@@ -98,7 +98,7 @@ describe("LinkIntegrityChecker.checkCycle", () => {
     assert.ok(!DIRECTIONAL_RELATIONS.has("related_to"));
   });
 
-  it("ruleVersion 필드는 항상 포함 (orchestrator 통합용)", async () => {
+  it("ruleVersion 필드는 항상 포함", async () => {
     const linker  = makeLinker(false);
     const checker = new LinkIntegrityChecker({ sessionLinker: linker });
 

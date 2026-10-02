@@ -533,12 +533,6 @@ Records result counts for each search call in the `search_param_thresholds` tabl
 
 The Symbolic Memory Layer section in architecture.md covers the overall design. This chapter focuses on implementation details of each module.
 
-### SymbolicOrchestrator
-
-`lib/symbolic/SymbolicOrchestrator.js`. Constructor: `({ config, metrics, rulePackLoader })`. All three dependencies provide production singleton defaults and are replaceable in tests via a DI structure. The `evaluate({ mode, candidates, ctx, timeoutMs, ruleVersion, correlationId })` entry point handles 5 modes (`recall|remember|link|explain|shadow`).
-
-When `config.enabled=false`, it immediately returns a noop result with zero CPU cost. Timeout is implemented via `Promise.race([evalPromise, timeoutPromise])`; on expiry it returns `degraded=true` and never throws. `clearTimeout` handling prevents timer leaks. `rule_version` and `correlation_id` accompany every evaluate call and are reflected in the result object as `ruleVersion`.
-
 ### SymbolicMetrics
 
 `lib/symbolic/SymbolicMetrics.js`. Registers 4 prom-client metrics immediately on module load:
@@ -586,15 +580,9 @@ At the `insert` entry point, a `fragment.key_id !== ctx.keyId` mismatch is check
 
 `lib/symbolic/CbrEligibility.js`. Applies 4 constraints decidable synchronously from in-memory fragment fields without asynchronous DB queries: `tenant_match`, `has_case_id`, `not_quarantine` (quarantine_state !== 'soft'), `resolved_state` (resolution_status is `resolved` or null/undefined). For each blocked fragment, calls `symbolicMetrics.recordGateBlock('cbr', reason)`. DI: `({ metrics })`.
 
-### 5 Rule Files (lib/symbolic/rules/v1/)
+### 2 Rule Files (lib/symbolic/rules/v1/)
 
 **explain.js**: `buildReasonCodes(fragment, searchContext)` function. Input: fragment (including searchPath, layerLatency metadata) + searchContext. Output: array of up to 3 reason codes. L3 morpheme path → `direct_keyword_match`, pgvector L2 → `semantic_similarity`, graph 1-hop → `graph_neighbor_1hop`, timeRange match → `temporal_proximity`, case cohort → `case_cohort_member`, EMA activation (`>= 0.5`) → `recent_activity_ema`.
-
-**link-integrity.js**: `checkCycle(input, ctx)` rule function. Creates a `LinkIntegrityChecker` instance and calls it with `sessionLinker` injected from ctx. Types outside DIRECTIONAL_RELATIONS return `{ hasCycle: false, reason: 'non_directional' }` early.
-
-**claim-conflict.js**: `detectPolarityConflict({ fragmentId, keyId }, { detector })`. Test isolation via `ClaimConflictDetector` DI injection. Detects polarity conflicts for the input fragmentId and returns results including severity.
-
-**policy.js**: `evaluatePolicy(fragment, _ctx)`. Creates a `PolicyRules` singleton instance at module load time. `_ctx` is currently unused and is preserved for future signature compatibility.
 
 **proactive-gate.js**: `evaluateProactiveGate({ source, target, keyId }, _ctx)`. Checks in cost-ascending order: `invalid_target` → `quarantine` → `cohort_mismatch` → `polarity_conflict`. `ClaimConflictDetector` throws are fail-open (returns allowed=true). Returns: `{ allowed, reason, ruleVersion }`.
 
