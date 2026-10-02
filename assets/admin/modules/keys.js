@@ -50,6 +50,23 @@ export function renderKeyKpiRow(keys) {
   return grid;
 }
 
+/**
+ * 키 삭제가 거절됐을 때(409 key_in_use) 보여줄 문구를 만든다.
+ * 파편 수와 재통합 기록 수가 모두 숫자면 둘을 함께 알리고, 하나라도 없으면 일반 문구를 쓴다.
+ *
+ * @param {{ fragments?: unknown, reconsolidations?: unknown }|null|undefined} data
+ * @returns {string}
+ */
+export function keyInUseMessage(data) {
+  const fragments        = data?.fragments;
+  const reconsolidations = data?.reconsolidations;
+  if (!Number.isFinite(fragments) || !Number.isFinite(reconsolidations)) {
+    return "Key has stored data. Deactivate it instead.";
+  }
+  return "Key has " + fragments + " stored fragments and " + reconsolidations
+    + " link reconsolidation records. Deactivate it instead.";
+}
+
 export function renderKeyTable(keys) {
   const wrap = document.createElement("div");
   wrap.className = "glass-panel flex-1 flex flex-col min-h-0";
@@ -860,7 +877,7 @@ export async function renderKeys(container) {
             const res = await api("/keys/" + keyId, { method: "DELETE" });
             closeModal();
             if (res.status === 409) {
-              showToast("Key has " + (res.data?.fragments ?? 0) + " stored fragments. Deactivate it instead.", "warning");
+              showToast(keyInUseMessage(res.data), "warning");
               return;
             }
             if (!res.ok) {

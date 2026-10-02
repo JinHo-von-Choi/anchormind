@@ -16,7 +16,8 @@ setupDom();
 const {
   renderKeyKpiRow,
   renderKeyTable,
-  renderKeyInspector
+  renderKeyInspector,
+  keyInUseMessage
 } = await import("../../assets/admin/modules/keys.js");
 
 const {
@@ -30,6 +31,19 @@ const { state } = await import("../../assets/admin/modules/state.js");
 /* ================================================================
    Keys View
    ================================================================ */
+
+describe("keyInUseMessage", () => {
+  test("파편 수와 재통합 기록 수를 함께 알린다", () => {
+    const msg = keyInUseMessage({ fragments: 0, reconsolidations: 3 });
+    assert.match(msg, /0 stored fragments/);
+    assert.match(msg, /3 link reconsolidation records/);
+  });
+
+  test("한쪽 수가 없으면 일반 문구를 쓴다", () => {
+    assert.equal(keyInUseMessage({ fragments: 2 }), "Key has stored data. Deactivate it instead.");
+    assert.equal(keyInUseMessage(undefined), "Key has stored data. Deactivate it instead.");
+  });
+});
 
 describe("renderKeyKpiRow", () => {
   test("4개 KPI 카드 (glass-panel)", () => {
