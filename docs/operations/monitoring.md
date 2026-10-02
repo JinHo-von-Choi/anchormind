@@ -13,7 +13,7 @@
 |-|-|-|
 | `/metrics` | `MEMENTO_ACCESS_KEY` 설정 시 마스터 키 Bearer 필요 | Prometheus 지표 |
 | `/health/live` | 없음 | 프로세스 생존 확인(DB, Redis를 보지 않음) |
-| `/health/ready` | 없음 | 주 DB 응답 확인(`HEALTH_READY_DB_TIMEOUT_MS` 안에 응답하면 200, 아니면 503) |
+| `/health/ready` | 없음 | 주 DB 응답 확인(`MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`(기본 2000, 범위 100~4500) 안에 응답하면 200, 아니면 503) |
 
 ---
 
