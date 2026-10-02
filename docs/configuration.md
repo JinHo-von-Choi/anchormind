@@ -13,6 +13,7 @@
 | MEMENTO_AUTH_DISABLED | false | `true`로 설정 시 인증을 완전히 비활성화하여 모든 요청을 master 권한으로 처리. 개발·시험 전용이며 이 선언이 없으면 키 없는 기동 자체가 거부된다. `MEMENTO_ACCESS_KEY`가 비어 있을 때만 유효 |
 | DB_STATEMENT_TIMEOUT_MS | 30000 | 사용자 요청 경로의 질의 시간 상한(ms). 0은 무제한. system·admin 유지보수 경로에는 적용하지 않는다 |
 | REQUEST_TIMEOUT_MS | 60000 | 요청 수신 상한(ms). 0은 무제한 |
+| MEMENTO_CONFIG_STRICT | false | 숫자·열거 환경 변수의 값 문제를 기동 시 한 줄로 기록한다. 숫자가 아닌 값은 기본값으로 돌아가고, 정수가 아니거나 허용 범위 밖인 값은 그대로 쓰며 기록만 한다(`MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`, `MEMENTO_SHUTDOWN_DEADLINE_MS`, `MEMENTO_SCORE_UPDATE_BATCH`, `MEMENTO_SESSION_KEY_RECHECK_MS`는 범위 밖이어도 기본값). 공백만 있는 값은 미설정과 같다. `true`면 문제가 있을 때 종료 코드 78로 멈춘다 |
 | KEEP_ALIVE_TIMEOUT_MS | 75000 | Keep-Alive 연결 유지 시간(ms). 프록시 설정과 맞춘다 |
 | HEADERS_TIMEOUT_MS | 76000 | 요청 헤더 수신 상한(ms). KEEP_ALIVE_TIMEOUT_MS보다 크게 둔다 |
 | LOG_LEVEL | info (NODE_ENV가 production이 아니면 debug) | winston 로그 레벨 |
@@ -22,7 +23,7 @@
 | MEMENTO_SPLIT_LLM_PRIMARY / MEMENTO_SPLIT_LLM_FALLBACKS | (없음) | 장문 분할 전용 LLM 체인. 미설정 시 전역 체인 사용 |
 | MEMENTO_VECTOR_FORCE_INDEX | (적용) | `off`면 벡터 검색의 인덱스 강제 planner 힌트를 끈다 |
 | MEMENTO_SEMANTIC_THRESHOLD_MODE | inner | `outer`면 시맨틱 검색이 이웃 max(limit, 80)개를 먼저 고르고 유사도 임계값을 바깥에서 적용한다 |
-| MEMENTO_SCORE_UPDATE_BATCH | 200 | 감쇠와 utility 갱신을 id 오름차순 묶음으로 나눌 때의 묶음 크기. 0이면 단일 UPDATE 문장. `forget`의 `linked_to` 정리는 이 값과 무관하게 항상 id 오름차순으로 잠근다 |
+| MEMENTO_SCORE_UPDATE_BATCH | 200 | 감쇠와 utility 갱신을 id 오름차순 묶음으로 나눌 때의 묶음 크기. 0이면 단일 UPDATE 문장. 0 이상의 정수만 받고(음수와 정수 아님은 기본값) 10000을 넘으면 10000으로 줄인다. `forget`의 `linked_to` 정리는 이 값과 무관하게 항상 id 오름차순으로 잠근다 |
 | MEMENTO_RUNTIME | (없음) | `docker`면 Docker 설치로 판정한다 |
 | GITHUB_TOKEN | (없음) | 업데이트 확인 시 GitHub API 인증 토큰 |
 | WORKER_ID | single | health 응답의 workerId 표기 |
@@ -98,7 +99,7 @@
 | MEMENTO_WORKSPACE_DECAY | true | `false` 시 workspace 랭킹 감쇠를 비활성화한다. 활성 시 검색 scope에 workspace가 지정되면 불일치·전역(NULL) 파편의 랭킹 점수에 감쇠 배율을 적용한다(반환 자체는 유지). recall과 context 주입 경로 공통 적용 |
 | MEMENTO_WORKSPACE_DECAY_PENALTY | 0.7 | workspace 불일치·전역 파편 랭킹 점수에 곱하는 감쇠 배율(0~1) |
 | MEMENTO_SESSION_SEGMENT | true | `false` 시 세션 세그먼트 회전을 비활성화하고 전송계층 세션 ID를 그대로 사용한다 |
-| MEMENTO_SESSION_KEY_RECHECK_MS | 30000 | 세션 사용 시 API 키 상태를 다시 읽는 주기(ms). 비활성 또는 삭제된 키의 세션은 닫히고 권한 변경은 열린 세션에 반영된다. `0`이면 재확인하지 않는다 |
+| MEMENTO_SESSION_KEY_RECHECK_MS | 30000 | 세션 사용 시 API 키 상태를 다시 읽는 주기(ms). 비활성 또는 삭제된 키의 세션은 닫히고 권한 변경은 열린 세션에 반영된다. `0`이면 재확인하지 않는다. 0 이상의 정수만 받고 그 밖은 기본값이다 |
 | MEMENTO_SEGMENT_IDLE_MS | 2700000 | 세션 유휴 시간이 이 값(ms)을 초과하면 다음 도구 호출 시 세그먼트를 회전한다. 기본 45분 |
 | MEMENTO_SEGMENT_MAX_AGE_MS | 43200000 | 세그먼트 시작 후 이 값(ms)을 초과하면 유휴 여부와 무관하게 세그먼트를 회전한다. 기본 12시간 |
 | MEMENTO_SEGMENT_MIN_ACTIVITY | 3 | 세그먼트 회전 시 직전 세그먼트에 대한 AutoReflect 발동에 필요한 세그먼트당 최소 활동(파편+도구 호출) 수 |
@@ -281,8 +282,8 @@ POSTGRES_* 접두어가 DB_* 접두어보다 우선한다. 두 형식을 혼용�
 | DB_IDLE_TIMEOUT_MS | 유휴 연결 반환 대기 시간 ms. 기본 30000 |
 | DB_CONN_TIMEOUT_MS | 연결 획득 타임아웃 ms. 기본 10000 |
 | DB_QUERY_TIMEOUT | 쿼리 타임아웃 ms. 기본 30000 |
-| MEMENTO_HEALTH_READY_DB_TIMEOUT_MS | `GET /health/ready`가 주 DB 응답을 기다리는 상한 ms. 기본 2000. 와치독 curl 상한 5초보다 짧게 둔다 |
-| MEMENTO_SHUTDOWN_DEADLINE_MS | SIGTERM/SIGINT 종료 절차 전체 상한 ms. 넘기면 종료 코드 1로 강제 종료한다. 기본 60000, 0은 상한 없음 |
+| MEMENTO_HEALTH_READY_DB_TIMEOUT_MS | `GET /health/ready`가 주 DB 응답을 기다리는 상한 ms. 기본 2000, 허용 범위 100 이상 4500 이하(밖이면 기본값). 와치독 curl 상한 5초보다 짧게 둔다 |
+| MEMENTO_SHUTDOWN_DEADLINE_MS | SIGTERM/SIGINT 종료 절차 전체 상한 ms. 넘기면 종료 코드 1로 강제 종료한다. 기본 60000, 0은 상한 없음, 음수는 기본값 |
 | DB_BACKGROUND_MAX_CONNECTIONS | 스케줄러·워커가 동시에 쓰는 Primary 풀 연결 상한. 기본 DB_MAX_CONNECTIONS의 40%(최소 1). DB_MAX_CONNECTIONS-1을 넘지 않는다. 초과 요청은 FIFO로 대기한다 |
 | DB_BACKGROUND_WAIT_MAX_MS | 백그라운드 슬롯 대기 상한(ms). 기본 120000. 넘기면 해당 작업만 실패하고 다음 회차에 재시도한다 |
 | PGVECTOR_SCHEMA | pgvector 확장이 설치된 스키마. 미설정 시 기동 시 자동 감지 |

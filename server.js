@@ -22,7 +22,7 @@ import http from "http";
 import { resolveClientIp, applyBaseResponseHeaders } from "./lib/http/helpers.js";
 
 /** 설정 */
-import { PORT, ACCESS_KEY, AUTH_DISABLED, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI, SHUTDOWN_DEADLINE_MS } from "./lib/config.js";
+import { PORT, ACCESS_KEY, AUTH_DISABLED, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI, SHUTDOWN_DEADLINE_MS, envInt, CONFIG_STRICT, getConfigIssues } from "./lib/config.js";
 import { MEMORY_CONFIG }          from "./config/memory.js";
 import { validateMemoryConfig }   from "./config/validate-memory-config.js";
 
@@ -296,8 +296,8 @@ const server = http.createServer(async (req, res) => {
   recordHttpRequest(req.method, "__not_found__", 404, duration);
 });
 
-server.keepAliveTimeout = Number(process.env.KEEP_ALIVE_TIMEOUT_MS  || 75000);
-server.headersTimeout   = Number(process.env.HEADERS_TIMEOUT_MS    || 76000);
+server.keepAliveTimeout = envInt("KEEP_ALIVE_TIMEOUT_MS", 75000, { min: 0 });
+server.headersTimeout   = envInt("HEADERS_TIMEOUT_MS", 76000, { min: 0 });
 /**
  * 요청 수신 시간 상한.
  *
@@ -307,7 +307,7 @@ server.headersTimeout   = Number(process.env.HEADERS_TIMEOUT_MS    || 76000);
  *
  * 본문 상한이 2MiB이므로 60초면 정상 요청에 충분하다.
  */
-server.requestTimeout   = Number(process.env.REQUEST_TIMEOUT_MS    || 60000);
+server.requestTimeout   = envInt("REQUEST_TIMEOUT_MS", 60000, { min: 0 });
 
 server.on("connection", (socket) => {
   socket.setKeepAlive(true, 60000);
@@ -328,6 +328,20 @@ if (!ACCESS_KEY && !AUTH_DISABLED) {
 }
 
 validateMemoryConfig(MEMORY_CONFIG);
+
+/**
+ * 환경 변수 값 문제를 한 번에 기록한다. MEMENTO_CONFIG_STRICT=true면 기동을 멈춘다.
+ * 이 시점 뒤에 처음 읽히는 변수(요청 경로)의 문제는 처음 읽힐 때 목록에 들어간다.
+ */
+const configIssues = getConfigIssues();
+if (configIssues.length > 0) {
+  const detail = configIssues.map(i => `${i.name}="${i.value}" ${i.problem} -> ${i.used}`).join("; ");
+  logWarn(`[Startup] 환경 변수 값 ${configIssues.length}건이 기대와 다르다: ${detail}`);
+  if (CONFIG_STRICT) {
+    console.error("[Startup] MEMENTO_CONFIG_STRICT=true: 환경 변수 값을 고친 뒤 다시 기동한다.");
+    process.exit(78);
+  }
+}
 setAnchorAutoPromotionEnabled(MEMORY_CONFIG.consolidate?.autoPromoteAnchors !== false);
 
 server.listen(PORT, () => {

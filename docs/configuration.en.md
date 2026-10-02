@@ -13,6 +13,7 @@
 | MEMENTO_AUTH_DISABLED | false | When `true`, completely disables authentication and processes all requests with master privileges. Development/testing only. Only effective when `MEMENTO_ACCESS_KEY` is unset |
 | DB_STATEMENT_TIMEOUT_MS | 30000 | Query time limit (ms) for user request paths. 0 means unlimited. Not applied to system and admin maintenance paths |
 | REQUEST_TIMEOUT_MS | 60000 | Request receive limit (ms). 0 means unlimited |
+| MEMENTO_CONFIG_STRICT | false | Reports problems in numeric and enumerated environment variables as one startup log line. A non-numeric value falls back to the default; a non-integer or out-of-range value is used as given and only reported (`MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`, `MEMENTO_SHUTDOWN_DEADLINE_MS`, `MEMENTO_SCORE_UPDATE_BATCH` and `MEMENTO_SESSION_KEY_RECHECK_MS` fall back to the default when out of range). A whitespace-only value counts as unset. When `true`, startup stops with exit code 78 if any problem is found |
 | KEEP_ALIVE_TIMEOUT_MS | 75000 | Keep-Alive connection lifetime (ms). Match the proxy setting |
 | HEADERS_TIMEOUT_MS | 76000 | Request header receive limit (ms). Keep it larger than KEEP_ALIVE_TIMEOUT_MS |
 | LOG_LEVEL | info (debug when NODE_ENV is not production) | winston log level |
@@ -22,7 +23,7 @@
 | MEMENTO_SPLIT_LLM_PRIMARY / MEMENTO_SPLIT_LLM_FALLBACKS | (none) | Dedicated LLM chain for long-fragment splitting. The global chain is used when unset |
 | MEMENTO_VECTOR_FORCE_INDEX | (applied) | `off` disables the index-forcing planner hint for vector search |
 | MEMENTO_SEMANTIC_THRESHOLD_MODE | inner | `outer` selects max(limit, 80) nearest neighbours first and applies the similarity threshold outside the KNN query |
-| MEMENTO_SCORE_UPDATE_BATCH | 200 | Batch size for id-ordered importance decay and utility updates. 0 runs a single UPDATE statement. The `linked_to` cleanup of `forget` always locks rows in id order regardless of this value |
+| MEMENTO_SCORE_UPDATE_BATCH | 200 | Batch size for id-ordered importance decay and utility updates. 0 runs a single UPDATE statement. Only integers of 0 or more are accepted (a negative or non-integer value falls back to the default) and values above 10000 are capped at 10000. The `linked_to` cleanup of `forget` always locks rows in id order regardless of this value |
 | MEMENTO_RUNTIME | (none) | `docker` marks the installation as Docker |
 | GITHUB_TOKEN | (none) | GitHub API authentication token for update checks |
 | WORKER_ID | single | workerId shown in the health response |
@@ -97,7 +98,7 @@
 | MEMENTO_WORKSPACE_DECAY | true | When `false`, disables workspace ranking decay. When enabled, if the search scope specifies a workspace, a decay multiplier is applied to the ranking score of mismatched or global (NULL) fragments (the fragments themselves are still returned). Applies to both the recall and context injection paths |
 | MEMENTO_WORKSPACE_DECAY_PENALTY | 0.7 | Decay multiplier (0-1) applied to the ranking score of workspace-mismatched or global fragments |
 | MEMENTO_SESSION_SEGMENT | true | When `false`, disables session segment rotation and uses the transport-layer session ID as-is |
-| MEMENTO_SESSION_KEY_RECHECK_MS | 30000 | Interval (ms) at which a session re-reads its API key state. Sessions of inactive or deleted keys are closed and permission changes reach open sessions. `0` disables the recheck |
+| MEMENTO_SESSION_KEY_RECHECK_MS | 30000 | Interval (ms) at which a session re-reads its API key state. Sessions of inactive or deleted keys are closed and permission changes reach open sessions. `0` disables the recheck. Only integers of 0 or more are accepted, anything else falls back to the default |
 | MEMENTO_SEGMENT_IDLE_MS | 2700000 | When session idle time exceeds this value (ms), the segment rotates on the next tool call. Default 45 minutes |
 | MEMENTO_SEGMENT_MAX_AGE_MS | 43200000 | When a segment's age exceeds this value (ms), it rotates regardless of idle state. Default 12 hours |
 | MEMENTO_SEGMENT_MIN_ACTIVITY | 3 | Minimum activity (fragments + tool calls) required in the previous segment for AutoReflect to fire on segment rotation |
@@ -282,8 +283,8 @@ POSTGRES_* prefixes take precedence over DB_* prefixes. Both formats can be mixe
 | DB_IDLE_TIMEOUT_MS | Idle connection return timeout ms. Default 30000 |
 | DB_CONN_TIMEOUT_MS | Connection acquisition timeout ms. Default 10000 |
 | DB_QUERY_TIMEOUT | Query timeout ms. Default 30000 |
-| MEMENTO_HEALTH_READY_DB_TIMEOUT_MS | How long `GET /health/ready` waits for the primary DB, in ms. Default 2000. Keep it below the 5 second watchdog curl limit |
-| MEMENTO_SHUTDOWN_DEADLINE_MS | Upper bound for the whole SIGTERM/SIGINT shutdown sequence, in ms. Forces exit code 1 when exceeded. Default 60000, 0 means no limit |
+| MEMENTO_HEALTH_READY_DB_TIMEOUT_MS | How long `GET /health/ready` waits for the primary DB, in ms. Default 2000, allowed range 100 to 4500 (the default is used outside it). Keep it below the 5 second watchdog curl limit |
+| MEMENTO_SHUTDOWN_DEADLINE_MS | Upper bound for the whole SIGTERM/SIGINT shutdown sequence, in ms. Forces exit code 1 when exceeded. Default 60000, 0 means no limit, a negative value falls back to the default |
 | DB_BACKGROUND_MAX_CONNECTIONS | Primary pool connections that schedulers and workers may hold at once. Default 40% of DB_MAX_CONNECTIONS (min 1). Capped at DB_MAX_CONNECTIONS-1. Excess acquisitions wait in FIFO order |
 | DB_BACKGROUND_WAIT_MAX_MS | Background slot wait limit (ms). Default 120000. Only the waiting job fails and retries on the next cycle |
 | PGVECTOR_SCHEMA | Schema where the pgvector extension is installed. Detected automatically at startup when unset |

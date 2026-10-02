@@ -25,18 +25,18 @@ const DB     = readFileSync(path.join(ROOT, "lib", "tools", "db.js"), "utf8");
 
 describe("요청 수신 상한", () => {
   test("기본값이 유한하다", () => {
-    const m = SERVER.match(/server\.requestTimeout\s*=\s*Number\(process\.env\.REQUEST_TIMEOUT_MS\s*\|\|\s*(\d+)\)/);
+    const m = SERVER.match(/server\.requestTimeout\s*=\s*envInt\("REQUEST_TIMEOUT_MS",\s*(\d+)/);
     assert.ok(m, "requestTimeout 설정을 찾지 못했다");
     assert.ok(Number(m[1]) > 0, "requestTimeout 기본값이 0이면 수신이 무제한이다");
   });
 
   test("본문 상한을 받기에 충분한 값이다", () => {
-    const m = SERVER.match(/server\.requestTimeout\s*=\s*Number\(process\.env\.REQUEST_TIMEOUT_MS\s*\|\|\s*(\d+)\)/);
+    const m = SERVER.match(/server\.requestTimeout\s*=\s*envInt\("REQUEST_TIMEOUT_MS",\s*(\d+)/);
     assert.ok(Number(m[1]) >= 30000, "2MiB 본문 수신에 여유가 없다");
   });
 
   test("환경 변수로 덮어쓸 수 있다", () => {
-    assert.match(SERVER, /process\.env\.REQUEST_TIMEOUT_MS/);
+    assert.match(SERVER, /envInt\("REQUEST_TIMEOUT_MS"/);
   });
 });
 
@@ -54,7 +54,7 @@ describe("질의 시간 상한", () => {
   });
 
   test("실측 기반 기본값이 회상 최대 소요보다 크다", () => {
-    const m = DB.match(/DB_STATEMENT_TIMEOUT_MS\s*\|\|\s*(\d+)/);
+    const m = DB.match(/envInt\("DB_STATEMENT_TIMEOUT_MS",\s*(\d+)/);
     assert.ok(m, "기본값을 찾지 못했다");
     /** recall 최대 소요는 임베딩 콜드스타트 포함 약 5초다. */
     assert.ok(Number(m[1]) >= 15000, `기본값 ${m[1]}ms가 정상 요청을 끊을 수 있다`);

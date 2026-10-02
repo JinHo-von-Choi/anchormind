@@ -59,5 +59,7 @@ describe("scoreUpdateBatchSize", () => {
     assert.equal(scoreUpdateBatchSize(), 10000);
     process.env.MEMENTO_SCORE_UPDATE_BATCH = "abc";
     assert.equal(scoreUpdateBatchSize(), 200);
+    process.env.MEMENTO_SCORE_UPDATE_BATCH = "-5";
+    assert.equal(scoreUpdateBatchSize(), 200);
   });
 });
