@@ -14,12 +14,13 @@ https://{도메인}/v1/internal/model/nothing/
 
 ## Admin UI 아키텍처
 
-Admin UI는 얇은 진입점(58줄) + 13개 ESM 모듈로 구성된다. Consolidator는 21개 stage(stageDefs 배열)를 순차 실행하며, 진행률 표시는 `stageDefs.length`(21)를 분모로 계산된다.
+Admin UI는 얇은 진입점(80줄) + 15개 ESM 모듈로 구성된다. Consolidator는 22개 stage(stageDefs 배열)를 순차 실행하며, 진행률 표시는 `stageDefs.length`(22)를 분모로 계산된다.
 
 ```
 assets/admin/
 ├── index.html          # <script type="module"> 로 로드
-├── admin.js            # 진입점 (58줄) — 모듈 초기화 오케스트레이션
+├── admin.js            # 진입점 (80줄), 모듈 초기화 오케스트레이션
+├── vendor/             # Tailwind CSS 3.4.17, d3 7.9.0 사본과 PROVENANCE.md
 └── modules/
     ├── state.js        # 전역 상태 관리
     ├── api.js          # API 호출 추상화
@@ -33,10 +34,14 @@ assets/admin/
     ├── sessions.js     # 세션 관리
     ├── graph.js        # 지식 그래프
     ├── logs.js         # 로그 뷰어
-    └── memory.js       # 메모리 운영
+    ├── memory.js       # 메모리 운영
+    ├── metrics.js      # 메트릭 대시보드
+    └── metrics-sparkline.js # 메트릭 스파크라인
 ```
 
 번들러 없이 브라우저 네이티브 ESM을 사용한다. index.html이 `<script type="module">` 태그로 진입점을 로드하고, 각 모듈은 ES import/export로 의존성을 해결한다.
+
+Tailwind CSS와 d3 스크립트는 외부 CDN이 아니라 서버가 `assets/admin/vendor/`에서 제공한다(`/v1/internal/model/nothing/assets/vendor/...`). 콘솔 응답의 CSP 헤더는 `script-src 'self' 'unsafe-inline'`이며 외부 스크립트 호스트를 허용하지 않는다. 사본의 출처와 sha256은 `assets/admin/vendor/PROVENANCE.md`에 있다.
 
 ---
 
@@ -109,7 +114,9 @@ assets/admin/
   - Groups Directory 섹션의 각 그룹 행에 ASSIGN 버튼이 표시되며, 클릭 시 해당 키를 그룹에 추가한다.
   - 소속 그룹 목록에서 그룹 옆 X 버튼을 클릭하면 그룹에서 제거된다.
 - REVOKE KEY -- 키를 비활성화한다. 되돌릴 수 있다.
-- DELETE PERMANENTLY -- 키를 완전히 삭제한다. 이 키로 저장된 파편은 남아있지만 더 이상 접근할 수 없다. 이중 확인 후 실행된다.
+- DELETE PERMANENTLY -- 키를 완전히 삭제한다. 이중 확인 후 실행된다. 저장된 파편이나 재통합 이력이 있는 키는 삭제되지 않고 409(`key_in_use`)로 거절된다(`MEMENTO_API_KEY_DELETE_GUARD=false`면 이 확인을 건너뛴다).
+
+키를 비활성화(REVOKE)하거나 삭제하면 이 프로세스에서 그 키로 연 세션이 즉시 닫힌다. 다른 인스턴스의 세션은 다음 사용 시 키 상태 재확인(`MEMENTO_SESSION_KEY_RECHECK_MS`, 기본 30000ms)으로 닫힌다.
 
 ---
 
@@ -225,7 +232,7 @@ API 키를 논리적 단위로 묶어 관리한다. 같은 그룹의 키들은 �
 Prometheus 기반 핵심 지표를 한 화면에서 확인하는 대시보드다. 외부 Grafana 탭 없이 즉각 진단을 목적으로 하며, 심층 분석은 Grafana에서 수행한다.
 
 엔드포인트: `GET /v1/internal/model/nothing/metrics-summary`
-- master 키 또는 admin 권한 전용. 일반 API 키는 403을 반환한다.
+- master 키 인증 전용. 인증되지 않은 요청은 401을 반환한다.
 - 응답 캐시 TTL: 10초. 운영자 폴링(30초)과 조합하여 서버 부하를 최소화한다.
 - `?windowSec=N` 쿼리 파라미터로 rate 계산 윈도우 변경 가능 (기본 60초).
 
@@ -308,6 +315,8 @@ API: `GET /memory/graph?topic=xxx&limit=50` -> `{ nodes: [...], edges: [...] }` 
 | `/v1/internal/model/nothing/import` | POST | 적용 |
 
 제한 초과 시 `429 Too Many Requests`와 `Retry-After` 헤더가 반환된다. 제한값은 서버의 `RATE_LIMIT_PER_IP` / `RATE_LIMIT_WINDOW_MS` 환경변수로 조정한다 (기본값: 30건/분).
+
+`MEMENTO_ADMIN_AUTH_BACKOFF=on`이면 관리 인증이 연속 5회 실패한 뒤 다음 시도를 1, 2, 4초 순으로 최대 60초까지 늦추고, 지연 중에는 올바른 키도 429와 `Retry-After`를 받는다(기본 `off`). 실패 기록은 이 값과 무관하게 남는다. 관리 API의 변경 요청(GET 제외)과 관리 인증의 성공과 실패는 `admin <METHOD> <path>`, `admin_auth` 감사 기록으로 남는다.
 
 반복 로그인 시도, 대량 키 생성, 대규모 파편 가져오기 작업은 이 제한에 걸릴 수 있다. import 작업이 대량이라면 단일 JSON 배열로 묶어 한 번에 요청하는 것이 권장된다.
 

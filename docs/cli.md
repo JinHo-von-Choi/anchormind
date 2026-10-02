@@ -123,6 +123,7 @@ node bin/memento.js migrate --help
 ```bash
 node bin/memento.js cleanup           # dry-run (미리보기만)
 node bin/memento.js cleanup --execute  # 실제 삭제 실행
+node bin/memento.js cleanup --execute --include-nli  # NLI 충돌 파편도 삭제
 ```
 
 직접 실행 대안:
@@ -163,19 +164,24 @@ node bin/memento.js stats --json
 node bin/memento.js stats --remote https://memento.anchormind.net/mcp --key mmcp_xxx
 ```
 
-출력 예시 (`--format table`):
+`--format table`은 key/value 표(Fragments, Anchors, Active, Expired, Topics, Avg utility, Noise ratio)와 상위 5개 토픽 표를 출력한다.
 
-```
-fragments   anchors   topics
-----------  --------  ------
-1204        38        12
-```
-
-출력 예시 (`--format json`):
+출력 예시 (`--format json`, 로컬):
 
 ```json
-{"fragments": 1204, "anchors": 38, "topics": 12}
+{
+  "fragments": 1204,
+  "anchors": 38,
+  "active": 1180,
+  "expired": 24,
+  "topics": 12,
+  "avgUtility": 0.62,
+  "noiseEstimate": { "count": 9, "ratio": 0.7 },
+  "topTopics": [{ "topic": "infra", "fragments": 210 }]
+}
 ```
+
+`--remote` 모드의 `stats`는 서버의 `memory_stats` 도구를 호출하므로 master 키가 필요하고, 출력은 서버가 돌려준 통계 객체다.
 
 도움말:
 
@@ -224,11 +230,12 @@ MEMENTO_CLI_REMOTE=https://memento.anchormind.net/mcp MEMENTO_CLI_KEY=mmcp_xxx \
 | 플래그 | 설명 |
 |--------|------|
 | `--topic <t>` | 주제 필터 |
-| `--type <t>` | 파편 유형 필터 (fact, error, procedure, decision, preference, episode) |
+| `--type <t>` | 파편 유형 필터 (fact, decision, error, preference, procedure, relation) |
 | `--limit <n>` | 반환 건수 상한 (기본: 10) |
 | `--time-range from,to` | 날짜 범위 필터 (ISO 8601) |
 | `--workspace <name>` | 해당 workspace + 전역(NULL) 파편 검색 |
 | `--all-workspaces` | master 전용 전체 workspace 검색 |
+| `--include-peer-agents` | master 전용. 같은 key/workspace 범위의 모든 agent 파편 포함 |
 
 workspace와 key default를 모두 생략하면 전역(NULL) 파편만 검색한다. 저장할 때 workspace를 명시했다면 조회에도 같은 `--workspace`를 전달해야 한다. 빈 결과 힌트는 이 범위 차이를 안내한다. 종전 master 전체 검색 동작이 필요하면 `--all-workspaces`를 명시한다.
 
@@ -263,8 +270,11 @@ node bin/memento.js remember "배포 완료" --topic deploy-2026 --type procedur
 | 플래그 | 설명 |
 |--------|------|
 | `--topic <t>` | 주제 태그 (권장) |
-| `--type <t>` | 파편 유형 (fact, error, procedure, decision, preference, episode) |
-| `--importance <n>` | 중요도 0.0~1.0 |
+| `--type <t>` | 파편 유형 (fact, decision, error, preference, procedure, relation. 기본: fact) |
+| `--importance <n>` | 중요도 0.0~1.0 (미지정 시 유형별 기본값) |
+| `--keywords <a,b,c>` | 쉼표로 구분한 키워드 |
+| `--source <name>` | 출처 라벨 (기본: cli) |
+| `--stdin` | 표준 입력에서 내용을 읽는다 (TTY가 아니면 자동 감지, 최대 1MB) |
 | `--idempotency-key <k>` | 동일 키가 있으면 저장 건너뜀 (멱등성 보장) |
 
 도움말:
@@ -312,13 +322,13 @@ memento-mcp session delete <sessionId>
 memento-mcp session rotate <sessionId> [--reason "suspected_leak"]
 ```
 
-`session rotate`는 Redis에 저장된 세션 데이터를 유지하면서 ID만 재바인딩한다. 진행 중이던 작업과 기억 파편은 영향 없다. `reason`은 최대 128자 감사 로그용 문자열이며 기본값은 `explicit_rotate`.
+`session rotate`는 Redis에 저장된 세션 데이터를 유지하면서 ID만 재바인딩한다. 진행 중이던 작업과 기억 파편은 영향 없다. `reason`은 최대 128자 감사 로그용 문자열이며 CLI의 기본값은 `user_request`다(HTTP를 직접 호출하면 기본값은 `explicit_rotate`).
 
 rotate 엔드포인트 정책:
 
 - HTTP: `POST /session/rotate` (body: `{ "reason": "..." }`)
 - 인증: `Authorization: Bearer <API key or master key>` + `Mcp-Session-Id` 헤더로 대상 세션 지정
-- CSRF 방어: `Origin` 헤더 필수. 누락 시 403
+- Origin 확인: `Origin` 헤더가 없으면 루프백 소켓의 요청만 받는다. `ALLOWED_ORIGINS`와 `ADMIN_ALLOWED_ORIGINS`가 하나라도 설정되어 있으면 두 목록에 없는 Origin은 403
 - Rate limit: IP당 분당 `MEMENTO_ROTATE_RATE_LIMIT_PER_MIN` (기본 5) 초과 시 429
 - 메트릭: `mcp_session_rotation_total` (label: `outcome`, 값: `rotated`, `not_found`, `expired`, `forbidden`, `unavailable`, `error`), `mcp_rotate_rate_limited_total`
 
@@ -431,7 +441,7 @@ node bin/memento.js stats
 node bin/memento.js remember "배포 완료" --topic deploy --type procedure
 ```
 
-`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update` 명령에서 `--remote`를 사용하면 에러가 반환된다.
+local-only 명령(`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`)에서 `--remote`나 `MEMENTO_CLI_REMOTE`를 쓰면 에러가 반환된다.
 
 ---
 
@@ -464,8 +474,18 @@ frag-00def456,procedure,deploy-2026,0.70,"배포 완료"
 | `npm run migrate` | `node scripts/migrate.js` |
 | `npm run backfill:embeddings` | `node scripts/backfill-embeddings.js` |
 | `npm test` | node:test 단위 테스트 |
+| `npm run test:coverage` | 단위 테스트 실행 후 줄, 분기, 함수 커버리지 합계를 `coverage-baseline.json`과 비교 (`scripts/check-coverage.js`) |
 | `npm run test:integration` | 통합/E2E 테스트 일괄 실행 |
 | `npm run test:integration:llm` | LLM provider 통합 테스트 순차 실행 |
+| `npm run test:e2e` | E2E 테스트만 실행 |
+| `npm run test:e2e:local` | `scripts/run-e2e-tests.sh` 실행 |
+| `npm run test:db` | 실제 PostgreSQL 동시성 시험(행 잠금 순서, 링크 일괄 생성 정합). 실행마다 전용 데이터베이스를 만들고 지운다 |
+| `npm run test:ci` | `npm test`와 `npm run test:integration` |
+| `npm run lint` | ESLint |
+| `npm run lint:ratchet` | `scripts/lint-ratchet.js`. 규칙별 수치가 기준선(`scripts/lint-baseline.json`)보다 늘면 실패 |
+| `npm run lint:migrations` | `scripts/lint-migrations.js`. 마이그레이션 번호 충돌과 규약 위반 검사 |
+| `npm run audit:ci` | audit-ci 의존성 점검 (`audit-ci.jsonc`) |
+| `npm run release -- X.Y.Z` | `scripts/release.js`. 릴리스 준비(버전 표기 갱신, 커밋, annotated tag). push와 Release 생성 명령은 출력만 한다 |
 
 ---
 
@@ -507,6 +527,26 @@ node scripts/backfill-embeddings.js
 DATABASE_URL=$DATABASE_URL node scripts/normalize-vectors.js
 ```
 
+### OAuth 클라이언트 정리
+
+한 번도 쓰인 적 없는 오래된 동적 등록 클라이언트를 정리한다. API 키에 묶인 클라이언트는 대상에서 제외된다. 기본은 후보 수와 표본만 출력하는 미리보기이며 `--execute`를 주면 200건씩 삭제한다.
+
+```bash
+node scripts/purge-oauth-clients.js                         # 미리보기
+node scripts/purge-oauth-clients.js --older-than-days 45    # 기준일 지정 (기본 30)
+node scripts/purge-oauth-clients.js --execute               # 실제 삭제
+```
+
+삭제는 되돌릴 수 없으므로 실행 전에 `pg_dump -t agent_memory.oauth_clients`로 표를 보관한다.
+
+### import 순환 검사
+
+```bash
+node scripts/import-cycles.js
+```
+
+`lib`, `config`, `server.js`의 상대 경로 import에서 크기 2 이상의 순환을 찾아 정적 import만 본 결과와 동적 import를 포함한 결과를 따로 출력한다.
+
 ### benchmark
 
 골드셋 (저장문, 질의) 패러프레이즈 쌍으로 회상 품질을 정량 측정한다. 저장문을 격리 스코프에 적재하고 질의를 실행해 정답 파편의 순위를 구한 뒤 Recall@k, MRR, 지연을 산출하고, 실행이 끝나면 적재분을 회수한다.
@@ -518,7 +558,9 @@ node bin/memento.js benchmark --save-baseline scripts/baseline-recall.json
 node bin/memento.js benchmark --baseline scripts/baseline-recall.json
 ```
 
-주요 옵션: `--goldset <path>`(기본 `tests/fixtures/recall-goldset.jsonl`), `--baseline <path>`, `--save-baseline <path>`, `--limit <n>`, `--repeat <n>`, `--synthetic`, `--page-size <n>`, `--key-scope isolated|corpus`, `--no-seed`, `--no-cleanup`.
+주요 옵션: `--goldset <path>`(기본 `tests/fixtures/recall-goldset.jsonl`), `--baseline <path>`, `--save-baseline <path>`, `--limit <n>`, `--repeat <n>`, `--synthetic`, `--page-size <n>`, `--key-scope isolated|corpus`, `--agent-id <id>`(기본 `benchmark-harness`), `--workspace <name>`(기본 `__benchmark__`), `--no-seed`, `--no-cleanup`, `--format table|json`.
+
+실행 전에 대상 DB(host, port, database)를 표준 에러에 한 줄로 출력한다. 임베딩된 파편이 0건인 실행(`--no-seed` 포함)은 `--save-baseline`을 거부한다. 기준선 파일에는 임베딩 provider, 모델, 차원이 함께 기록되고, `--baseline` 비교에서 모델이나 차원이 다르면 경고한다. `isolated` 모드는 격리 키 `benchmark-harness-key`(상태 `inactive`) 행을 `api_keys`에 한 번 만든다.
 
 `--synthetic`은 적재한 파편에 합성 역질의를 생성한 뒤 평가한다. 역질의 증강의 효과를 통제 변수로 재려는 목적이며, 파편당 LLM 호출이 발생하므로 기본 실행에는 포함되지 않는다.
 

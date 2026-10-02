@@ -147,6 +147,8 @@ AnchorMind는 MCP(Model Context Protocol) 표준 서버다. Claude Code뿐 아�
 
 Claude.ai Web / ChatGPT 연동은 OAuth를 사용한다. 발급한 API 키(`mmcp_xxx`)를 `client_id`로 입력하면 Dynamic Client Registration(RFC 7591) 없이 바로 연결된다. 신뢰 도메인(claude.ai, chatgpt.com)의 redirect URI는 자동 승인된다.
 
+`POST /register`에 API 키를 `Authorization: Bearer`로 보내 등록한 클라이언트(키에 묶인 클라이언트)는 인가 요청마다 동의 화면을 거치고, 토큰 교환에서 같은 키를 `client_secret`(또는 Basic 인증)으로 제시해야 한다. 제시하지 않으면 `POST /token`이 401 `invalid_client`를 돌려준다. `/register`는 프로세스당 시간당 `MEMENTO_DCR_MAX_PER_HOUR`(기본 100, 0은 상한 없음)건까지 받고 초과하면 429(`Retry-After: 3600`)를 돌려준다.
+
 플랫폼별 상세 설정은 [연동 가이드](docs/getting-started/) 참조.
 
 ## 7가지 파편 유형
@@ -254,11 +256,16 @@ memento-mcp remember "내용" --topic 프로젝트명 --idempotency-key k1
 - injectSessionContext: 클라이언트가 전송한 `_keyId` / `_permissions` 등 내부 필드를 서버 인증 결과로 재주입하여 세션 컨텍스트 위조 차단.
 - Admin rate limit: `/auth`, `/keys` POST, `/import` POST에 IP 기반 rate limit.
 - OpenAPI: `GET /openapi.json` 엔드포인트(`ENABLE_OPENAPI=true`). master key는 전체 경로, API key는 permissions 필터 스펙 반환.
+- 키 상태 재확인: API 키로 연 MCP 세션은 사용할 때 `MEMENTO_SESSION_KEY_RECHECK_MS`(기본 30000ms, 0이면 끔) 주기로 키 상태를 다시 읽는다. 비활성 또는 삭제된 키의 세션은 닫히고 404 `Session not found`를 받으며, 권한 변경은 열린 세션에 반영된다.
+- 도구 인자 점검: `MEMENTO_TOOL_ARGS_VALIDATION`(`off`, `warn`, `enforce`, 기본 `warn`)이 호출 인자를 `tools/list`의 inputSchema와 대조한다. `warn`은 경고 로그만 남기고 `enforce`는 위반 시 -32602로 거절한다.
+- 세션 ID: `MEMENTO_SESSION_ID_POLICY`(`warn`, `enforce`, 기본 `warn`)가 쿼리스트링 세션 ID와 서버 발급 형식(UUID)이 아닌 ID의 복구를 다룬다. `enforce`는 쿼리 ID에 400, UUID가 아닌 ID의 복구에 404를 돌려준다.
+- 예약 agentId: `MEMENTO_RESERVED_AGENT_IDS`(`warn`, `enforce`, 기본 `warn`)가 내부 작업 전용 agentId(`system`, `admin`)를 API 키 요청에서 쓸 때의 처리를 정한다. `enforce`는 FORBIDDEN(-32001)으로 거부하며 master 키는 허용한다.
+- 감사 기록: 도구 호출 감사 기록에 행위자(`key=`, `sid=` 앞 8자, `ip=`)가 붙고, 관리 API의 변경 요청(GET 제외)과 관리 인증의 성공과 실패가 `admin_auth`, `admin <METHOD> <path>` 기록으로 남는다. `MEMENTO_ADMIN_AUTH_BACKOFF=on`이면 관리 인증이 연속 5회 실패한 뒤 다음 시도를 최대 60초까지 늦추고, 지연 중에는 올바른 키도 429(`Retry-After`)를 받는다(기본 `off`).
 - 응답 공통 헤더: 모든 응답에 `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`를 붙인다. `MEMENTO_FRAME_OPTIONS=deny`이면 `X-Frame-Options: DENY`도 붙인다. HSTS는 TLS를 종단하는 리버스 프록시에서 설정한다.
 
 ## Symbolic Verification Layer
 
-선택적 설명 가능성, advisory 링크 무결성, 극성 충돌 탐지, 정책 규칙 soft gating. 9 core 모듈 + 5 규칙 파일. 모든 플래그 기본 비활성.
+선택적 설명 가능성, advisory 링크 무결성, 극성 충돌 탐지, 정책 규칙 soft gating. 8 core 모듈 + 2 규칙 파일. 모든 플래그 기본 비활성.
 
 ## Smart Recall
 
@@ -273,7 +280,7 @@ memento-mcp remember "내용" --topic 프로젝트명 --idempotency-key k1
 
 `fragments.id`는 `frag-{16자 hex}` text 형식이다. UUID가 아니므로 외부에서 ID를 생성하거나 파싱할 때 주의한다.
 
-`/metrics` 엔드포인트가 Prometheus 호환 형식으로 메트릭을 노출한다. 수집·시각화는 사용자가 자유롭게 구성한다.
+`/metrics` 엔드포인트가 Prometheus 호환 형식으로 메트릭을 노출한다(`MEMENTO_ACCESS_KEY` 설정 시 master 키 인증 필요). 수집·시각화는 사용자가 자유롭게 구성한다. 공유 Prometheus용 스크레이프 잡과 경보 규칙은 [docs/operations/monitoring.md](docs/operations/monitoring.md)에 있다.
 
 ## 기억 vs 규칙
 
@@ -322,7 +329,7 @@ lib/
     signals/     # SpreadingActivation, CaseRewardBackprop 등
     processors/  # facade — MemoryRecaller, MemoryReflector 등
   llm/           # dispatchChain, provider 구현체
-  symbolic/      # SymbolicVerificationLayer (opt-in)
+  symbolic/      # 설명 가능성, 링크 무결성, 정책 규칙 (opt-in)
 docs/
   getting-started/   # 플랫폼별 설치 가이드
   operations/        # 운영 가이드 (llm-providers, symbolic-hard-gate 등)
@@ -348,10 +355,12 @@ docs/
 
 ## 운영
 
-- `/health`: DB, Redis, pgvector, 워커 상태를 종합 점검. 부분 장애 시 degraded 응답.
-- Rate Limiting: API 키당 100/분, IP당 30/분. 환경변수로 조정 가능.
+- `/health`: DB, Redis, pgvector, 워커 상태를 종합 점검. 부분 장애 시 degraded 응답. 비인증 요청에는 상태만 돌려준다.
+- `/health/live`: 이벤트 루프 생존만 확인하며 항상 200. `/health/ready`: 주 DB가 `MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`(기본 2000) 안에 응답하면 200, 아니면 `db_timeout` 또는 `db_error` 사유의 503.
+- 와치독: `memento-watchdog.sh`는 `/health/live`가 응답하지 않을 때만 서비스를 재시작하고, 연속 재시작의 간격을 지수로 늘리며, 중복 실행을 잠금으로 막는다.
+- Rate Limiting: API 키당 100/분, IP당 30/분. 환경변수로 조정 가능. IP 한도는 `initialize`, `GET /sse`, `/token`, `/register`, `/authorize`가 같은 버킷을 쓰고 초과하면 429와 `Retry-After`를 돌려준다.
 - 워커 복구: 임베딩/평가 워커가 에러 시 지수 백오프(1s→60s)로 자동 재시도.
-- Graceful Shutdown: SIGTERM 시 진행 중 워커 완료 대기(30초) 후 세션 auto-reflect 실행.
+- Graceful Shutdown: SIGTERM 시 진행 중 워커 완료 대기(30초) 후 세션 auto-reflect 실행. 종료 절차 전체는 `MEMENTO_SHUTDOWN_DEADLINE_MS`(기본 60000, 0은 상한 없음)로 제한하며 넘기면 종료 코드 1로 강제 종료한다.
 - OAuth 엔드포인트: 인증 실패 시 `WWW-Authenticate` 헤더를 반환하여 OAuth 클라이언트가 자동으로 인증 흐름을 시작할 수 있다. 세션 TTL 기본값은 43200분(30일)이며 `SESSION_TTL_MINUTES`로 조정한다.
 - 마이그레이션 lint: `npm run lint:migrations`로 번호 충돌 및 규약 위반을 커밋 전 검사.
 - 운영 가이드: [docs/operations/](docs/operations/) — LLM provider 체인, symbolic hard gate, agent worktree, upstream porting 등.

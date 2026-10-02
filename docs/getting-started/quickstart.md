@@ -2,7 +2,7 @@
 title: "Quick Start"
 date: 2026-03-13
 author: 최진호
-updated: 2026-04-20
+updated: 2026-10-03
 ---
 
 # Quick Start
@@ -43,7 +43,7 @@ DATABASE_URL=postgresql://postgres:change-me@localhost:5432/memento
 MEMENTO_ACCESS_KEY=change-me
 ```
 
-> v2.7.0부터 `MEMENTO_ACCESS_KEY`가 필수다. 개발/테스트 환경에서 인증을 비활성화하려면 `.env`에 `MEMENTO_AUTH_DISABLED=true`를 추가한다.
+> `MEMENTO_ACCESS_KEY`는 필수다. 설정하지 않으면 서버가 종료 코드 78로 기동을 멈춘다. 개발/테스트 환경에서 인증을 비활성화하려면 `.env`에 `MEMENTO_AUTH_DISABLED=true`를 추가한다.
 
 ## 3. 의존성 설치
 
@@ -107,15 +107,32 @@ curl -s http://localhost:57332/health
 
 ```json
 {
-  "ok": true
+  "status": "healthy",
+  "timestamp": "2026-10-03T00:00:00.000Z"
 }
 ```
 
-## 8. 첫 remember 호출
+`/health/live`는 프로세스 생존만 확인하며 항상 200이다. `/health/ready`는 주 DB가 응답하면 200, 아니면 503(`db_timeout` 또는 `db_error`)이다.
+
+## 8. 세션 초기화
+
+`tools/call`은 세션이 필요하다. 먼저 `initialize`를 호출해 응답 헤더의 `MCP-Session-Id`를 받는다. 세션 없이 `tools/call`을 보내면 서버가 HTTP 400(`Session required`)으로 응답한다.
+
+```bash
+SID=$(curl -s -D - -o /dev/null -X POST http://localhost:57332/mcp \
+  -H "Authorization: Bearer change-me" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"quickstart","version":"1"}}}' \
+  | awk 'tolower($1)=="mcp-session-id:"{print $2}' | tr -d '\r')
+echo "$SID"
+```
+
+## 9. 첫 remember 호출
 
 ```bash
 curl -s -X POST http://localhost:57332/mcp \
   -H "Authorization: Bearer change-me" \
+  -H "MCP-Session-Id: $SID" \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -132,11 +149,12 @@ curl -s -X POST http://localhost:57332/mcp \
   }'
 ```
 
-## 9. 첫 recall 호출
+## 10. 첫 recall 호출
 
 ```bash
 curl -s -X POST http://localhost:57332/mcp \
   -H "Authorization: Bearer change-me" \
+  -H "MCP-Session-Id: $SID" \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -153,7 +171,7 @@ curl -s -X POST http://localhost:57332/mcp \
 
 다음 단계는 [First Memory Flow](first-memory-flow.md) 문서를 따라 `context`, `remember`, `recall` 사용 흐름을 검증하는 것이다.
 
-## 10. CLI 기본 사용법
+## 11. CLI 기본 사용법
 
 서버 없이 터미널에서 직접 조회·저장할 수 있다.
 
@@ -172,7 +190,7 @@ node bin/memento.js stats --format json
 node bin/memento.js remember "Quick Start 완료" --topic onboarding --type fact \
   --idempotency-key "quickstart-done-2026-04-20"
 
-# 원격 서버 조회 (v2.12.0 M1)
+# 원격 서버 조회
 node bin/memento.js recall "onboarding" \
   --remote https://memento.anchormind.net/mcp \
   --key mmcp_xxx
@@ -185,4 +203,4 @@ node bin/memento.js stats
 
 상세 CLI 사용법: [docs/cli.md](../cli.md)
 
-v2.8.0 옵션: Symbolic Memory 활성화 방법은 [docs/configuration.md](../configuration.md) 및 [CHANGELOG.md](../../CHANGELOG.md) 참조.
+Symbolic Memory 활성화 방법은 [docs/configuration.md](../configuration.md) 및 [CHANGELOG.md](../../CHANGELOG.md)를 참조한다.

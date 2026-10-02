@@ -2,7 +2,7 @@
 
 작성자: 최진호
 작성일: 2026-04-18
-수정일: 2026-04-29
+수정일: 2026-10-03
 
 ---
 
@@ -54,6 +54,8 @@ EMBEDDING_PROVIDER=transformers
 EMBEDDING_MODEL=Xenova/multilingual-e5-small
 EMBEDDING_DIMENSIONS=384
 ```
+
+`EMBEDDING_DIMENSIONS`를 생략하면 위 표의 모델은 차원이 자동으로 정해진다.
 
 `OPENAI_API_KEY`, `EMBEDDING_API_KEY` 등 API 기반 임베딩 환경변수는 설정하지 않는다.
 
@@ -137,7 +139,7 @@ HF_HOME=/var/lib/memento/huggingface
 | Xenova/multilingual-e5-small | ~30-80ms |
 | Xenova/bge-m3 | ~150-300ms |
 
-- Reranker(~150MB) 및 NLIClassifier(~250MB)를 동시에 활성화하면 합산 메모리 사용량을 반드시 사전에 확인한다. bge-m3 + Reranker bge-m3 조합은 약 1GB 이상의 RAM을 사용한다.
+- 인프로세스 Reranker(`MEMENTO_RERANKER_ENABLED=true`, 기본 비활성. minilm ~80MB, bge-m3 ~280MB) 및 NLIClassifier(~250MB)를 동시에 활성화하면 합산 메모리 사용량을 반드시 사전에 확인한다. 임베딩 bge-m3(~600MB)와 Reranker bge-m3(~280MB) 조합만으로도 약 880MB의 RAM을 사용한다.
 
 ---
 

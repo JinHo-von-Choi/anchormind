@@ -147,6 +147,8 @@ Common setup: Server URL `http://localhost:57332/mcp`, Authorization header `Bea
 
 For Claude.ai Web and ChatGPT, AnchorMind uses OAuth. Enter your API key (`mmcp_xxx`) as the `client_id` -- no Dynamic Client Registration (RFC 7591) flow required. Redirect URIs from trusted domains (claude.ai, chatgpt.com) are auto-approved.
 
+A client registered through `POST /register` with the API key in an `Authorization: Bearer` header (a key-bound client) always passes through the consent screen on authorization, and must present the same key as `client_secret` (or through Basic authentication) at token exchange. Without it, `POST /token` returns 401 `invalid_client`. `/register` accepts up to `MEMENTO_DCR_MAX_PER_HOUR` registrations per hour per process (default 100, 0 means no cap) and answers 429 (`Retry-After: 3600`) above that.
+
 See [integration guides](docs/getting-started/) for platform-specific setup.
 
 ## 7 Fragment Types
@@ -252,6 +254,11 @@ Successful `remember` / `amend` / `forget` responses carry a `feedback_sampled` 
 - injectSessionContext: Client-supplied internal fields (`_keyId` / `_permissions`, etc.) are stripped and re-injected from the server-side authentication result, so session context cannot be forged.
 - Admin rate limit: IP-based rate limits apply to `/auth`, `/keys` POST, and `/import` POST.
 - OpenAPI: `GET /openapi.json` endpoint (`ENABLE_OPENAPI=true`). The master key receives the full spec; an API key receives a permissions-filtered spec.
+- Key state recheck: an MCP session opened with an API key rereads the key state on use at the `MEMENTO_SESSION_KEY_RECHECK_MS` interval (default 30000 ms, 0 disables). The session of an inactive or deleted key is closed and receives 404 `Session not found`; permission changes apply to open sessions.
+- Tool argument validation: `MEMENTO_TOOL_ARGS_VALIDATION` (`off`, `warn`, `enforce`, default `warn`) checks call arguments against the `tools/list` inputSchema. `warn` only logs a warning; `enforce` rejects violations with -32602.
+- Session ID: `MEMENTO_SESSION_ID_POLICY` (`warn`, `enforce`, default `warn`) governs query-string session IDs and recovery of IDs that are not in the server-issued format (UUID). `enforce` answers 400 for a query-string ID and 404 for recovery of a non-UUID ID.
+- Reserved agent IDs: `MEMENTO_RESERVED_AGENT_IDS` (`warn`, `enforce`, default `warn`) sets the handling of the internal agent IDs (`system`, `admin`) in API-key requests. `enforce` rejects them with FORBIDDEN (-32001); the master key is allowed.
+- Audit records: tool-call audit records carry the actor (`key=`, `sid=` first 8 characters, `ip=`), and admin API mutating requests (anything but GET) plus admin authentication successes and failures are recorded as `admin_auth` and `admin <METHOD> <path>`. With `MEMENTO_ADMIN_AUTH_BACKOFF=on`, after 5 consecutive failed admin authentications the next attempt is delayed up to 60 seconds, and during the delay even the correct key receives 429 (`Retry-After`) (default `off`).
 - Common response headers: every response carries `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`; `MEMENTO_FRAME_OPTIONS=deny` adds `X-Frame-Options: DENY`. HSTS belongs to the TLS-terminating reverse proxy.
 
 ## Symbolic Verification Layer
@@ -271,7 +278,7 @@ Optional explainability, advisory link integrity, polarity conflict detection, a
 
 `fragments.id` uses the `frag-{16-char hex}` text format. It is not a UUID — take care when generating or parsing IDs externally.
 
-The `/metrics` endpoint exposes Prometheus-compatible metrics. Collection and visualization are left to the operator.
+The `/metrics` endpoint exposes Prometheus-compatible metrics (master-key authentication is required when `MEMENTO_ACCESS_KEY` is set). Collection and visualization are left to the operator. Scrape jobs and alert rules for a shared Prometheus instance are in [docs/operations/monitoring.md](docs/operations/monitoring.md).
 
 ## Memory vs Rules
 
@@ -325,10 +332,12 @@ AnchorMind is optimized for fact caching. When narrative context matters:
 
 ## Operations
 
-- `/health`: Comprehensive check of DB, Redis, pgvector, and worker status. Returns degraded on partial failure.
-- Rate Limiting: 100/min per API key, 30/min per IP. Configurable via environment variables.
+- `/health`: Comprehensive check of DB, Redis, pgvector, and worker status. Returns degraded on partial failure. Unauthenticated requests receive the status only.
+- `/health/live`: checks only that the event loop is alive; always 200. `/health/ready`: 200 when the primary DB answers within `MEMENTO_HEALTH_READY_DB_TIMEOUT_MS` (default 2000), otherwise 503 with reason `db_timeout` or `db_error`.
+- Watchdog: `memento-watchdog.sh` restarts the service only when `/health/live` does not respond, spaces consecutive restarts exponentially, and prevents duplicate runs with a lock.
+- Rate Limiting: 100/min per API key, 30/min per IP. Configurable via environment variables. The IP limit is one bucket shared by `initialize`, `GET /sse`, `/token`, `/register`, and `/authorize`; above it the server answers 429 with `Retry-After`.
 - Worker Recovery: Embedding/evaluator workers use exponential backoff (1s→60s) on errors.
-- Graceful Shutdown: On SIGTERM, waits up to 30s for workers to drain, then runs session auto-reflect.
+- Graceful Shutdown: On SIGTERM, waits up to 30s for workers to drain, then runs session auto-reflect. The whole shutdown is bounded by `MEMENTO_SHUTDOWN_DEADLINE_MS` (default 60000, 0 means no bound); exceeding it forces exit with code 1.
 - OAuth Endpoints: On authentication failure, a `WWW-Authenticate` header is returned so OAuth clients can automatically initiate the auth flow. Session TTL defaults to 43200 minutes (30 days) and is set with `SESSION_TTL_MINUTES`.
 - Migration lint: `npm run lint:migrations` checks numbering conflicts and convention violations before commit.
 - Operations guides: [docs/operations/](docs/operations/) covers the LLM provider chain, symbolic hard gate, agent worktree, upstream porting and more.

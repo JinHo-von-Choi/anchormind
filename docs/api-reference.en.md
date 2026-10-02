@@ -11,7 +11,7 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | POST | /mcp | Streamable HTTP. JSON-RPC request receiver. MCP-Session-Id header required (except initial initialize) |
 | GET | /mcp | Streamable HTTP. Opens SSE stream. For server-side push |
 | DELETE | /mcp | Streamable HTTP. Explicit session termination |
-| GET | /sse | Legacy SSE. Session creation. Authenticate with the `Authorization: Bearer` header. The `?accessKey=` query is a master-key-only compatibility path; `MEMENTO_SSE_QUERY_KEY=deny` returns 401 |
+| GET | /sse | Legacy SSE. Session creation. Authenticate with the `Authorization: Bearer` header. The `?accessKey=` query is a master-key-only compatibility path; `MEMENTO_SSE_QUERY_KEY=deny` returns 401. Subject to a per-client-IP request limit (`RATE_LIMIT_PER_IP`, default 30 per minute) that shares one bucket with `/token`, `/register`, `/authorize` and `initialize`; above it the server answers 429 with `Retry-After` |
 | POST | /message?sessionId= | Legacy SSE. JSON-RPC request receiver. Responses delivered via SSE stream |
 | GET | /health | Health check. Verifies DB query (SELECT 1), session state, and Redis connection, returning JSON. When `REDIS_ENABLED=false`, Redis shows as `disabled` with 200 returned. DB failure returns 503. Without master key authentication the body is only `{status, timestamp}`; services and worker details are included when authenticated |
 | GET | /health/live | Process liveness. Always 200 `{status: "alive", uptime}` without authentication. Does not check the DB or Redis |
@@ -23,12 +23,12 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | GET | /authorize | OAuth 2.0 authorization endpoint. PKCE code_challenge required |
 | POST | /token | OAuth 2.0 token endpoint. authorization_code exchange and refresh_token renewal |
 | POST | /authorize | OAuth 2.0 consent form submission (allow/deny) |
-| POST | /register | RFC 7591 dynamic client registration. Per-IP rate limit applies |
+| POST | /register | RFC 7591 dynamic client registration. A per-IP rate limit and a per-process hourly registration cap (`MEMENTO_DCR_MAX_PER_HOUR`, default 100, 0 means no cap) apply. Above the cap the server answers 429 with `Retry-After: 3600` |
 | POST | /session/rotate | Reissue the session ID. See the section below |
 | GET | /v1/internal/model/nothing | Admin SPA. Serves app shell HTML after master key authentication; unauthenticated requests receive 401 and the login page. Data APIs require master key authentication |
 | GET | /v1/internal/model/nothing/assets/* | Admin static files (admin.css, admin.js). No authentication required |
 | GET | /v1/internal/model/nothing/images/* | Admin image files. Master key authentication required |
-| POST | /v1/internal/model/nothing/auth | Master key verification endpoint |
+| POST | /v1/internal/model/nothing/auth | Master key verification endpoint. Per-IP rate limit applies (as for `/keys` POST and `/import` POST). With `MEMENTO_ADMIN_AUTH_BACKOFF=on`, after 5 consecutive failures the next attempt is delayed 1, 2, 4 seconds and so on up to 60 seconds, and during the delay even the correct key receives 429 with `Retry-After` |
 | GET | /v1/internal/model/nothing/stats | Dashboard statistics (fragment count, API call volume, system metrics, searchMetrics, observability, queues, healthFlags) |
 | GET | /v1/internal/model/nothing/activity | Recent fragment activity log (10 entries) |
 | GET | /v1/internal/model/nothing/metrics-summary | Dashboard metrics summary |
@@ -40,7 +40,7 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | PUT | /v1/internal/model/nothing/keys/:id/permissions | Change API key permissions |
 | PUT | /v1/internal/model/nothing/keys/:id/fragment-limit | Change API key fragment quota |
 | PATCH | /v1/internal/model/nothing/keys/:id/workspace | Change API key's default_workspace. `{ workspace: "name" }` or `{ workspace: null }` (null=unset) |
-| DELETE | /v1/internal/model/nothing/keys/:id | Delete API key |
+| DELETE | /v1/internal/model/nothing/keys/:id | Delete API key (204 on success). A key that has stored fragments or reconsolidation history is not deleted and the server answers 409 `key_in_use` (`MEMENTO_API_KEY_DELETE_GUARD=false` skips the check). Disabling or deleting a key closes that key's sessions in this process immediately |
 | GET | /v1/internal/model/nothing/groups | Key group list |
 | POST | /v1/internal/model/nothing/groups | Create key group |
 | DELETE | /v1/internal/model/nothing/groups/:id | Delete key group |
@@ -111,7 +111,7 @@ All MCP tool calls must pass RBAC validation.
 - Only tools registered in the `TOOL_PERMISSIONS` map can be called. A tool name missing from the map is refused for every caller, including the master key. Register every new tool in `TOOL_PERMISSIONS`.
 - Three permission levels exist: `read` (recall/context etc.), `write` (remember/forget/amend etc.), and `admin` (memory_consolidate/apply_update etc.). The `admin` permission does not bypass tools that require explicit master authentication.
 - Calling a tool without the required permission returns JSON-RPC error `-32001` whose `message` carries the reason (`Permission denied: '<tool>' requires '<level>' permission`). Master-only tools (memory_stats, memory_consolidate, check_update, apply_update) called with an API key return `-32001` with `Permission denied: '<tool>' requires master authentication`, and they are absent from that key's tools/list.
-- When a forget/amend/link request targets a fragment owned by another tenant (different API key), a `"Fragment not found"` error is returned. Isolation is enforced at the SQL level via `key_id` conditions, so the fragment's existence is never exposed.
+- When a forget/amend/link request targets a fragment owned by another tenant (different API key), a `"Fragment not found or no permission"` error is returned. Isolation is enforced at the SQL level via `key_id` conditions, so the fragment's existence is never exposed.
 
 Accessing a protected resource without authentication returns `401 Unauthorized` with a `WWW-Authenticate: Bearer resource_metadata="</.well-known/oauth-protected-resource URL>"` header.
 
@@ -123,7 +123,7 @@ The session behavior mode can be set via the `X-Memento-Mode` header or `params.
 |--------|-------------|---------------|
 | `recall-only` | Read-only session. Removes memory write/modify tools. For search-only agents. | remember, batch_remember, amend, forget, link, reflect, memory_consolidate |
 | `write-only` | Write-only session. Removes recall and context. For data ingestion pipelines. | recall, context, reconstruct_history, graph_explore, fragment_history, search_traces, memory_stats |
-| `onboarding` | New user guidance session. Forces get_skill_guide as the first exposed tool. | none (get_skill_guide surfaced first) |
+| `onboarding` | New user guidance session. All tools stay exposed and get_skill_guide returns the beginner guide. | none |
 | `audit` | Read and trace session. Removes write tools. For auditing and compliance. Applies to master sessions only; ignored for API-key sessions | remember, batch_remember, amend, forget, link, reflect |
 
 Presets filter the tools/list response only. tools/call does not consult the preset, so what can be called is decided by RBAC permissions.
@@ -147,6 +147,10 @@ Via `initialize` parameters:
 ### Session Reuse
 
 Token-based session reuse is enabled. Even when a client reconnects without an `Mcp-Session-Id`, the server automatically recovers the existing session if the same Bearer token is presented. This is transparent to the client and requires no additional configuration.
+
+Send the session ID in the `MCP-Session-Id` header. `MEMENTO_SESSION_ID_POLICY` (`warn`, `enforce`, default `warn`) governs session IDs received in the query string and automatic recovery of IDs that are not in the server-issued format (UUID). `warn` logs a warning and proceeds; `enforce` answers 400 for a query-string ID and 404 for recovery of a non-UUID ID. UUID sessions sent in the header and `/message?sessionId=` are unaffected.
+
+A session opened with an API key rereads the key state on use at the `MEMENTO_SESSION_KEY_RECHECK_MS` interval (default 30000 ms, `0` disables). The session of an inactive or deleted key is closed and receives 404 `Session not found` (JSON-RPC `-32000`); permission changes apply to open sessions. Disabling or deleting a key through the admin API closes that key's sessions in this process immediately. When an API key store lookup fails and authentication cannot be decided, `initialize` and automatic session recovery answer 401 by default, or 503 with `Retry-After: 10` when `MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS=503`. Requests above the per-IP limit on repeated `initialize` receive 429 with `Retry-After`.
 
 When session segmentation is active (`MEMENTO_SESSION_SEGMENT`, default true), a fragment's `session_id` may be a derived ID `{transport session ID}#{seq}` that rotates on idle or age thresholds, rather than the raw transport-layer `Mcp-Session-Id`. A rotation triggers an automatic reflect of the previous segment.
 
@@ -179,7 +183,7 @@ Response (200):
 
 Policy:
 
-- Auth: `Authorization: Bearer` required (401 on failure). Missing `Mcp-Session-Id` returns 400, unknown session 404, ownership mismatch 403
+- Auth: `Authorization: Bearer` required (401 on failure). Missing `Mcp-Session-Id` returns 400, unknown session 404, expired session 401, ownership mismatch 403, session persistence unavailable 503
 - Origin check: without an `Origin` header only loopback-socket requests are accepted. localhost/127.0.0.1 origins are always accepted. When both `ALLOWED_ORIGINS` and `ADMIN_ALLOWED_ORIGINS` are empty any Origin is accepted; otherwise only origins in those lists. Anything else returns 403
 - Rate limit: `MEMENTO_ROTATE_RATE_LIMIT_PER_MIN` requests per client address per minute (default 5); exceeding returns 429 with `Retry-After`. The client address follows `TRUST_PROXY_HOPS`
 - `reason` is an audit-log field (max 128 chars); defaults to `explicit_rotate` when omitted
@@ -189,6 +193,16 @@ Policy:
 ### tools/list response fields
 
 Each entry carries `name`, `title`, `annotations`, `description`, and `inputSchema`. `annotations` holds the MCP standard hints (`readOnlyHint`, `idempotentHint`, `destructiveHint`, `openWorldHint`). The server-side registry (`lib/tool-registry.js`) keeps per-tool `riskLevel` (`safe`, `caution`, `destructive`) and `requiresMaster`; these are not sent in tools/list.
+
+### Tool argument validation and error responses
+
+`tools/call` arguments are compared with the tool's `inputSchema`. The check covers top-level fields and array items for type, `enum`, range, `maxLength`, `maxItems`, `pattern`, `oneOf`, required fields and fields absent from the schema. `MEMENTO_TOOL_ARGS_VALIDATION` (`off`, `warn`, `enforce`, default `warn`) sets the behavior. `warn` only logs a warning and proceeds; `enforce` rejects a violation with JSON-RPC `-32602` and an `Invalid arguments for <tool>: <reason>` message. With `MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN=true`, fields absent from the schema are not violations.
+
+Internal exceptions raised while a tool runs (DB driver, runtime errors) leave the server as `Internal error`; the original text stays in the server log and audit records. When an enum argument of `remember`, `amend`, `link` or `tool_feedback` does not fit the storage constraint, the response is `{ "success": false, "error": "Invalid arguments for <tool>: <param>: must be one of a|b|c", "code": "INVALID_ARGUMENT" }`.
+
+The internal agent IDs (`system`, `admin`) are governed by `MEMENTO_RESERVED_AGENT_IDS` (`warn`, `enforce`, default `warn`). `warn` only logs a warning (including the first 8 characters of the key) when an API-key request uses one; `enforce` rejects it with FORBIDDEN (`-32001`). The master key is allowed in both modes.
+
+Tool-call audit records carry the actor (`key=`, `sid=` first 8 characters, `ip=`). Admin API mutating requests (anything but GET) and admin authentication successes and failures are recorded as `admin <METHOD> <path>` and `admin_auth`.
 
 ---
 
@@ -242,7 +256,9 @@ Response 201:
 
 > API keys (mmcp_xxx) can be used directly as `client_id`. This applies when reusing an existing API key as an OAuth client in Claude.ai Web Integration.
 
-> API key binding: sending `Authorization: Bearer <API key>` with the registration registers the client under a URL-safe `client_id = "<name>_<keyIdHex8>"`, and `/authorize` later restores that key's tenant context. Without the header a random `client_id` is issued.
+> API key binding: sending `Authorization: Bearer <API key>` with the registration registers the client under a URL-safe `client_id = "<name>_<keyIdHex8>"`, and the response reports `token_endpoint_auth_method` as `client_secret_post`. `/authorize` later restores that key's tenant context. Without the header a random `client_id` is issued and `token_endpoint_auth_method` is `none`. A `client_id` in the raw API key format is never registered as a client row.
+>
+> `/register` answers 400 `invalid_client_metadata` when `redirect_uris` is missing, and 429 `too_many_requests` with `Retry-After: 3600` above the hourly cap (`MEMENTO_DCR_MAX_PER_HOUR`).
 
 ### GET /authorize
 
@@ -250,7 +266,15 @@ OAuth 2.0 authorization endpoint. PKCE `code_challenge` and `code_challenge_meth
 
 Query parameters: `response_type=code`, `client_id`, `redirect_uri`, `code_challenge`, `code_challenge_method`, `state` (optional).
 
-When `redirect_uri` is in the trusted list (`OAUTH_TRUSTED_ORIGINS`), the request is approved without the consent screen and redirected with `code` (302). Otherwise a consent screen is rendered and, after consent, a 302 redirect to `redirect_uri` with `code` is returned. An unregistered client_id is auto-registered only for a trusted redirect_uri or when `ALLOW_AUTO_DCR_REGISTER=true`.
+When `redirect_uri` is in the allow list (localhost, `OAUTH_TRUSTED_ORIGINS`, `OAUTH_ALLOWED_REDIRECT_URIS`), the request is approved without the consent screen and redirected with `code` (302). Otherwise a consent screen is rendered and, after consent, a 302 redirect to `redirect_uri` with `code` is returned. A client bound to an API key at registration always passes through the consent screen, even when `redirect_uri` is in the allow list. An unregistered client_id is auto-registered only for an allow-listed redirect_uri or when `MCP_ALLOW_AUTO_DCR_REGISTER=true`.
+
+### POST /token
+
+OAuth 2.0 token endpoint. Accepts `application/x-www-form-urlencoded` or `application/json` bodies and supports `authorization_code` exchange (PKCE `code_verifier` required) and `refresh_token` renewal. A per-IP rate limit applies.
+
+- Code exchange for a client bound to an API key at registration succeeds only when the request presents the same key as `client_secret` (or as the password of an `Authorization: Basic` header). Otherwise the server answers 401 `invalid_client`.
+- An `invalid_client` error is HTTP 401; other OAuth errors (`invalid_request`, `invalid_grant`, and so on) are 400. Responses carry `Cache-Control: no-store`.
+- The access token lifetime is `OAUTH_ACCESS_TOKEN_TTL_SECONDS` (`SESSION_TTL_MINUTES * 60` when unset); the refresh token lifetime is `SESSION_TTL_MINUTES * 60 * 2` seconds.
 
 ### POST /authorize
 
@@ -335,7 +359,7 @@ ID lookups through `fragment_history` and `graph_explore` now apply workspace fi
 | includeSuperseded | boolean | - | Include expired (superseded) fragments. Default false. |
 | includePeerAgents | boolean | - | Master only. Includes other agents within the same key/workspace scope. Ordinary API keys receive a permission error. Default false. |
 | includeKeyName | boolean | - | When true, each fragment carries key_id and key_name (the access key label). Only information within the same key group scope is exposed. Default false. |
-| asOf | string | - | ISO 8601. Return only fragments valid at the specified point in time. |
+| asOf | string | - | ISO 8601. Used only as the time-proximity ranking reference that lifts fragments close to that time. It is not a filter that keeps only the versions valid at that time; use `timeRange` to bound a period. |
 | excludeSeen | boolean | - | Exclude fragments already injected by context(). Default true. |
 | includeKeywords | boolean | - | Include each fragment's keywords array in the response |
 | includeContext | boolean | - | Include context_summary + adjacent fragments |
@@ -587,7 +611,7 @@ With violations (soft gate, stored):
 - `errorHasResolutionPath` — error type lacks cause/fix keywords or resolution_status
 - `procedureHasStepMarkers` — procedure type lacks numbered/step markers
 - `caseIdHasResolutionStatus` — fragment with a case_id has no resolution_status set
-- `assertionNotContradictory` — polarity conflict with an existing assertion
+- `assertionNotContradictory` - the assertion is marked both verified and rejected
 - `fragmentHasWorkspace` — workspace could not be resolved from an explicit value or the key default (severity: low)
 
 Warnings are soft gates and do not block storage. When `api_keys.symbolic_hard_gate=true`, fragments triggering warnings are rejected. `fragmentHasWorkspace` is only included in the hard-gate-eligible set when `MEMENTO_WORKSPACE_GATE=true`; by default (`false`) it never blocks storage even on hard-gate-enabled keys.
@@ -595,6 +619,8 @@ Warnings are soft gates and do not block storage. When `api_keys.symbolic_hard_g
 `workspaceNotAllowed` — recorded when a fragment's workspace falls outside the API key's `allowed_workspaces` set (severity: medium). Evaluated unconditionally, independent of `MEMENTO_SYMBOLIC_POLICY_RULES`. It is a pure warning that never blocks storage and is always excluded from the hard-gate-eligible set.
 
 Fragments also record the resolution source of their workspace as `workspace_source`: `explicit` (workspace given in the request), `key_default` (the API key's default_workspace was applied), or `unscoped` (neither was available).
+
+With `MEMENTO_REMEMBER_DUPLICATE_GUARD=true` (default `false`), a `remember` that receives the same body as an existing fragment in the same key scope does not run post-processing, TTL adjustment or reindexing on the existing fragment and only reports its state through `existing: true` and `duplicate` (`same_scope`, `other_workspace`, `closed`, `unknown`). Duplicate hits are counted in `mcp_remember_duplicate_total{kind}` regardless of the flag.
 
 ### Feedback sampling hint
 
@@ -656,7 +682,7 @@ Store multiple fragments at once (for bulk memory input). Batch INSERTs up to 20
 | workspace | string | - | Batch default workspace. Used for individual fragments without a workspace. Key's default_workspace applied if not specified. |
 | agentId | string | - | Agent ID (for agent scoping) |
 | stream | boolean | - | Deprecated: no longer emits SSE progress events. batch_remember returns a standard single JSON response. This parameter is retained for backward compatibility but has no effect on behavior. |
-| async | boolean | - | When true, fire-and-forget (async) mode (default false). Performs only schema validation, content_hash dedup, and quota pre-check synchronously, then enqueues accepted fragments to a Redis queue and immediately returns `{async: true, accepted: N, rejected: N, jobId: "..."}`. The actual INSERT is handled by the background worker (BatchRememberWorker). Falls back to synchronous mode when Redis is disabled (REDIS_ENABLED=false). |
+| async | boolean | - | When true, fire-and-forget (async) mode (default false). Performs only schema validation, content_hash dedup, and quota pre-check synchronously, then enqueues accepted fragments to a Redis queue and immediately returns `{async: true, accepted: N, rejected: [{index, error}], jobId: "..."}` (`jobId` is null when `accepted` is 0). The actual INSERT is handled by the background worker (BatchRememberWorker). Falls back to synchronous mode when Redis is disabled (REDIS_ENABLED=false). |
 
 ### async=true Response Example
 
@@ -664,8 +690,8 @@ Store multiple fragments at once (for bulk memory input). Batch INSERTs up to 20
 {
   "async": true,
   "accepted": 5,
-  "rejected": 1,
-  "jobId": "batch-1750000000000-a1b2c3d4"
+  "rejected": [{ "index": 3, "error": "Content too short: length < 10 and word count < 3" }],
+  "jobId": "brw-1750000000000-a1b2c"
 }
 ```
 
@@ -697,23 +723,30 @@ Query the processing state of an async batch job started by `batch_remember(asyn
 
 ### Response
 
-| Field | Type | Description |
-|-------|------|-------------|
-| jobId | string | The queried jobId |
-| state | string | `queued` \| `processing` \| `completed` \| `dead` |
-| accepted | number | Fragments enqueued |
-| processed | number | Fragments successfully processed |
-| failed | number | Fragments that failed processing |
+The response is `{ success: true, jobId, status }`. `status` is the job state object, or null for an unknown or expired jobId. All values are returned as strings.
+
+| `status` field | Description |
+|-|-|
+| state | `queued` \| `processing` \| `completed` \| `dead` |
+| accepted | Fragments enqueued |
+| inserted | Fragments stored once processing completed |
+| skipped | Fragments skipped once processing completed |
+| error | Last error message while waiting for retry or in the dead state |
+| ts | Last update time (epoch ms) |
 
 ### Response Example
 
 ```json
 {
-  "jobId": "batch-1750000000000-a1b2c3d4",
-  "state": "completed",
-  "accepted": 5,
-  "processed": 5,
-  "failed": 0
+  "success": true,
+  "jobId": "brw-1750000000000-a1b2c",
+  "status": {
+    "state": "completed",
+    "accepted": "5",
+    "inserted": "5",
+    "skipped": "0",
+    "ts": "1750000012345"
+  }
 }
 ```
 
@@ -773,7 +806,7 @@ Update the content or metadata of an existing fragment. Selectively modifies whi
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | id | string | Y | Target fragment ID to update |
-| content | string | - | New content. The schema advertises a 4000-character maximum, but the amend path neither checks length nor truncates, so clients should keep it within 300 characters. The remember self-containment rules apply |
+| content | string | - | New content. The same 4000-character limit as remember applies; exceeding it is rejected with `-32602`. The 300-character truncation is not applied, so clients should keep it within 300 characters. The remember self-containment rules apply |
 | topic | string | - | New topic |
 | keywords | string[] | - | New keyword list |
 | type | string | - | New type (fact, decision, error, preference, procedure, relation) |
@@ -869,7 +902,7 @@ Loads Anchor, Core, Learning, and Working Memory plus session_reflect separately
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | tokenBudget | number | - | Injection token target (default 2000). Anchors and minimum non-anchor slots may make the total exceed the target; remaining candidates are trimmed by score. |
-| types | string[] | - | Types to load (default: preference, error, procedure) |
+| types | string[] | - | Types to load (default: preference, error, procedure, decision) |
 | sessionId | string | - | Session ID (for Working Memory loading) |
 | agentId | string | - | Agent ID |
 | includePeerAgents | boolean | - | Master only. When true, includes memories of every agent inside the key/workspace boundary. API keys receive a permission error. Default false. |
@@ -1014,7 +1047,7 @@ Returns the AnchorMind best practices guide. Comprehensive skill reference cover
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| section | string | - | Query a specific section only. Returns full guide if not specified. Possible values: overview, lifecycle, keywords, search, episode, multiplatform, codex, tools, importance, experiential, cbr, triggers, workspace, antipatterns |
+| section | string | - | Query a specific section only. Returns full guide if not specified. Possible values: overview, lifecycle, keywords, search, episode, multiplatform, collaboration, codex, tools, importance, experiential, cbr, triggers, workspace, antipatterns |
 
 ---
 
@@ -1114,7 +1147,7 @@ No duplicate creation when resending after a network failure:
 
 Re-call response with the same `idempotencyKey`:
 ```json
-{ "success": true, "id": "frag-abc123", "idempotent": true }
+{ "success": true, "id": "frag-abc123", "idempotent": true, "existing": true }
 ```
 
 ### Confirm plan before storage with dryRun=true
@@ -1177,6 +1210,8 @@ curl -si -X POST https://anchormind.example.com/mcp \
 | `MEMENTO_CASE_BACKPROP_ENABLED` | `false` | When `true`, amending a fragment with a case_id (specifically changing resolutionStatus) triggers importance backpropagation to all fragments sharing the same caseId. Exported as the `CASE_BACKPROP_ENABLED` constant in `lib/config.js`. Boosts activation scores of related fragments after case resolution, improving subsequent recall precision. |
 | `MEMENTO_STORAGE` | `pgvector` | Storage backend name. Currently `pgvector` only; this value does not affect behavior. |
 | `MEMENTO_SYMBOLIC_POLICY_RULES` | `false` | When `true`, `_runPolicyGate` evaluates PolicyRules soft gates and accumulates failed rule names into `validation_warnings`. |
+| `MEMENTO_TOOL_ARGS_VALIDATION` | `warn` | Check mode of tool call arguments against `inputSchema` (`off`, `warn`, `enforce`). |
+| `MEMENTO_REMEMBER_DUPLICATE_GUARD` | `false` | When `true`, a `remember` that receives the same body as an existing fragment in the same key scope reports the state through `existing` and `duplicate` without post-processing the existing fragment. |
 | `MEMENTO_FEEDBACK_SAMPLING` | `true` | Attaches the `feedback_sampled` hint to successful remember/amend/forget responses with a fixed probability. When `false`, no hint is attached and response shapes are unchanged. |
 
 ---
