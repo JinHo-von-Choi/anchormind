@@ -55,7 +55,7 @@ npm run test:integration:llm
 | 스크립트 | 실행 범위 |
 |--------|---------|
 | `npm test` | unit 전체 (node:test) |
-| `npm run test:coverage` | unit 전체를 커버리지와 함께 실행하고 `coverage/lcov.info`의 줄, 분기, 함수 합계를 `coverage-baseline.json`과 비교한다. 합계가 기준선에서 허용 폭(0.5%p)을 뺀 값보다 낮으면 실패한다. 로컬 72코어에서 약 40초로 `npm test`(약 35초)보다 조금 길다. 기준선보다 오른 값은 `node scripts/check-coverage.js coverage/lcov.info --write`로 올리고, 낮추는 갱신은 소유자 승인 아래 `--write --allow-decrease`로만 한다 |
+| `npm run test:coverage` | unit 전체를 커버리지와 함께 실행하고 `coverage/lcov.info`의 줄, 분기, 함수 합계를 `coverage-baseline.json`과 비교한다. 합계가 기준선에서 허용 폭(0.5%p)을 뺀 값보다 낮으면 실패한다. 로컬 72코어에서 약 40초로 `npm test`(약 35초)보다 조금 길다. 기준선보다 오른 값은 `node scripts/check-coverage.js coverage/lcov.info --write`로 올리고, 낮추는 갱신은 소유자 승인 아래 `--write --allow-decrease`로만 한다. 숫자로 읽히지 않는 lcov 값이나 기준선 필드는 통과가 아니라 종료 코드 2로 처리한다. 이 수치는 시험 실행이 적재한 파일만 센 값이며 모든 소스 파일을 센 프로젝트 전체 수치가 아니다 |
 | `npm run test:integration` | 통합 + e2e (tests/integration/*.test.js + tests/e2e/*.test.js) |
 | `npm run test:e2e` | e2e만 |
 | `npm run test:ci` | `npm test && npm run test:integration`. 로컬 일괄 실행용 (DB 필요). CI는 아래 워크플로 작업으로 나눠 돈다 |

@@ -5,10 +5,13 @@
  * 작성일: 2026-10-03
  */
 
-import { describe, it } from "node:test";
-import assert           from "node:assert/strict";
+import { describe, it, before, after } from "node:test";
+import assert                           from "node:assert/strict";
+import fs                               from "node:fs";
+import os                               from "node:os";
+import path                             from "node:path";
 
-import { parseLcov, summarize, findDrops, planWrite } from "../../scripts/check-coverage.js";
+import { parseLcov, summarize, findDrops, planWrite, runCli, CoverageInputError } from "../../scripts/check-coverage.js";
 
 const LCOV = [
   "TN:", "SF:lib/a.js", "FNF:4", "FNH:2", "BRF:10", "BRH:5", "LF:100", "LH:80", "end_of_record",
@@ -67,5 +70,99 @@ describe("planWrite", () => {
     const plan = planWrite({ lines: 70, branches: 60, functions: 50, files: 3 }, null, false);
     assert.equal(plan.ok, true);
     assert.equal(plan.next.tolerance, 0.5);
+  });
+});
+
+/** lcov 한 파일 기록을 만든다. 값은 문자열 그대로 넣어 잘못된 입력도 만들 수 있다. */
+function lcovOf({ lf = "100", lh = "80", brf = "10", brh = "5", fnf = "4", fnh = "2" } = {}) {
+  return ["TN:", "SF:lib/a.js", `FNF:${fnf}`, `FNH:${fnh}`, `BRF:${brf}`, `BRH:${brh}`, `LF:${lf}`, `LH:${lh}`, "end_of_record", ""].join("\n");
+}
+
+const GOOD_BASELINE = { lines: 70, branches: 40, functions: 40, tolerance: 0.5 };
+
+describe("읽을 수 없는 입력은 통과시키지 않는다", () => {
+  let dir;
+  let seq = 0;
+
+  before(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "check-coverage-")); });
+  after(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+
+  /** lcov 본문과 기준선(객체, 원문 문자열, 또는 null=파일 없음)을 쓰고 runCli 의 종료 코드와 메시지를 돌려준다. */
+  function exec(lcovText, baseline = GOOD_BASELINE, extraArgs = []) {
+    const id       = seq++;
+    const lcovPath = path.join(dir, `lcov-${id}.info`);
+    const basePath = path.join(dir, `baseline-${id}.json`);
+    fs.writeFileSync(lcovPath, lcovText);
+    if (baseline !== null) fs.writeFileSync(basePath, typeof baseline === "string" ? baseline : JSON.stringify(baseline));
+    const out = [];
+    const err = [];
+    const code = runCli([lcovPath, ...extraArgs], basePath, { log: m => out.push(m), error: m => err.push(m) });
+    return { code, out, err, basePath };
+  }
+
+  it("정상 입력은 0으로 끝난다", () => {
+    assert.equal(exec(lcovOf()).code, 0);
+  });
+
+  it("LF:abc 는 NaN 으로 통과하지 않고 2로 끝난다", () => {
+    assert.throws(() => parseLcov(lcovOf({ lf: "abc" })), CoverageInputError);
+    const r = exec(lcovOf({ lf: "abc" }));
+    assert.equal(r.code, 2);
+    assert.match(r.err.join("\n"), /LF:abc/);
+    assert.equal(r.out.length, 0);
+  });
+
+  it("음수 값은 2로 끝난다", () => {
+    assert.throws(() => parseLcov(lcovOf({ lh: "-5" })), CoverageInputError);
+    assert.equal(exec(lcovOf({ lh: "-5" })).code, 2);
+  });
+
+  it("적중이 전체보다 크면 2로 끝난다", () => {
+    assert.throws(() => parseLcov(lcovOf({ lf: "10", lh: "11" })), /적중 11/);
+    assert.equal(exec(lcovOf({ lf: "10", lh: "11" })).code, 2);
+    assert.equal(exec(lcovOf({ fnf: "1", fnh: "2" })).code, 2);
+  });
+
+  it("합계를 계산할 수 없는 lcov(유한한 지표 0개)는 2로 끝난다", () => {
+    const allZero = lcovOf({ lf: "0", lh: "0", brf: "0", brh: "0", fnf: "0", fnh: "0" });
+    assert.ok(Number.isNaN(summarize(parseLcov(allZero)).lines));
+    assert.equal(exec(allZero).code, 2);
+    assert.equal(exec("").code, 2);
+  });
+
+  it("기준선에 필드가 없으면 2로 끝난다", () => {
+    for (const field of ["lines", "branches", "functions", "tolerance"]) {
+      const baseline = { ...GOOD_BASELINE };
+      delete baseline[field];
+      assert.throws(() => findDrops({ lines: 80, branches: 50, functions: 50 }, baseline), CoverageInputError);
+      assert.equal(exec(lcovOf(), baseline).code, 2, `${field} 누락`);
+    }
+  });
+
+  it("기준선에 문자열 필드가 있으면 2로 끝난다", () => {
+    const r = exec(lcovOf(), { ...GOOD_BASELINE, lines: "70" });
+    assert.equal(r.code, 2);
+    assert.match(r.err.join("\n"), /lines/);
+    assert.equal(exec(lcovOf(), { ...GOOD_BASELINE, tolerance: "0.5" }).code, 2);
+  });
+
+  it("기준선이 JSON 이 아니거나 없으면 2로 끝난다", () => {
+    assert.equal(exec(lcovOf(), "{ not json").code, 2);
+    assert.equal(exec(lcovOf(), null).code, 2);
+  });
+
+  it("--write 도 읽을 수 없는 기준선이나 lcov 앞에서 파일을 쓰지 않고 2로 끝난다", () => {
+    const badBase = exec(lcovOf(), { ...GOOD_BASELINE, branches: "x" }, ["--write"]);
+    assert.equal(badBase.code, 2);
+    assert.equal(JSON.parse(fs.readFileSync(badBase.basePath, "utf8")).branches, "x");
+
+    const badLcov = exec(lcovOf({ lf: "abc" }), null, ["--write"]);
+    assert.equal(badLcov.code, 2);
+    assert.equal(fs.existsSync(badLcov.basePath), false);
+  });
+
+  it("기준선 아래로 내려가면 1, 허용 폭 안이면 0으로 끝난다", () => {
+    assert.equal(exec(lcovOf(), { ...GOOD_BASELINE, lines: 90 }).code, 1);
+    assert.equal(exec(lcovOf(), { ...GOOD_BASELINE, lines: 80.3 }).code, 0);
   });
 });
