@@ -11,24 +11,32 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | POST | /mcp | Streamable HTTP. JSON-RPC request receiver. MCP-Session-Id header required (except initial initialize) |
 | GET | /mcp | Streamable HTTP. Opens SSE stream. For server-side push |
 | DELETE | /mcp | Streamable HTTP. Explicit session termination |
-| GET | /sse | Legacy SSE. Session creation. Authenticate via `accessKey` query parameter |
+| GET | /sse | Legacy SSE. Session creation. Authenticate with the `Authorization: Bearer` header. The `?accessKey=` query is a master-key-only compatibility path; `MEMENTO_SSE_QUERY_KEY=deny` returns 401 |
 | POST | /message?sessionId= | Legacy SSE. JSON-RPC request receiver. Responses delivered via SSE stream |
-| GET | /health | Health check. Verifies DB query (SELECT 1), session state, and Redis connection, returning JSON. When `REDIS_ENABLED=false`, Redis shows as `disabled` with 200 returned. DB failure returns 503 |
-| GET | /metrics | Prometheus metrics. HTTP request counters, session gauges, etc. collected by prom-client |
+| GET | /health | Health check. Verifies DB query (SELECT 1), session state, and Redis connection, returning JSON. When `REDIS_ENABLED=false`, Redis shows as `disabled` with 200 returned. DB failure returns 503. Without master key authentication the body is only `{status, timestamp}`; services and worker details are included when authenticated |
+| GET | /metrics | Prometheus metrics. HTTP request counters, session gauges, etc. collected by prom-client. Requires the master key when `MEMENTO_ACCESS_KEY` is set (otherwise 401) |
 | GET | /openapi.json | OpenAPI 3.1.0 spec. Authentication required. Master key returns full paths including Admin REST API; API key returns a spec filtered to tools matching the key's `permissions` array. Enabled via `ENABLE_OPENAPI=true` env var. Returns 404 when disabled. |
-| GET | /.well-known/oauth-authorization-server | OAuth 2.0 authorization server metadata |
-| GET | /.well-known/oauth-protected-resource | OAuth 2.0 protected resource metadata |
+| GET, HEAD | /.well-known/oauth-authorization-server | OAuth 2.0 authorization server metadata |
+| GET, HEAD | /.well-known/oauth-protected-resource | OAuth 2.0 protected resource metadata |
 | GET | /authorize | OAuth 2.0 authorization endpoint. PKCE code_challenge required |
-| POST | /token | OAuth 2.0 token endpoint. authorization_code exchange |
-| GET | /v1/internal/model/nothing | Admin SPA. Serves app shell HTML (no auth required). Data APIs require master key authentication |
+| POST | /token | OAuth 2.0 token endpoint. authorization_code exchange and refresh_token renewal |
+| POST | /authorize | OAuth 2.0 consent form submission (allow/deny) |
+| POST | /register | RFC 7591 dynamic client registration. Per-IP rate limit applies |
+| POST | /session/rotate | Reissue the session ID. See the section below |
+| GET | /v1/internal/model/nothing | Admin SPA. Serves app shell HTML after master key authentication; unauthenticated requests receive 401 and the login page. Data APIs require master key authentication |
 | GET | /v1/internal/model/nothing/assets/* | Admin static files (admin.css, admin.js). No authentication required |
+| GET | /v1/internal/model/nothing/images/* | Admin image files. Master key authentication required |
 | POST | /v1/internal/model/nothing/auth | Master key verification endpoint |
 | GET | /v1/internal/model/nothing/stats | Dashboard statistics (fragment count, API call volume, system metrics, searchMetrics, observability, queues, healthFlags) |
 | GET | /v1/internal/model/nothing/activity | Recent fragment activity log (10 entries) |
+| GET | /v1/internal/model/nothing/metrics-summary | Dashboard metrics summary |
 | GET | /v1/internal/model/nothing/keys | API key list |
 | POST | /v1/internal/model/nothing/keys | Create API key. Raw key returned in response exactly once |
 | PUT | /v1/internal/model/nothing/keys/:id | Change API key status (active <-> inactive) |
+| GET | /v1/internal/model/nothing/keys/:id/stats | Per-key usage statistics |
 | PUT | /v1/internal/model/nothing/keys/:id/daily-limit | Change API key daily call limit. Master key required |
+| PUT | /v1/internal/model/nothing/keys/:id/permissions | Change API key permissions |
+| PUT | /v1/internal/model/nothing/keys/:id/fragment-limit | Change API key fragment quota |
 | PATCH | /v1/internal/model/nothing/keys/:id/workspace | Change API key's default_workspace. `{ workspace: "name" }` or `{ workspace: null }` (null=unset) |
 | DELETE | /v1/internal/model/nothing/keys/:id | Delete API key |
 | GET | /v1/internal/model/nothing/groups | Key group list |
@@ -40,7 +48,14 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | GET | /v1/internal/model/nothing/memory/overview | Memory overview (type/topic distribution, quality unverified, superseded, recent activity) |
 | GET | /v1/internal/model/nothing/memory/search-events?days=N | Search event analysis (total searches, failed queries, feedback stats) |
 | GET | /v1/internal/model/nothing/memory/fragments | Fragment search/filter (topic, type, key_id, workspace, page, limit) |
+| POST | /v1/internal/model/nothing/memory/fragments | Create fragment |
+| GET | /v1/internal/model/nothing/memory/fragments/:id | Fragment detail |
+| GET | /v1/internal/model/nothing/memory/fragments/:id/history | Fragment change history |
+| PATCH | /v1/internal/model/nothing/memory/fragments/:id | Update fragment |
+| DELETE | /v1/internal/model/nothing/memory/fragments/:id | Delete fragment |
 | GET | /v1/internal/model/nothing/memory/anomalies | Anomaly detection results |
+| POST | /v1/internal/model/nothing/search | Key-scoped recall proxy (key_ids, keywords, text, type, topic, pageSize) |
+| GET | /v1/internal/model/nothing/search-events | Search event list |
 | GET | /v1/internal/model/nothing/sessions | Session list (activity enrichment, unreflected session count) |
 | GET | /v1/internal/model/nothing/sessions/:id | Session detail (search events, tool feedback) |
 | POST | /v1/internal/model/nothing/sessions/:id/reflect | Manual reflect execution |
@@ -58,10 +73,10 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 
 | Dependency | Classification | Response when down |
 |------------|---------------|-------------------|
-| PostgreSQL | Required | 503 (degraded) |
-| Redis | Optional | 200 (healthy, with warnings) |
+| PostgreSQL | Required | 503 (unhealthy) |
+| Redis | Optional | 200 (degraded). With `REDIS_ENABLED=false`: 200 (healthy, redis=disabled) |
 
-Even when Redis is disabled (`REDIS_ENABLED=false`) or connection fails, the server returns healthy (200). L1 cache and Working Memory are deactivated, but core memory storage/retrieval operates fully on PostgreSQL alone.
+When Redis is disabled (`REDIS_ENABLED=false`) the server returns healthy (200); when the Redis connection fails it returns degraded (200). L1 cache and Working Memory are deactivated, but core memory storage/retrieval operates fully on PostgreSQL alone.
 
 Two authentication methods are available. Streamable HTTP authenticates via `Authorization: Bearer <MEMENTO_ACCESS_KEY>` header on the `initialize` request, then maintains the session. Legacy SSE also authenticates with the `Authorization: Bearer` header by default. The `/sse?accessKey=<MEMENTO_ACCESS_KEY>` query parameter is a master-key-only compatibility path and can be turned off with `MEMENTO_SSE_QUERY_KEY=deny`. Query values are recorded in proxy access logs.
 
@@ -91,8 +106,9 @@ All MCP tool calls must pass RBAC validation.
 
 - Master key (`MEMENTO_ACCESS_KEY`): identified by explicit trusted `isMaster=true`, granting access to all tools. Neither `permissions=null` nor `keyId=null` alone implies master authentication.
 - API key (`mmcp_xxx`): tool access is restricted based on the `permissions` array specified at key creation time. Requests for tools not included in the array are immediately denied.
-- Tools registered in the `TOOL_PERMISSIONS` map require the corresponding permission level. Unregistered tool names are treated as `required=null` and pass the permission check. To bring a new tool into the RBAC boundary, register it explicitly in the `TOOL_PERMISSIONS` map.
+- Only tools registered in the `TOOL_PERMISSIONS` map can be called. A tool name missing from the map is refused for every caller, including the master key. Register every new tool in `TOOL_PERMISSIONS`.
 - Three permission levels exist: `read` (recall/context etc.), `write` (remember/forget/amend etc.), and `admin` (memory_consolidate/apply_update etc.). The `admin` permission does not bypass tools that require explicit master authentication.
+- Calling a tool without the required permission returns JSON-RPC error `-32001` whose `message` carries the reason (`Permission denied: '<tool>' requires '<level>' permission`). Master-only tools (memory_stats, memory_consolidate, check_update, apply_update) called with an API key return `-32001` with `Permission denied: '<tool>' requires master authentication`, and they are absent from that key's tools/list.
 - When a forget/amend/link request targets a fragment owned by another tenant (different API key), a `"Fragment not found"` error is returned. Isolation is enforced at the SQL level via `key_id` conditions, so the fragment's existence is never exposed.
 
 Accessing a protected resource without authentication returns `401 Unauthorized` with a `WWW-Authenticate: Bearer resource_metadata="</.well-known/oauth-protected-resource URL>"` header.
@@ -101,12 +117,14 @@ Accessing a protected resource without authentication returns `401 Unauthorized`
 
 The session behavior mode can be set via the `X-Memento-Mode` header or `params.mode` in the `initialize` request. Setting `api_keys.default_mode` in the admin console pins a per-key default.
 
-| Preset | Description | Allowed Tools |
+| Preset | Description | Tools removed from tools/list |
 |--------|-------------|---------------|
-| `recall-only` | Read-only session. Blocks memory write/modify tools. For search-only agents. | recall, context, memory_stats, graph_explore, fragment_history, reconstruct_history, search_traces, get_skill_guide, tool_feedback |
-| `write-only` | Write-only session. Blocks recall and context. For data ingestion pipelines. | remember, batch_remember, forget, amend, link, reflect |
-| `onboarding` | New user guidance session. Forces get_skill_guide as the first exposed tool. | All (get_skill_guide surfaced first) |
-| `audit` | Read and trace-only session. Blocks all write tools. For auditing and compliance. | recall, context, memory_stats, graph_explore, fragment_history, reconstruct_history, search_traces |
+| `recall-only` | Read-only session. Removes memory write/modify tools. For search-only agents. | remember, batch_remember, amend, forget, link, reflect, memory_consolidate |
+| `write-only` | Write-only session. Removes recall and context. For data ingestion pipelines. | recall, context, reconstruct_history, graph_explore, fragment_history, search_traces, memory_stats |
+| `onboarding` | New user guidance session. Forces get_skill_guide as the first exposed tool. | none (get_skill_guide surfaced first) |
+| `audit` | Read and trace session. Removes write tools. For auditing and compliance. Applies to master sessions only; ignored for API-key sessions | remember, batch_remember, amend, forget, link, reflect |
+
+Presets filter the tools/list response only. tools/call does not consult the preset, so what can be called is decided by RBAC permissions.
 
 Via HTTP header:
 ```
@@ -150,49 +168,25 @@ Response (200):
 
 ```json
 {
-  "ok": true,
   "oldSessionId": "aabbcc11-...-8899ddee",
   "newSessionId": "ffeedd22-...-3344ccbb",
-  "reason": "suspected_leak",
-  "rotatedAt": "2026-04-21T12:34:56.789Z"
+  "expiresAt": 1776774896789,
+  "reason": "suspected_leak"
 }
 ```
 
 Policy:
 
-- Auth: `Authorization: Bearer` required; ownership mismatch with the target session returns 403
-- CSRF guard: `Origin` header required; missing or non-allowlisted Origin returns 403
-- Rate limit: `MEMENTO_ROTATE_RATE_LIMIT_PER_MIN` requests per IP per minute (default 5); exceeding returns 429
+- Auth: `Authorization: Bearer` required (401 on failure). Missing `Mcp-Session-Id` returns 400, unknown session 404, ownership mismatch 403
+- Origin check: without an `Origin` header only loopback-socket requests are accepted. localhost/127.0.0.1 origins are always accepted. When both `ALLOWED_ORIGINS` and `ADMIN_ALLOWED_ORIGINS` are empty any Origin is accepted; otherwise only origins in those lists. Anything else returns 403
+- Rate limit: `MEMENTO_ROTATE_RATE_LIMIT_PER_MIN` requests per client address per minute (default 5); exceeding returns 429 with `Retry-After`. The client address follows `TRUST_PROXY_HOPS`
 - `reason` is an audit-log field (max 128 chars); defaults to `explicit_rotate` when omitted
 - Metrics: `mcp_session_rotation_total{reason}` counter + `mcp_rotate_rate_limited_total` counter
 - CLI: use `memento-mcp session rotate <sessionId>` for the same capability; see `docs/cli.en.md` for details
 
-### tools/list Response — meta Field
+### tools/list response fields
 
-Each tool entry in the `tools/list` response includes a `meta` field.
-
-```json
-{
-  "name": "recall",
-  "description": "...",
-  "inputSchema": { ... },
-  "meta": {
-    "capabilities": ["search", "pagination", "caseMode"],
-    "riskLevel": "read",
-    "requiresMaster": false,
-    "beta": false,
-    "idempotent": true
-  }
-}
-```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `capabilities` | string[] | List of feature tags supported by this tool |
-| `riskLevel` | string | Tool risk tier. `read` / `write` / `admin` |
-| `requiresMaster` | boolean | Whether the tool requires the master key (MEMENTO_ACCESS_KEY) |
-| `beta` | boolean | Whether this is an experimental feature. When true, the interface may change |
-| `idempotent` | boolean | Whether repeated calls with the same parameters produce no side effects |
+Each entry carries `name`, `title`, `annotations`, `description`, and `inputSchema`. `annotations` holds the MCP standard hints (`readOnlyHint`, `idempotentHint`, `destructiveHint`, `openWorldHint`). The server-side registry (`lib/tool-registry.js`) keeps per-tool `riskLevel` (`safe`, `caution`, `destructive`) and `requiresMaster`; these are not sent in tools/list.
 
 ---
 
@@ -211,8 +205,11 @@ The server metadata response includes a `registration_endpoint`.
   "token_endpoint": "https://{domain}/token",
   "registration_endpoint": "https://{domain}/register",
   "response_types_supported": ["code"],
-  "grant_types_supported": ["authorization_code"],
-  "code_challenge_methods_supported": ["S256"]
+  "grant_types_supported": ["authorization_code", "refresh_token"],
+  "code_challenge_methods_supported": ["S256"],
+  "token_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"],
+  "scopes_supported": ["mcp"],
+  "service_documentation": "https://{domain}/docs"
 }
 ```
 
@@ -243,13 +240,15 @@ Response 201:
 
 > API keys (mmcp_xxx) can be used directly as `client_id`. This applies when reusing an existing API key as an OAuth client in Claude.ai Web Integration.
 
+> API key binding: sending `Authorization: Bearer <API key>` with the registration registers the client under a URL-safe `client_id = "<name>_<keyIdHex8>"`, and `/authorize` later restores that key's tenant context. Without the header a random `client_id` is issued.
+
 ### GET /authorize
 
 OAuth 2.0 authorization endpoint. PKCE `code_challenge` and `code_challenge_method=S256` are required.
 
 Query parameters: `response_type=code`, `client_id`, `redirect_uri`, `code_challenge`, `code_challenge_method`, `state` (optional).
 
-Renders a user consent screen. After consent, returns a 302 redirect to `redirect_uri` with the `code` parameter.
+When `redirect_uri` is in the trusted list (`OAUTH_TRUSTED_ORIGINS`), the request is approved without the consent screen and redirected with `code` (302). Otherwise a consent screen is rendered and, after consent, a 302 redirect to `redirect_uri` with `code` is returned. An unregistered client_id is auto-registered only for a trusted redirect_uri or when `ALLOW_AUTO_DCR_REGISTER=true`.
 
 ### POST /authorize
 
@@ -266,7 +265,7 @@ Submitted as form data when the user allows or denies on the consent screen.
 | `state` | Original OAuth parameter (if present) |
 
 - `decision=allow`: 302 redirect to `redirect_uri?code=<code>&state=<state>`
-- `decision=deny`: 302 redirect to `redirect_uri?error=access_denied`
+- `decision=deny`: 302 redirect to `redirect_uri?error=access_denied&error_description=User%20denied%20access&state=<state>` (`state` only when present in the request). Common error rule: a missing or non-URL redirect_uri returns 400 JSON; a redirect_uri not registered for the client is redirected with a warning under `MEMENTO_OAUTH_REDIRECT_CHECK=warn` (default) and returns 400 JSON under `enforce`
 
 ### PUT /v1/internal/model/nothing/keys/:id/daily-limit
 
@@ -354,7 +353,7 @@ ID lookups through `fragment_history` and `graph_explore` now apply workspace fi
 | minImportance | number | - | Minimum importance filter (0-1). Only fragments with importance at or above this value are returned. |
 | isAnchor | boolean | - | Anchor filter. `true` returns anchors only, `false` returns non-anchors only, and omission returns both. |
 | affect | string \| string[] | - | Affect tag filter. Single string or array. Returns only fragments with the matching affect value. Valid values: neutral, frustration, confidence, surprise, doubt, satisfaction |
-| fields | string[] | - | Fragment fields to include in the response. Returns all fields if not specified. Supported keys: id / content / type / topic / keywords / importance / created_at / access_count / confidence / linked / explanations / workspace / context_summary / case_id / valid_to / affect / ema_activation |
+| fields | string[] | - | Fragment fields to include in the response. Returns all fields if not specified. Supported keys: id / content / type / topic / keywords / importance / created_at / access_count / confidence / linked / explanations / workspace / context_summary / case_id / valid_to / affect / ema_activation / key_id / key_name |
 
 ### Response Fragment Fields (key fields)
 
@@ -509,7 +508,7 @@ Fragment-based memory storage. Store exactly one atomic fact in 1-2 sentences. I
 | content | string | Y | Content to remember (1-3 sentences, 300 characters recommended). The raw input itself is capped at 4000 characters; exceeding it is rejected with `-32602`. |
 | topic | string | Y | Topic (e.g., database, email, deployment, security) |
 | type | string | Y | Fragment type. fact, decision, error, preference, procedure, relation, episode. Types other than episode are truncated beyond 300 characters. |
-| keywords | string[] | - | Keywords for search (auto-extracted if not provided) |
+| keywords | string[] | - | Search keywords. Even when supplied, keywords extracted from the content are merged after them (deduplicated, max 10) with supplied keywords first. Without input only extraction is used |
 | importance | number | - | Importance 0-1 (type-specific default if not provided) |
 | source | string | - | Source (session ID, tool name, etc.) |
 | linkedTo | string[] | - | List of existing fragment IDs to link to |
@@ -550,21 +549,33 @@ dryRun=true response (no actual storage):
     "fragment": { "content": "...", "type": "error", "topic": "redis" },
     "conflicts": [],
     "validation_warnings": [],
-    "quota": { "used": 120, "limit": 5000, "remaining": 4880 }
+    "quota": { "limit": 5000, "current": 120, "remaining": 4880, "resetAt": null }
   }
 }
 ```
 
-Normal response:
+Without violations (normal storage):
 ```json
 {
-  "fragment": {
-    "id": "...",
-    "content": "...",
-    "type": "decision",
-    "importance": 0.8,
-    "validation_warnings": []
-  }
+  "success": true,
+  "id": "frag-...",
+  "keywords": ["..."],
+  "ttl_tier": "warm",
+  "scope": "permanent",
+  "conflicts": []
+}
+```
+
+With violations (soft gate, stored):
+```json
+{
+  "success": true,
+  "id": "frag-...",
+  "keywords": ["..."],
+  "ttl_tier": "warm",
+  "scope": "permanent",
+  "conflicts": [],
+  "validation_warnings": ["decisionHasRationale"]
 }
 ```
 
@@ -609,6 +620,26 @@ Clients receiving the hint should pass `hints[0].args` straight into `tool_feedb
 
 Sampling follows `feedback.sampling` in `config/memory.js`: per-tool rates are remember 0.10, amend 0.25, forget 0.25, capped at 2 hints per session with a 900-second cooldown after the previous hint (the cap and cooldown are skipped when Redis is unavailable). Set `MEMENTO_FEEDBACK_SAMPLING=false` to disable sampling entirely. `remember(dryRun=true)`, `forget(dryRun=true)`, and an `amend` that changed nothing (`updated=false`) are excluded. recall is not sampled because it already has its own hint path.
 
+### Error codes
+
+- `-32003` (SYMBOLIC_POLICY_VIOLATION): PolicyRules violations on a key with the symbolic hard gate enabled. Storage is rejected. This is a JSON-RPC **protocol-level** error, not an MCP tool error (isError: true).
+- `-32602`: `content` exceeds 4000 characters. It is returned as a tool result `{ "success": false, "error": "content length N exceeds max 4000", "code": -32602 }`, not as a JSON-RPC error.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "error": {
+    "code": -32003,
+    "message": "policy_violation: decisionHasRationale",
+    "data": {
+      "violations": ["decisionHasRationale"],
+      "fragmentType": "decision"
+    }
+  }
+}
+```
+
 ---
 
 ## MCP Tool — batch_remember
@@ -637,6 +668,18 @@ Store multiple fragments at once (for bulk memory input). Batch INSERTs up to 20
 ```
 
 In synchronous mode (default), a `results[]` array is returned. Use the `batch_status` tool with `jobId` to query processing state. The async worker guarantees at-least-once delivery via ack, retry (up to 3), dead-letter, and startup recovery (RPOPLPUSH reliable queue).
+
+### Pre-validation error codes
+
+Each fragment is checked before INSERT against the conditions below. A failing fragment is recorded as `results[i].success = false` and does not affect storage of the rest of the array.
+
+| Error message | Cause |
+|-|-|
+| `content is required` | `content` is null or undefined |
+| `content length N exceeds max 4000` | `content` exceeds 4000 characters |
+| `type is required` | `type` is missing |
+| `Content too short: length < 10 and word count < 3` | `FragmentFactory.validateContent` rejected the content as too short |
+| `fragment_limit_exceeded` | API key fragment quota exceeded |
 
 ---
 
@@ -674,24 +717,6 @@ Query the processing state of an async batch job started by `batch_remember(asyn
 
 ---
 
-### Permission denials
-
-Calling a tool without the required permission returns JSON-RPC error `-32600` with the message `Internal error`. The actual reason (`Permission denied: '<tool>' requires '<level>' permission`) is recorded in the server log only. A client therefore cannot tell an authorization failure from a server fault by the response alone, which matters when designing retry policy. `memory_consolidate`, `apply_update`, and `check_update` take this path.
-
-### forget response shapes
-
-| Situation | Response | isError |
-|-|-|-|
-| Deleted | `{success: true, deleted: 1}` | false |
-| Permanent tier without `force` | `{success: true, deleted: 0, protected: 1, reason: "..."}` | false |
-| Target missing or not permitted | `{success: true, deleted: 0, error: "Fragment not found or no permission"}` | true |
-
-In the third case the payload reports `success: true` while carrying an `error` key, and that key flips the MCP envelope to `isError: true`. Retrying a delete that already succeeded lands here, so clients should read `deleted` rather than treating the envelope as authoritative.
-
-### memory_consolidate execution
-
-Requires `admin`. The full cycle runs 20+ stages and scales with fragment count; around 13,000 fragments it takes roughly 7 minutes. The scheduler runs the same path every 6 hours by default, so manual invocation is for inspection only. The semantic dedup stage is guarded: a merge is blocked when the distinctive tokens of the fragment being removed do not survive in the one being kept.
-
 ## MCP Tool — forget
 
 Delete fragment memory. Either id or topic is required. Permanent-tier fragments require the force option.
@@ -705,6 +730,18 @@ Delete fragment memory. Either id or topic is required. Permanent-tier fragments
 | force | boolean | - | Force-delete permanent fragments (default false) |
 | agentId | string | - | Agent ID |
 | dryRun | boolean | - | When true, returns target fragment info and connected link count without actually deleting. |
+
+### Response shapes
+
+The call result falls into one of three cases.
+
+| Situation | Response | isError |
+|-|-|-|
+| Deleted | `{success: true, deleted: 1}` | false |
+| Permanent tier without `force` | `{success: true, deleted: 0, protected: 1, reason: "..."}` | false |
+| Target missing or not permitted | `{success: true, deleted: 0, error: "Fragment not found or no permission"}` | true |
+
+In the third case the payload reports `success: true` while carrying an `error` key, and that key flips the MCP envelope to `isError: true`. Retrying a delete that already succeeded lands here, so clients should read `deleted` rather than treating the envelope as authoritative.
 
 ---
 
@@ -734,7 +771,7 @@ Update the content or metadata of an existing fragment. Selectively modifies whi
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | id | string | Y | Target fragment ID to update |
-| content | string | - | New content (truncated beyond 300 characters). The raw input itself is capped at 4000 characters; exceeding it is rejected with `-32602`. |
+| content | string | - | New content. The schema advertises a 4000-character maximum, but the amend path neither checks length nor truncates, so clients should keep it within 300 characters. The remember self-containment rules apply |
 | topic | string | - | New topic |
 | keywords | string[] | - | New keyword list |
 | type | string | - | New type (fact, decision, error, preference, procedure, relation) |
@@ -747,6 +784,7 @@ Update the content or metadata of an existing fragment. Selectively modifies whi
 | phase | string | - | Change the work phase (planning, debugging, implementation, verification, …). |
 | agentId | string | - | Agent ID |
 | dryRun | boolean | - | When true, returns the expected fragment state after applying the patch without making actual changes. |
+| idempotencyKey | string | - | Retry-safe identifier (max 128 characters). Repeating a call with the same value in the same key_id scope returns the first response without recording history again |
 
 ---
 
@@ -768,6 +806,7 @@ Persist session learnings as atomic fragments at session end. Each array item is
 | agentId | string | - | Agent ID |
 | workspace | string | - | Workspace applied to the items passed by the caller (summary, decisions, etc.). Session synthesis groups keep their own workspace and use this value only when the group has none. Falls back to the API key's default_workspace, then global (NULL). Recommended in multi-project setups to prevent cross-project session summary injection. |
 | task_effectiveness | object | - | Session outcome and tool usage effectiveness assessment. Composed of outcome, evaluator, evidence, unmet_requirements, overall_success, tool_highlights, tool_pain_points. See the table below. |
+| idempotencyKey | string | - | Retry-safe identifier (max 128 characters). Repeating a call with the same value in the same key_id scope returns the fragment list created by the first call |
 
 #### task_effectiveness sub-fields
 
@@ -809,6 +848,14 @@ Persist session learnings as atomic fragments at session end. Each array item is
 
 When `sessionId` is provided, session fragments are synthesized separately per workspace → case_id → topic group. The `groups` field returns one entry per group (`workspace`, `topic`, `caseId`, and `fragmentIds` — the fragments created for that group, including the episode fragment id when a narrative_summary was produced). Groups with different workspaces each stamp their own workspace on their fragments. Without `sessionId`, `params` (summary/decisions/...) itself is treated as a single group (legacy path).
 
+### AutoReflect timeout
+
+AutoReflect, which runs automatically at session end, applies a 30000 ms timeout to its LLM call. The value keeps a 30 s margin against the 60 s cutoff of external gateways (for example the claude.ai MCP proxy) and must not be raised to 40000 ms or more.
+
+| Item | Default | Description |
+|-|-|-|
+| `GEMINI_TIMEOUT_MS` (code constant) | 30000 | LLM call timeout of AutoReflect (ms). Exported as a constant of `lib/memory/processors/AutoReflect.js` and not configurable through environment variables |
+
 ---
 
 ## MCP Tool — context
@@ -823,6 +870,7 @@ Loads Anchor, Core, Learning, and Working Memory plus session_reflect separately
 | types | string[] | - | Types to load (default: preference, error, procedure) |
 | sessionId | string | - | Session ID (for Working Memory loading) |
 | agentId | string | - | Agent ID |
+| includePeerAgents | boolean | - | Master only. When true, includes memories of every agent inside the key/workspace boundary. API keys receive a permission error. Default false. |
 | workspace | string | - | Returns the selected workspace + global (NULL), falls back to the key default, and returns global-only when neither exists. |
 | allWorkspaces | boolean | - | Master-only cross-workspace context read, including anchor/core/learning/working memory. |
 | structured | boolean | - | When true, returns hierarchical tree structure; when false/omitted, returns existing flat list (default: false) |
@@ -852,6 +900,7 @@ Usefulness feedback on tool usage results. Evaluates whether the target tool's r
 | irrelevance_reason | string | - | Why the result was judged irrelevant. `not_stored` (never stored), `search_miss` (stored but not retrieved), `scope_leak` (leaked in from another scope), `topic_mismatch` (wrong subject), `other`. Meaningful only when `relevant=false`; other calls and values outside the enum are discarded and stored as NULL. The distribution is aggregated as `irrelevance_breakdown` in `memory_stats`. |
 | search_event_id | integer | - | _meta.searchEventId returned by the most recent recall. Used for search quality analysis. |
 | fragment_ids | string[] | - | Fragment ID list for feedback targets. When provided, activation scores of the specified fragments are adjusted based on the feedback. |
+| idempotencyKey | string | - | Retry-safe identifier (max 128 characters). Repeating a call with the same value returns the first response without adjusting link weights again |
 
 ---
 
@@ -904,6 +953,10 @@ Execute fragment memory maintenance. Performs TTL transitions, importance decay,
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | stream | boolean | - | Deprecated. No SSE progress events are emitted any more. Kept in the schema for backward compatibility; it has no effect. |
+
+### Execution
+
+Master key only (`requiresMaster: true`); hidden from API-key tools/list and rejected with `-32001` when called with an API key. The full cycle runs 20+ stages and scales with fragment count; around 13,000 fragments it takes roughly 7 minutes. The scheduler runs the same path every 6 hours by default, so manual invocation is for inspection only. The semantic dedup stage is guarded: a merge is blocked when the distinctive tokens of the fragment being removed do not survive in the one being kept.
 
 ---
 
@@ -959,7 +1012,7 @@ Returns the AnchorMind best practices guide. Comprehensive skill reference cover
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| section | string | - | Query a specific section only. Returns full guide if not specified. Possible values: overview, lifecycle, keywords, search, episode, multiplatform, codex, tools, importance, experiential, cbr, triggers, antipatterns |
+| section | string | - | Query a specific section only. Returns full guide if not specified. Possible values: overview, lifecycle, keywords, search, episode, multiplatform, codex, tools, importance, experiential, cbr, triggers, workspace, antipatterns |
 
 ---
 
@@ -1087,9 +1140,21 @@ Response:
     "fragment": { "content": "Redis Sentinel connection failure — REDIS_SENTINEL_ENABLED not set", "type": "error", "topic": "redis" },
     "conflicts": [],
     "validation_warnings": [],
-    "quota": { "used": 120, "limit": 5000, "remaining": 4880 }
+    "quota": { "limit": 5000, "current": 120, "remaining": 4880, "resetAt": null }
   }
 }
+```
+
+### Rate Limit header consumption example
+
+```bash
+# Inspect response headers
+curl -si -X POST https://anchormind.example.com/mcp \
+  -H "Authorization: Bearer $API_KEY" \
+  ... | grep X-RateLimit
+# X-RateLimit-Limit: 5000
+# X-RateLimit-Remaining: 4879
+# X-RateLimit-Resource: fragments
 ```
 
 ---

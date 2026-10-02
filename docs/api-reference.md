@@ -14,24 +14,32 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | POST | /mcp | Streamable HTTP. JSON-RPC 요청 수신. MCP-Session-Id 헤더 필요 (초기 initialize 제외) |
 | GET | /mcp | Streamable HTTP. SSE 스트림 열기. 서버 측 푸시용 |
 | DELETE | /mcp | Streamable HTTP. 세션 명시적 종료 |
-| GET | /sse | Legacy SSE. 세션 생성. `accessKey` 쿼리 파라미터로 인증 |
+| GET | /sse | Legacy SSE. 세션 생성. `Authorization: Bearer` 헤더로 인증한다. `?accessKey=` 쿼리는 마스터 키 전용 하위 호환 경로이며 `MEMENTO_SSE_QUERY_KEY=deny`면 401 |
 | POST | /message?sessionId= | Legacy SSE. JSON-RPC 요청 수신. 응답은 SSE 스트림으로 전달 |
-| GET | /health | 헬스 체크. DB 쿼리(SELECT 1), 세션 상태, Redis 연결을 확인하고 JSON으로 반환. `REDIS_ENABLED=false` 시 Redis는 `disabled`로 표시되며 200 반환. DB 장애 시 503 |
-| GET | /metrics | Prometheus 메트릭. prom-client가 수집한 HTTP 요청 카운터, 세션 게이지 등 |
+| GET | /health | 헬스 체크. DB 쿼리(SELECT 1), 세션 상태, Redis 연결을 확인하고 JSON으로 반환. `REDIS_ENABLED=false` 시 Redis는 `disabled`로 표시되며 200 반환. DB 장애 시 503. 마스터 키 인증이 없으면 `{status, timestamp}`만 반환하고, 인증 시 services·workers 상세를 포함한다 |
+| GET | /metrics | Prometheus 메트릭. prom-client가 수집한 HTTP 요청 카운터, 세션 게이지 등. `MEMENTO_ACCESS_KEY`가 설정되어 있으면 마스터 키 인증 필요(없으면 401) |
 | GET | /openapi.json | OpenAPI 3.1.0 스펙. 인증 필수. master key는 Admin REST API 포함 전체 경로를 반환하며, API key는 해당 키의 `permissions` 배열에 맞게 도구 목록이 필터된 스펙을 반환. `ENABLE_OPENAPI=true` 환경변수로 활성화. 비활성 시 404 반환. |
-| GET | /.well-known/oauth-authorization-server | OAuth 2.0 인가 서버 메타데이터 |
-| GET | /.well-known/oauth-protected-resource | OAuth 2.0 보호 리소스 메타데이터 |
+| GET, HEAD | /.well-known/oauth-authorization-server | OAuth 2.0 인가 서버 메타데이터 |
+| GET, HEAD | /.well-known/oauth-protected-resource | OAuth 2.0 보호 리소스 메타데이터 |
 | GET | /authorize | OAuth 2.0 인가 엔드포인트. PKCE code_challenge 필요 |
-| POST | /token | OAuth 2.0 토큰 엔드포인트. authorization_code 교환 |
-| GET | /v1/internal/model/nothing | Admin SPA. app shell HTML 제공(인증 불필요). 데이터 API는 마스터 키 인증 필요 |
+| POST | /token | OAuth 2.0 토큰 엔드포인트. authorization_code 교환과 refresh_token 갱신 |
+| POST | /authorize | OAuth 2.0 동의 화면 폼 제출 (allow/deny) |
+| POST | /register | RFC 7591 동적 클라이언트 등록. IP 기준 rate limit 적용 |
+| POST | /session/rotate | 세션 ID 재발급. 아래 절 참조 |
+| GET | /v1/internal/model/nothing | Admin SPA. 마스터 키 인증 후 app shell HTML 제공. 미인증 요청은 401과 로그인 페이지를 반환. 데이터 API는 마스터 키 인증 필요 |
 | GET | /v1/internal/model/nothing/assets/* | Admin 정적 파일 (admin.css, admin.js). 인증 불필요 |
+| GET | /v1/internal/model/nothing/images/* | Admin 이미지 파일. 마스터 키 인증 필요 |
 | POST | /v1/internal/model/nothing/auth | 마스터 키 검증 엔드포인트 |
 | GET | /v1/internal/model/nothing/stats | 대시보드 통계 (파편 수, API 호출량, 시스템 메트릭, searchMetrics, observability, queues, healthFlags) |
 | GET | /v1/internal/model/nothing/activity | 최근 파편 활동 로그 (10건) |
+| GET | /v1/internal/model/nothing/metrics-summary | 대시보드 메트릭 요약 |
 | GET | /v1/internal/model/nothing/keys | API 키 목록 조회 |
 | POST | /v1/internal/model/nothing/keys | API 키 생성. 원시 키는 응답에서 단 1회 반환 |
 | PUT | /v1/internal/model/nothing/keys/:id | API 키 상태 변경 (active ↔ inactive) |
+| GET | /v1/internal/model/nothing/keys/:id/stats | API 키별 사용 통계 |
 | PUT | /v1/internal/model/nothing/keys/:id/daily-limit | API 키 일일 호출 제한 변경. 마스터 키 인증 필요 |
+| PUT | /v1/internal/model/nothing/keys/:id/permissions | API 키 권한 변경 |
+| PUT | /v1/internal/model/nothing/keys/:id/fragment-limit | API 키 파편 할당량 변경 |
 | PATCH | /v1/internal/model/nothing/keys/:id/workspace | API 키의 default_workspace 변경. `{ workspace: "name" }` 또는 `{ workspace: null }` (null=해제) |
 | DELETE | /v1/internal/model/nothing/keys/:id | API 키 삭제 |
 | GET | /v1/internal/model/nothing/groups | 키 그룹 목록 |
@@ -43,7 +51,14 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | GET | /v1/internal/model/nothing/memory/overview | 메모리 전체 현황 (유형/토픽 분포, 품질 미검증, superseded, 최근 활동) |
 | GET | /v1/internal/model/nothing/memory/search-events?days=N | 검색 이벤트 분석 (총 검색 수, 실패 쿼리, 피드백 통계) |
 | GET | /v1/internal/model/nothing/memory/fragments | 파편 검색/필터링 (topic, type, key_id, workspace, page, limit) |
+| POST | /v1/internal/model/nothing/memory/fragments | 파편 생성 |
+| GET | /v1/internal/model/nothing/memory/fragments/:id | 파편 상세 |
+| GET | /v1/internal/model/nothing/memory/fragments/:id/history | 파편 변경 이력 |
+| PATCH | /v1/internal/model/nothing/memory/fragments/:id | 파편 수정 |
+| DELETE | /v1/internal/model/nothing/memory/fragments/:id | 파편 삭제 |
 | GET | /v1/internal/model/nothing/memory/anomalies | 이상 탐지 결과 |
+| POST | /v1/internal/model/nothing/search | 키 범위 recall 프록시 (key_ids, keywords, text, type, topic, pageSize) |
+| GET | /v1/internal/model/nothing/search-events | 검색 이벤트 목록 |
 | GET | /v1/internal/model/nothing/sessions | 세션 목록 (활동 enrichment, 미반영 세션 수) |
 | GET | /v1/internal/model/nothing/sessions/:id | 세션 상세 (검색 이벤트, 도구 피드백) |
 | POST | /v1/internal/model/nothing/sessions/:id/reflect | 수동 reflect 실행 |
@@ -61,10 +76,10 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 
 | 의존성 | 분류 | down 시 응답 |
 |--------|------|-------------|
-| PostgreSQL | 필수 | 503 (degraded) |
-| Redis | 선택 | 200 (healthy, warnings 포함) |
+| PostgreSQL | 필수 | 503 (unhealthy) |
+| Redis | 선택 | 200 (degraded). `REDIS_ENABLED=false`면 200 (healthy, redis=disabled) |
 
-Redis가 비활성화(`REDIS_ENABLED=false`)되거나 연결 실패해도 서버는 healthy(200)를 반환합니다.
+Redis가 비활성화(`REDIS_ENABLED=false`)되면 healthy(200), 연결에 실패하면 degraded(200)를 반환합니다.
 L1 캐시와 Working Memory가 비활성화되지만 핵심 기억 저장/검색은 PostgreSQL만으로 동작합니다.
 
 인증 방식은 두 가지다. Streamable HTTP는 `initialize` 요청 시 `Authorization: Bearer <MEMENTO_ACCESS_KEY>` 헤더로 인증하며 이후 세션으로 유지된다. Legacy SSE도 `Authorization: Bearer` 헤더로 인증하는 것을 기본으로 한다. `/sse?accessKey=<MEMENTO_ACCESS_KEY>` 쿼리 파라미터는 마스터 키 전용 하위 호환 경로이며 `MEMENTO_SSE_QUERY_KEY=deny`로 끌 수 있다. 쿼리 값은 프록시 접근 로그에 남는다.
@@ -95,9 +110,9 @@ X-RateLimit-Resource: fragments
 
 - master key (`MEMENTO_ACCESS_KEY`): 신뢰된 인증 결과의 명시적 `isMaster=true`로 판정하며 모든 도구를 호출할 수 있다. `permissions=null`이나 `keyId=null`만으로 master 권한을 추론하지 않는다.
 - API key (`mmcp_xxx`): 키 생성 시 지정된 `permissions` 배열 기준으로 도구 접근이 제한된다. 배열에 필요한 권한이 없으면 즉시 거부된다.
-- `TOOL_PERMISSIONS` 맵에 등록된 도구는 해당 권한 레벨이 요구된다. 맵에 등록되지 않은 도구명은 `required=null`로 간주되어 권한 검사를 통과한다. 도구를 RBAC 경계에 편입하려면 `TOOL_PERMISSIONS` 맵에 명시적으로 등록해야 한다.
+- `TOOL_PERMISSIONS` 맵에 등록된 도구만 호출할 수 있다. 맵에 없는 도구명은 master key를 포함한 모든 호출에서 거부된다. 새 도구는 `TOOL_PERMISSIONS`에 반드시 등록해야 한다.
 - 권한 레벨은 세 가지다: `read`(recall/context 등), `write`(remember/forget/amend 등), `admin`(memory_consolidate/apply_update 등). `admin` 권한만으로 master 전용 도구를 우회할 수는 없다.
-- 권한이 없는 도구를 호출하면 JSON-RPC 오류 `-32600`이 반환되며 `message`는 `Internal error`다. 거부 사유(`Permission denied: '<도구>' requires '<레벨>' permission`)는 서버 로그에만 남는다. 따라서 클라이언트는 응답만으로 권한 부족과 서버 오류를 구분할 수 없으므로, 재시도 정책을 세울 때 이 점을 감안해야 한다. `memory_consolidate`와 `apply_update`, `check_update`가 이 경로에 해당한다.
+- 권한이 없는 도구를 호출하면 JSON-RPC 오류 `-32001`이 반환되며 `message`에 사유(`Permission denied: '<도구>' requires '<레벨>' permission`)가 담긴다. master 전용 도구(memory_stats, memory_consolidate, check_update, apply_update)를 일반 키로 호출하면 `-32001`과 `Permission denied: '<도구>' requires master authentication`이 반환되며, 이 도구들은 일반 키의 tools/list에도 나타나지 않는다.
 - 타 테넌트(다른 API 키)가 소유한 파편에 forget/amend/link 요청 시 `"Fragment not found"` 에러가 반환된다. SQL 레벨에서 `key_id` 조건으로 격리되므로 존재 여부조차 노출되지 않는다.
 
 보호된 리소스에 인증 없이 접근하면 `401 Unauthorized`와 함께 `WWW-Authenticate: Bearer resource_metadata="</.well-known/oauth-protected-resource URL>"` 헤더가 반환된다.
@@ -106,12 +121,14 @@ X-RateLimit-Resource: fragments
 
 `X-Memento-Mode` 헤더 또는 `initialize` 요청의 `params.mode`로 세션 동작 모드를 지정할 수 있다. admin console에서 `api_keys.default_mode`를 설정하면 키 단위 기본값을 고정할 수 있다.
 
-| Preset | 설명 | 허용 도구 |
+| Preset | 설명 | tools/list에서 제외되는 도구 |
 |--------|------|----------|
-| `recall-only` | 읽기 전용 세션. 기억 저장·수정 도구 차단. 검색 전용 에이전트에 사용. | recall, context, memory_stats, graph_explore, fragment_history, reconstruct_history, search_traces, get_skill_guide, tool_feedback |
-| `write-only` | 저장 전용 세션. recall, context 차단. 데이터 수집 파이프라인에 사용. | remember, batch_remember, forget, amend, link, reflect |
-| `onboarding` | 사용자 안내 세션. get_skill_guide를 첫 도구로 강제 노출. | 전체 (get_skill_guide 우선 안내) |
-| `audit` | 읽기·추적 전용 세션. 쓰기 도구 전체 차단. 감사·컴플라이언스 목적. | recall, context, memory_stats, graph_explore, fragment_history, reconstruct_history, search_traces |
+| `recall-only` | 읽기 전용 세션. 기억 저장·수정 도구 제외. 검색 전용 에이전트에 사용. | remember, batch_remember, amend, forget, link, reflect, memory_consolidate |
+| `write-only` | 저장 전용 세션. recall, context 제외. 데이터 수집 파이프라인에 사용. | recall, context, reconstruct_history, graph_explore, fragment_history, search_traces, memory_stats |
+| `onboarding` | 사용자 안내 세션. get_skill_guide를 첫 도구로 강제 노출. | 없음 (get_skill_guide 우선 안내) |
+| `audit` | 읽기·추적 세션. 쓰기 도구 제외. 감사·컴플라이언스 목적. master 세션에만 적용되며 일반 키 세션에서는 무시된다. | remember, batch_remember, amend, forget, link, reflect |
+
+Preset은 tools/list 응답만 거른다. tools/call 경로는 preset을 검사하지 않으므로 호출 가능 여부는 RBAC 권한으로 정해진다.
 
 HTTP 헤더로 설정:
 ```
@@ -155,49 +172,25 @@ Content-Type: application/json
 
 ```json
 {
-  "ok": true,
   "oldSessionId": "aabbcc11-...-8899ddee",
   "newSessionId": "ffeedd22-...-3344ccbb",
-  "reason": "suspected_leak",
-  "rotatedAt": "2026-04-21T12:34:56.789Z"
+  "expiresAt": 1776774896789,
+  "reason": "suspected_leak"
 }
 ```
 
 정책:
 
-- 인증: `Authorization: Bearer` 필수. 대상 세션 소유권이 일치하지 않으면 403
-- CSRF 방어: `Origin` 헤더 필수. 누락 또는 허용 목록 외 Origin이면 403
-- Rate limit: IP당 분당 `MEMENTO_ROTATE_RATE_LIMIT_PER_MIN` 회 (기본 5). 초과 시 429
+- 인증: `Authorization: Bearer` 필수(실패 시 401). `Mcp-Session-Id` 누락 시 400, 세션 없음 404, 소유권 불일치 403
+- Origin 확인: `Origin` 헤더가 없으면 루프백 소켓에서 온 요청만 받는다. localhost/127.0.0.1 Origin은 항상 허용한다. `ALLOWED_ORIGINS`와 `ADMIN_ALLOWED_ORIGINS`가 모두 비어 있으면 모든 Origin을 받고, 하나라도 설정되어 있으면 두 목록에 있는 Origin만 받는다. 그 밖은 403
+- Rate limit: 클라이언트 주소당 분당 `MEMENTO_ROTATE_RATE_LIMIT_PER_MIN` 회 (기본 5). 초과 시 429와 `Retry-After`. 클라이언트 주소는 `TRUST_PROXY_HOPS` 설정에 따라 정해진다
 - `reason` 필드는 감사 로그용으로 최대 128자. 지정하지 않으면 `explicit_rotate`
 - 메트릭: `mcp_session_rotation_total{reason}` 카운터 + `mcp_rotate_rate_limited_total` 카운터
 - CLI: `memento-mcp session rotate <sessionId>` 서브명령으로 동일 기능 호출. 자세한 사용법은 `docs/cli.md` 참조
 
-### tools/list 응답 — meta 필드
+### tools/list 응답 필드
 
-각 도구의 `tools/list` 응답 항목은 `meta` 필드를 포함한다.
-
-```json
-{
-  "name": "recall",
-  "description": "...",
-  "inputSchema": { ... },
-  "meta": {
-    "capabilities": ["search", "pagination", "caseMode"],
-    "riskLevel": "read",
-    "requiresMaster": false,
-    "beta": false,
-    "idempotent": true
-  }
-}
-```
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `capabilities` | string[] | 도구가 지원하는 기능 태그 목록 |
-| `riskLevel` | string | 도구의 위험 등급. `read` / `write` / `admin` |
-| `requiresMaster` | boolean | master key(MEMENTO_ACCESS_KEY)만 호출 가능 여부 |
-| `beta` | boolean | 실험적 기능 여부. true 시 인터페이스가 변경될 수 있음 |
-| `idempotent` | boolean | 동일 파라미터로 반복 호출해도 부작용이 없는지 여부 |
+각 항목은 `name`, `title`, `annotations`, `description`, `inputSchema`를 담는다. `annotations`는 MCP 표준 힌트(`readOnlyHint`, `idempotentHint`, `destructiveHint`, `openWorldHint`)다. 서버 내부 레지스트리(`lib/tool-registry.js`)는 도구별 `riskLevel`(`safe`, `caution`, `destructive`)과 `requiresMaster`를 따로 관리하며 이 값은 tools/list 응답에 실리지 않는다.
 
 ---
 
@@ -216,8 +209,11 @@ RFC 7591 Dynamic Client Registration 및 PKCE 기반 Authorization Code Flow를 
   "token_endpoint": "https://{domain}/token",
   "registration_endpoint": "https://{domain}/register",
   "response_types_supported": ["code"],
-  "grant_types_supported": ["authorization_code"],
-  "code_challenge_methods_supported": ["S256"]
+  "grant_types_supported": ["authorization_code", "refresh_token"],
+  "code_challenge_methods_supported": ["S256"],
+  "token_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"],
+  "scopes_supported": ["mcp"],
+  "service_documentation": "https://{domain}/docs"
 }
 ```
 
@@ -254,7 +250,7 @@ OAuth 2.0 인가 엔드포인트. PKCE `code_challenge` 및 `code_challenge_meth
 
 쿼리 파라미터: `response_type=code`, `client_id`, `redirect_uri`, `code_challenge`, `code_challenge_method`, `state`(선택).
 
-사용자 동의 화면을 렌더링하며, 동의 후 `redirect_uri`로 `code`를 포함한 302 리다이렉트를 반환한다.
+`redirect_uri`가 신뢰 목록(`OAUTH_TRUSTED_ORIGINS`)에 있으면 동의 화면 없이 바로 `code`를 담아 302로 이동한다. 그 밖에는 동의 화면을 렌더링하며, 동의 후 `redirect_uri`로 `code`를 포함한 302 리다이렉트를 반환한다. 등록되지 않은 client_id는 신뢰 목록의 redirect_uri이거나 `ALLOW_AUTO_DCR_REGISTER=true`일 때만 자동 등록된다.
 
 ### POST /authorize
 
@@ -271,7 +267,7 @@ OAuth 2.0 인가 엔드포인트. PKCE `code_challenge` 및 `code_challenge_meth
 | `state` | 원본 OAuth 파라미터 (존재 시) |
 
 - `decision=allow`: `redirect_uri?code=<code>&state=<state>` 로 302 리다이렉트
-- `decision=deny`: `redirect_uri?error=access_denied` 로 302 리다이렉트
+- `decision=deny`: `redirect_uri?error=access_denied&error_description=User%20denied%20access&state=<state>`로 302 리다이렉트(`state`는 요청에 있을 때만 포함). 오류 응답 공통 규칙: redirect_uri가 없거나 URL이 아니면 400 JSON. 클라이언트에 등록되지 않은 redirect_uri는 `MEMENTO_OAUTH_REDIRECT_CHECK=warn`(기본)이면 경고를 남기고 302, `enforce`면 400 JSON
 
 ### PUT /v1/internal/model/nothing/keys/:id/daily-limit
 
@@ -359,7 +355,7 @@ Agent 조회는 생략 시 `default`, 지정 시 해당 agent와 `default`를 �
 | minImportance | number | - | 최소 중요도 필터 (0~1). 이 값 이상의 importance를 가진 파편만 반환. |
 | isAnchor | boolean | - | 앵커 필터. `true`는 앵커만, `false`는 비앵커만 반환하며 미지정 시 둘 다 반환. |
 | affect | string \| string[] | - | 정서 태그 필터. 단일 문자열 또는 배열. 해당 affect 값을 가진 파편만 반환. 유효값: neutral, frustration, confidence, surprise, doubt, satisfaction |
-| fields | string[] | - | 응답에 포함할 파편 필드 목록. 미지정 시 전체 필드 반환. 지원 키: id / content / type / topic / keywords / importance / created_at / access_count / confidence / linked / explanations / workspace / context_summary / case_id / valid_to / affect / ema_activation |
+| fields | string[] | - | 응답에 포함할 파편 필드 목록. 미지정 시 전체 필드 반환. 지원 키: id / content / type / topic / keywords / importance / created_at / access_count / confidence / linked / explanations / workspace / context_summary / case_id / valid_to / affect / ema_activation / key_id / key_name |
 
 ### 응답 파편 필드 (주요)
 
@@ -570,7 +566,7 @@ dryRun=true 응답 (실제 저장 없음):
     "fragment": { "content": "...", "type": "fact", "topic": "..." },
     "conflicts": [],
     "validation_warnings": [],
-    "quota": { "used": 120, "limit": 5000, "remaining": 4880 }
+    "quota": { "limit": 5000, "current": 120, "remaining": 4880, "resetAt": null }
   }
 }
 ```
@@ -644,7 +640,7 @@ violations 있는 경우 (soft gate — 저장됨):
 ### 에러 코드
 
 - `-32003` (SYMBOLIC_POLICY_VIOLATION): Symbolic hard gate가 활성화된 키에서 PolicyRules violations 발생. 저장이 거부됨. MCP 도구 에러(isError: true)가 아닌 JSON-RPC **프로토콜 레벨** 에러다.
-- `-32602` (Invalid params): `content` 길이가 4000자를 초과. JSON-RPC 프로토콜 레벨 에러다.
+- `-32602`: `content` 길이가 4000자를 초과. JSON-RPC 오류가 아니라 도구 결과 `{ "success": false, "error": "content length N exceeds max 4000", "code": -32602 }`로 반환된다.
 
 ```json
 {
@@ -792,7 +788,7 @@ violations 있는 경우 (soft gate — 저장됨):
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | id | string | O | 갱신 대상 파편 ID |
-| content | string | - | 새 내용 (300자 초과 시 절삭). 입력 자체는 최대 4000자까지 허용되며 초과 시 `-32602` 오류로 거부된다 |
+| content | string | - | 새 내용. 스키마는 최대 4000자를 표기하지만 amend 경로는 길이를 검사하거나 절삭하지 않으므로 클라이언트가 300자 이내로 맞춘다. remember의 자기완결성 기준을 따른다 |
 | topic | string | - | 새 주제 |
 | keywords | string[] | - | 새 키워드 목록 |
 | type | string | - | 새 유형 (fact, decision, error, preference, procedure, relation) |
@@ -805,6 +801,7 @@ violations 있는 경우 (soft gate — 저장됨):
 | phase | string | - | 작업 단계 변경 (planning, debugging, implementation, verification 등). |
 | agentId | string | - | 에이전트 ID |
 | dryRun | boolean | - | true 설정 시 실제 변경 없이 패치 적용 후의 예상 파편 상태를 반환. |
+| idempotencyKey | string | - | 재시도 안전 식별자 (최대 128자). 같은 key_id 범위에서 같은 값으로 반복 호출하면 첫 호출의 응답을 그대로 반환하고 이력을 다시 쌓지 않는다 |
 
 ---
 
@@ -826,6 +823,7 @@ violations 있는 경우 (soft gate — 저장됨):
 | agentId | string | - | 에이전트 ID |
 | workspace | string | - | 호출자가 넘긴 항목(summary, decisions 등)에 적용할 워크스페이스. 세션 종합 그룹은 원래 workspace를 유지하고, 그룹에 workspace가 없을 때만 이 값을 쓴다. 미지정 시 API 키의 default_workspace, 그것도 없으면 전역(NULL). 멀티 프로젝트 환경에서 세션 요약의 교차 주입 방지에 권장. |
 | task_effectiveness | object | - | 세션 작업 결과와 도구 사용 효과성 평가. outcome, evaluator, evidence, unmet_requirements, overall_success, tool_highlights, tool_pain_points로 구성된다. 아래 표 참조. |
+| idempotencyKey | string | - | 재시도 안전 식별자 (최대 128자). 같은 key_id 범위에서 같은 값으로 반복 호출하면 첫 호출이 만든 파편 목록을 그대로 반환한다 |
 
 #### task_effectiveness 하위 필드
 
@@ -889,6 +887,7 @@ Anchor + Core + Learning + Working Memory와 session_reflect를 분리 로드한
 | types | string[] | - | 로드할 유형 목록 (기본: preference, error, procedure) |
 | sessionId | string | - | 세션 ID (Working Memory 로드용) |
 | agentId | string | - | 에이전트 ID |
+| includePeerAgents | boolean | - | master 전용. true이면 key/workspace 경계 안의 모든 agent 기억을 포함한다. 일반 API 키는 권한 오류. 기본 false. |
 | workspace | string | - | 워크스페이스 필터. 지정 시 해당 workspace + 전역(NULL), 미지정 시 key default + 전역(NULL), 둘 다 없으면 전역(NULL)만 반환. |
 | allWorkspaces | boolean | - | master 전용 전체 workspace context 조회. anchor/core/learning/working memory에 동일 적용. |
 | structured | boolean | - | true 시 계층적 트리 구조 반환, false/미지정 시 기존 flat list (기본값: false) |
@@ -918,6 +917,7 @@ Anchor + Core + Learning + Working Memory와 session_reflect를 분리 로드한
 | irrelevance_reason | string | - | 무관 판정 원인. `not_stored`(저장된 적 없음), `search_miss`(저장됐으나 미검색), `scope_leak`(타 스코프 유입), `topic_mismatch`(주제 불일치), `other`(그 외). `relevant=false`일 때만 의미를 가지며, 그 외의 호출이나 열거값 밖의 값은 폐기되어 NULL로 기록된다. 원인별 분포는 `memory_stats`의 `irrelevance_breakdown`으로 집계된다. |
 | search_event_id | integer | - | 직전 recall이 반환한 _meta.searchEventId. 검색 품질 분석에 사용. |
 | fragment_ids | string[] | - | 피드백 대상 파편 ID 목록. 제공 시 해당 파편의 활성화 점수가 피드백에 따라 조정된다. |
+| idempotencyKey | string | - | 재시도 안전 식별자 (최대 128자). 같은 값으로 반복 호출하면 첫 호출의 응답을 그대로 반환하고 링크 가중치를 다시 조정하지 않는다 |
 
 ---
 
@@ -973,7 +973,7 @@ workspace 기입 현황과 세션당 파편 분포를 반환한다.
 
 ### 실행 특성
 
-`admin` 권한이 필요하다. 일반 API 키로 호출하면 위의 RBAC 절에 적은 대로 `-32600 Internal error`가 반환된다.
+master key 전용 도구다(`requiresMaster: true`). 일반 API 키 세션의 tools/list에는 나타나지 않으며, 호출하면 `-32001`과 `Permission denied: 'memory_consolidate' requires master authentication`이 반환된다.
 
 전체 사이클은 20개 이상의 stage로 구성되며 파편 규모에 비례해 시간이 걸린다. 약 1만 3천 파편 규모에서 전 사이클 소요는 7분 안팎이다. 스케줄러가 기본 6시간 주기로 같은 경로를 실행하므로, 수동 호출은 점검 목적일 때만 쓴다.
 
@@ -1033,7 +1033,7 @@ AnchorMind 최적 활용 가이드를 반환한다. 기억 도구 사용법, 세
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| section | string | - | 특정 섹션만 조회. 미지정 시 전체 가이드 반환. 가능한 값: overview, lifecycle, keywords, search, episode, multiplatform, codex, tools, importance, experiential, cbr, triggers, antipatterns |
+| section | string | - | 특정 섹션만 조회. 미지정 시 전체 가이드 반환. 가능한 값: overview, lifecycle, keywords, search, episode, multiplatform, codex, tools, importance, experiential, cbr, triggers, workspace, antipatterns |
 
 ---
 
@@ -1174,7 +1174,7 @@ curl -X POST https://anchormind.example.com/mcp \
     "fragment": { "content": "Redis Sentinel 연결 실패 — REDIS_SENTINEL_ENABLED 미설정", "type": "error", "topic": "redis" },
     "conflicts": [],
     "validation_warnings": [],
-    "quota": { "used": 120, "limit": 5000, "remaining": 4880 }
+    "quota": { "limit": 5000, "current": 120, "remaining": 4880, "resetAt": null }
   }
 }
 ```
