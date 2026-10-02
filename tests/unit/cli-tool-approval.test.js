@@ -26,7 +26,7 @@ mock.module("child_process", {
 const { runGeminiCLI }                          = await import("../../lib/gemini.js");
 const { runCopilotCLI }                         = await import("../../lib/copilot.js");
 const { runOpenCodeCLI }                        = await import("../../lib/opencode.js");
-const { cliToolApprovalMode, cliWorkDir }       = await import("../../lib/llm/util/cli-approval.js");
+const { cliToolApprovalMode, cliWorkDir, cleanupCliWorkDir } = await import("../../lib/llm/util/cli-approval.js");
 
 const DENY_FLAGS = ["--deny-tool=shell", "--deny-tool=write", "--deny-tool=url", "--disable-builtin-mcps", "--no-custom-instructions"];
 
@@ -47,7 +47,17 @@ beforeEach(() => {
   spawnMock.mock.resetCalls();
   spawnMock.mock.mockImplementation(() => fakeProcess("{\"ok\":true}"));
 });
-afterEach(() => { delete process.env.MEMENTO_LLM_CLI_TOOL_APPROVAL; });
+
+const PREVIOUS_APPROVAL = process.env.MEMENTO_LLM_CLI_TOOL_APPROVAL;
+const PREVIOUS_TRUST    = process.env.GEMINI_CLI_TRUST_WORKSPACE;
+
+afterEach(() => {
+  mock.restoreAll();
+  if (PREVIOUS_APPROVAL === undefined) delete process.env.MEMENTO_LLM_CLI_TOOL_APPROVAL;
+  else process.env.MEMENTO_LLM_CLI_TOOL_APPROVAL = PREVIOUS_APPROVAL;
+  if (PREVIOUS_TRUST === undefined) delete process.env.GEMINI_CLI_TRUST_WORKSPACE;
+  else process.env.GEMINI_CLI_TRUST_WORKSPACE = PREVIOUS_TRUST;
+});
 
 const lastSpawn = () => spawnMock.mock.calls.at(-1).arguments;
 
@@ -85,6 +95,13 @@ describe("기본(none)", () => {
     assert.equal(opts.cwd, cliWorkDir());
   });
 
+  it("gemini는 임시 작업 디렉터리를 신뢰 작업 공간으로 지정하고 인자로 신뢰 옵션을 넘기지 않는다", async () => {
+    await runGeminiCLI("ctx", "p");
+    const [, args, opts] = lastSpawn();
+    assert.equal(opts.env.GEMINI_CLI_TRUST_WORKSPACE, "true");
+    assert.equal(args.includes("--skip-trust"), false);
+  });
+
   it("copilot은 쓰기, 셸, URL 도구를 거부하는 규칙을 붙인다", async () => {
     await runCopilotCLI("p");
     const [, args, opts] = lastSpawn();
@@ -113,6 +130,12 @@ describe("기본(none)", () => {
     const [, args, opts] = lastSpawn();
     assert.equal(args[args.indexOf("--dir") + 1], "/tmp/explicit");
     assert.deepEqual(JSON.parse(opts.env.OPENCODE_PERMISSION), { "*": "deny" });
+    assert.equal(opts.cwd, cliWorkDir());
+  });
+
+  it("opencode의 자식 프로세스 작업 디렉터리는 --dir 지원 여부와 무관하게 임시 디렉터리다", async () => {
+    await runOpenCodeCLI("p", {});
+    assert.equal(lastSpawn()[2].cwd, cliWorkDir());
   });
 
   it("사용자 입력은 프롬프트 인자 한 곳에만 들어가고 작업 디렉터리는 고정이다", async () => {
@@ -124,35 +147,56 @@ describe("기본(none)", () => {
     for (const call of spawnMock.mock.calls) {
       const [, args, opts] = call.arguments;
       assert.equal(args.filter((a) => a === hostile).length, 1);
-      assert.equal(opts.cwd ?? args[args.indexOf("--dir") + 1], cliWorkDir());
+      assert.equal(opts.cwd, cliWorkDir());
     }
   });
 });
 
 describe("MEMENTO_LLM_CLI_TOOL_APPROVAL=all", () => {
-  it("gemini는 -y와 서버 작업 디렉터리로 실행한다", async () => {
-    process.env.MEMENTO_LLM_CLI_TOOL_APPROVAL = "all";
-    await runGeminiCLI("ctx", "p");
-    assert.ok(lastSpawn()[1].includes("-y"));
-    assert.equal(lastSpawn()[2].cwd, undefined);
+  beforeEach(() => { process.env.MEMENTO_LLM_CLI_TOOL_APPROVAL = "all"; });
+
+  it("gemini는 -y와 서버 작업 디렉터리로 실행하고 신뢰 변수를 더하지 않는다", async () => {
+    delete process.env.GEMINI_CLI_TRUST_WORKSPACE;
+    await runGeminiCLI("ctx", "p", { model: "m" });
+    const [, args, opts] = lastSpawn();
+    assert.deepEqual(args, ["-p", "p", "--output-format", "text", "-y", "--model", "m"]);
+    assert.equal(opts.cwd, undefined);
+    assert.equal(opts.env.GEMINI_CLI_TRUST_WORKSPACE, undefined);
   });
 
-  it("copilot은 거부 규칙 없이 실행한다", async () => {
-    process.env.MEMENTO_LLM_CLI_TOOL_APPROVAL = "all";
-    await runCopilotCLI("p");
+  it("copilot은 거부 규칙 없이 서버 작업 디렉터리로 실행한다", async () => {
+    await runCopilotCLI("p", { effort: "low" });
     const [, args, opts] = lastSpawn();
-    assert.ok(args.includes("--allow-all-tools"));
-    assert.equal(args.some((a) => a.startsWith("--deny-tool")), false);
-    assert.equal(args.includes("--disable-builtin-mcps"), false);
-    assert.equal(args.includes("--no-custom-instructions"), false);
+    assert.deepEqual(args, ["-p", "p", "--output-format", "text", "--effort", "low", "--allow-all-tools"]);
     assert.equal(opts.cwd, undefined);
   });
 
   it("opencode는 권한 환경 변수 없이 서버 작업 디렉터리로 실행한다", async () => {
-    process.env.MEMENTO_LLM_CLI_TOOL_APPROVAL = "all";
     await runOpenCodeCLI("p", {});
     const [, args, opts] = lastSpawn();
+    assert.deepEqual(args, ["run", "--format", "default", "--dir", process.cwd(), "--pure", "p"]);
     assert.equal(opts.env.OPENCODE_PERMISSION, undefined);
-    assert.equal(args[args.indexOf("--dir") + 1], process.cwd());
+    assert.equal(opts.cwd, undefined);
+  });
+});
+
+describe("작업 디렉터리 정리", () => {
+  it("정리 중 삭제가 실패해도 예외를 던지지 않는다", () => {
+    const dir = cliWorkDir();
+    mock.method(fs, "rmSync", () => { throw Object.assign(new Error("denied"), { code: "EACCES" }); });
+    const write = mock.method(process.stderr, "write", () => true);
+    assert.doesNotThrow(() => cleanupCliWorkDir());
+    assert.equal(write.mock.calls.length, 1);
+    mock.restoreAll();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("정리하면 디렉터리가 사라지고 다음 호출은 새 디렉터리를 만든다", () => {
+    const dir = cliWorkDir();
+    cleanupCliWorkDir();
+    assert.equal(fs.existsSync(dir), false);
+    const next = cliWorkDir();
+    assert.ok(fs.existsSync(next));
+    cleanupCliWorkDir();
   });
 });

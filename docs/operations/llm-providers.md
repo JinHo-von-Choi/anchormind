@@ -114,7 +114,7 @@ rate(memento_llm_token_usage_total{direction="input"}[1h])
 
 **CLI 자식 환경**: CLI provider 자식 프로세스는 기본 변수(PATH, HOME, LANG, 프록시, 인증서 경로 등)와 CLI별 인증 변수만 받는다. 그 밖의 변수가 필요하면 `MEMENTO_LLM_CLI_ENV_PASSTHROUGH`에 이름을 쉼표로 적는다(기본 없음).
 
-**CLI 도구 승인**: gemini-cli, copilot-cli, opencode-cli는 기본(`MEMENTO_LLM_CLI_TOOL_APPROVAL=none`)에서 쓰기, 셸, 네트워크 도구를 거부하고 빈 임시 디렉터리에서 실행한다. 이 호출들은 JSON 텍스트 생성만 요구한다. 특정 CLI가 도구 승인 없이는 JSON을 돌려주지 못하면 `MEMENTO_LLM_CLI_TOOL_APPROVAL=all`로 전체 자동 승인 인자와 서버 작업 디렉터리 실행으로 전환한다. 값은 호출 시점에 읽는다.
+**CLI 도구 승인**: gemini-cli, copilot-cli, opencode-cli는 기본(`MEMENTO_LLM_CLI_TOOL_APPROVAL=none`)에서 쓰기, 셸, 네트워크 도구를 거부하고 빈 임시 디렉터리에서 실행한다. 이 호출들은 JSON 텍스트 생성만 요구한다. gemini-cli, copilot-cli, opencode-cli를 쓰는 배포는 기본에서 제한된 호출을 받으며, `MEMENTO_LLM_CLI_TOOL_APPROVAL=all`로 설정하면 승인 제한이 없는 호출을 쓴다. 특정 CLI가 도구 승인 없이는 JSON을 돌려주지 못하면 `MEMENTO_LLM_CLI_TOOL_APPROVAL=all`로 전체 자동 승인 인자와 서버 작업 디렉터리 실행으로 전환한다. 값은 호출 시점에 읽는다.
 
 ## 장애 대응
 

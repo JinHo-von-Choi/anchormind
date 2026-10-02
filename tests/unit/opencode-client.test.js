@@ -56,6 +56,6 @@ describe("runOpenCodeCLI", () => {
       "--agent", "general",
       "payload"
     ]);
-    assert.equal(options.cwd, undefined);
+    assert.match(options.cwd, /memento-llm-cli-/);
   });
 });
