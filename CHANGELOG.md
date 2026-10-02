@@ -6,6 +6,7 @@
 
 - 런타임 의존성 `moment`를 2.31.0으로 올렸다.
 - `initialize`의 협상 프로토콜 버전은 항상 지원 목록(2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05) 중 하나다. YYYY-MM-DD 형식이 아닌 값은 가장 오래된 지원 버전으로, 목록 사이의 날짜는 그 이하의 가장 가까운 지원 버전으로 협상한다. `mcp_protocol_version_negotiations_total`의 `requested_version`, `negotiated_version`과 `mcp_protocol_version_reanchored_total`의 `from`, `to` 라벨 값은 지원 버전, `none`, `other`(from은 `null` 포함)다.
+- README와 벤치마크 문서의 LongMemEval 수치에 측정 조건(데이터셋, 단계별 소요 시간)과 논문 링크(arXiv 2410.10813)를 맞춘다. 임베딩 없이 동작하는 회상 범위를 명시한다.
 
 ## [5.12.0] - 2026-10-02
 

@@ -283,15 +283,15 @@ AnchorMind가 주입하는 기억 파편은 시스템 프롬프트보다 우선�
 
 ## 벤치마크
 
-[LongMemEval-S](https://arxiv.org/abs/2407.15460) 500문항 기준 성능:
+[LongMemEval-S](https://arxiv.org/abs/2410.10813) 500문항 기준 성능(2026-03-29 측정, 리더와 평가자 Gemini 2.5 Flash):
 
-| 지표 | 점수 | 비교 |
-|------|------|------|
-| 검색 recall@5 | 88.3% | LongMemEval 논문 Stella 1.5B 대비 +8~18pp |
-| QA 정답률 | 45.4% | temporal metadata 적용 (baseline 40.4%) |
-| 파편 처리량 | 89,006개 / 27초 | 인제스천 + 임베딩 + 검색 전체 파이프라인 |
+| 지표 | 점수 | 조건 |
+|-|-|-|
+| 검색 recall_any@5 | 88.3% | text-embedding-3-small, 질의의 99%를 pgvector 계층이 처리 |
+| QA 정답률 | 44.9% | temporal metadata와 abstention 감지 적용 (기본 조건 40.4%) |
+| 데이터 적재 | 89,006개 / 27초 | DB bulk INSERT만. 임베딩 백필 약 15분, 검색 500문항 2분은 별도 |
 
-검색은 6개 문항 유형 중 5개에서 80% 이상 recall을 달성한다. 다만 검색 recall(88.3%)과 QA 정답률(45.4%) 사이에 큰 gap이 존재한다. 이는 검색된 파편에서 정답을 합성하는 reader 단계의 한계로, multi-session 추론과 시간축 추론에서 특히 두드러진다.
+검색은 6개 문항 유형 중 5개에서 80% 이상 recall을 달성한다. 다만 검색 recall(88.3%)과 QA 정답률(44.9%) 사이에 큰 차이가 있다. 이는 검색된 파편에서 정답을 합성하는 reader 단계의 한계로, multi-session 추론과 시간축 추론에서 특히 두드러진다. LongMemEval 논문의 검색 표는 질문당 약 500세션인 LongMemEval_M 기준이라 위 수치와 직접 비교하지 않는다.
 
 상세 분석은 [Benchmark Report](docs/benchmark.md) 참조.
 
@@ -391,7 +391,7 @@ docs/
 - @huggingface/transformers + ONNX Runtime (NLI 모순 분류 + 로컬 임베딩, CPU 전용)
 - MCP Protocol 2025-11-25
 
-PostgreSQL만 있으면 핵심 기능이 동작한다. Redis를 추가하면 L1 캐스케이드 검색과 SessionActivityTracker가 활성화되고, OpenAI API 또는 `EMBEDDING_PROVIDER=transformers`를 추가하면 L3 시맨틱 검색과 자동 링크가 활성화된다.
+PostgreSQL만 있으면 저장, keywords 배열 일치 회상, 링크, 관리 기능이 동작한다. 자연어 `text` 질의 회상은 임베딩이 있어야 결과를 낸다. Redis를 추가하면 L1 캐스케이드 검색과 SessionActivityTracker가 활성화되고, OpenAI API 또는 `EMBEDDING_PROVIDER=transformers`를 추가하면 L3 시맨틱 검색과 자동 링크가 활성화된다.
 
 ## 만들게 된 계기
 

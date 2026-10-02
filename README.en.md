@@ -281,15 +281,15 @@ For behavioral rules, use higher-priority channels such as CLAUDE.md, AGENTS.md,
 
 ## Benchmark
 
-Performance on [LongMemEval-S](https://arxiv.org/abs/2407.15460) (500 questions):
+Performance on [LongMemEval-S](https://arxiv.org/abs/2410.10813) (500 questions, measured 2026-03-29, reader and judge Gemini 2.5 Flash):
 
-| Metric | Score | Comparison |
-|--------|-------|------------|
-| Retrieval recall@5 | 88.3% | +8-18pp vs Stella 1.5B (LongMemEval paper) |
-| QA accuracy | 45.4% | with temporal metadata (baseline 40.4%) |
-| Fragment throughput | 89,006 / 27s | full ingestion-embedding-retrieval pipeline |
+| Metric | Score | Condition |
+|-|-|-|
+| Retrieval recall_any@5 | 88.3% | text-embedding-3-small, 99% of queries served by the pgvector layer |
+| QA accuracy | 44.9% | with temporal metadata and abstention detection (base condition 40.4%) |
+| Data load | 89,006 / 27s | DB bulk INSERT only. Embedding backfill (~15 min) and retrieval of 500 questions (2 min) are separate |
 
-Retrieval exceeds 80% recall on 5 of 6 question types. However, a significant gap exists between retrieval recall (88.3%) and QA accuracy (45.4%). This reflects reader-stage limitations in synthesizing answers from retrieved fragments, particularly for multi-session and temporal reasoning questions.
+Retrieval exceeds 80% recall on 5 of 6 question types. However, a significant gap exists between retrieval recall (88.3%) and QA accuracy (44.9%). This reflects reader-stage limitations in synthesizing answers from retrieved fragments, particularly for multi-session and temporal reasoning questions. The retrieval table in the LongMemEval paper uses LongMemEval_M (about 500 sessions per question), so it is not directly comparable with these numbers.
 
 See [Benchmark Report](docs/benchmark.en.md) for the full analysis.
 
@@ -365,7 +365,7 @@ AnchorMind is optimized for fact caching. When narrative context matters:
 - @huggingface/transformers + ONNX Runtime (NLI contradiction classification + local embeddings, CPU-only)
 - MCP Protocol 2025-11-25
 
-The core features work with PostgreSQL alone. Adding Redis enables L1 cascade search and SessionActivityTracker. Adding the OpenAI API or setting `EMBEDDING_PROVIDER=transformers` enables L3 semantic search and automatic linking.
+With PostgreSQL alone, storage, recall by matching the stored keywords array, links and admin features work. Natural-language `text` recall returns results only when embeddings are configured. Adding Redis enables L1 cascade search and SessionActivityTracker. Adding the OpenAI API or setting `EMBEDDING_PROVIDER=transformers` enables L3 semantic search and automatic linking.
 
 ## Why I Built This
 

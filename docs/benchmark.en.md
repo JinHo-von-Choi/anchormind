@@ -1,6 +1,6 @@
 # Benchmark Report
 
-Based on [LongMemEval-S](https://arxiv.org/abs/2407.15460) benchmark. Full evaluation code: [longmemeval-memento](https://github.com/JinHo-von-Choi/longmemeval-memento)
+Based on [LongMemEval-S](https://arxiv.org/abs/2410.10813) benchmark. Full evaluation code: [longmemeval-memento](https://github.com/JinHo-von-Choi/longmemeval-memento)
 
 Date: 2026-03-29
 Evaluator: Jinho Choi
@@ -72,7 +72,7 @@ Gap = retrieval recall - QA accuracy. Large gaps indicate the reader fails to ex
 
 ### Retrieval Strengths
 
-AnchorMind's pgvector semantic search achieves 88.3% recall_any@5 across all question types. This is competitive with dense retrievers reported in the LongMemEval paper (Stella 1.5B: ~0.7-0.8 range at similar K values). The fragment-based atomic storage with OpenAI embeddings provides strong semantic matching.
+AnchorMind's pgvector semantic search recorded 88.3% recall_any@5 across all question types. The retrieval table in the LongMemEval paper (Table 3) uses LongMemEval_M with about 500 sessions per question (Stella V5 1.5B base design: session R@5 0.706, round R@5 0.582), so it is not directly comparable with this LongMemEval_S result. Retrieval here is served by fragment-level storage with OpenAI embeddings and pgvector.
 
 Multi-session (98.3%) and knowledge-update (97.2%) retrieval is near-perfect, indicating that AnchorMind handles cross-session information distribution and temporal updates well at the retrieval level.
 

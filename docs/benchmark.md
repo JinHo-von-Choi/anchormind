@@ -1,6 +1,6 @@
 # 벤치마크 리포트
 
-[LongMemEval-S](https://arxiv.org/abs/2407.15460) 벤치마크 기반. 전체 평가 코드: [longmemeval-memento](https://github.com/JinHo-von-Choi/longmemeval-memento)
+[LongMemEval-S](https://arxiv.org/abs/2410.10813) 벤치마크 기반. 전체 평가 코드: [longmemeval-memento](https://github.com/JinHo-von-Choi/longmemeval-memento)
 
 일자: 2026-03-29
 평가자: 최진호
@@ -72,7 +72,7 @@ L1과 L2가 0%인 이유는 round_direct 수집 방식이 세션 ID와 날짜를
 
 ### 검색 강점
 
-AnchorMind의 pgvector 시맨틱 검색은 전체 질문 유형에 걸쳐 88.3%의 recall_any@5를 달성한다. 이는 LongMemEval 논문에 보고된 dense retriever(Stella 1.5B: 유사 K 값에서 ~0.7-0.8 범위)와 경쟁력 있는 수준이다. OpenAI 임베딩을 사용한 파편 기반 원자적 저장이 강력한 시맨틱 매칭을 제공한다.
+AnchorMind의 pgvector 시맨틱 검색은 전체 질문 유형에 걸쳐 88.3%의 recall_any@5를 기록했다. LongMemEval 논문의 검색 표(Table 3)는 질문당 약 500세션인 LongMemEval_M 기준(Stella V5 1.5B 기본 설계 session R@5 0.706, round R@5 0.582)이므로 이 LongMemEval_S 결과와 직접 비교하지 않는다. 검색은 OpenAI 임베딩을 사용한 파편 단위 저장과 pgvector가 맡았다.
 
 multi-session(98.3%)과 knowledge-update(97.2%) 검색은 거의 완벽하며, AnchorMind가 검색 수준에서 세션 간 정보 분산과 시간적 업데이트를 잘 처리함을 보여준다.
 
