@@ -56,8 +56,9 @@ mock.module("../../lib/logger.js", {
 const skipReasons = [];
 mock.module("../../lib/memory/consolidate/split-metrics.js", {
   namedExports: {
-    recordSplitSkip  : (reason) => { skipReasons.push(reason); },
-    splitSkippedTotal: { inc: () => {} }
+    recordSplitStepFailure: () => {},
+    recordSplitSkip       : (reason) => { skipReasons.push(reason); },
+    splitSkippedTotal     : { inc: () => {} }
   }
 });
 

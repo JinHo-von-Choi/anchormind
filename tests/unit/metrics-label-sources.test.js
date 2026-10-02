@@ -36,6 +36,7 @@ const LABEL_PARAMS = new Map([
   ["recordGateBlock",               [0, 1]],
   ["recordGateAllow",               [0]],
   ["recordSplitSkip",               [0]],
+  ["recordSplitStepFailure",        [0]],
   ["recordWarning",                 [0, 1]],
   ["recordClaim",                   [0, 1]]
 ]);
@@ -72,6 +73,7 @@ const REVIEWED = new Map([
   ["lib/llm/index.js|inc|primaryName",                                            "등록된 provider 이름"],
   ["lib/llm/providers/OpenAICompatibleProvider.js|inc|this.name",                 "등록된 provider 이름"],
   ["lib/memory/consolidate/ConsolidatorGC.js|recordSplitSkip|reason",             "splitLongFragments 안의 고정 사유 문자열"],
+  ["lib/memory/consolidate/ConsolidatorGC.js|recordSplitStepFailure|step",       "_recordSplitStepFailure 호출부의 고정 단계 문자열"],
   ["lib/memory/consolidate/MemoryConsolidator.js|recordGateBlock|verdict.reason", "consolidate-gate 판정 사유 상수"],
   ["lib/memory/processors/MemoryRememberer.js|recordWarning|`policy.${v.rule}`",  "PolicyRules 규칙 이름"],
   ["lib/memory/processors/MemoryRememberer.js|recordWarning|v.severity || \"low\"", "PolicyRules 심각도 상수"],

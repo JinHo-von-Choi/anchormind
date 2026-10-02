@@ -63,8 +63,9 @@ mock.module("../../lib/logger.js", {
 
 mock.module("../../lib/memory/consolidate/split-metrics.js", {
   namedExports: {
-    recordSplitSkip  : () => {},
-    splitSkippedTotal: { inc: () => {} }
+    recordSplitStepFailure: () => {},
+    recordSplitSkip       : () => {},
+    splitSkippedTotal     : { inc: () => {} }
   }
 });
 

@@ -370,7 +370,7 @@ server.listen(PORT, () => {
         process.exit(1);
       }
       await warnPendingMigrations(pool, { error: (msg, meta) => logError(msg, null, meta) });
-    }).catch(() => {});
+    }).catch(err => logError("[Startup] pgvector 스키마·임베딩 일관성·마이그레이션 점검 실패", err, { code: err?.code ?? null }));
   }
 
   const embeddingWorkerRef = { current: null };
@@ -378,7 +378,7 @@ server.listen(PORT, () => {
   setWorkerRefs({ embeddingWorkerRef });
 
   /** Reranker 사전 로드 (비차단 — 실패해도 서버 시작 중단 없음) */
-  preloadReranker().catch(() => {});
+  preloadReranker().catch(err => logWarn(`[Reranker] preload failed (non-fatal): ${err?.message ?? err}`));
 
   /** 형태소 분석기 워밍업 (비차단 — garu-ko·PorterStemmer 선제 로드, jieba·kuromoji 제외) */
   const tokenizerMode = MEMORY_CONFIG?.morphemeIndex?.tokenizer ?? "local";
