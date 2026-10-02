@@ -96,3 +96,7 @@ after(async () => {
 ## Commit Messages
 
 Format: `[영역] 설명` (예: `[HTTP] 응답 공통 헤더 추가`, `[문서] 연결 설정 안내 현행화`)
+
+## 릴리스
+
+`npm run release -- X.Y.Z`가 작업 트리와 HEAD의 Tests 워크플로 결과를 확인한 뒤 CHANGELOG의 [Unreleased]를 버전 절로 옮기고 package.json, package-lock.json, SKILL.md, SECURITY.md의 버전 표기를 갱신한다. lint, 마이그레이션 lint, 단위 시험이 통과하면 `release: X.Y.Z` 커밋과 annotated tag를 만들고, push와 `gh release create` 명령을 출력한다. push와 Release 생성은 출력된 명령으로 직접 한다.

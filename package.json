@@ -41,6 +41,7 @@
     "lint:migrations": "node scripts/lint-migrations.js",
     "audit:ci": "audit-ci --config audit-ci.jsonc",
     "migrate": "node scripts/migrate.js",
+    "release": "node scripts/release.js",
     "cli": "node bin/memento.js"
   },
   "dependencies": {
