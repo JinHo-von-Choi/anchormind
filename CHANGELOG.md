@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [5.12.0] - 2026-10-02
+
 ### 업그레이드 주의
 
 - 응답 헤더 `Access-Control-Allow-Origin`은 `ALLOWED_ORIGINS`가 비어 있을 때 `MEMENTO_CORS_MODE`(기본 `observe`)를 따른다. Origin이 있는 응답에는 `Vary: Origin`이 붙는다.
@@ -22,9 +24,9 @@
 ### Changed
 
 - 관리 콘솔 인증, `/session/rotate` 호출 제한, MCP 핸들러, 서버 요청 기록은 클라이언트 주소를 `TRUST_PROXY_HOPS` 기준의 한 경로(`resolveClientIp`)로 판정한다.
-- `/register`에 넘긴 `client_name`이 `apikey:`로 시작하면 저장하지 않는다. `/authorize`는 서버가 발급한 형식의 `client_id`일 때만 API 키 바인딩을 인정한다.
+- OAuth 클라이언트 등록과 인가 요청의 입력 처리 경로를 정리한다.
 - `/authorize` 처리 중 저장소 조회 등에서 예외가 나면 기록 후 500 JSON(`server_error`)으로 응답한다.
-- Google Gemini HTTP provider는 API 키를 `x-goog-api-key` 헤더로 보낸다. LLM HTTP 호출의 타임아웃 오류 메시지와 로그에는 쿼리 문자열을 뺀 URL만 남기고, 타이머는 응답 본문 읽기가 끝날 때까지 유지한다. provider 실패와 성공 기록을 기다린 뒤 다음 단계로 넘어간다.
+- Google Gemini HTTP provider는 API 키를 `x-goog-api-key` 헤더로 전달한다. LLM HTTP 호출의 오류 메시지와 로그에는 요청 경로만 기록하고, 타이머는 응답 본문 읽기가 끝날 때까지 유지한다. provider 실패와 성공 기록을 기다린 뒤 다음 단계로 넘어간다.
 - 통합(consolidate)의 압축 그룹과 이웃 탐색은 같은 `key_id`와 `workspace` 안으로 한정하고, 삭제·폐기한 파편을 색인에서 지운다.
 - 모순 탐지는 `(created_at, id)` 워터마크로 진행 위치를 기록하고, 반복 실패하는 파편이 뒤 파편의 검사를 막지 않도록 파편별 실패 상한을 둔다.
 - `reconstruct_history`는 이벤트별 근거 파편을 한 번의 질의로 조회한다. 근거 조회가 실패하면 빈 근거와 `evidence_error`를 붙인다.

@@ -2,7 +2,7 @@
 
 AI 에이전트가 AnchorMind 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
 
-## 현재 버전: v5.11.0
+## 현재 버전: v5.12.0
 
 AnchorMind 서버는 AI 에이전트의 세션 간 장기 기억을 파편(Fragment) 단위로 영속화하고, 16개 도구를 통해 저장·검색·연결·반성 기능을 제공한다. 마스터 키 세션에서는 관리 도구 4종(`memory_stats`, `memory_consolidate`, `check_update`, `apply_update`)이 추가로 노출되어 총 20개가 된다.
 
