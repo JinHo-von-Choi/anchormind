@@ -9,6 +9,11 @@
 - `MEMENTO_SHUTDOWN_DEADLINE_MS`(기본 60000, 0은 상한 없음): 종료 절차 전체 상한. 두 번째 종료 신호는 기록만 한다.
 - `MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS`(`401`, `503`, 기본 `401`): API 키 저장소 조회 실패로 인증을 판정하지 못한 initialize와 세션 자동 복구의 응답 상태. `503`이면 `Retry-After: 10`을 붙인다.
 - 지표 `mcp_auth_store_errors_total{operation}`. `memento_auth_denied_total`의 `reason`에 `store_unavailable`.
+- `MEMENTO_SEMANTIC_THRESHOLD_MODE`(`inner`, `outer`, 기본 `inner`): 시맨틱 검색의 유사도 임계값을 이웃 조회 안쪽(현행)에서 적용할지, 바깥에서 적용할지 정한다.
+- `MEMENTO_SCORE_UPDATE_BATCH`(기본 200, 0은 단일 문장): 감쇠와 utility 점수 갱신, `forget`의 `linked_to` 정리를 id 오름차순으로 잠근 묶음 단위로 처리한다.
+- `MEMENTO_API_KEY_DELETE_GUARD`(기본 `true`): 저장된 파편이나 재통합 이력이 있는 API 키는 삭제하지 않고 409(`key_in_use`)를 돌려준다. `false`면 확인을 건너뛴다.
+- `npm run test:db`: 실제 PostgreSQL에서 행 잠금 순서와 링크 일괄 생성의 정합을 확인하는 시험 레인. 실행마다 전용 데이터베이스를 만들고 지운다.
+- `node scripts/lint-ratchet.js`: 무처리 catch 처리기, 복잡도, 파일 길이, 직접 환경 변수 읽기의 수치가 기준선(`scripts/lint-baseline.json`)보다 늘면 실패한다. 기준선 상향에는 `--update --allow-increase`가 필요하다.
 
 ### Changed
 
@@ -21,6 +26,9 @@
 - `remember`의 `supersedes`는 호출한 키가 소유한 유효 파편에만 적용된다. 다른 키의 파편이나 이미 닫힌 파편은 링크 없이 경고 로그만 남긴다.
 - utility 점수와 중요도 하향 갱신은 저장값이 실제로 바뀌는 행만 기록한다.
 - 의존성 감사(`audit:ci`)는 별도 워크플로(`audit.yml`)에서 push, pull request, 매일 예약 실행으로 돈다. 단위 시험은 감사 결과와 무관하게 실행된다.
+- 도구 인자 점검이 스키마의 `maxLength`, `maxItems`, `pattern`, `oneOf`를 해석한다. `amend`의 본문은 `remember`와 같은 길이 상한을 따른다. 점검 모드의 기본값은 `warn`이다.
+- 와치독 스크립트(`memento-watchdog.sh`)는 `/health/live`가 응답하지 않을 때만 서비스를 재시작하고, 연속 재시작의 간격을 지수로 늘리며, 중복 실행을 잠금으로 막는다. 상태는 재시작 전에 기록한다.
+- 종료 신호를 받은 서버는 `MEMENTO_SHUTDOWN_DEADLINE_MS` 안에 종료하지 못하면 종료 코드 1로 강제 종료한다.
 - 실제 PostgreSQL에서 행 잠금 순서와 링크 일괄 생성의 `linked_to` 정합을 확인하는 `npm run test:db`와 CI 작업 `DB Concurrency (with DB)`를 추가한다. 이 작업은 결과를 보고만 한다.
 
 ## [5.12.0] - 2026-10-02
