@@ -14,6 +14,8 @@ import assert             from "node:assert/strict";
 
 import { getToolsDefinition } from "../../lib/tools/index.js";
 import { TOOL_REGISTRY }      from "../../lib/tool-registry.js";
+import { MEMORY_CONFIG }         from "../../config/memory.js";
+import { DEFAULT_CONTEXT_TYPES } from "../../lib/memory/read/ContextBuilder.js";
 
 const SCOPED = getToolsDefinition("some-key-id");
 const MASTER = getToolsDefinition(null, true);
@@ -174,5 +176,67 @@ describe("핵심 도구의 필수 인자", () => {
       assert.equal(prop.type, "string");
       assert.equal(prop.maxLength, 128);
     }
+  });
+});
+
+/**
+ * 도구 정의 안의 모든 description 을 (위치, 문구, 속성 스키마)로 모은다.
+ *
+ * @param {Object[]} tools
+ * @returns {Array<{where: string, text: string, schema: Object}>}
+ */
+function collectDescriptions(tools) {
+  const out = [];
+  for (const tool of tools) {
+    out.push({ where: tool.name, text: tool.description ?? "", schema: tool });
+    for (const [key, prop] of Object.entries(tool.inputSchema?.properties ?? {})) {
+      out.push({ where: `${tool.name}.${key}`, text: prop.description ?? "", schema: prop });
+    }
+  }
+  return out;
+}
+
+function propertyOf(toolName, key) {
+  return MASTER.find(t => t.name === toolName)?.inputSchema?.properties?.[key];
+}
+
+describe("도구 설명 정합", () => {
+  const descriptions = collectDescriptions(MASTER);
+
+  test("설명에 내부 이력 표기, 운영 플래그 이름, HTTP 헤더 안내가 없다", () => {
+    const bad = descriptions
+      .filter(d => /migration-\d{3}|v\d+\.\d+\.\d+\+|MEMENTO_[A-Z_]+|X-RateLimit/.test(d.text))
+      .map(d => d.where);
+    assert.deepEqual(bad, []);
+  });
+
+  test("설명에 검색 계층 번호(L1, L2, L2.5, L3)를 쓰지 않는다", () => {
+    const bad = descriptions.filter(d => /\bL[123](?:\.5)?\b/.test(d.text)).map(d => d.where);
+    assert.deepEqual(bad, []);
+  });
+
+  test("enum 속성 설명의 '기본 X'는 enum 값이다", () => {
+    const bad = [];
+    for (const d of descriptions) {
+      const values = d.schema.enum ?? d.schema.items?.enum;
+      if (!Array.isArray(values)) continue;
+      const m = /기본(?:값)?\s*[:=]?\s*([a-z][a-z_-]*)/.exec(d.text);
+      if (m && !values.includes(m[1])) bad.push(`${d.where}: ${m[1]}`);
+    }
+    assert.deepEqual(bad, []);
+  });
+
+  test("context.types 설명의 기본 목록은 코드 기본값과 같다", () => {
+    const text = propertyOf("context", "types").description;
+    const m    = /기본:\s*([a-z_, ]+)\)/.exec(text);
+    assert.ok(m, `기본 목록 표기를 찾지 못했다: ${text}`);
+    assert.deepEqual(m[1].split(",").map(s => s.trim()), [...DEFAULT_CONTEXT_TYPES]);
+  });
+
+  test("recall.pageSize 와 context.tokenBudget 설명의 기본값은 설정값과 같다", () => {
+    const page   = /기본\s*(\d+)/.exec(propertyOf("recall", "pageSize").description);
+    const budget = /기본\s*(\d+)/.exec(propertyOf("context", "tokenBudget").description);
+    assert.equal(Number(page?.[1]), MEMORY_CONFIG.pagination.defaultPageSize);
+    assert.equal(Number(budget?.[1]), MEMORY_CONFIG.contextInjection.defaultTokenBudget);
   });
 });
