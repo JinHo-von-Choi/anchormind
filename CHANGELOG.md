@@ -30,6 +30,8 @@
 - 도구 호출 감사 기록에 행위자 정보(`key=`, `sid=` 앞 8자, `ip=`)가 붙는다. 관리 API의 변경 요청(GET 제외)과 관리 인증의 성공과 실패가 `admin_auth`, `admin <METHOD> <path>` 감사 기록으로 남는다.
 - `remember`, `amend`, `link`, `tool_feedback`의 열거형 인자 값이 저장소 제약에 맞지 않으면 `Invalid arguments for <tool>: <param>: must be one of a|b|c` 메시지와 `code: "INVALID_ARGUMENT"`를 돌려준다.
 - 기동 점검 실패는 `[Startup]` 오류 로그로, 리랭커 사전 적재 실패는 `[Reranker] preload failed (non-fatal)` 경고로 남는다.
+- `MEMENTO_DECAY_MIN_DELTA`(기본 0): 묶음 갱신에서 감쇠량이 이 값보다 작은 행을 건너뛴다. 마지막 감쇠 후 24시간이 지난 행은 항상 갱신한다. 숫자가 아니거나 음수인 값은 0으로 처리하고 경고를 남기며 1을 넘는 값은 1로 제한한다. `MEMENTO_SCORE_UPDATE_BATCH`가 0이면 적용하지 않는다.
+- `MEMENTO_UTILITY_MIN_DELTA`(기본 0): 묶음 갱신에서 저장된 `utility_score`와의 차이가 이 값 이하인 행을 다시 쓰지 않는다. 값 처리와 적용 조건은 `MEMENTO_DECAY_MIN_DELTA`와 같다.
 
 ### Changed
 
@@ -58,6 +60,7 @@
 - 도구 설명에서 내부 이력 표기와 단계 번호 문구를 줄였다. `tools/list` 응답은 일반 키 기준 약 1.1KB 작다. `context`의 `types` 기본값 문구는 실제 기본값과 같은 목록에서 만든다.
 - 도구 감사 기록의 `ip=`는 `resolveClientIp`가 채택한 클라이언트 주소다. 관리 감사 기록의 경로 표기는 세션과 키의 UUID 구간을 앞 8자로 줄인다.
 - `SECURITY.md`의 지원 버전 표는 5.12.x까지를 지원으로 적는다.
+- `npm run test:db`는 감쇠와 utility 묶음 갱신의 잠금 순서, 무변경 재기록, 최소 변화량 시험도 실행한다. 표 전체를 갱신하는 시험은 이 직렬 레인에만 둔다.
 
 ## [5.12.0] - 2026-10-02
 
