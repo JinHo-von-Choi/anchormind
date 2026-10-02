@@ -250,6 +250,8 @@ Seeding creates one `api_keys` row with id `benchmark-harness-key` and status `i
 DELETE FROM agent_memory.api_keys WHERE id = 'benchmark-harness-key' AND status = 'inactive';
 ```
 
+Deleting the `api_keys` row sets `key_id` of the remaining fragments to NULL, which makes them master-scope. A row in `link_reconsolidations` that references the key makes the DELETE fail. A run with `--no-seed` has no embedded fragments, so the benchmark refuses `--save-baseline` together with `--no-seed`.
+
 `isolated` keeps only the seeded goldset fragments as candidates, so results are identical between runs. Use this mode for regression decisions. `corpus` fluctuates by about 3 points depending on when it runs, because production data keeps changing. When quoting an absolute figure, state the run time and the repeat count together.
 
 ### Intent profile, before and after

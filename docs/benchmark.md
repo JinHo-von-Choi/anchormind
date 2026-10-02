@@ -151,6 +151,8 @@ EMBEDDING_ENABLED=true node bin/memento.js benchmark --repeat 3 --save-baseline 
 DELETE FROM agent_memory.api_keys WHERE id = 'benchmark-harness-key' AND status = 'inactive';
 ```
 
+`api_keys` 행을 지우면 남아 있는 파편의 `key_id`는 NULL이 되며, 이 파편은 마스터 범위로 바뀐다. `link_reconsolidations`에 이 키를 참조하는 행이 있으면 DELETE는 실패한다. `--no-seed`로 실행한 결과에는 임베딩된 파편이 없으므로 벤치마크는 `--no-seed`와 `--save-baseline`을 함께 쓰는 실행을 거부한다.
+
 `isolated`는 적재한 골드셋 파편만 후보로 두므로 회차 간 결과가 동일하다. 회귀 판정에는 이 모드를 쓴다. `corpus`는 운영 데이터가 계속 변하므로 실행 시점에 따라 3포인트 안팎으로 흔들린다. 절대 수치를 인용할 때는 실행 시각과 반복 횟수를 함께 적는다.
 
 ### 질의 의도 프로파일 적용 전후

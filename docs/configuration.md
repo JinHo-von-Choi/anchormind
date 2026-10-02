@@ -4,6 +4,33 @@
 
 ## 환경 변수
 
+### 허용 범위
+
+숫자, 열거, 불리언 환경 변수가 받는 값이다. 숫자가 아니거나 범위 밖인 값의 처리는 `MEMENTO_CONFIG_STRICT` 행을 따른다. 표에 대체 값이 적힌 변수는 범위 밖일 때 그 값을 쓴다.
+
+| 허용 범위 | 변수 |
+|-|-|
+| 0 이상의 정수 | CACHE_DB_TTL, CACHE_SESSION_TTL, DB_CONN_TIMEOUT_MS, DB_IDLE_TIMEOUT_MS, DB_QUERY_TIMEOUT, DB_STATEMENT_TIMEOUT_MS, EMBEDDING_MAX_RETRIES, EMBEDDING_SEM_WAIT_MS, HEADERS_TIMEOUT_MS, KEEP_ALIVE_TIMEOUT_MS, LLM_CB_OPEN_DURATION_MS, LLM_CHAIN_TIMEOUT_MS, LLM_CONCURRENCY_WAIT_MS, LLM_PROVIDER_TIMEOUT_MS, LLM_TOKEN_BUDGET_INPUT, LLM_TOKEN_BUDGET_OUTPUT, QUOTA_NEAR_LIMIT_MARGIN, REDIS_DB, REQUEST_TIMEOUT_MS, RERANKER_EXTERNAL_COOLDOWN_MS, SSE_RETRY_MS, TRUST_PROXY_HOPS |
+| 0 이상의 숫자 | MCP_IDLE_REFLECT_HOURS, UPDATE_CHECK_INTERVAL_HOURS |
+| 1 이상의 정수 | DEFAULT_DAILY_LIMIT, DEFAULT_FRAGMENT_LIMIT, FRAGMENT_DEFAULT_LIMIT, EMBEDDING_CONCURRENCY, EMBEDDING_DIMENSIONS, EMBEDDING_TIMEOUT_MS, LLM_CB_FAILURE_THRESHOLD, LLM_CB_FAILURE_WINDOW_MS, LLM_TOKEN_BUDGET_WINDOW_SEC, NLI_TIMEOUT_MS, RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, RATE_LIMIT_WINDOW_MS, RERANKER_TIMEOUT_MS, SESSION_TTL_MINUTES |
+| 2 이상의 정수 | DB_MAX_CONNECTIONS |
+| 1000 이상의 정수 | SSE_HEARTBEAT_INTERVAL_MS |
+| 1 이상 65535 이하의 정수 | POSTGRES_PORT, DB_PORT, REDIS_PORT |
+| 0 이상 65535 이하의 정수 | PORT |
+| 0 이상의 정수, 그 밖은 기본값 | MEMENTO_SHUTDOWN_DEADLINE_MS (60000), MEMENTO_SESSION_KEY_RECHECK_MS (30000), MEMENTO_DCR_MAX_PER_HOUR (100), MEMENTO_SCORE_UPDATE_BATCH (200, 10000을 넘으면 10000) |
+| 100 이상 4500 이하의 정수, 그 밖은 2000 | MEMENTO_HEALTH_READY_DB_TIMEOUT_MS |
+| 1 이상의 숫자, 그 밖은 `SESSION_TTL_MINUTES * 60` | OAUTH_ACCESS_TOKEN_TTL_SECONDS |
+| 0 이상 1 이하의 숫자 (1을 넘으면 1, 음수와 숫자가 아닌 값은 0) | MEMENTO_DECAY_MIN_DELTA, MEMENTO_UTILITY_MIN_DELTA |
+| off, warn, enforce (그 밖의 값은 enforce로 동작) | MEMENTO_TOOL_ARGS_VALIDATION |
+| warn, enforce (그 밖의 값은 warn) | MEMENTO_SESSION_ID_POLICY, MEMENTO_RESERVED_AGENT_IDS |
+| 401, 503 (그 밖의 값은 401) | MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS |
+| inner, outer (그 밖의 값은 inner) | MEMENTO_SEMANTIC_THRESHOLD_MODE |
+| none, all (그 밖의 값은 none) | MEMENTO_LLM_CLI_TOOL_APPROVAL |
+| true, false (그 밖의 값은 false) | MEMENTO_CONFIG_STRICT |
+| on, off (그 밖의 값은 off) | MEMENTO_ADMIN_AUTH_BACKOFF |
+| true, false (false가 아닌 값은 true) | MEMENTO_API_KEY_DELETE_GUARD |
+| true, false (true가 아닌 값은 false) | MEMENTO_REMEMBER_DUPLICATE_GUARD |
+
 ### 서버
 
 | 변수 | 기본값 | 설명 |
@@ -56,6 +83,7 @@
 | DEFAULT_DAILY_LIMIT | 10000 | API 키 생성 시 기본 일일 호출 한도 |
 | DEFAULT_PERMISSIONS | read,write | API 키 생성 시 기본 권한 |
 | DEFAULT_FRAGMENT_LIMIT | (없음) | API 키 생성 시 기본 파편 할당량. 미설정 시 무제한 |
+| FRAGMENT_DEFAULT_LIMIT | 5000 | 1 이상의 정수. 값을 읽어 기동 시 검사하지만 처리에는 쓰이지 않는다. API 키 생성의 기본 할당량은 `DEFAULT_FRAGMENT_LIMIT`이 정한다 |
 | DEDUP_BATCH_SIZE | 100 | 시맨틱 중복 제거 배치 크기 |
 | DEDUP_MIN_FRAGMENTS | 5 | dedup 최소 파편 수. 이 수 미만이면 중복 제거를 건너뛴다 |
 | COMPRESS_AGE_DAYS | 30 | 기억 압축 대상 비활성 일수 |
@@ -386,6 +414,24 @@ DATABASE_URL=$DATABASE_URL node scripts/backfill-embeddings.js
 서버 시작 시 `check-embedding-consistency.js`가 DB 벡터 차원과 `EMBEDDING_DIMENSIONS`의 일치 여부를 자동 검증한다. 불일치 시 프로세스를 중단하여 무결성을 보장한다.
 
 상세 내용: [docs/embedding-local.md](embedding-local.md)
+
+### 와치독
+
+`memento-watchdog.sh`가 읽는 환경 변수다. 서버의 `.env`가 아니라 와치독을 실행하는 cron 작업의 환경에서 받는다. 초 단위 값은 0 이상의 정수다. 운영 절차는 [maintenance.md](operations/maintenance.md)에 있다.
+
+| 변수 | 기본값 | 설명 |
+|-|-|-|
+| MEMENTO_WATCHDOG_BASE_URL | `http://127.0.0.1:57332` | 상태 확인 대상 주소 |
+| MEMENTO_WATCHDOG_SERVICE | `memento-mcp.service` | 재시작할 systemd 서비스 이름 |
+| MEMENTO_WATCHDOG_STATE_FILE | `/tmp/memento-watchdog.state` | 상태 파일 경로. 연속 재시작 횟수, 마지막 재시작 시각, 마지막 ready 응답 코드를 한 줄로 기록한다 |
+| MEMENTO_WATCHDOG_LOCK_FILE | 상태 파일 경로에 `.lock`을 붙인 값 | 중복 실행을 막는 잠금 파일 |
+| MEMENTO_WATCHDOG_STARTUP_GRACE_SEC | 120 | 서비스 기동 후 이 시간(초) 안에는 응답이 없어도 재시작하지 않는다 |
+| MEMENTO_WATCHDOG_BACKOFF_BASE_SEC | 60 | 연속 재시작 사이의 첫 대기 시간(초) |
+| MEMENTO_WATCHDOG_BACKOFF_MAX_SEC | 1800 | 연속 재시작 대기 시간의 상한(초) |
+| MEMENTO_WATCHDOG_RESTART_CMD | (없음) | 지정하면 `sudo systemctl restart` 대신 이 명령을 실행한다 |
+| MEMENTO_WATCHDOG_NOW | 현재 시각(epoch 초) | 시각 주입. 시험용 |
+| MEMENTO_WATCHDOG_SERVICE_AGE_SEC | (없음) | 서비스 기동 후 경과 초 주입. 시험용 |
+| MEMENTO_WATCHDOG_ACTIVE_ENTER_TIMESTAMP | (없음) | 서비스 기동 시각 주입. 시험용 |
 
 ---
 

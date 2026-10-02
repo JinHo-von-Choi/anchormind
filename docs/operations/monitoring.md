@@ -41,7 +41,7 @@ scrape_configs:
 
 ## 경보 규칙
 
-`up`은 Prometheus가 스크레이프마다 만드는 시계열이고, 나머지 지표는 memento-mcp가 `/metrics`로 내보낸다.
+`up`은 Prometheus가 스크레이프마다 만드는 시계열이고, 나머지 지표는 memento-mcp가 `/metrics`로 내보낸다. 라벨이 있는 카운터는 해당 라벨 조합이 처음 증가한 뒤에 나타난다.
 
 ```yaml
 groups:

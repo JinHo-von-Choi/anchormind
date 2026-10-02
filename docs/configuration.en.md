@@ -4,6 +4,33 @@
 
 ## Environment Variables
 
+### Allowed Ranges
+
+Values accepted by numeric, enumerated and boolean environment variables. Handling of non-numeric or out-of-range values follows the `MEMENTO_CONFIG_STRICT` row. A variable with a replacement value in the table uses that value when the input is out of range.
+
+| Allowed range | Variables |
+|-|-|
+| Integer, 0 or more | CACHE_DB_TTL, CACHE_SESSION_TTL, DB_CONN_TIMEOUT_MS, DB_IDLE_TIMEOUT_MS, DB_QUERY_TIMEOUT, DB_STATEMENT_TIMEOUT_MS, EMBEDDING_MAX_RETRIES, EMBEDDING_SEM_WAIT_MS, HEADERS_TIMEOUT_MS, KEEP_ALIVE_TIMEOUT_MS, LLM_CB_OPEN_DURATION_MS, LLM_CHAIN_TIMEOUT_MS, LLM_CONCURRENCY_WAIT_MS, LLM_PROVIDER_TIMEOUT_MS, LLM_TOKEN_BUDGET_INPUT, LLM_TOKEN_BUDGET_OUTPUT, QUOTA_NEAR_LIMIT_MARGIN, REDIS_DB, REQUEST_TIMEOUT_MS, RERANKER_EXTERNAL_COOLDOWN_MS, SSE_RETRY_MS, TRUST_PROXY_HOPS |
+| Number, 0 or more | MCP_IDLE_REFLECT_HOURS, UPDATE_CHECK_INTERVAL_HOURS |
+| Integer, 1 or more | DEFAULT_DAILY_LIMIT, DEFAULT_FRAGMENT_LIMIT, FRAGMENT_DEFAULT_LIMIT, EMBEDDING_CONCURRENCY, EMBEDDING_DIMENSIONS, EMBEDDING_TIMEOUT_MS, LLM_CB_FAILURE_THRESHOLD, LLM_CB_FAILURE_WINDOW_MS, LLM_TOKEN_BUDGET_WINDOW_SEC, NLI_TIMEOUT_MS, RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, RATE_LIMIT_WINDOW_MS, RERANKER_TIMEOUT_MS, SESSION_TTL_MINUTES |
+| Integer, 2 or more | DB_MAX_CONNECTIONS |
+| Integer, 1000 or more | SSE_HEARTBEAT_INTERVAL_MS |
+| Integer, 1 to 65535 | POSTGRES_PORT, DB_PORT, REDIS_PORT |
+| Integer, 0 to 65535 | PORT |
+| Integer, 0 or more, anything else uses the default | MEMENTO_SHUTDOWN_DEADLINE_MS (60000), MEMENTO_SESSION_KEY_RECHECK_MS (30000), MEMENTO_DCR_MAX_PER_HOUR (100), MEMENTO_SCORE_UPDATE_BATCH (200, values above 10000 are capped at 10000) |
+| Integer, 100 to 4500, anything else uses 2000 | MEMENTO_HEALTH_READY_DB_TIMEOUT_MS |
+| Number, 1 or more, anything else uses `SESSION_TTL_MINUTES * 60` | OAUTH_ACCESS_TOKEN_TTL_SECONDS |
+| Number, 0 to 1 (above 1 is capped to 1; negative and non-numeric values become 0) | MEMENTO_DECAY_MIN_DELTA, MEMENTO_UTILITY_MIN_DELTA |
+| off, warn, enforce (any other value behaves as enforce) | MEMENTO_TOOL_ARGS_VALIDATION |
+| warn, enforce (any other value is warn) | MEMENTO_SESSION_ID_POLICY, MEMENTO_RESERVED_AGENT_IDS |
+| 401, 503 (any other value is 401) | MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS |
+| inner, outer (any other value is inner) | MEMENTO_SEMANTIC_THRESHOLD_MODE |
+| none, all (any other value is none) | MEMENTO_LLM_CLI_TOOL_APPROVAL |
+| true, false (any other value is false) | MEMENTO_CONFIG_STRICT |
+| on, off (any other value is off) | MEMENTO_ADMIN_AUTH_BACKOFF |
+| true, false (any value other than false is true) | MEMENTO_API_KEY_DELETE_GUARD |
+| true, false (any value other than true is false) | MEMENTO_REMEMBER_DUPLICATE_GUARD |
+
 ### Server
 
 | Variable | Default | Description |
@@ -56,6 +83,7 @@
 | DEFAULT_DAILY_LIMIT | 10000 | Default daily call limit when creating API keys |
 | DEFAULT_PERMISSIONS | read,write | Default permissions when creating API keys |
 | DEFAULT_FRAGMENT_LIMIT | (none) | Default fragment quota when creating API keys. Unlimited when unset |
+| FRAGMENT_DEFAULT_LIMIT | 5000 | Integer, 1 or more. The value is read and checked at startup but no processing uses it. The default quota for new API keys is set by `DEFAULT_FRAGMENT_LIMIT` |
 | DEDUP_BATCH_SIZE | 100 | Semantic deduplication batch size |
 | DEDUP_MIN_FRAGMENTS | 5 | Minimum fragment count for dedup. Deduplication is skipped below this threshold |
 | COMPRESS_AGE_DAYS | 30 | Memory compression target inactive days |
@@ -358,6 +386,24 @@ This feature operates asynchronously only when `REDIS_ENABLED=true`. When `REDIS
 | EMBEDDING_MAX_RETRIES | 0 | Retry count for the OpenAI-compatible client's own retry logic. Defaults to 0 because the per-call timeout already acts as the absolute deadline; stacking retries on top would let semaphore hold time accumulate as timeout × retries |
 | EMBEDDING_CONCURRENCY | 6 | Process-wide concurrency cap for embedding calls. The semaphore slot count that prevents embedding service latency from propagating into the overall request queue |
 | EMBEDDING_SEM_WAIT_MS | 3000 | Wait timeout (ms) for an embedding semaphore slot. Calls that exceed this are rejected and increment the `mcp_embedding_semaphore_wait_exceeded_total` counter |
+
+### Watchdog
+
+Environment variables read by `memento-watchdog.sh`. They come from the environment of the cron job that runs the watchdog, not from the server `.env`. Values in seconds are integers of 0 or more. The operating procedure is in [maintenance.md](operations/maintenance.md).
+
+| Variable | Default | Description |
+|-|-|-|
+| MEMENTO_WATCHDOG_BASE_URL | `http://127.0.0.1:57332` | Address that is checked |
+| MEMENTO_WATCHDOG_SERVICE | `memento-mcp.service` | Name of the systemd service to restart |
+| MEMENTO_WATCHDOG_STATE_FILE | `/tmp/memento-watchdog.state` | State file path. Holds the consecutive restart count, the last restart time and the last ready response code on one line |
+| MEMENTO_WATCHDOG_LOCK_FILE | state file path plus `.lock` | Lock file that prevents concurrent runs |
+| MEMENTO_WATCHDOG_STARTUP_GRACE_SEC | 120 | No restart within this many seconds after the service started, even without a response |
+| MEMENTO_WATCHDOG_BACKOFF_BASE_SEC | 60 | First wait (seconds) between consecutive restarts |
+| MEMENTO_WATCHDOG_BACKOFF_MAX_SEC | 1800 | Upper bound (seconds) of the wait between consecutive restarts |
+| MEMENTO_WATCHDOG_RESTART_CMD | (none) | When set, runs this command instead of `sudo systemctl restart` |
+| MEMENTO_WATCHDOG_NOW | current time (epoch seconds) | Time injection. For tests |
+| MEMENTO_WATCHDOG_SERVICE_AGE_SEC | (none) | Injects the seconds since the service started. For tests |
+| MEMENTO_WATCHDOG_ACTIVE_ENTER_TIMESTAMP | (none) | Injects the service start time. For tests |
 
 ---
 
