@@ -12,7 +12,7 @@ server.js  (HTTP server)
     +-- DELETE /mcp        Streamable HTTP -- Session termination
     +-- GET  /sse          Legacy SSE -- Session creation
     +-- POST /message      Legacy SSE -- JSON-RPC receiver
-    +-- GET  /health       Health check
+    +-- GET  /health, /health/live, /health/ready  Health checks (live: process liveness, ready: primary DB response)
     +-- GET  /metrics      Prometheus metrics
     +-- GET|POST /authorize  OAuth 2.0 authorization endpoint
     +-- POST /token        OAuth 2.0 token endpoint
@@ -37,6 +37,7 @@ server.js  (HTTP server)
             |   +-- AutoReflect.js        Session-end auto reflect orchestrator
             |   +-- EpisodeContinuityService.js Inserts case_events milestone_reached + preceded_by edge after reflect() (idempotency_key-based dedup)
             |   +-- SessionActivityTracker.js Per-session tool call/fragment activity tracking (Redis)
+            |   +-- RememberDuplicate.js  Detects and classifies remember duplicate hits (`same_scope`, `other_workspace`, `closed`, `unknown`) and builds the existing-fragment status response when `MEMENTO_REMEMBER_DUPLICATE_GUARD` is on
             +-- read/                     Search layer modules
             |   +-- FragmentSearch.js     3-layer search orchestration (structural: L1->L2, semantic: L1->L2||L3 RRF merge). `_executeSearch` decomposes into `_buildTextRRF` (L2+L3 parallel RRF when text parameter present) / `_buildFallbackCombined` (L1+L2 only when no text)
             |   +-- FragmentReader.js     Fragment reads. `getById(id, agentId, keyId, groupKeyIds)` -- groupKeyIds parameter enables single-call lookup of fragments belonging to same-group keys. `getByIds`, `getHistory`, `searchByKeywords`, `searchBySemantic`, `findCaseIdBySessionTopic`, `findErrorFragmentsBySessionTopic`
@@ -53,11 +54,13 @@ server.js  (HTTP server)
             +-- write/                    Write layer modules
             |   +-- FragmentWriter.js     Fragment writes (insert, update, delete, incrementAccess, touchLinked)
             |   +-- FragmentFactory.js    Fragment creation, validation, PII masking
+            |   +-- affect.js             Allowed affect tag values and `sanitizeAffect` normalization (shared by FragmentFactory and FragmentWriter)
             |   +-- FragmentStore.js      PostgreSQL CRUD facade (delegates to FragmentReader + FragmentWriter)
             |   +-- RememberPostProcessor.js remember() post-processing pipeline (embedding/morpheme/linking/assertion/temporal linking/evaluation queue/ProactiveRecall)
             |   +-- ConflictResolver.js   Conflict detection, supersede, autoLinkOnRemember (topic-based structural linking)
+            |   +-- IdempotencyStore.js   Retry response records for write tools that create no fragment (`amend`, `tool_feedback`) (`idempotency_records`)
             |   +-- BatchRememberProcessor.js Dedicated batchRemember() logic. Phase A (validation) -> B (INSERT) -> C (post-processing) 3-stage. Supports async opt-in via `async: true` parameter: after pre-validation, enqueues job to Redis (`memento:batch_remember_queue`) and returns immediately. Falls back to synchronous path when Redis is unavailable. Worker (BatchRememberWorker) consumes the queue via the existing INSERT path
-            |   +-- BatchRememberWorker.js Async queue worker for batch_remember. Polls `memento:batch_remember_queue` Redis queue and processes jobs via the BatchRememberProcessor synchronous path. `getBatchRememberWorker()` singleton factory. `server.js` `gracefulShutdown` awaits `stop()` drain for safe shutdown
+            |   +-- BatchRememberWorker.js Async queue worker for batch_remember. Polls `memento:batch_remember_queue` Redis queue and processes jobs via the BatchRememberProcessor synchronous path. `getBatchRememberWorker()` singleton factory. Because it is `PollingWorker`-based it registers in the worker registry at startup and `gracefulShutdown` drains it together with the other workers
             +-- link/                     Link layer modules
             |   +-- ReconsolidationEngine.js Dynamic fragment_links weight/confidence update engine (reinforce/decay/quarantine/restore/soft_delete + history recording)
             |   +-- GraphLinker.js        Embedding-ready event subscriber for auto-linking + retroactive linking + Hebbian co-retrieval linking
@@ -69,6 +72,7 @@ server.js  (HTTP server)
             |   +-- MemoryConsolidator.js 22-stage declarative maintenance pipeline (stageDefs array, TOTAL_STAGES = stageDefs.length). NLI + Gemini hybrid
             |   +-- ConsolidatorGC.js     Feedback reports, stale fragment collection/cleanup, long fragment splitting, feedback-based correction
             |   +-- FragmentGC.js         Fragment expiration/deletion, exponential decay, TTL tier transitions (permanent parole + EMA batch decay)
+            |   +-- idOrderedUpdate.js    Locks and updates decay and utility score changes in id-ascending batches (`MEMENTO_SCORE_UPDATE_BATCH`). Rows below the minimum change (`MEMENTO_DECAY_MIN_DELTA`, `MEMENTO_UTILITY_MIN_DELTA`) are not rewritten
             |   +-- decay.js              Exponential decay half-life constants, pure computation functions, ACT-R EMA activation approximation (`updateEmaActivation`, `computeEmaRankBoost`), EMA-based dynamic half-life (`computeDynamicHalfLife`), age-weighted utility score (`computeUtilityScore`)
             |   +-- UtilityBaseline.js    Fragment utility baseline computation (dedup/compression decision baseline)
             |   +-- feedbackFactor.js     Feedback-based correction factor computation
@@ -76,7 +80,7 @@ server.js  (HTTP server)
             |   +-- split-metrics.js      Split-result metric aggregation
             +-- embedding/                Embedding layer modules
             |   +-- EmbeddingWorker.js    Redis queue-based async embedding worker (EventEmitter)
-            |   +-- EmbeddingCache.js     Query embedding Redis cache (emb:q:{sha256} key, 1-hour TTL, fault-isolated)
+            |   +-- EmbeddingCache.js     Query embedding Redis cache (emb:q:{sha256 first 16 chars} key, 1-hour TTL, fault-isolated)
             |   +-- MorphemeIndex.js      Morpheme-based L3 fallback index
             |   +-- MorphemeTokenizer.js  Local CPU morpheme analyzer. Splits Unicode script runs then routes per language: Korean garu-ko (filterHangulMorphemes strips particles/endings/single-syllable tokens), English natural PorterStemmer, Chinese @node-rs/jieba, Japanese kuromoji (skipped when enableKuromoji=false). MorphemeIndex.tokenize() delegates to it, replacing the LLM subprocess on the default path (MEMENTO_MORPHEME_TOKENIZER=local). Benchmark: 1.06ms/call, resident RSS +28.9MB.
             +-- signals/                  Signal layer modules
@@ -106,10 +110,15 @@ lib/
 +-- oauth.js           OAuth 2.0 PKCE authorization/token handling
 +-- sessions.js        Streamable/Legacy SSE session lifecycle
 +-- redis.js           ioredis client (Sentinel support)
++-- safe-compare.js    Timing-safe string comparison (`safeCompare`: SHA-256 hash then `timingSafeEqual`). Leaf module shared by auth.js and oauth.js
++-- session-id.js      Distinguishes how an MCP session ID was received (header, query) and whether it has the server-issued format (UUID). Handling is set by `MEMENTO_SESSION_ID_POLICY`
++-- protocol-versions.js Supported MCP protocol version list and default version. Leaf module shared by config.js and metrics.js
++-- process-guards.js  `installProcessGuards` (records unhandledRejection and uncaughtException, handles the fatal path once) and `createShutdownGuard` (runs shutdown once with the `MEMENTO_SHUTDOWN_DEADLINE_MS` cap)
++-- session-audit.js   Session event audit log (`session-audit.log`, NDJSON). Records only the first 16 chars of the sha256 hash of the sessionId
 +-- gemini.js          Google Gemini API/CLI client (geminiCLIJson, isGeminiCLIAvailable)
 +-- compression.js     Response compression (gzip/deflate)
 +-- metrics.js         Prometheus metric collection (prom-client). 4 denial-path counters: `memento_auth_denied_total{reason}` (auth denial), `memento_cors_denied_total{reason}` (CORS denial), `memento_rbac_denied_total{tool,reason}` (RBAC denial), `memento_tenant_isolation_blocked_total{component}` (tenant isolation block)
-+-- logger.js          Winston logger (daily rotate). REDACT_PATTERNS-based redactor format: auto-masking of Authorization Bearer tokens, mmcp_ API keys, mmcp_session cookies, OAuth code/refresh_token/access_token (6 patterns). content field trimmed to head 50 + tail 50 when exceeding 200 chars
++-- logger.js          Winston logger (daily rotate). REDACT_PATTERNS-based redactor format: auto-masking of Authorization Bearer tokens, mmcp_ API keys, mmcp_session cookies, OAuth code/refresh_token/access_token (7 patterns). content field trimmed to head 50 + tail 50 when exceeding 200 chars
 +-- openapi.js         OpenAPI 3.1.0 spec generator. Enabled when `ENABLE_OPENAPI=true` via `GET /openapi.json`. Auth-level-based tool list filtering: master key -> all paths (including Admin REST API), API key -> permissions-based tool list
 +-- rate-limiter.js    IP-based sliding window rate limiter
 +-- rbac.js            RBAC authorization (read/write/admin tool-level permissions)
@@ -120,7 +129,10 @@ lib/
 
 lib/handlers/
 +-- _common.js         applyCorsOrigin, setWorkerRefs, recordConsolidateRun (shared utilities)
-+-- health-handler.js  handleHealth, handleMetrics
++-- health-handler.js  handleHealth, handleLive, handleReady, handleMetrics
++-- session-handler.js POST /session/rotate (calls rotateSession; per-IP per-minute cap in `_rotate-ratelimit.js`)
++-- _ratelimit-cache.js QuotaChecker.getUsage delegating wrapper for X-RateLimit-* headers
++-- _rotate-ratelimit.js IP-based rate limit dedicated to /session/rotate (`MEMENTO_ROTATE_RATE_LIMIT_PER_MIN`)
 +-- mcp-handler.js     handleMcpPost/Get/Delete (Streamable HTTP). handleMcpPost internally decomposes into 4 private functions: `_resolveExistingSession` / `_createInitializeSession` / `_validateProtocolVersion` / `_dispatchAndRespond`. `injectSessionContext(msg, ctx)` -- injects server-controlled context (_sessionId, _keyId, _groupKeyIds, _permissions, _defaultWorkspace) into tools/call message arguments. Client-supplied fields of the same name are overwritten with server values to prevent forgery
 +-- sse-handler.js     handleLegacySseGet/Post (Legacy SSE)
 +-- oauth-handler.js   OAuth 5 endpoints (ServerMetadata, ResourceMetadata, Register, Authorize, Token)
@@ -128,7 +140,11 @@ lib/handlers/
 lib/admin/
 +-- ApiKeyStore.js     API key CRUD, group CRUD, authentication verification (SHA-256 hash storage, raw key returned once only). `getGroupKeyIds(keyId)` -- returns array of all key IDs in keyId's group (null input returns null immediately, no DB query)
 +-- OAuthClientStore.js OAuth client CRUD (client_id/secret validation, redirect_uri whitelist)
++-- admin-routes.js    Admin HTTP dispatcher (routes UI, images, static files, REST API)
 +-- admin-auth.js      Admin auth routes (POST /auth, session cookie issuance)
++-- admin-login-guard.js Admin auth failure accumulation and per-account delay (delay applies only when `MEMENTO_ADMIN_AUTH_BACKOFF=on`)
++-- key-state-cache.js API key state recheck cache used when a session is used (`MEMENTO_SESSION_KEY_RECHECK_MS`)
++-- admin-metrics.js   `/metrics-summary` summary (reads the prom-client registry directly, 10-second response cache)
 +-- admin-keys.js      API key management routes
 +-- admin-memory.js    Memory operations routes (overview, fragments, anomalies, graph)
 +-- admin-sessions.js  Session management routes
@@ -139,12 +155,14 @@ assets/admin/
 +-- index.html         Admin SPA app shell (login form + container)
 +-- admin.css          Admin UI stylesheet
 +-- admin.js           Admin UI logic (8 navigation sections: overview, API keys, groups, memory ops, sessions, logs, knowledge graph, metrics)
++-- vendor/            Copies of the Tailwind CSS 3.4.17 and d3 7.9.0 scripts. The console response CSP is `script-src 'self' 'unsafe-inline'` and allows no external script host. Source and sha256 are in `PROVENANCE.md`
 
 lib/http/
 +-- helpers.js         HTTP SSE stream helpers and request parsing utilities
 
 lib/logging/
 +-- audit.js           Audit logging and access history recording
++-- session-ref.js     Session ID notation used in logs and external prompts (first 8 chars)
 ```
 
 Storage access is handled by `getPrimaryPool` and `queryWithAgentVector` in `lib/tools/db.js`.
@@ -156,6 +174,7 @@ lib/tools/
 +-- memory.js    16 MCP tool handlers
 +-- reconstruct.js  reconstruct_history, search_traces tool handlers (Narrative Reconstruction)
 +-- memory-schemas.js  Tool schema definitions (inputSchema)
++-- tool-error.js Converts error text in tool responses. Intended business errors pass through, driver/OS/runtime errors become fixed text, and storage CHECK constraint violations become an `INVALID_ARGUMENT` message naming the parameter and allowed values
 +-- db.js        PostgreSQL connection pool, agent session variable query helper (not exposed via MCP). getPrimaryPool(), getBatchPool(), queryWithAgentVector()
 +-- embedding.js OpenAI text embedding generation
 +-- stats.js     Access statistics collection and storage
@@ -184,6 +203,16 @@ lib/cli/
 +-- recall.js           Terminal recall
 +-- remember.js         Terminal remember
 +-- inspect.js          Fragment detail
++-- benchmark.js        Goldset recall measurement (Recall@k, MRR, latency)
++-- anchor-scope.js     Non-default anchor scope inventory, approved shared-anchor normalization, snapshot backfill (dry-run by default)
++-- session.js          Session listing, cleanup, rotation
++-- export.js           Fragment JSONL backup
++-- import.js           Fragment JSONL restore
++-- update.js           New version check and apply
++-- completion.js       Shell completion
++-- _mcpClient.js       Remote MCP client
++-- _format.js          Output formatter
++-- _stdin.js           Standard input reader
 ```
 
 One-time utility scripts are in `scripts/`.
@@ -195,7 +224,15 @@ scripts/
 +-- migrate.js                                   DB migration runner (schema_migrations-based incremental, .env auto-load, pgvector schema auto-detection)
 +-- post-migrate-flexible-embedding-dims.js      Embedding dimension migration
 +-- cleanup-noise.js                             Bulk cleanup of low-quality/noise fragments (one-time)
++-- purge-oauth-clients.js                       Removes old dynamically registered OAuth clients that were never used (preview by default, `--execute` deletes)
++-- lint-migrations.js                           Migration file convention check (`npm run lint:migrations`)
++-- lint-ratchet.js                              Compares silent catch handlers, complexity, file length and direct environment reads against `scripts/lint-baseline.json` (`npm run lint:ratchet`)
++-- import-cycles.js                             Import cycle check over relative imports in `lib`, `config` and `server.js` (static-only and static+dynamic results printed separately)
++-- check-coverage.js                            Compares unit test coverage totals with `coverage-baseline.json` (`npm run test:coverage`)
++-- release.js                                   Release procedure (`npm run release -- X.Y.Z`)
 ```
+
+`config/recommended-settings.js` returns the names of recommended production settings that are not applied (`recommendedSettingsGap`), and the server lists them on one `[Startup] Recommended settings not applied:` line at startup. Values are not included.
 
 `config/memory.js` is a separate configuration file for the memory system. It holds time-semantic composite ranking weights, stale thresholds, embedding worker settings, context injection, pagination, and GC policies. `config/validate-memory-config.js` is called once at server startup to runtime-validate MEMORY_CONFIG weight sums, ranges, and type constraints. The process is halted on failure.
 
@@ -217,7 +254,7 @@ Dependency direction: processors -> shared modules (FragmentStore, FragmentSearc
 
 ### _installSharedSync Design
 
-The facade constructor initializes 20 shared objects (store, index, factory, search, quotaChecker, etc.) then DI-injects them into 4 processors. It then calls `_installSharedSync()` to wrap each shared property setter in the facade with `Object.defineProperty`.
+The facade constructor initializes 17 shared objects (store, index, factory, search, quotaChecker, etc.) then DI-injects them into 4 processors. It then calls `_installSharedSync()` to wrap each shared property setter in the facade with `Object.defineProperty`.
 
 ```js
 // Conceptual code
@@ -269,7 +306,7 @@ Connection flow:
 
 Authentication: `Authorization: Bearer <KEY>` header.
 
-Global CLI flags: `--remote <URL>`, `--key <KEY>`. Local-only commands (serve, migrate, cleanup, backfill, health, update) do not support remote routing.
+Global CLI flags: `--remote <URL>`, `--key <KEY>`. Local-only commands (serve, migrate, cleanup, backfill, health, update, export, import, benchmark, anchor-scope) do not support remote routing.
 
 ---
 
@@ -281,7 +318,7 @@ SSE streams are monitored via periodic heartbeats (`: ping\n\n`).
 
 - Pings sent at `SSE_HEARTBEAT_INTERVAL_MS` (default 25s) intervals
 - `res.write()` return value detects backpressure (false = kernel buffer full)
-- Session auto-terminated after `SSE_MAX_HEARTBEAT_FAILURES` (default 3) consecutive failures
+- Session auto-terminated after `SSE_MAX_HEARTBEAT_FAILURES` (default 10) consecutive failures
 - Failure counter reset on success
 
 ### Proxy Compatibility
@@ -291,9 +328,37 @@ SSE streams are monitored via periodic heartbeats (`: ping\n\n`).
 
 ### Socket Tuning
 
-- `keepAliveTimeout=0`, `headersTimeout=0`, `requestTimeout=0`: server-level timeouts disabled (protects long-lived SSE connections)
+- `keepAliveTimeout` (`KEEP_ALIVE_TIMEOUT_MS`, default 75000), `headersTimeout` (`HEADERS_TIMEOUT_MS`, default 76000), `requestTimeout` (`REQUEST_TIMEOUT_MS`, default 60000): limits for keep-alive, header receipt and request body receipt. 0 means unlimited. They bound request receive time only, not processing time or the lifetime of an already open SSE stream
 - `socket.setKeepAlive(true, 60000)`: TCP keep-alive with 60s idle timeout
 - `socket.setNoDelay(true)`: TCP_NODELAY minimizes packet delay
+
+### Startup Checks
+
+- If `MEMENTO_ACCESS_KEY` is unset and `MEMENTO_AUTH_DISABLED=true` is not set, a `[Startup]` error is printed and the process stops with exit code 78.
+- `validateMemoryConfig(MEMORY_CONFIG)` validates `MEMORY_CONFIG`; a failure stops startup.
+- Value problems in numeric, enum and boolean environment variables are recorded on one `[Startup]` warning line; with `MEMENTO_CONFIG_STRICT=true` the process stops with exit code 78.
+- A failed embedding dimension consistency check stops the process with exit code 1. Unapplied migrations are reported in a `[Startup]` error log.
+
+### Health Endpoints
+
+| Path | Response |
+|-|-|
+| `GET /health/live` | Always 200 while the event loop handles requests. Does not look at the DB or Redis |
+| `GET /health/ready` | 200 when the primary DB answers within `MEMENTO_HEALTH_READY_DB_TIMEOUT_MS` (default 2000, 100 to 4500), otherwise 503 with reason `db_timeout` or `db_error` |
+| `GET /health` | Combined status of DB, Redis, pgvector and workers. Returns only `status` without authentication |
+
+`memento-watchdog.sh` uses `/health/live` to decide on restarts and `/health/ready` only to log state changes.
+
+### Shutdown Procedure
+
+`SIGTERM` and `SIGINT` are handled once by `createShutdownGuard`; later signals are only logged. The procedure runs in this order.
+
+1. The HTTP server stops accepting new connections.
+2. Polling workers registered in the worker registry (`lib/memory/workers/registry.js`) and pending morpheme registration work are drained for up to 30 seconds. A worker whose `PollingWorker.start` succeeded registers itself, so workers such as `BatchRememberWorker` and `EmbeddingWorker` are not listed by name in the shutdown path.
+3. Active sessions are closed with auto-reflect. Redis sessions are kept so they can be restored after a restart.
+4. The DB connection pool is closed, access statistics are saved, and the process exits with code 0.
+
+If the procedure does not finish within `MEMENTO_SHUTDOWN_DEADLINE_MS` (default 60000, 0 means no cap), the process is forced to exit with code 1. An uncaught exception runs the same procedure with exit code 1 and arms a 35-second forced-exit timer.
 
 ### sseWrite Atomic Write
 
@@ -376,7 +441,7 @@ erDiagram
         text event_id PK
         text case_id
         text session_id
-        text event_type "8 types: milestone/hypothesis/decision/error/fix/verification"
+        text event_type "9 types: milestone/hypothesis/decision/error/fix/verification/case_closed"
         text summary
         timestamptz occurred_at
         text key_id FK
@@ -442,6 +507,11 @@ The store for all fragments. This is the core table of the system.
 | validation_warnings | JSONB | | PolicyRules soft gate violation rule names. NULL when there are no violations (migration-032) |
 | morpheme_indexed | BOOLEAN | NOT NULL DEFAULT false | Whether MorphemeIndex registration completed. Fragments with false are excluded from morpheme search (migration-035) |
 | split_attempt_failed_at | TIMESTAMPTZ | | Timestamp of the last failed splitLongFragments attempt. Excluded from re-selection for `failureBackoffHours` (migration-036) |
+| workspace_source | TEXT | CHECK | How the workspace value was filled. explicit (caller supplied) / key_default (key default_workspace) / inferred (automatic inference) / unscoped (intentionally global). NULL means not recorded (migration-040) |
+| quality_rationale | TEXT | | Rationale sentence from automatic quality evaluation, kept separate from keywords (migration-040) |
+| workspace_inferred | TEXT | | Inferred workspace value. The workspace column is unchanged until promotion (migration-041) |
+| inference_confidence | REAL | CHECK | Confidence of the inference evidence, 0.0 to 1.0 (migration-041) |
+| backfill_batch_id | TEXT | | Identifier of the batch run that produced the inference. Used for per-batch rollback (migration-041) |
 
 Index list: two per-tenant partial UNIQUE indexes on content_hash (`uq_frag_hash_master`, `uq_frag_hash_per_key`), topic (B-tree), type (B-tree), keywords (GIN), importance DESC (B-tree), created_at DESC (B-tree), agent_id (B-tree), linked_to (GIN), (ttl_tier, created_at) (B-tree), source (B-tree), verified_at (B-tree), is_anchor WHERE TRUE (partial index), valid_from (B-tree), (topic, type) WHERE valid_to IS NULL (partial index), id WHERE valid_to IS NULL (partial UNIQUE). `idx_fragments_key_workspace` (key_id, workspace) WHERE valid_to IS NULL (composite partial index — optimizes simultaneous key + workspace filtering), `idx_fragments_workspace` (workspace) WHERE workspace IS NOT NULL AND valid_to IS NULL (partial index for workspace-only full scans).
 
@@ -550,7 +620,7 @@ Semantic milestone log table for Narrative Reconstruction. Records key events wi
 | event_id | TEXT | PRIMARY KEY -- event unique identifier |
 | case_id | TEXT | Associated case ID (corresponds to fragments.case_id) |
 | session_id | TEXT | Session ID where the event occurred |
-| event_type | TEXT | milestone_reached / hypothesis_proposed / hypothesis_rejected / decision_committed / error_observed / fix_attempted / verification_passed / verification_failed |
+| event_type | TEXT | milestone_reached / hypothesis_proposed / hypothesis_rejected / decision_committed / error_observed / fix_attempted / verification_passed / verification_failed / case_closed (migration-048) |
 | summary | TEXT | Event summary text |
 | occurred_at | TIMESTAMPTZ | Event occurrence timestamp |
 | key_id | TEXT | API key isolation (same criteria as fragments.key_id) |
@@ -578,6 +648,39 @@ Evidence join table linking fragments to case_events. Connects fragments that su
 | fragment_id | TEXT | Evidence fragment (ON DELETE CASCADE) |
 | event_id | TEXT | Associated event (ON DELETE CASCADE) |
 | kind | TEXT | Evidence role classification label |
+
+### fragment_synthetic_query
+
+Auxiliary vector table holding synthetic queries generated when a fragment is stored, together with their embeddings (migration-043). It is separate from `fragments`, so it is not counted by the `QuotaChecker` `fragment_limit` check, and since it is derived data it is regenerated by backfill when lost. The embedding dimension follows `fragments.embedding` (migration-049 and the alignment step of `npm run migrate`).
+
+| Column | Type | Description |
+|-|-|-|
+| id | BIGSERIAL PK | |
+| fragment_id | TEXT | Source fragment (ON DELETE CASCADE) |
+| query_text | TEXT | Generated synthetic query |
+| embedding | vector | Query embedding (HNSW index `idx_fsq_embedding_hnsw`) |
+| key_id | TEXT | API key isolation |
+| agent_id | TEXT | Agent identifier (default `default`) |
+| workspace | TEXT | Workspace isolation |
+| created_at | TIMESTAMPTZ | Creation time |
+
+A UNIQUE index on `(fragment_id, md5(query_text))` prevents the same query from being stored twice.
+
+### idempotency_records
+
+Stores retry responses for write tools that create no fragment (`amend`, `tool_feedback`) (migration-044). Calling again with the same `(scope_key, tool, idempotency_key)` returns the response of the first call unchanged.
+
+| Column | Type | Description |
+|-|-|-|
+| id | BIGSERIAL PK | |
+| scope_key | TEXT | `COALESCE(key_id, '')` normalized value |
+| tool | TEXT | Tool name |
+| idempotency_key | TEXT | Caller-supplied idempotency key |
+| response | JSONB | Response body of the first call |
+| agent_id | TEXT | Agent identifier (default `default`) |
+| key_id | TEXT | API key isolation |
+| created_at | TIMESTAMPTZ | Creation time |
+| expires_at | TIMESTAMPTZ | Expiry time (default 7 days later). Rows may be deleted once expired |
 
 ---
 
@@ -647,13 +750,14 @@ MCP clients connect via an OAuth 2.0 flow based on RFC 8414/RFC 7591/RFC 7636. U
 3. Authorization (PKCE, RFC 7636)
    GET /authorize?response_type=code&client_id=...&redirect_uri=...
                   &code_challenge=...&code_challenge_method=S256&state=...
-   -> Auto-approved without user interaction for trusted redirect_uris
+   -> Auto-approved without user interaction for trusted redirect_uris (clients bound to an API key always get the consent screen)
    -> On approval, redirects to redirect_uri?code=...&state=...
 
 4. Token
    POST /token  (application/x-www-form-urlencoded)
    grant_type=authorization_code, code=..., code_verifier=...
    -> Returns { access_token, refresh_token, expires_in }
+   (a client bound to an API key must present that key as client_secret or via Basic auth; invalid_client is HTTP 401)
 
    POST /token
    grant_type=refresh_token, refresh_token=...
@@ -765,7 +869,7 @@ Admin REST endpoints:
 | GET | `.../logs/files` | Log file list (with sizes) |
 | GET | `.../logs/read?file=&tail=&level=&search=` | Log content viewing (reverse tail, level/search filters) |
 | GET | `.../logs/stats` | Log statistics (per-level counts, recent errors, disk usage) |
-| GET | `.../assets/*` | Admin static files (admin.css, admin.js). No authentication required |
+| GET | `.../assets/*` | Admin static files (admin.css, admin.js, `modules/`, `vendor/`). No authentication required |
 
 ---
 
@@ -830,7 +934,7 @@ A narrative reconstruction engine that groups fragments by case_id, performs str
 
 `lib/memory/CaseEventStore.js`. Handles CRUD for the case_events table plus DAG edges/evidence joins.
 
-**8 event_types**:
+**9 event_types**:
 
 | event_type | Description |
 |------------|-------------|
@@ -842,9 +946,10 @@ A narrative reconstruction engine that groups fragments by case_id, performs str
 | `fix_attempted` | Fix attempt made |
 | `verification_passed` | Verification passed (-> CaseRewardBackprop backpropagation +0.15) |
 | `verification_failed` | Verification failed (-> CaseRewardBackprop backpropagation -0.10) |
+| `case_closed` | Closing event recorded when `amend` changes `resolutionStatus` of a fragment with a case_id to resolved (and it was not resolved before) |
 
 **Key methods**:
-- `append(event)`: Insert event. Deduplication via `idempotency_key`
+- `append(event)`: Insert event. sequence_no is `MAX(sequence_no) + 1` within the same case_id. Milestone events of `reflect` are inserted by `EpisodeContinuityService`, which prevents duplicates with `idempotency_key`
 - `addEdge(fromId, toId, edgeType, confidence)`: Add DAG edge
 - `addEvidence(fragmentId, eventId, kind)`: Link fragment-event evidence
 - `getByCase(caseId)`: Retrieve all events for a case in chronological order
@@ -899,7 +1004,7 @@ Weight/confidence change history audit table. Each `ReconsolidationEngine.recons
 | Action | Behavior |
 |--------|----------|
 | `reinforce` | `weight += delta`, `confidence = min(1, confidence + 0.05)`. Strengthens links evaluated as useful |
-| `decay` | `weight = max(0, weight - delta)`, `confidence = max(0, confidence - 0.03)`. Weakens links evaluated as irrelevant |
+| `decay` | `weight = max(0, weight - delta)`, `confidence = max(0, confidence - 0.1)`. Weakens links evaluated as irrelevant |
 | `quarantine` | `quarantine_state = 'soft'`. Quarantines contradictory links (excluded from search results) |
 
 `restore` (quarantine release) and `soft_delete` (weight=0 soft-delete) actions are also supported.
@@ -972,7 +1077,7 @@ probabilistic result
 | ClaimConflictDetector | Polarity conflict + severity heuristic |
 | LinkIntegrityChecker | Cycle detection (reuses sessionLinker.wouldCreateCycle) |
 | ExplanationBuilder | 6 reason codes annotate (immutable copy) |
-| PolicyRules | 5 predicate soft gating |
+| PolicyRules | 6 predicate soft gating |
 | CbrEligibility | 4-constraint CBR filter |
 
 Rule files (`lib/symbolic/rules/v1/`): `explain.js`, `proactive-gate.js`. `PolicyRules`, `LinkIntegrityChecker`, and `ClaimConflictDetector` are used directly by their callers.
@@ -1015,7 +1120,7 @@ The blind spot in SessionLinker.wouldCreateCycle is sealed. `store.isReachable` 
 
 `lib/memory/ModeRegistry.js`. Loads Mode preset JSON and applies per-session tool filters and skill_guide overrides.
 
-- Preset definition files: `config/modes/*.json` (recall-only, write-only, onboarding, audit)
+- Preset definition files: `lib/memory/modes/*.json` (recall-only, write-only, onboarding, audit)
 - Reads the preset name from the `X-Memento-Mode` header or `initialize.params.mode`
 - `api_keys.default_mode` column (migration-034) enables per-key default configuration via admin console
 - Filters tools/list response to expose only allowed tools for the active preset
@@ -1040,6 +1145,8 @@ ModeRegistry.resolve(mode)
 - `_suggestion` object: `{code, message, recommendedTool, recommendedArgs}` or null
 
 ### LocalTransformersEmbedder
+
+`lib/embeddings/normalize.js` is a leaf module holding L2 normalization (`normalizeL2`), shared by `lib/tools/embedding.js` and `LocalTransformersEmbedder`. `lib/tools/embedding.js` re-exports `normalizeL2`.
 
 `lib/embeddings/LocalTransformersEmbedder.js`. Local embedding generator using the `@huggingface/transformers` library. The `getLocalEmbedder(modelId, dimensions)` factory returns a singleton instance per modelId.
 
@@ -1100,7 +1207,7 @@ LLM_PRIMARY=gemini-cli
 - Authenticates via `OPENAI_API_KEY` or Codex CLI's own configuration file
 
 **copilot-cli provider** (`lib/llm/providers/CopilotCliProvider.js`):
-- Calls GitHub Copilot CLI (`gh copilot suggest`) as a wrapper
+- Wraps GitHub Copilot CLI (`copilot -p <prompt> --output-format text`)
 - Uses `extractJsonBlock()` utility to strip trailing statistics/banner text before JSON extraction
 
 **qwen-cli provider** (`lib/llm/providers/QwenCliProvider.js`):
@@ -1109,12 +1216,14 @@ LLM_PRIMARY=gemini-cli
 - Falls back to provider-config `model` / `timeoutMs`, and uses the CLI default model only when `model` is still omitted
 - Requires `qwen auth` authentication
 
+**CLI tool approval** (`lib/llm/util/cli-approval.js`): the tool execution approval mode of gemini-cli, copilot-cli and opencode-cli is read at call time from `MEMENTO_LLM_CLI_TOOL_APPROVAL` (`none` by default, or `all`). With `none` the three CLIs run in an empty temporary directory created once per process; gemini runs without `-y`, copilot runs with arguments that deny write, shell and URL tools and built-in MCPs, and opencode runs with `OPENCODE_PERMISSION={"*":"deny"}`. With `all` they run in the server working directory using gemini `-y` and copilot `--allow-all-tools`. The environment of CLI child processes is set by the allowlist in `lib/llm/util/cli-env.js` and `MEMENTO_LLM_CLI_ENV_PASSTHROUGH`.
+
 **Circuit breaker and timeout** (`config/memory.js`):
 - `geminiTimeoutMs: 60000` (increased from 15000). Accommodates latency growth with large Gemini CLI prompts
 - Circuit breaker failure threshold (LLM_CB_FAILURE_THRESHOLD=5) and OPEN duration (LLM_CB_OPEN_DURATION_MS=60000) remain unchanged
 
 **Complete LLM_PRIMARY allowed values**:
-`gemini-cli`, `agy-cli`, `anthropic`, `openai`, `google-gemini-api`, `groq`, `openrouter`, `xai`, `ollama`, `vllm`, `deepseek`, `mistral`, `cohere`, `zai`, `codex-cli`, `copilot-cli`, `qwen-cli`, `opencode-cli`
+`gemini-cli`, `agy-cli`, `anthropic`, `openai`, `gemini`, `groq`, `openrouter`, `xai`, `ollama`, `vllm`, `deepseek`, `mistral`, `cohere`, `zai`, `codex-cli`, `copilot-cli`, `qwen-cli`, `opencode-cli`
 
 ### Search Pipeline -- _suggestion Post-Processing
 
@@ -1342,7 +1451,7 @@ Flow:
 3. Returns `{ async: true, accepted, rejected, jobId }` immediately
 4. BatchRememberWorker polls the queue in the background and processes via the BatchRememberProcessor synchronous INSERT path
 
-When Redis is unavailable (stub state), the async flag is ignored and falls back to the synchronous path. On server shutdown, `gracefulShutdown` awaits `getBatchRememberWorker().stop()` for worker drain (`server.js`).
+When Redis is unavailable (stub state), the async flag is ignored and falls back to the synchronous path. On server shutdown, `gracefulShutdown` drains the workers registered in the worker registry (`server.js`, `lib/memory/workers/registry.js`).
 
 ## keyScopeClause Shared Helper
 

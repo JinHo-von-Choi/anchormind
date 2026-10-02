@@ -33,7 +33,7 @@ MemoryManager는 thin facade다. 비즈니스 로직은 `lib/memory/processors/`
 
 검색 관련 모듈은 `lib/memory/read/`에 위치하며, 임포트 경로는 실제 파일 위치를 그대로 따른다.
 
-**facade 생성자 흐름:** 20개 공유 객체 초기화 → 4 프로세서 DI 주입 → `_installSharedSync()` 호출. 공개 메서드는 processor 위임으로 구현된다.
+**facade 생성자 흐름:** 17개 공유 객체 초기화 → 4 프로세서 DI 주입 → `_installSharedSync()` 호출. 공개 메서드는 processor 위임으로 구현된다.
 
 **_installSharedSync:** facade의 각 공유 프로퍼티(store, index, factory 등) setter를 `Object.defineProperty`로 래핑한다. `mm.store = stub` 한 줄이 facade와 모든 프로세서에 자동 전파된다 (테스트 DI 호환).
 
@@ -78,9 +78,9 @@ remember(params)
 ```
 recall(query)
   ├── L1 Redis 인메모리 캐시 (warm path)
-  ├── L2 pgvector 임베딩 유사도
+  ├── L2 PostgreSQL 키워드·토픽 검색 (keywords GIN 교집합)
   ├── L2.5 그래프 이웃 (fragment_links 1-hop)
-  ├── L3 PostgreSQL 전문 검색 (형태소; MorphemeTokenizer 로컬 CPU 분석기 → morpheme_dict → tsquery)
+  ├── L3 pgvector 임베딩 유사도 (형태소 보조 경로: MorphemeTokenizer 로컬 CPU 분석기 → morpheme_dict 임베딩 평균 벡터)
   ├── L4 Cross-Encoder Reranker (RRF 상위 30건)
   ├── RRF 병합 (k=60)
   ├── SearchScope.applyTo() 필터 — workspace·caseId·resolutionStatus·phase·affect·type·topic·isAnchor 정합
@@ -113,7 +113,7 @@ recall(query)
 
 워커는 5초 간격으로 Redis 큐 `memory_evaluation`을 폴링한다. 큐가 비어 있으면 대기한다. 큐에서 잡(job)을 꺼내면 Gemini CLI(`geminiCLIJson`)를 호출하여 파편 내용의 합리성을 평가한다. 평가 결과는 fragments 테이블의 utility_score와 verified_at을 갱신하는 데 사용된다.
 
-새 파편이 remember로 저장될 때 평가 큐에 투입된다. 단, fact, procedure, error 유형은 제외된다. 평가 대상은 decision, preference, relation 유형이다. 평가는 저장과 비동기로 분리되어 있으므로 remember 호출의 응답 시간에 영향을 주지 않는다.
+새 파편이 remember로 저장될 때 평가 큐에 투입된다. 단, fact, procedure, error, episode 유형은 제외된다. 평가 대상은 decision, preference, relation 유형이다. 큐 길이가 `EVALUATOR_MAX_QUEUE`(기본 100)를 넘으면 초과분을 버리고 해당 파편을 `quality_verified=false`로 표시해 다음 consolidate 주기가 다시 집어가게 한다. 평가는 저장과 비동기로 분리되어 있으므로 remember 호출의 응답 시간에 영향을 주지 않는다.
 
 Gemini CLI가 설치되지 않은 환경에서는 워커가 구동되지만 평가 작업을 건너뛴다.
 
@@ -127,8 +127,8 @@ memory_consolidate 도구가 실행되거나 서버 내부 스케줄러(6시간 
 
 스테이지는 `stageDefs` 배열로 선언적으로 정의된다. 새 스테이지를 추가할 때 배열에 항목 하나만 push하면 `TOTAL_STAGES = stageDefs.length`로 자동 산출되고 progress 이벤트 카운트도 갱신된다. 현재 22개 스테이지가 아래 순서로 실행된다.
 
-1. `ttl_transition` — hot → warm → cold 강등. warm → permanent 승격은 importance≥0.8이고 `quality_verified IS DISTINCT FROM FALSE`인 파편만 대상(Circuit Breaker 패턴). permanent 파편도 is_anchor=false + importance<0.5 + 180일 미접근 조건 충족 시 cold로 강등(parole)
-2. `importance_decay` — PostgreSQL `POWER()` 단일 SQL 배치. 공식: `importance × 2^(−Δt / halfLife)`. Δt는 `COALESCE(last_decay_at, accessed_at, created_at)` 기준. 유형별 반감기 — procedure:30일, fact:60일, decision:90일, error:45일, preference:120일, relation:90일, 나머지:60일. `is_anchor=true` 제외, 최솟값 0.05 보장
+1. `ttl_transition`: preference 유형은 permanent로 고정하고 `linked_to`가 5개 이상인 허브 파편을 permanent로 승격한다. importance≥0.8 파편의 permanent 승격은 `quality_verified`가 TRUE이거나, NULL이면서 앵커 또는 importance≥0.9일 때만 하며 FALSE는 항상 차단한다(Circuit Breaker 패턴). warm 파편은 importance<0.3이거나 30일 이상 미접근이면 cold로 강등한다. permanent 파편도 is_anchor=false + importance<0.5 + 180일 미접근 조건 충족 시 cold로 강등(parole)
+2. `importance_decay`: PostgreSQL `POWER()` SQL. 공식: `importance × 2^(−Δt / halfLife)`. Δt는 `COALESCE(last_decay_at, accessed_at, created_at)` 기준. 유형별 반감기: procedure:30일, fact:60일, decision:90일, error:45일, preference:120일, relation:90일, 나머지:60일. 반감기에는 `1 + ema_activation × 0.5`(1~2로 제한)를 곱한다. `is_anchor=true`와 permanent 계층은 제외, 최솟값 0.05 보장. 기본은 대상 행을 id 오름차순 묶음(`MEMENTO_SCORE_UPDATE_BATCH`, 기본 200)으로 `FOR NO KEY UPDATE` 잠금 후 갱신하며 모든 묶음이 첫 조회의 기준 시각 하나를 쓴다. 묶음 크기 0이면 단일 UPDATE 문장이다. `MEMENTO_DECAY_MIN_DELTA`가 0보다 크면 감쇠량이 그 값보다 작은 행은 건너뛰고 마지막 감쇠 후 24시간이 지난 행은 항상 갱신한다
 3. `expired_delete` — 5가지 복합 GC 조건. (a) utility_score < 0.15 + 비활성 60일, (b) fact/decision 고립 파편, (c) 하위 호환 조건(importance < 0.1, 90일), (d) 해결된 error 파편, (e) NULL type 파편. gracePeriod 7일 이내 파편 보호. 1회 최대 50건. `is_anchor=true`·`permanent` 제외
 4. `gc_preview` — type별 GC 후보 카운트 조회. results.gcCandidatesByType에 Map으로 기록
 5. `split_long_fragments` — 길이 초과 파편 분할
@@ -137,7 +137,7 @@ memory_consolidate 도구가 실행되거나 서버 내부 스케줄러(6시간 
 8. `compress_old_fragments` — 장기 미접근·저중요도 파편 topic별 그룹핑 후 KNN 압축
 9. `embeddings_backfill` — embedding이 NULL인 파편 비동기 임베딩 생성
 10. `retro_link` — GraphLinker.retroLink()로 고립 파편(임베딩 있음, 링크 없음) 최대 20건 소급 자동 링크
-11. `utility_score_update` — `importance * (1 + ln(max(access_count,1))) / age_months^0.3` 공식 갱신
+11. `utility_score_update`: `importance * (1 + ln(max(access_count,1))) / age_months^0.3` 공식 갱신. 저장값이 실제로 바뀌는 행만 id 오름차순 묶음으로 기록하며 `MEMENTO_UTILITY_MIN_DELTA`가 0보다 크면 저장값과의 차이가 그 값 이하인 행도 다시 쓰지 않는다
 12. `requeue_high_ema` — ema_activation>0.3 AND importance<0.4 파편을 MemoryEvaluator 재평가 큐에 등록
 13. `promote_anchors` — access_count >= 10 + importance >= 0.8 파편을 `is_anchor=true`로 승격. `MEMENTO_AUTO_PROMOTE_ANCHORS=false`이면 이 stage만 `disabled_by_config` 사유로 건너뛴다(기본 true).
 14. `detect_contradictions`: 3단계 하이브리드 모순 탐지. pgvector cosine > 0.85 후보 추출 → mDeBERTa NLI → Gemini CLI 에스컬레이션. 모순이면 `contradicts` 링크를 걸고 오래된 쪽의 importance를 절반으로 낮춘 뒤 `superseded_by`로 닫는다. 오래된 쪽이 앵커면 닫지 않는다. 해소 기록은 `contradiction_audit` topic에 남기며 이 topic은 모순·대체 탐지 대상에서 빠진다. 결과는 `nliResolvedDirectly`, `nliSkippedAsNonContra`로 분리 반환
@@ -147,7 +147,7 @@ memory_consolidate 도구가 실행되거나 서버 내부 스케줄러(6시간 
 18. `feedback_calibration` — 최근 7일 tool_feedback을 세션별로 집계한 뒤 `feedbackFactor(allRelevant, allSufficient)` 순수함수(lib/memory/consolidate/feedbackFactor.js)로 importance 보정 계수를 결정한다. POSITIVE(allRelevant=true AND allSufficient=true): ×1.1, MIXED(allRelevant=true AND allSufficient=false): ×0.95, NEGATIVE(allRelevant=false): ×0.85. `is_anchor=true` 제외, 클리핑 [0.05, 1.0]
 19. `prune_keyword_indexes` — Redis 고아 키워드 인덱스 제거
 20. `collect_stale_fragments` — 검증 주기 초과 파편 목록 수집, results.stale_fragments에 기록
-21. `purge_stale_reflections` — topic='session_reflect' 파편 중 type별 최신 5개만 보존, 30일 경과 + importance < 0.3인 나머지 삭제(1회 최대 30건)
+21. `purge_stale_reflections`: topic='session_reflect' 파편 중 type별 최신 5개만 보존, 30일 경과 + importance < 0.55인 나머지 삭제(1회 최대 30건)
 22. `gc_search_events` — 오래된 검색 이벤트 GC
 
 ### compressOldFragments (KNN 배치 병렬화)
@@ -237,6 +237,14 @@ Legacy SSE 세션도 요청마다 `expiresAt`을 `now + SESSION_TTL_MS`로 갱�
 
 `validateStreamableSession`은 세션 갱신 시 고정된 `CACHE_SESSION_TTL` 대신 Redis에서 읽은 실제 잔여 TTL을 사용한다. 세션이 만료에 가까워질수록 갱신 후에도 남은 시간이 정확히 보존된다.
 
+### API 키 상태 재확인
+
+API 키로 연 MCP 세션은 사용할 때 `getCachedKeyState`로 키의 존재, `status`, `permissions`를 `MEMENTO_SESSION_KEY_RECHECK_MS`(기본 30000, 0이면 재확인 안 함) 주기로 다시 읽는다(`lib/admin/key-state-cache.js`). 비활성이거나 삭제된 키의 세션은 닫히고 404 `Session not found`를 받으며, 권한 변경은 열린 세션에 반영된다. 관리 API로 키 상태나 권한을 바꾸거나 키를 삭제하면 `invalidateKeyState`가 캐시를 지우고, 비활성화와 삭제는 이 프로세스의 해당 키 세션을 즉시 닫는다. 조회가 실패하면 세션은 저장된 identity를 유지한다.
+
+### 세션 ID 수신 정책
+
+`MEMENTO_SESSION_ID_POLICY`(`warn` 기본, `enforce`)가 세션 ID 수신을 정한다(`lib/session-id.js`). 쿼리스트링(`?sessionId=`, `?mcp-session-id=`)으로 받은 ID와 서버 발급 형식(UUID)이 아닌 ID의 자동 복구는 `warn`에서 경고 로그만 남기고 정상 처리한다. `enforce`에서는 쿼리 ID에 400, UUID가 아닌 ID의 복구에 404를 돌려준다. `MCP-Session-Id` 헤더로 보낸 UUID 세션과 Legacy `/message?sessionId=`는 영향이 없다. 로그와 reflect 프롬프트에는 세션 ID의 앞 8자만 표기한다(`lib/logging/session-ref.js`).
+
 ### SSE 연결 해제
 
 SSE 스트림이 닫히면(`res.on('close')`) 서버는 SSE 응답 객체만 제거하고 세션 자체는 유지한다. 세션은 Redis TTL이 소진될 때까지 살아있으며, 클라이언트가 재연결하면 동일 세션을 이어서 사용할 수 있다.
@@ -264,7 +272,7 @@ SSE 스트림이 닫히면(`res.on('close')`) 서버는 SSE 응답 객체만 제
 
 API 키 원문을 client_id로 등록한 기존 Redis 토큰은 `bound_key_id=null`이므로 2순위 `is_api_key` 경로로 정상 처리된다 (backward compat).
 
-**AUTO-REGISTRATION 차단**: `/authorize` GET 요청에서 미등록 `client_id`가 유효한 `redirect_uri`만 있으면 자동으로 클라이언트를 생성하던 경로는 `MCP_ALLOW_AUTO_DCR_REGISTER=false`(기본)로 차단된다. 미등록 클라이언트는 반드시 `POST /register`(RFC 7591)로 사전 등록해야 한다. 차단 시 `mcp_oauth_auto_register_blocked_total` 카운터 증가.
+**AUTO-REGISTRATION 차단**: `/authorize` GET 요청에서 미등록 `client_id`의 `redirect_uri`가 신뢰 목록(기본 신뢰 도메인, `OAUTH_TRUSTED_ORIGINS`, `OAUTH_ALLOWED_REDIRECT_URIS`, localhost)에 없으면 `MCP_ALLOW_AUTO_DCR_REGISTER=false`(기본)에서 자동 등록하지 않고 `invalid_client`로 거부한다. 이 경우 `POST /register`(RFC 7591)로 사전 등록해야 하며 차단 시 `mcp_oauth_auto_register_blocked_total` 카운터가 증가한다. 신뢰 목록에 있는 `redirect_uri`는 자동 등록되지만 키에 묶이지 않은 토큰은 `MCP_REJECT_NONAPIKEY_OAUTH` 정책에 따라 거부된다. API 키 원문 형식의 `client_id`는 키 검증만 하고 클라이언트 행으로 저장하지 않는다.
 
 **ACCESS_KEY 직접 사용**: `Authorization: Bearer <ACCESS_KEY>` 헤더는 OAuth 분기 진입 전 `safeCompare`에서 처리되므로 위 분기와 무관하다.
 
@@ -278,7 +286,7 @@ API 키 원문을 client_id로 등록한 기존 Redis 토큰은 `bound_key_id=nu
 
 ### initialize 요청 IP rate limit 선차단
 
-`handleMcpPost`는 무세션(`!sessionId`) `initialize` 요청에 한해 `_createInitializeSession()` 호출(및 그 내부의 인증·`api_keys` 조회)보다 먼저 IP 기반 rate limit을 적용한다. `rateLimiter.allow(clientIp, null)`이 false를 반환하면 즉시 429(`Retry-After` 헤더 포함)를 반환하고 `recordInitializeIpRateLimited()`로 `mcp_initialize_ip_rate_limited_total` 카운터를 증가시킨다. 미인증 initialize 폭주가 DB 조회 단계까지 도달하는 경로를 차단하는 것이 목적이다.
+`handleMcpPost`는 무세션(`!sessionId`) `initialize` 요청에 한해 `_createInitializeSession()` 호출(및 그 내부의 인증·`api_keys` 조회)보다 먼저 IP 기반 rate limit을 적용한다. `rateLimiter.allow(clientIp, null)`이 false를 반환하면 즉시 429(`Retry-After` 헤더 포함)를 반환하고 `recordInitializeIpRateLimited()`로 `mcp_initialize_ip_rate_limited_total` 카운터를 증가시킨다. 미인증 initialize 폭주가 DB 조회 단계까지 도달하는 경로를 차단하는 것이 목적이다. `GET /sse`(레거시 SSE 연결)도 같은 IP 버킷(`RATE_LIMIT_PER_IP`)으로 요청 제한을 받으며 초과하면 429와 `Retry-After`를 돌려준다.
 
 이 선차단은 `keyId=null`인 IP 버킷을 사용하며, `DualRateLimiter`의 IP 버킷과 key 버킷은 서로 독립적이다(같은 IP라도 인증된 key 버킷은 별도로 소진). 선차단을 통과한 initialize 요청은 이후 일반 rate limit 분기(`!isInitializeRequest(msg) && !rateLimiter.allow(clientIp, sessionKeyId)`)에서 제외되어 동일 IP 버킷을 이중으로 소비하지 않는다.
 
@@ -346,7 +354,7 @@ RRF 병합 이후 상위 30건을 cross-encoder로 재정렬하고 15건만 남�
 
 어느 모드든 scores 반환 실패 시 RRF 결과 그대로 반환(graceful degradation).
 
-**최종 스코어:** `sigmoid(logit) * recency_boost`. recency_boost는 생성일 기준 365일 선형 감쇠 [0.9, 1.1] 범위.
+**최종 스코어:** `sigmoid(logit) * recency_boost`. `recency_boost = 1 + 0.2 * (recency - 0.5)`이며 recency는 생성일 기준 365일에 걸쳐 1.0에서 0.1까지 선형 감쇠한다(boost 범위 [0.92, 1.1]).
 
 ---
 
@@ -381,14 +389,14 @@ case_events 테이블에 semantic milestone을 기록하고 조회하는 전담 
 
 | 메서드 | 설명 |
 |--------|------|
-| `append(caseId, sessionId, eventType, summary, keyId)` | 신규 이벤트 기록. sequence_no에 `FOR UPDATE` 잠금으로 동시성 제어 |
+| `append(event)` | 신규 이벤트 기록. `event`는 `case_id`, `event_type`, `summary` 필수이며 `session_id`, `entity_keys`, `source_fragment_id`, `source_search_event_id`, `key_id`를 받는다. sequence_no는 같은 case_id의 `MAX(sequence_no) + 1`로 정하고, 원본 파편이 있으면 그 파편의 agent_id와 workspace를 이벤트에 기록한다 |
 | `addEdge(fromId, toId, edgeType, confidence)` | 이벤트 간 DAG 엣지 추가 |
 | `addEvidence(fragmentId, eventId, kind)` | 파편-이벤트 증거 조인 기록 |
 | `getByCase(caseId, opts)` | 케이스 범위 이벤트 목록 조회 (occurred_at 오름차순) |
 | `getBySession(sessionId, opts)` | 세션 범위 이벤트 목록 조회 |
 | `getEdgesByEvents(eventIds)` | 이벤트 ID 목록에 해당하는 모든 엣지 일괄 조회 |
 
-**event_type 8종:**
+**event_type 9종:**
 
 - `milestone_reached` — 목표 이정표 도달
 - `hypothesis_proposed` — 가설 제안
@@ -398,8 +406,9 @@ case_events 테이블에 semantic milestone을 기록하고 조회하는 전담 
 - `fix_attempted` — 수정 시도
 - `verification_passed` — 검증 통과
 - `verification_failed` — 검증 실패
+- `case_closed`: `amend`가 case_id가 있는 파편을 resolved로 전환할 때 기록하는 케이스 종결 이벤트
 
-**동시성:** `append()` 내부에서 `SELECT sequence_no FROM case_events WHERE case_id = $1 FOR UPDATE`로 배타적 행 잠금을 획득한 뒤 INSERT를 수행한다. 동일 케이스에 이벤트가 동시 삽입될 때 sequence_no 중복을 방지한다.
+**순서:** 한 트랜잭션 안에서 `SELECT COALESCE(MAX(sequence_no), -1) + 1`로 sequence_no를 정한 뒤 INSERT한다. READ COMMITTED이므로 같은 케이스에 이벤트가 동시에 삽입되면 sequence_no가 겹칠 수 있으며, 순서는 `created_at` 정렬로 보존된다. `event_type`이 `CASE_EVENT_TYPES`에 없으면 거부한다.
 
 ---
 
@@ -461,10 +470,11 @@ weight는 [0, 2] 범위로 클램핑되며, confidence는 [0, 1] 범위로 클�
 
 **linkEpisodeMilestone(episodeFragmentId, agentId, keyId, sessionId):**
 
-1. fragment 내용 첫 200자를 요약으로 조회
+1. fragment 내용 첫 200자를 요약으로, workspace와 topic을 체인 스코프 결정용으로 조회 (agent_id, key_id 범위 안에서만)
 2. milestone_reached 이벤트를 case_events에 삽입 (ON CONFLICT idempotency_key DO NOTHING — 중복 방지)
-3. 동일 agentId의 직전 milestone eventId가 캐시에 있으면 preceded_by 엣지 삽입
-4. lastEventByAgent Map에 현재 eventId 저장 (삽입 순서 기반 LRU, 상한 `MAX_TRACKED_AGENTS=1000`. 재삽입 시 최신 위치로 갱신되며, 상한 초과 시 가장 오래된 항목을 방출한다)
+3. 체인 스코프는 workspace가 우선이고 없으면 topic이다. 둘 다 없으면 체인을 만들지 않는다 (교차 프로젝트 오연결 방지)
+4. 스코프(`agentId:keyId:scopeType:scopeValue`)의 직전 milestone eventId를 캐시에서 읽고, 없으면 DB에서 방금 삽입한 이벤트를 제외하고 조회한다. 있으면 preceded_by 엣지 삽입
+5. 스코프별 캐시에 현재 eventId 저장 (삽입 순서 기반 LRU, 상한 `MAX_TRACKED_SCOPES=1000`, TTL `EPISODE_CONTINUITY_CACHE_TTL_MS` 기본 5000ms. 재삽입 시 최신 위치로 갱신되며, 상한 초과 시 가장 오래된 항목을 방출한다)
 
 **idempotency_key 형식:** `milestone:{agentId}:{sessionId}:{fragmentId}` — 서버 재시작 후 동일 호출이 재발생해도 중복 이벤트가 생성되지 않는다.
 
@@ -587,12 +597,13 @@ architecture.md의 Symbolic Memory Layer 섹션이 전체 설계를 다룬다. �
 
 ### PolicyRules
 
-`lib/symbolic/PolicyRules.js`. 5개 predicate를 순수 동기 함수로 구현한다:
+`lib/symbolic/PolicyRules.js`. 6개 predicate를 순수 동기 함수로 구현한다:
 1. `decisionHasRationale`: decision 타입에서 `linked_to >= 2` 또는 `RATIONALE_REGEX` 매칭
 2. `errorHasResolutionPath`: error 타입에서 `CAUSE_FIX_REGEX` 매칭 또는 `resolution_status` 존재
 3. `procedureHasStepMarkers`: procedure 타입에서 `STEP_MARKER_REGEX` 매칭
 4. `caseIdHasResolutionStatus`: case_id 보유 파편이 `resolution_status` 누락
 5. `assertionNotContradictory`: `assertion_status`가 동시에 verified이면서 rejected인 경우
+6. `fragmentHasWorkspace`: workspace가 명시값·키 default 어느 쪽으로도 해석되지 않는 경우
 
 `check(fragment)` 반환: `[{ rule, severity, detail, ruleVersion }]`. DB 조회 없음, 순수 JS 동기.
 
@@ -604,7 +615,7 @@ architecture.md의 Symbolic Memory Layer 섹션이 전체 설계를 다룬다. �
 
 **explain.js**: `buildReasonCodes(fragment, searchContext)` 함수. 입력: fragment (searchPath, layerLatency 메타데이터 포함) + searchContext. 출력: 최대 3개 reason code 배열. L3 형태소 경로는 `direct_keyword_match`, pgvector L2는 `semantic_similarity`, 그래프 1-hop은 `graph_neighbor_1hop`, timeRange 매칭은 `temporal_proximity`, case cohort는 `case_cohort_member`, EMA 활성화(`>= 0.5`)는 `recent_activity_ema`.
 
-**proactive-gate.js**: `evaluateProactiveGate({ source, target, keyId }, _ctx)`. 비용 순 우선 검사: `invalid_target` → `quarantine` → `cohort_mismatch` → `polarity_conflict`. `ClaimConflictDetector` throw는 fail-open(allowed=true 반환). 반환: `{ allowed, reason, ruleVersion }`.
+**proactive-gate.js**: `evaluateProactiveGate({ source, target, keyId }, _ctx)`. 비용 순 우선 검사: `invalid_target` → `quarantine` → `cohort_mismatch` → `workspace_mismatch` → `case_policy` → `polarity_conflict`. `ClaimConflictDetector` throw는 fail-open(allowed=true 반환). 반환: `{ allowed, reason, ruleVersion }`.
 
 ### RememberPostProcessor 8단계 및 _extractSymbolicClaims 경로
 
@@ -659,6 +670,10 @@ MCP 2025-06-18 스펙은 서버가 세션을 종료한 후 해당 sessionId를 �
 
 메트릭: `mcp_origin_rejected_total` (label: `origin`)
 
+### initialize 프로토콜 버전 협상
+
+`initialize`의 협상 결과(`negotiateProtocolVersion`)는 항상 지원 목록(2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05) 중 하나다. 버전을 지정하지 않으면 지원 목록의 최신 버전(기본 버전)을, 지원 목록에 있는 값이면 그 값을 쓴다. YYYY-MM-DD 형식이 아닌 값은 가장 오래된 지원 버전으로, 형식이 맞지만 목록에 없는 날짜는 그 이하의 가장 가까운 지원 버전(없으면 가장 오래된 버전)으로 협상한다. 지표 `mcp_protocol_version_negotiations_total`의 `requested_version`, `negotiated_version` 라벨 값은 지원 버전, `none`(미지정), `other`(그 밖의 값)다.
+
 ### MCP-Protocol-Version 헤더 검증
 
 initialize 이후 모든 요청에서 `MCP-Protocol-Version` 헤더를 검사한다. 구현 위치: `lib/handlers/mcp-handler.js#handleMcpPost`
@@ -687,8 +702,8 @@ initialize 이후 모든 요청에서 `MCP-Protocol-Version` 헤더를 검사한
 | 프리셋 | 차단 도구 | 용도 |
 |--------|---------|------|
 | `recall-only` | remember, batch_remember, amend, forget, link, reflect, memory_consolidate | 읽기 전용 클라이언트 |
-| `write-only` | recall, context, graph_explore, fragment_history | 쓰기 전용 파이프라인 |
-| `onboarding` | memory_consolidate, forget, amend | 신규 사용자 보호 |
+| `write-only` | recall, context, reconstruct_history, graph_explore, fragment_history, search_traces, memory_stats | 쓰기 전용 파이프라인 |
+| `onboarding` | (없음, 모든 도구 노출 + `skill_guide_override` 초심자 가이드) | 신규 사용자 안내 |
 | `audit` | remember, batch_remember, amend, forget, link, reflect (requiresMaster=true) | 마스터 키 감사 전용 |
 
 각 JSON 파일의 스키마: `{ name, description, excluded_tools[], fixed_tools[], skill_guide_override?, requiresMaster? }`.
@@ -740,17 +755,17 @@ initialize 이후 모든 요청에서 `MCP-Protocol-Version` 헤더를 검사한
 
 ## Tool 메타 레지스트리 내부 동작
 
-각 MCP 도구 정의는 `meta` 필드를 갖는다. `tools/list` 응답 조립 시 자동으로 포함된다.
+`lib/tool-registry.js`의 `TOOL_REGISTRY` 항목마다 `meta` 필드가 있다. `meta`는 서버 내부에서 쓰이며 `tools/list` 응답의 도구 정의(name, description, inputSchema)에는 실리지 않는다.
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | `capabilities` | string[] | 도구가 제공하는 기능 레이블 |
-| `riskLevel` | `"low"` \| `"medium"` \| `"high"` | 클라이언트 UI 위험 표시용 |
-| `requiresMaster` | boolean | 마스터 키 전용 도구 여부 |
+| `riskLevel` | `"safe"` \| `"caution"` \| `"destructive"` | 도구의 위험 등급 |
+| `requiresMaster` | boolean | 마스터 키 전용 도구 여부. `true`인 도구는 마스터가 아닌 세션의 `tools/list`와 OpenAPI 도구 목록에서 빠지고, `tools/call`은 마스터 세션이 아니면 거부된다 |
 | `beta` | boolean | 실험적 기능 여부 |
 | `idempotent` | boolean | 멱등성 여부 (재시도 안전) |
 
-OpenAPI 스키마 생성(`GET /openapi.json`)에서도 이 메타데이터가 반영된다. 클라이언트는 `riskLevel`을 읽어 확인 프롬프트를 표시하거나, `requiresMaster` 도구를 감사 로그에 기록하는 등의 용도로 활용할 수 있다.
+`GET /openapi.json`의 `x-mcp-tools`는 인증 수준에 맞는 도구 목록을 담으며 마스터 전용 도구는 마스터 인증에서만 나온다.
 
 ---
 
@@ -853,5 +868,7 @@ migration-047은 `fragment_versions`/`case_events` snapshot 컬럼만 추가한�
 
 - `unhandledRejection`: `logError`로 reason(message/stack)을 기록하고 프로세스는 유지한다. 장수 데몬에서 산발적 rejection이 전면 다운으로 번지는 것을 방지한다.
 - `uncaughtException`: 기록 후 `onFatal`을 최초 1회만 호출한다. shutdown 도중 2차 예외가 발생해도 onFatal은 재호출되지 않는다(재진입 가드).
+
+`createShutdownGuard({ deadlineMs, run, exit, logError })`는 종료 절차를 한 번만 실행하며 이후 신호는 `Shutdown already in progress` 로그만 남긴다. `deadlineMs`(`MEMENTO_SHUTDOWN_DEADLINE_MS`, 기본 60000) 안에 `run`이 끝나지 않으면 `Deadline exceeded, forcing exit`을 기록하고 종료 코드 1로 나간다. `deadlineMs`가 0이면 상한을 걸지 않는다.
 
 server.js의 onFatal은 `gracefulShutdown("uncaughtException", { exitCode: 1 })`을 호출하고, drain이 행에 걸릴 경우를 대비해 35초 후 강제 `process.exit(1)` 타이머(unref)를 건다. `gracefulShutdown(signal, { exitCode })`는 SIGTERM/SIGINT 경로에서 exit 0, uncaught 경로에서 exit 1로 종료하여 systemd `Restart=on-failure`가 크래시에만 재시작하도록 구분한다.

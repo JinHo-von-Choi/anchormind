@@ -33,7 +33,7 @@ Search-related modules are separated into `lib/memory/read/`.
 
 Search-related modules live under `lib/memory/read/`; import paths follow the actual file locations directly.
 
-**Facade constructor flow:** Initializes 20 shared objects → injects into 4 processors via DI → calls `_installSharedSync()`. Public methods are implemented as delegations to the processors.
+**Facade constructor flow:** Initializes 17 shared objects → injects into 4 processors via DI → calls `_installSharedSync()`. Public methods are implemented as delegations to the processors.
 
 **_installSharedSync:** Wraps each shared property setter on the facade (store, index, factory, etc.) with `Object.defineProperty`. A single assignment like `mm.store = stub` is automatically propagated to the facade and all processors (test DI compatibility).
 
@@ -78,9 +78,9 @@ The `dryRun` branch includes a `_runPolicyGate` call and is positioned before th
 ```
 recall(query)
   ├── L1 Redis in-memory cache (warm path)
-  ├── L2 pgvector embedding similarity
+  ├── L2 PostgreSQL keyword/topic search (keywords GIN intersection)
   ├── L2.5 graph neighbors (fragment_links 1-hop)
-  ├── L3 PostgreSQL full-text search (morpheme; MorphemeTokenizer local CPU analyzer → morpheme_dict → tsquery)
+  ├── L3 pgvector embedding similarity (morpheme assist path: MorphemeTokenizer local CPU analyzer → morpheme_dict embedding mean vector)
   ├── L4 Cross-Encoder Reranker (top 30 from RRF)
   ├── RRF merge (k=60)
   ├── SearchScope.applyTo() filter — workspace/caseId/resolutionStatus/phase/affect/type/topic/isAnchor consistency
@@ -114,7 +114,7 @@ When the server starts, the MemoryEvaluator worker runs in the background. It is
 
 The worker polls the Redis queue `memory_evaluation` every 5 seconds. It waits when the queue is empty. When a job is dequeued, it calls Gemini CLI (`geminiCLIJson`) to evaluate the fragment content's soundness. Evaluation results are used to update the utility_score and verified_at in the fragments table.
 
-New fragments are enqueued for evaluation when stored via remember. However, fact, procedure, and error types are excluded. Only decision, preference, and relation types are evaluated. Evaluation is decoupled from storage, so it does not affect remember call response time.
+New fragments are enqueued for evaluation when stored via remember. However, fact, procedure, error, and episode types are excluded. Only decision, preference, and relation types are evaluated. When the queue length exceeds `EVALUATOR_MAX_QUEUE` (default 100), the excess is dropped and the fragments are marked `quality_verified=false` so the next consolidate cycle picks them up again. Evaluation is decoupled from storage, so it does not affect remember call response time.
 
 In environments where Gemini CLI is not installed, the worker starts but skips evaluation tasks.
 
@@ -128,8 +128,8 @@ A maintenance pipeline that runs when the memory_consolidate tool is invoked or 
 
 Stages are declared as a `stageDefs` array. Adding a new stage requires only a single push to the array; `TOTAL_STAGES = stageDefs.length` is computed automatically, and progress event counts update accordingly. The current 22 stages execute in the following order.
 
-1. `ttl_transition` — hot -> warm -> cold demotion. warm -> permanent promotion targets only fragments with importance>=0.8 and `quality_verified IS DISTINCT FROM FALSE` (Circuit Breaker pattern). Permanent fragments with is_anchor=false + importance<0.5 + 180 days without access are demoted to cold (parole)
-2. `importance_decay` — single PostgreSQL `POWER()` batch SQL. Formula: `importance * 2^(-dt / halfLife)`. dt from `COALESCE(last_decay_at, accessed_at, created_at)`. Per-type half-lives: procedure:30d, fact:60d, decision:90d, error:45d, preference:120d, relation:90d, others:60d. Excludes `is_anchor=true`, minimum 0.05 guaranteed
+1. `ttl_transition`: the preference type is pinned to permanent, and hub fragments with 5 or more `linked_to` entries are promoted to permanent. Promoting an importance>=0.8 fragment to permanent requires `quality_verified` to be TRUE, or NULL with an anchor or importance>=0.9; FALSE always blocks it (Circuit Breaker pattern). Warm fragments with importance<0.3 or no access for 30+ days are demoted to cold. Permanent fragments with is_anchor=false + importance<0.5 + 180 days without access are demoted to cold (parole)
+2. `importance_decay`: PostgreSQL `POWER()` SQL. Formula: `importance * 2^(-dt / halfLife)`. dt from `COALESCE(last_decay_at, accessed_at, created_at)`. Per-type half-lives: procedure:30d, fact:60d, decision:90d, error:45d, preference:120d, relation:90d, others:60d. The half-life is multiplied by `1 + ema_activation * 0.5` (limited to 1 to 2). Excludes `is_anchor=true` and the permanent tier, minimum 0.05 guaranteed. By default the target rows are locked with `FOR NO KEY UPDATE` and updated in id-ascending batches (`MEMENTO_SCORE_UPDATE_BATCH`, default 200), and every batch uses the single reference time of the first query. A batch size of 0 uses a single UPDATE statement. When `MEMENTO_DECAY_MIN_DELTA` is above 0, rows whose decay amount is smaller than that value are skipped, and rows last decayed more than 24 hours ago are always updated
 3. `expired_delete` — 5-condition composite GC. (a) utility_score < 0.15 + 60 days inactive, (b) isolated fact/decision fragments, (c) legacy condition (importance < 0.1, 90 days), (d) resolved error fragments, (e) NULL type fragments. 7-day gracePeriod protection, max 50 per cycle, excludes `is_anchor=true` and `permanent` tier
 4. `gc_preview` — counts GC candidates by type; written to results.gcCandidatesByType as a Map
 5. `split_long_fragments` — splits over-length fragments
@@ -138,7 +138,7 @@ Stages are declared as a `stageDefs` array. Adding a new stage requires only a s
 8. `compress_old_fragments` — groups long-unaccessed low-importance fragments by topic, then KNN-compresses
 9. `embeddings_backfill` — async embedding generation for fragments with NULL embedding
 10. `retro_link` — GraphLinker.retroLink() retroactively links up to 20 orphan fragments (have embedding, no links)
-11. `utility_score_update` — updates scores with `importance * (1 + ln(max(access_count,1))) / age_months^0.3`
+11. `utility_score_update`: updates scores with `importance * (1 + ln(max(access_count,1))) / age_months^0.3`. Only rows whose stored value actually changes are written, in id-ascending batches, and when `MEMENTO_UTILITY_MIN_DELTA` is above 0 rows whose difference from the stored value is at most that value are not rewritten either
 12. `requeue_high_ema` — registers ema_activation>0.3 AND importance<0.4 fragments for MemoryEvaluator re-evaluation
 13. `promote_anchors` — promotes fragments with access_count >= 10 + importance >= 0.8 to `is_anchor=true`. `MEMENTO_AUTO_PROMOTE_ANCHORS=false` skips only this stage with reason `disabled_by_config` (default: true).
 14. `detect_contradictions`: 3-stage hybrid contradiction detection. pgvector cosine > 0.85 candidate extraction -> mDeBERTa NLI -> Gemini CLI escalation. A contradiction adds a `contradicts` link, halves the importance of the older side and closes it via `superseded_by`; an anchor on the older side is left open. Resolution records go to the `contradiction_audit` topic, which contradiction and supersession detection skip. Results returned as separate `nliResolvedDirectly` and `nliSkippedAsNonContra` counts
@@ -148,7 +148,7 @@ Stages are declared as a `stageDefs` array. Adding a new stage requires only a s
 18. `feedback_calibration` — aggregates tool_feedback by session over the last 7 days, then applies a multiplier via the `feedbackFactor(allRelevant, allSufficient)` pure function (lib/memory/consolidate/feedbackFactor.js). POSITIVE (allRelevant=true AND allSufficient=true): ×1.1, MIXED (allRelevant=true AND allSufficient=false): ×0.95, NEGATIVE (allRelevant=false): ×0.85. Excludes `is_anchor=true`, clamped to [0.05, 1.0]
 19. `prune_keyword_indexes` — removes orphaned Redis keyword indexes
 20. `collect_stale_fragments` — collects fragments past their verification cycle; written to results.stale_fragments
-21. `purge_stale_reflections` — among topic='session_reflect' fragments, keeps the latest 5 per type and deletes the rest with 30+ days age + importance < 0.3 (max 30 per cycle)
+21. `purge_stale_reflections`: among topic='session_reflect' fragments, keeps the latest 5 per type and deletes the rest with 30+ days age + importance < 0.55 (max 30 per cycle)
 22. `gc_search_events` — garbage-collects old search events
 
 ### compressOldFragments (KNN Batch Parallelization)
@@ -232,6 +232,14 @@ Trigger condition: `(now - session.lastAccessedAt) > idleThresholdMs` AND (`sess
 
 `validateStreamableSession` uses the actual remaining TTL read from Redis instead of a fixed `CACHE_SESSION_TTL` when refreshing a session. As a session approaches expiration, its remaining lifetime is preserved accurately after each refresh.
 
+### API Key State Recheck
+
+When an MCP session opened with an API key is used, `getCachedKeyState` rereads the key's existence, `status` and `permissions` every `MEMENTO_SESSION_KEY_RECHECK_MS` (default 30000, 0 disables the recheck) (`lib/admin/key-state-cache.js`). A session whose key was deactivated or deleted is closed and receives 404 `Session not found`, and permission changes take effect in open sessions. When a key's status or permissions are changed through the admin API, or a key is deleted, `invalidateKeyState` clears the cache, and deactivation and deletion close that key's sessions in this process immediately. If the lookup fails the session keeps its stored identity.
+
+### Session ID Receipt Policy
+
+`MEMENTO_SESSION_ID_POLICY` (`warn` default, `enforce`) sets how session IDs are received (`lib/session-id.js`). Under `warn`, an ID received in the query string (`?sessionId=`, `?mcp-session-id=`) and the automatic recovery of an ID that does not have the server-issued format (UUID) only produce a warning log and are handled normally. Under `enforce`, a query ID receives 400 and the recovery of a non-UUID ID receives 404. UUID sessions sent in the `MCP-Session-Id` header and Legacy `/message?sessionId=` are not affected. Logs and reflect prompts show only the first 8 characters of a session ID (`lib/logging/session-ref.js`).
+
 ### SSE Disconnect
 
 When an SSE stream closes (`res.on('close')`), the server removes only the SSE response object; the session itself is kept alive. The session persists until its Redis TTL expires, allowing a reconnecting client to resume the same session.
@@ -255,7 +263,7 @@ When the header is missing or invalid, a random client_id is generated as a fall
 
 Existing Redis tokens that registered the raw API key as client_id have `bound_key_id=null`, so they are handled normally by the second-priority `is_api_key` path (backward compatibility).
 
-**AUTO-REGISTRATION blocked**: on `/authorize` GET, the path that automatically created a client for an unregistered `client_id` with a valid `redirect_uri` is blocked by `MCP_ALLOW_AUTO_DCR_REGISTER=false` (default). Unregistered clients must be registered in advance via `POST /register` (RFC 7591). Each block increments the `mcp_oauth_auto_register_blocked_total` counter.
+**AUTO-REGISTRATION blocked**: on `/authorize` GET, when the `redirect_uri` of an unregistered `client_id` is not in the trusted list (default trusted origins, `OAUTH_TRUSTED_ORIGINS`, `OAUTH_ALLOWED_REDIRECT_URIS`, localhost), `MCP_ALLOW_AUTO_DCR_REGISTER=false` (default) rejects it with `invalid_client` instead of registering it. Such clients must be registered in advance via `POST /register` (RFC 7591), and each block increments the `mcp_oauth_auto_register_blocked_total` counter. A `redirect_uri` in the trusted list is registered automatically, but a token that is not bound to a key is rejected by the `MCP_REJECT_NONAPIKEY_OAUTH` policy. A `client_id` in raw API key format is only verified as a key and is not stored as a client row.
 
 **Direct ACCESS_KEY use**: the `Authorization: Bearer <ACCESS_KEY>` header is handled by `safeCompare` before the OAuth branch, so it is unrelated to the branches above.
 
@@ -271,7 +279,7 @@ The `SESSION_TTL_MINUTES` environment variable defaults to 43200 minutes (30 day
 
 `handleMcpPost` applies an IP-based rate limit to session-less (`!sessionId`) `initialize` requests before calling `_createInitializeSession()` (and the authentication / `api_keys` lookup inside it). When `rateLimiter.allow(clientIp, null)` returns false, the handler immediately returns 429 (with a `Retry-After` header) and increments the `mcp_initialize_ip_rate_limited_total` counter via `recordInitializeIpRateLimited()`. The goal is to stop a burst of unauthenticated initialize requests from reaching the DB lookup stage.
 
-This pre-check uses the IP bucket with `keyId=null`; `DualRateLimiter`'s IP bucket and key bucket are independent (an authenticated key bucket for the same IP is consumed separately). Initialize requests that pass the pre-check are excluded from the later general rate-limit branch (`!isInitializeRequest(msg) && !rateLimiter.allow(clientIp, sessionKeyId)`), so the same IP bucket is not double-consumed.
+This pre-check uses the IP bucket with `keyId=null`; `DualRateLimiter`'s IP bucket and key bucket are independent (an authenticated key bucket for the same IP is consumed separately). Initialize requests that pass the pre-check are excluded from the later general rate-limit branch (`!isInitializeRequest(msg) && !rateLimiter.allow(clientIp, sessionKeyId)`), so the same IP bucket is not double-consumed. `GET /sse` (legacy SSE connection) is also limited per client IP using the same IP bucket (`RATE_LIMIT_PER_IP`) and returns 429 with `Retry-After` when exceeded.
 
 ---
 
@@ -326,7 +334,7 @@ After RRF merging, the top 30 candidates are reranked by a cross-encoder for hig
 
 In either mode, if scores cannot be retrieved, the original RRF result is returned unchanged (graceful degradation).
 
-**Final score:** `sigmoid(logit) * recency_boost`. recency_boost uses 365-day linear decay in the [0.9, 1.1] range.
+**Final score:** `sigmoid(logit) * recency_boost`. `recency_boost = 1 + 0.2 * (recency - 0.5)`, where recency decays linearly from 1.0 to 0.1 over 365 days since creation (boost range [0.92, 1.1]).
 
 ---
 
@@ -361,14 +369,14 @@ A dedicated store that records and queries semantic milestones in the case_event
 
 | Method | Description |
 |--------|-------------|
-| `append(caseId, sessionId, eventType, summary, keyId)` | Records a new event. Uses `FOR UPDATE` lock on sequence_no for concurrency control |
+| `append(event)` | Records a new event. `event` requires `case_id`, `event_type` and `summary` and accepts `session_id`, `entity_keys`, `source_fragment_id`, `source_search_event_id` and `key_id`. sequence_no is `MAX(sequence_no) + 1` within the same case_id, and when a source fragment exists its agent_id and workspace are recorded on the event |
 | `addEdge(fromId, toId, edgeType, confidence)` | Adds a DAG edge between events |
 | `addEvidence(fragmentId, eventId, kind)` | Records a fragment-event evidence join |
 | `getByCase(caseId, opts)` | Queries event list scoped to a case (occurred_at ascending) |
 | `getBySession(sessionId, opts)` | Queries event list scoped to a session |
 | `getEdgesByEvents(eventIds)` | Batch queries all edges for a list of event IDs |
 
-**8 event_types:**
+**9 event_types:**
 
 - `milestone_reached` — Goal milestone reached
 - `hypothesis_proposed` — Hypothesis proposed
@@ -378,8 +386,9 @@ A dedicated store that records and queries semantic milestones in the case_event
 - `fix_attempted` — Fix attempted
 - `verification_passed` — Verification passed
 - `verification_failed` — Verification failed
+- `case_closed`: closing event recorded when `amend` changes a fragment with a case_id to resolved
 
-**Concurrency:** Inside `append()`, an exclusive row lock is acquired via `SELECT sequence_no FROM case_events WHERE case_id = $1 FOR UPDATE` before performing the INSERT. This prevents sequence_no duplication when events are concurrently inserted into the same case.
+**Ordering:** Inside one transaction the sequence_no is set with `SELECT COALESCE(MAX(sequence_no), -1) + 1` before the INSERT. Because the isolation level is READ COMMITTED, sequence_no values can collide when events are inserted into the same case concurrently, and ordering is preserved by `created_at`. An `event_type` that is not in `CASE_EVENT_TYPES` is rejected.
 
 ---
 
@@ -441,10 +450,11 @@ Weight is clamped to [0, 2]; confidence is clamped to [0, 1].
 
 **linkEpisodeMilestone(episodeFragmentId, agentId, keyId, sessionId):**
 
-1. Queries the first 200 characters of the fragment as summary
+1. Queries the first 200 characters of the fragment as summary, and its workspace and topic to decide the chain scope (only within the agent_id and key_id scope)
 2. Inserts a milestone_reached event into case_events (ON CONFLICT idempotency_key DO NOTHING — deduplication)
-3. If the in-memory cache holds the previous milestone eventId for the same agentId, inserts a preceded_by edge
-4. Stores the current eventId in the lastEventByAgent Map (insertion-order LRU, capped at `MAX_TRACKED_AGENTS=1000`. Re-insertion refreshes an entry's position; the oldest entry is evicted once the cap is exceeded)
+3. The chain scope is the workspace when present, otherwise the topic. When neither exists no chain is created (prevents cross-project mislinking)
+4. Reads the previous milestone eventId of the scope (`agentId:keyId:scopeType:scopeValue`) from the cache, or from the DB excluding the event just inserted when absent. If found, inserts a preceded_by edge
+5. Stores the current eventId in the per-scope cache (insertion-order LRU, capped at `MAX_TRACKED_SCOPES=1000`, TTL `EPISODE_CONTINUITY_CACHE_TTL_MS` default 5000ms. Re-insertion refreshes an entry's position; the oldest entry is evicted once the cap is exceeded)
 
 **idempotency_key format:** `milestone:{agentId}:{sessionId}:{fragmentId}` — prevents duplicate events on server restart.
 
@@ -567,12 +577,13 @@ At the `insert` entry point, a `fragment.key_id !== ctx.keyId` mismatch is check
 
 ### PolicyRules
 
-`lib/symbolic/PolicyRules.js`. Implements 5 predicates as pure synchronous functions:
+`lib/symbolic/PolicyRules.js`. Implements 6 predicates as pure synchronous functions:
 1. `decisionHasRationale`: for decision type, `linked_to >= 2` or `RATIONALE_REGEX` match
 2. `errorHasResolutionPath`: for error type, `CAUSE_FIX_REGEX` match or `resolution_status` present
 3. `procedureHasStepMarkers`: for procedure type, `STEP_MARKER_REGEX` match
 4. `caseIdHasResolutionStatus`: fragment with case_id that is missing `resolution_status`
 5. `assertionNotContradictory`: `assertion_status` simultaneously verified and rejected
+6. `fragmentHasWorkspace`: workspace could not be resolved from an explicit value or the key default
 
 `check(fragment)` returns: `[{ rule, severity, detail, ruleVersion }]`. No DB queries; pure JS synchronous.
 
@@ -584,7 +595,7 @@ At the `insert` entry point, a `fragment.key_id !== ctx.keyId` mismatch is check
 
 **explain.js**: `buildReasonCodes(fragment, searchContext)` function. Input: fragment (including searchPath, layerLatency metadata) + searchContext. Output: array of up to 3 reason codes. L3 morpheme path → `direct_keyword_match`, pgvector L2 → `semantic_similarity`, graph 1-hop → `graph_neighbor_1hop`, timeRange match → `temporal_proximity`, case cohort → `case_cohort_member`, EMA activation (`>= 0.5`) → `recent_activity_ema`.
 
-**proactive-gate.js**: `evaluateProactiveGate({ source, target, keyId }, _ctx)`. Checks in cost-ascending order: `invalid_target` → `quarantine` → `cohort_mismatch` → `polarity_conflict`. `ClaimConflictDetector` throws are fail-open (returns allowed=true). Returns: `{ allowed, reason, ruleVersion }`.
+**proactive-gate.js**: `evaluateProactiveGate({ source, target, keyId }, _ctx)`. Checks in cost-ascending order: `invalid_target` → `quarantine` → `cohort_mismatch` → `workspace_mismatch` → `case_policy` → `polarity_conflict`. `ClaimConflictDetector` throws are fail-open (returns allowed=true). Returns: `{ allowed, reason, ruleVersion }`.
 
 ### RememberPostProcessor 8-Stage Pipeline and _extractSymbolicClaims Invocation Path
 
@@ -639,6 +650,10 @@ Rejected when: any other Origin -> HTTP 403 + JSON-RPC `-32000 "Origin not allow
 
 Metric: `mcp_origin_rejected_total` (label: `origin`)
 
+### initialize Protocol Version Negotiation
+
+The result of `initialize` negotiation (`negotiateProtocolVersion`) is always one of the supported list (2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05). With no version specified the newest supported version (the default) is used, and a value in the supported list is used as is. A value that is not in YYYY-MM-DD format negotiates to the oldest supported version, and a well-formed date that is not in the list negotiates to the closest supported version at or below it (the oldest when none). The `requested_version` and `negotiated_version` label values of `mcp_protocol_version_negotiations_total` are a supported version, `none` (not specified) or `other` (any other value).
+
 ### MCP-Protocol-Version Header Validation
 
 After initialize, the `MCP-Protocol-Version` header is checked on every request. Implementation: `lib/handlers/mcp-handler.js#handleMcpPost`
@@ -667,8 +682,8 @@ On server startup, `initModeRegistry()` reads all `lib/memory/modes/*.json` file
 | Preset | Blocked Tools | Use Case |
 |--------|-------------|---------|
 | `recall-only` | remember, batch_remember, amend, forget, link, reflect, memory_consolidate | Read-only clients |
-| `write-only` | recall, context, graph_explore, fragment_history | Write-only pipelines |
-| `onboarding` | memory_consolidate, forget, amend | New user protection |
+| `write-only` | recall, context, reconstruct_history, graph_explore, fragment_history, search_traces, memory_stats | Write-only pipelines |
+| `onboarding` | (none; all tools exposed + beginner guide via `skill_guide_override`) | New-user guidance |
 | `audit` | remember, batch_remember, amend, forget, link, reflect (requiresMaster=true) | Master-key audit sessions |
 
 Each JSON file schema: `{ name, description, excluded_tools[], fixed_tools[], skill_guide_override?, requiresMaster? }`.
@@ -720,17 +735,17 @@ The `repeat_query` rule queries the `search_events` table for events in the past
 
 ## Tool Meta Registry Internals
 
-Each MCP tool definition now includes a `meta` field, automatically included in `tools/list` responses.
+Each `TOOL_REGISTRY` entry in `lib/tool-registry.js` has a `meta` field. `meta` is used inside the server and is not included in the tool definitions (name, description, inputSchema) of `tools/list` responses.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `capabilities` | string[] | Functional labels describing what the tool does |
-| `riskLevel` | `"low"` \| `"medium"` \| `"high"` | Risk indicator for client UI |
-| `requiresMaster` | boolean | Whether the tool requires a master key |
+| `riskLevel` | `"safe"` \| `"caution"` \| `"destructive"` | Risk grade of the tool |
+| `requiresMaster` | boolean | Whether the tool requires a master key. A tool with `true` is left out of `tools/list` and the OpenAPI tool list for non-master sessions, and `tools/call` is rejected unless the session is a master session |
 | `beta` | boolean | Whether the tool is experimental |
 | `idempotent` | boolean | Whether the tool is safe to retry |
 
-The `GET /openapi.json` endpoint also reflects this metadata. Clients can use `riskLevel` to show confirmation prompts, or use `requiresMaster` to route calls to audit logs.
+The `x-mcp-tools` list of `GET /openapi.json` holds the tool list matching the authentication level, and master-only tools appear only for master authentication.
 
 ---
 
@@ -832,5 +847,7 @@ Old sessions require reconnection and initialize. Old sessions reused without be
 
 - `unhandledRejection`: records the reason (message/stack) with `logError` and keeps the process alive. This keeps sporadic rejections in a long-running daemon from escalating into a full outage.
 - `uncaughtException`: records the error and calls `onFatal` only once. `onFatal` is not called again if a second exception occurs during shutdown (re-entry guard).
+
+`createShutdownGuard({ deadlineMs, run, exit, logError })` runs the shutdown procedure only once, and later signals only log `Shutdown already in progress`. If `run` does not finish within `deadlineMs` (`MEMENTO_SHUTDOWN_DEADLINE_MS`, default 60000), it logs `Deadline exceeded, forcing exit` and exits with code 1. A `deadlineMs` of 0 sets no cap.
 
 The server.js `onFatal` calls `gracefulShutdown("uncaughtException", { exitCode: 1 })` and arms a 35-second forced `process.exit(1)` timer (unref) in case the drain hangs. `gracefulShutdown(signal, { exitCode })` exits with 0 on the SIGTERM/SIGINT path and 1 on the uncaught path, so systemd `Restart=on-failure` restarts only on crashes.

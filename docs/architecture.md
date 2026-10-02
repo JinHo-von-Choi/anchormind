@@ -1,7 +1,7 @@
 # Architecture
 
 작성자: 최진호
-수정일: 2026-06-16
+수정일: 2026-10-03
 
 ## 시스템 구조
 
@@ -15,7 +15,7 @@ server.js  (HTTP 서버)
     ├── DELETE /mcp        Streamable HTTP — 세션 종료
     ├── GET  /sse          Legacy SSE — 세션 생성
     ├── POST /message      Legacy SSE — JSON-RPC 수신
-    ├── GET  /health       헬스 체크
+    ├── GET  /health, /health/live, /health/ready  헬스 체크 (live: 프로세스 생존, ready: 주 DB 응답)
     ├── GET  /metrics      Prometheus 메트릭
     ├── GET|POST /authorize  OAuth 2.0 인가 엔드포인트
     ├── POST /token        OAuth 2.0 토큰 엔드포인트
@@ -39,6 +39,7 @@ server.js  (HTTP 서버)
             │   ├── ReflectProcessor.js   reflect() 로직 전담. summary→파편 변환, episode 생성, Working Memory 정리
             │   ├── AutoReflect.js        세션 종료 시 자동 reflect 오케스트레이터
             │   ├── EpisodeContinuityService.js reflect() 호출 후 case_events milestone_reached + preceded_by 엣지 연결 (idempotency_key 기반 중복 방지)
+            │   ├── RememberDuplicate.js  remember 중복 적중 판정과 분류(`same_scope`, `other_workspace`, `closed`, `unknown`), `MEMENTO_REMEMBER_DUPLICATE_GUARD`일 때 기존 파편 상태 응답 조립
             │   └── SessionActivityTracker.js 세션별 도구 호출/파편 활동 추적 (Redis)
             ├── read/                     검색 레이어 모듈
             │   ├── FragmentSearch.js     3계층 검색 조율 (구조적: L1→L2, 시맨틱: L1→L2‖L3 RRF 병합). `_executeSearch`는 `_buildTextRRF` (text 파라미터 있을 때 L2+L3 병렬 RRF) / `_buildFallbackCombined` (text 없을 때 L1+L2, keywords 존재 시 합성 텍스트 L3 시맨틱 보조를 병렬 결합해 `L3kw:N` 세그먼트로 병합) 두 내부 메서드로 분해
@@ -56,11 +57,13 @@ server.js  (HTTP 서버)
             ├── write/                    쓰기 레이어 모듈
             │   ├── FragmentWriter.js     파편 쓰기 (insert, update, delete, incrementAccess, touchLinked)
             │   ├── FragmentFactory.js    파편 생성, 유효성 검증, PII 마스킹
+            │   ├── affect.js             정서 태그 허용값 집합과 `sanitizeAffect` 정규화 (FragmentFactory, FragmentWriter가 공유)
             │   ├── FragmentStore.js      PostgreSQL CRUD 파사드 (FragmentReader + FragmentWriter 위임)
             │   ├── RememberPostProcessor.js remember() 후처리 파이프라인 (임베딩/형태소/링크/assertion/시간링크/평가큐/ProactiveRecall 포함)
             │   ├── ConflictResolver.js   충돌 감지, supersede, autoLinkOnRemember(topic 기반 구조적 링킹)
+            │   ├── IdempotencyStore.js   파편을 만들지 않는 쓰기 도구(`amend`, `tool_feedback`)의 재시도 응답 기록 (`idempotency_records`)
             │   ├── BatchRememberProcessor.js batchRemember() 로직 전담. Phase A(검증)→B(INSERT)→C(후처리) 3단계. `async: true` 파라미터로 비동기 opt-in 가능: 선검증 후 Redis 큐(`memento:batch_remember_queue`)에 job을 적재하고 즉시 반환. Redis 미설정 시 동기 경로 폴백. 워커(BatchRememberWorker)가 기존 INSERT 경로로 소비
-            │   └── BatchRememberWorker.js batch_remember 비동기 큐 워커. `memento:batch_remember_queue` Redis 큐 폴링 → BatchRememberProcessor 동기 경로로 실행. `getBatchRememberWorker()` 싱글톤 팩토리. server.js `gracefulShutdown`에서 `stop()` drain 대기로 안전 종료
+            │   └── BatchRememberWorker.js batch_remember 비동기 큐 워커. `memento:batch_remember_queue` Redis 큐 폴링 → BatchRememberProcessor 동기 경로로 실행. `getBatchRememberWorker()` 싱글톤 팩토리. `PollingWorker` 기반이므로 기동 시 워커 레지스트리에 등록되고 `gracefulShutdown`이 일괄 배수
             ├── link/                     링크 레이어 모듈
             │   ├── ReconsolidationEngine.js fragment_links weight/confidence 동적 갱신 엔진 (reinforce/decay/quarantine/restore/soft_delete + 이력 기록)
             │   ├── GraphLinker.js        임베딩 완료 이벤트 구독 자동 관계 생성 + 소급 링킹 + Hebbian co-retrieval 링킹
@@ -72,6 +75,7 @@ server.js  (HTTP 서버)
             │   ├── MemoryConsolidator.js 22단계 선언형 유지보수 파이프라인 (stageDefs 배열, TOTAL_STAGES = stageDefs.length). NLI + Gemini 하이브리드
             │   ├── ConsolidatorGC.js     피드백 리포트, stale 파편 수집/정리, 긴 파편 분할, 피드백 기반 보정
             │   ├── FragmentGC.js         파편 만료 삭제, 지수 감쇠, TTL 계층 전환 (permanent parole + EMA 배치 감쇠 포함)
+            │   ├── idOrderedUpdate.js    감쇠와 utility 점수 갱신을 id 오름차순 묶음(`MEMENTO_SCORE_UPDATE_BATCH`)으로 잠그고 갱신. 최소 변화량(`MEMENTO_DECAY_MIN_DELTA`, `MEMENTO_UTILITY_MIN_DELTA`) 미만 행은 다시 쓰지 않음
             │   ├── decay.js              지수 감쇠 반감기 상수, 순수 계산 함수, ACT-R EMA 활성화 근사 (`updateEmaActivation`, `computeEmaRankBoost`), EMA 기반 동적 반감기 (`computeDynamicHalfLife`), 나이 가중치 utility score (`computeUtilityScore`)
             │   ├── UtilityBaseline.js    파편 utility baseline 계산 (중복 제거/압축 판단 기준선)
             │   ├── feedbackFactor.js     피드백 기반 보정 계수 계산
@@ -79,7 +83,7 @@ server.js  (HTTP 서버)
             │   └── split-metrics.js      분할 결과 메트릭 집계
             ├── embedding/                임베딩 레이어 모듈
             │   ├── EmbeddingWorker.js    Redis 큐 기반 비동기 임베딩 생성 워커 (EventEmitter)
-            │   ├── EmbeddingCache.js     쿼리 임베딩 Redis 캐시 (emb:q:{sha256} 키, TTL 1시간, 장애 격리)
+            │   ├── EmbeddingCache.js     쿼리 임베딩 Redis 캐시 (emb:q:{sha256 앞 16자} 키, TTL 1시간, 장애 격리)
             │   ├── MorphemeIndex.js      형태소 기반 L3 폴백 인덱스
             │   └── MorphemeTokenizer.js  로컬 CPU 형태소 분석기. 유니코드 스크립트 런 분할 후 언어별 라우팅: 한글 garu-ko(filterHangulMorphemes 조사·어미·단음절 필터), 영어 natural PorterStemmer, 중국어 @node-rs/jieba, 일본어 kuromoji(enableKuromoji=false 시 생략). MorphemeIndex.tokenize()가 위임하며 기본 경로(MEMENTO_MORPHEME_TOKENIZER=local)에서 LLM 서브프로세스를 대체한다. 벤치마크: 1.06ms/call, 상주 RSS +28.9MB.
             ├── signals/                  신호 레이어 모듈
@@ -109,10 +113,15 @@ lib/
 ├── oauth.js           OAuth 2.0 PKCE 인가/토큰 처리
 ├── sessions.js        Streamable/Legacy SSE 세션 생명주기
 ├── redis.js           ioredis 클라이언트 (Sentinel 지원)
+├── safe-compare.js   타이밍 안전 문자열 비교(`safeCompare`: SHA-256 해시 후 `timingSafeEqual`). auth.js와 oauth.js가 공유하는 말단 모듈
+├── session-id.js     MCP 세션 ID의 수신 경로(헤더, 쿼리) 구분과 서버 발급 형식(UUID) 판정. 처리 방식은 `MEMENTO_SESSION_ID_POLICY`
+├── protocol-versions.js 지원 MCP 프로토콜 버전 목록과 기본 버전. config.js와 metrics.js가 공유하는 말단 모듈
+├── process-guards.js  `installProcessGuards`(unhandledRejection, uncaughtException 기록과 치명 오류 1회 처리)와 `createShutdownGuard`(종료 절차 1회 실행과 `MEMENTO_SHUTDOWN_DEADLINE_MS` 상한)
+├── session-audit.js   세션 이벤트 감사 로그(`session-audit.log`, NDJSON). sessionId 원문 대신 sha256 앞 16자 해시만 기록
 ├── gemini.js          Google Gemini API/CLI 클라이언트 (geminiCLIJson, isGeminiCLIAvailable)
 ├── compression.js     응답 압축 (gzip/deflate)
 ├── metrics.js         Prometheus 메트릭 수집 (prom-client). 거부 경로 전용 카운터 4종: `memento_auth_denied_total{reason}` (인증 거부), `memento_cors_denied_total{reason}` (CORS 거부), `memento_rbac_denied_total{tool,reason}` (RBAC 거부), `memento_tenant_isolation_blocked_total{component}` (테넌트 격리 차단)
-├── logger.js          Winston 로거 (daily rotate). REDACT_PATTERNS 기반 redactor format: Authorization Bearer 토큰, mmcp_ API 키, mmcp_session 쿠키, OAuth code/refresh_token/access_token 자동 마스킹 (6개 패턴). content 필드 200자 초과 시 head 50 + tail 50 트리밍
+├── logger.js          Winston 로거 (daily rotate). REDACT_PATTERNS 기반 redactor format: Authorization Bearer 토큰, mmcp_ API 키, mmcp_session 쿠키, OAuth code/refresh_token/access_token 자동 마스킹 (7개 패턴). content 필드 200자 초과 시 head 50 + tail 50 트리밍
 ├── openapi.js         OpenAPI 3.1.0 스펙 생성기. `ENABLE_OPENAPI=true` 시 `GET /openapi.json` 활성화. 인증 레벨 기반 도구 목록 필터: master key → 전체 경로(Admin REST API 포함), API key → permissions 기반 도구 목록
 ├── rate-limiter.js    IP 기반 sliding window rate limiter
 ├── rbac.js            RBAC 권한 검사 (read/write/admin 도구 레벨 권한 적용)
@@ -123,7 +132,10 @@ lib/
 
 lib/handlers/
 ├── _common.js         applyCorsOrigin, setWorkerRefs, recordConsolidateRun (공통 유틸리티)
-├── health-handler.js  handleHealth, handleMetrics
+├── health-handler.js  handleHealth, handleLive, handleReady, handleMetrics
+├── session-handler.js POST /session/rotate (rotateSession 호출, IP당 분당 호출 상한은 `_rotate-ratelimit.js`)
+├── _ratelimit-cache.js X-RateLimit-* 헤더용 QuotaChecker.getUsage 위임 래퍼
+├── _rotate-ratelimit.js /session/rotate 전용 IP 기반 rate limit (`MEMENTO_ROTATE_RATE_LIMIT_PER_MIN`)
 ├── mcp-handler.js     handleMcpPost/Get/Delete (Streamable HTTP). handleMcpPost는 내부적으로 `_resolveExistingSession` / `_createInitializeSession` / `_validateProtocolVersion` / `_dispatchAndRespond` 4개 비공개 함수로 분해된다. `injectSessionContext(msg, ctx)` — tools/call 메시지의 arguments에 서버 제어 컨텍스트(_sessionId, _keyId, _groupKeyIds, _permissions, _defaultWorkspace) 주입. 클라이언트가 전달한 동명 필드는 서버값으로 덮어쓰기하여 위조 차단
 ├── sse-handler.js     handleLegacySseGet/Post (Legacy SSE)
 └── oauth-handler.js   OAuth 5개 엔드포인트 (ServerMetadata, ResourceMetadata, Register, Authorize, Token)
@@ -131,7 +143,11 @@ lib/handlers/
 lib/admin/
 ├── ApiKeyStore.js     API 키 CRUD, 그룹 CRUD, 인증 검증 (SHA-256 해시 저장, 원시 키 단 1회 반환). `getGroupKeyIds(keyId)` — keyId 소속 그룹의 모든 키 ID 배열 반환 (null 입력 시 null 즉시 반환, DB 쿼리 없음)
 ├── OAuthClientStore.js OAuth 클라이언트 CRUD (client_id/secret 검증, redirect_uri 화이트리스트)
+├── admin-routes.js    Admin HTTP 디스패처 (UI, 이미지, 정적 파일, REST API 라우팅)
 ├── admin-auth.js      Admin 인증 라우트 (POST /auth, 세션 쿠키 발급)
+├── admin-login-guard.js 관리 인증 실패 누적과 계정 단위 지연 (`MEMENTO_ADMIN_AUTH_BACKOFF=on`일 때만 지연 적용)
+├── key-state-cache.js 세션 사용 시 API 키 상태 재확인 캐시 (`MEMENTO_SESSION_KEY_RECHECK_MS`)
+├── admin-metrics.js   `/metrics-summary` 요약 (prom-client 레지스트리 직접 조회, 10초 응답 캐시)
 ├── admin-keys.js      API 키 관리 라우트
 ├── admin-memory.js    메모리 운영 라우트 (overview, fragments, anomalies, graph)
 ├── admin-sessions.js  세션 관리 라우트
@@ -141,13 +157,15 @@ lib/admin/
 assets/admin/
 ├── index.html         Admin SPA app shell (로그인 폼 + 컨테이너)
 ├── admin.css          Admin UI 스타일시트
-└── admin.js           Admin UI 로직 (8개 내비게이션: 개요, API 키, 그룹, 메모리 운영, 세션, 로그, 지식 그래프, 메트릭)
+├── admin.js           Admin UI 로직 (8개 내비게이션: 개요, API 키, 그룹, 메모리 운영, 세션, 로그, 지식 그래프, 메트릭)
+└── vendor/            Tailwind CSS 3.4.17, d3 7.9.0 스크립트 사본. 콘솔 응답의 CSP는 `script-src 'self' 'unsafe-inline'`이며 외부 스크립트 호스트를 허용하지 않는다. 출처와 sha256은 `PROVENANCE.md`
 
 lib/http/
 └── helpers.js         HTTP SSE 스트림 헬퍼 및 요청 파싱 유틸리티
 
 lib/logging/
-└── audit.js           감사 로그 및 접근 이력 기록
+├── audit.js           감사 로그 및 접근 이력 기록
+└── session-ref.js     로그와 외부 프롬프트에 쓰는 세션 ID 표기 (앞 8자)
 ```
 
 저장소 접근은 `lib/tools/db.js`의 `getPrimaryPool`, `queryWithAgentVector`가 맡는다.
@@ -159,6 +177,7 @@ lib/tools/
 ├── memory.js    16개 MCP 도구 핸들러
 ├── reconstruct.js  reconstruct_history, search_traces 도구 핸들러 (Narrative Reconstruction)
 ├── memory-schemas.js  도구 스키마 정의 (inputSchema)
+├── tool-error.js 도구 응답의 오류 문구 변환. 의도한 업무 오류는 그대로, 드라이버·운영체제·실행 오류는 고정 문구로 바꾸고, 저장소 CHECK 제약 위반은 파라미터 이름과 허용 값을 담은 `INVALID_ARGUMENT` 안내로 바꾼다
 ├── db.js        PostgreSQL 연결 풀, 에이전트 세션 변수 설정 쿼리 헬퍼 (MCP 미노출). getPrimaryPool(), getBatchPool(), queryWithAgentVector()
 ├── embedding.js OpenAI 텍스트 임베딩 생성
 ├── stats.js     접근 통계 수집 및 저장
@@ -186,7 +205,17 @@ lib/cli/
 ├── health.js           연결 진단
 ├── recall.js           터미널 recall
 ├── remember.js         터미널 remember
-└── inspect.js          파편 상세
+├── inspect.js          파편 상세
+├── benchmark.js        골드셋 recall 계측 (Recall@k, MRR, 지연)
+├── anchor-scope.js     non-default anchor 범위 inventory, 승인된 공유 anchor 정규화, 스냅숏 backfill (기본 dry-run)
+├── session.js          세션 조회, 정리, 교체
+├── export.js           파편 JSONL 백업
+├── import.js           JSONL 파편 복원
+├── update.js           새 버전 확인과 적용
+├── completion.js       셸 자동완성
+├── _mcpClient.js       원격 MCP 클라이언트
+├── _format.js          출력 포맷터
+└── _stdin.js           표준 입력 읽기
 ```
 
 1회성 유틸리티 스크립트는 `scripts/`에 분리되어 있다.
@@ -197,8 +226,16 @@ scripts/
 ├── normalize-vectors.js                         벡터 L2 정규화 (1회성)
 ├── migrate.js                                   DB 마이그레이션 러너 (schema_migrations 기반 증분 적용, .env 자동 로드, pgvector 스키마 자동 감지)
 ├── post-migrate-flexible-embedding-dims.js      임베딩 차원 마이그레이션
-└── cleanup-noise.js                             저품질/노이즈 파편 일괄 정리 (1회성)
+├── cleanup-noise.js                             저품질/노이즈 파편 일괄 정리 (1회성)
+├── purge-oauth-clients.js                       한 번도 쓰이지 않은 오래된 동적 등록 OAuth 클라이언트 정리 (기본 미리보기, `--execute`로 삭제)
+├── lint-migrations.js                           마이그레이션 파일 규약 검사 (`npm run lint:migrations`)
+├── lint-ratchet.js                              무처리 catch 처리기, 복잡도, 파일 길이, 직접 환경 변수 읽기 수치를 `scripts/lint-baseline.json`과 비교 (`npm run lint:ratchet`)
+├── import-cycles.js                             `lib`, `config`, `server.js`의 상대 경로 import 순환 검사 (정적 import만 본 결과와 동적 import를 포함한 결과를 따로 출력)
+├── check-coverage.js                            단위 시험 커버리지 합계를 `coverage-baseline.json`과 비교 (`npm run test:coverage`)
+└── release.js                                   릴리스 절차 (`npm run release -- X.Y.Z`)
 ```
+
+`config/recommended-settings.js`는 운영 권장 설정 중 적용되지 않은 항목 이름 목록(`recommendedSettingsGap`)을 돌려주며, 서버 기동 시 `[Startup] Recommended settings not applied:` 한 줄로 나열한다. 값은 싣지 않는다.
 
 `config/memory.js`는 별도 파일로 분리된 기억 시스템 설정이다. 시간-의미 복합 랭킹 가중치, stale 임계값, 임베딩 워커, 컨텍스트 주입, 페이지네이션, GC 정책을 담는다. `config/validate-memory-config.js`는 서버 시작 시 1회 호출되어 MEMORY_CONFIG의 가중치 합계, 범위, 타입 제약을 런타임 검증한다. 실패 시 프로세스 시작을 중단한다.
 
@@ -220,7 +257,7 @@ MemoryManager (facade)
 
 ### _installSharedSync 설계
 
-facade 생성자는 20개 공유 객체(store, index, factory, search, quotaChecker 등)를 초기화한 뒤 4개 processor에 DI 주입한다. 이후 `_installSharedSync()`를 호출하여 facade의 각 공유 프로퍼티 setter를 `Object.defineProperty`로 래핑한다.
+facade 생성자는 17개 공유 객체(store, index, factory, search, quotaChecker 등)를 초기화한 뒤 4개 processor에 DI 주입한다. 이후 `_installSharedSync()`를 호출하여 facade의 각 공유 프로퍼티 setter를 `Object.defineProperty`로 래핑한다.
 
 ```js
 // 개념 코드
@@ -272,7 +309,7 @@ X-RateLimit-Resource:  fragments
 
 인증: `Authorization: Bearer <KEY>` 헤더 사용.
 
-CLI 전역 플래그: `--remote <URL>`, `--key <KEY>`. Local-only 명령(serve, migrate, cleanup, backfill, health, update)은 원격 경유를 지원하지 않는다.
+CLI 전역 플래그: `--remote <URL>`, `--key <KEY>`. Local-only 명령(serve, migrate, cleanup, backfill, health, update, export, import, benchmark, anchor-scope)은 원격 경유를 지원하지 않는다.
 
 ---
 
@@ -284,7 +321,7 @@ SSE 스트림은 주기적 heartbeat(`: ping\n\n`)으로 연결 상태를 감시
 
 - `SSE_HEARTBEAT_INTERVAL_MS`(기본 25s) 간격으로 ping 전송
 - `res.write()` 반환값으로 backpressure 감지 (false = 커널 버퍼 가득 참)
-- 연속 `SSE_MAX_HEARTBEAT_FAILURES`(기본 3)회 실패 시 세션 자동 종료
+- 연속 `SSE_MAX_HEARTBEAT_FAILURES`(기본 10)회 실패 시 세션 자동 종료
 - 성공 시 failure counter 리셋
 
 ### Proxy 호환성
@@ -294,9 +331,37 @@ SSE 스트림은 주기적 heartbeat(`: ping\n\n`)으로 연결 상태를 감시
 
 ### Socket Tuning
 
-- `keepAliveTimeout=0`, `headersTimeout=0`, `requestTimeout=0`: 서버 레벨 타임아웃 비활성화 (장시간 SSE 연결 보호)
+- `keepAliveTimeout`(`KEEP_ALIVE_TIMEOUT_MS`, 기본 75000), `headersTimeout`(`HEADERS_TIMEOUT_MS`, 기본 76000), `requestTimeout`(`REQUEST_TIMEOUT_MS`, 기본 60000): 연결 유지, 헤더 수신, 요청 본문 수신 상한. 0은 무제한. 요청 수신 시간만 제한하며 처리 시간과 이미 열린 SSE 스트림의 유지 시간은 제한하지 않는다
 - `socket.setKeepAlive(true, 60000)`: TCP keep-alive 60s idle 타임아웃
 - `socket.setNoDelay(true)`: TCP_NODELAY로 패킷 지연 최소화
+
+### 기동 검사
+
+- `MEMENTO_ACCESS_KEY`가 없고 `MEMENTO_AUTH_DISABLED=true`도 아니면 `[Startup]` 오류를 출력하고 종료 코드 78로 멈춘다.
+- `validateMemoryConfig(MEMORY_CONFIG)`가 `MEMORY_CONFIG`를 검증하며 실패하면 기동을 중단한다.
+- 숫자, 열거, 불리언 환경 변수의 값 문제는 `[Startup]` 경고 한 줄로 기록하고, `MEMENTO_CONFIG_STRICT=true`면 종료 코드 78로 멈춘다.
+- 임베딩 차원 일관성 점검이 실패하면 종료 코드 1로 멈춘다. 미적용 마이그레이션이 있으면 `[Startup]` 오류 로그로 알린다.
+
+### 상태 확인 경로
+
+| 경로 | 응답 |
+|-|-|
+| `GET /health/live` | 이벤트 루프가 요청을 처리하면 항상 200. DB, Redis를 보지 않는다 |
+| `GET /health/ready` | 주 DB가 `MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`(기본 2000, 100~4500) 안에 응답하면 200, 아니면 `db_timeout` 또는 `db_error` 사유의 503 |
+| `GET /health` | DB, Redis, pgvector, 워커 종합 상태. 인증 없이는 `status`만 반환 |
+
+`memento-watchdog.sh`는 `/health/live`로 재시작 여부를 판단하고 `/health/ready`는 상태 변화 기록에만 쓴다.
+
+### 종료 절차
+
+`SIGTERM`, `SIGINT`는 `createShutdownGuard`가 한 번만 처리하며 이후 신호는 기록만 한다. 절차는 다음 순서다.
+
+1. HTTP 서버가 새 연결 수신을 멈춘다.
+2. 워커 레지스트리(`lib/memory/workers/registry.js`)에 등록된 폴링 워커와 형태소 등록 작업을 최대 30초 동안 배수한다. `PollingWorker.start`가 성공한 워커는 스스로 등록하므로 `BatchRememberWorker`, `EmbeddingWorker` 같은 워커가 종료 경로에 이름으로 나열되지 않는다.
+3. 활성 세션을 auto-reflect와 함께 닫는다. Redis 세션은 남겨 재시작 뒤 복원할 수 있다.
+4. DB 연결 풀을 닫고 접근 통계를 저장한 뒤 종료 코드 0으로 끝난다.
+
+`MEMENTO_SHUTDOWN_DEADLINE_MS`(기본 60000, 0은 상한 없음) 안에 절차가 끝나지 않으면 종료 코드 1로 강제 종료한다. 처리되지 않은 예외는 같은 절차를 종료 코드 1로 실행하며 35초 뒤 강제 종료 타이머가 걸린다.
 
 ### sseWrite Atomic Write
 
@@ -379,7 +444,7 @@ erDiagram
         text event_id PK
         text case_id
         text session_id
-        text event_type "8종 milestone/hypothesis/decision/error/fix/verification"
+        text event_type "9종 milestone/hypothesis/decision/error/fix/verification/case_closed"
         text summary
         timestamptz occurred_at
         text key_id FK
@@ -445,6 +510,11 @@ erDiagram
 | validation_warnings | JSONB | | PolicyRules soft gate 위반 rule 이름 목록. 위반이 없으면 NULL (migration-032) |
 | morpheme_indexed | BOOLEAN | NOT NULL DEFAULT false | MorphemeIndex 등록 완료 여부. false인 파편은 형태소 검색 대상에서 제외 (migration-035) |
 | split_attempt_failed_at | TIMESTAMPTZ | | splitLongFragments 분할 실패 시각. `failureBackoffHours` 동안 재선정에서 제외 (migration-036) |
+| workspace_source | TEXT | CHECK | workspace 값이 채워진 경로. explicit(호출자 명시) / key_default(키 default_workspace) / inferred(자동 추론 배정) / unscoped(의도적 전역). NULL은 미기록 (migration-040) |
+| quality_rationale | TEXT | | 자동 품질 평가 근거 문장. keywords와 분리해 보관 (migration-040) |
+| workspace_inferred | TEXT | | 추론된 workspace 값. 승격 전까지 workspace 컬럼은 변하지 않는다 (migration-041) |
+| inference_confidence | REAL | CHECK | 추론 근거의 신뢰도 0.0~1.0 (migration-041) |
+| backfill_batch_id | TEXT | | 추론을 만든 배치 실행 식별자. 배치 단위 롤백에 사용 (migration-041) |
 
 인덱스 목록: content_hash 테넌트별 partial UNIQUE 2종(`uq_frag_hash_master`, `uq_frag_hash_per_key`), topic(B-tree), type(B-tree), keywords(GIN), importance DESC(B-tree), created_at DESC(B-tree), agent_id(B-tree), linked_to(GIN), (ttl_tier, created_at)(B-tree), source(B-tree), verified_at(B-tree), is_anchor WHERE TRUE(부분 인덱스), valid_from(B-tree), (topic, type) WHERE valid_to IS NULL(부분 인덱스), id WHERE valid_to IS NULL(부분 UNIQUE). `idx_fragments_key_workspace` (key_id, workspace) WHERE valid_to IS NULL (복합 부분 인덱스 — API 키 + workspace 동시 필터 최적화), `idx_fragments_workspace` (workspace) WHERE workspace IS NOT NULL AND valid_to IS NULL (workspace 단독 전체 조회용 부분 인덱스).
 
@@ -534,7 +604,7 @@ Narrative Reconstruction의 semantic milestone 로그 테이블. 케이스 또�
 | event_id | TEXT | PRIMARY KEY — 이벤트 고유 식별자 |
 | case_id | TEXT | 연관 케이스 ID (fragments.case_id와 대응) |
 | session_id | TEXT | 이벤트가 발생한 세션 ID |
-| event_type | TEXT | milestone_reached / hypothesis_proposed / hypothesis_rejected / decision_committed / error_observed / fix_attempted / verification_passed / verification_failed |
+| event_type | TEXT | milestone_reached / hypothesis_proposed / hypothesis_rejected / decision_committed / error_observed / fix_attempted / verification_passed / verification_failed / case_closed (migration-048) |
 | summary | TEXT | 이벤트 요약 텍스트 |
 | occurred_at | TIMESTAMPTZ | 이벤트 발생 시각 |
 | key_id | TEXT | API 키 격리 (fragments.key_id와 동일 기준) |
@@ -581,6 +651,39 @@ fragment_links의 weight/confidence 변경 이력을 기록하는 감사 테이�
 | key_id | TEXT | API 키 격리 |
 | metadata | JSONB | 추가 메타데이터 |
 | created_at | TIMESTAMPTZ | |
+
+### fragment_synthetic_query
+
+파편 저장 시 생성한 합성 역질의와 그 임베딩을 담는 보조 벡터 표(migration-043). `fragments`와 분리해 두어 `QuotaChecker`의 `fragment_limit` 판정에 포함되지 않으며, 파생 자료이므로 유실 시 백필로 재생성한다. 임베딩 차원은 `fragments.embedding`을 따른다(migration-049와 `npm run migrate`의 정합화 단계).
+
+| 컬럼 | 타입 | 설명 |
+|-|-|-|
+| id | BIGSERIAL PK | |
+| fragment_id | TEXT | 원본 파편 (ON DELETE CASCADE) |
+| query_text | TEXT | 생성된 역질의 |
+| embedding | vector | 역질의 임베딩 (HNSW 인덱스 `idx_fsq_embedding_hnsw`) |
+| key_id | TEXT | API 키 격리 |
+| agent_id | TEXT | 에이전트 구분 (기본 `default`) |
+| workspace | TEXT | 워크스페이스 격리 |
+| created_at | TIMESTAMPTZ | 생성 시각 |
+
+`(fragment_id, md5(query_text))`에 UNIQUE 인덱스가 있어 같은 질의는 중복 적재되지 않는다.
+
+### idempotency_records
+
+파편을 만들지 않는 쓰기 도구(`amend`, `tool_feedback`)의 재시도 응답을 보관하는 표(migration-044). 같은 `(scope_key, tool, idempotency_key)`로 다시 호출하면 첫 호출의 응답을 그대로 돌려준다.
+
+| 컬럼 | 타입 | 설명 |
+|-|-|-|
+| id | BIGSERIAL PK | |
+| scope_key | TEXT | `COALESCE(key_id, '')` 정규화 값 |
+| tool | TEXT | 도구 이름 |
+| idempotency_key | TEXT | 호출자가 지정한 멱등 키 |
+| response | JSONB | 첫 호출의 응답 본문 |
+| agent_id | TEXT | 에이전트 구분 (기본 `default`) |
+| key_id | TEXT | API 키 격리 |
+| created_at | TIMESTAMPTZ | 생성 시각 |
+| expires_at | TIMESTAMPTZ | 만료 시각 (기본 7일 뒤). 만료되면 지워도 무방하다 |
 
 ---
 
@@ -650,13 +753,14 @@ MCP 클라이언트는 RFC 8414/RFC 7591/RFC 7636 기반 OAuth 2.0 흐름으로 
 3. Authorization (PKCE, RFC 7636)
    GET /authorize?response_type=code&client_id=...&redirect_uri=...
                   &code_challenge=...&code_challenge_method=S256&state=...
-   → trusted redirect_uri인 경우 사용자 승인 없이 자동 승인
+   → trusted redirect_uri인 경우 사용자 승인 없이 자동 승인 (API 키에 묶인 클라이언트는 항상 동의 화면)
    → 승인 시 redirect_uri?code=...&state=... 로 리다이렉트
 
 4. Token
    POST /token  (application/x-www-form-urlencoded)
    grant_type=authorization_code, code=..., code_verifier=...
    → { access_token, refresh_token, expires_in } 반환
+   (API 키에 묶인 클라이언트는 해당 키를 client_secret 또는 Basic 인증으로 제시해야 하며, invalid_client는 HTTP 401)
 
    POST /token
    grant_type=refresh_token, refresh_token=...
@@ -768,7 +872,7 @@ Admin REST 엔드포인트:
 | GET | `.../logs/files` | 로그 파일 목록 (크기 포함) |
 | GET | `.../logs/read?file=&tail=&level=&search=` | 로그 내용 조회 (역순 tail, 레벨/검색 필터) |
 | GET | `.../logs/stats` | 로그 통계 (레벨별 카운트, 최근 에러, 디스크 사용량) |
-| GET | `.../assets/*` | Admin 정적 파일 서빙 (admin.css, admin.js). 인증 불필요 |
+| GET | `.../assets/*` | Admin 정적 파일 서빙 (admin.css, admin.js, `modules/`, `vendor/`). 인증 불필요 |
 
 ---
 
@@ -833,7 +937,7 @@ case_id로 파편을 묶어 과거 유사 사례를 구조화 검색하고 인�
 
 `lib/memory/CaseEventStore.js`. case_events 테이블의 CRUD와 DAG 엣지/증거 조인을 전담한다.
 
-**event_type 8종**:
+**event_type 9종**:
 
 | event_type | 설명 |
 |------------|------|
@@ -845,9 +949,10 @@ case_id로 파편을 묶어 과거 유사 사례를 구조화 검색하고 인�
 | `fix_attempted` | 수정 시도 |
 | `verification_passed` | 검증 통과 (→ CaseRewardBackprop 역전파 +0.15) |
 | `verification_failed` | 검증 실패 (→ CaseRewardBackprop 역전파 -0.10) |
+| `case_closed` | `amend`가 case_id가 있는 파편의 `resolutionStatus`를 resolved로 바꿀 때(이전 상태가 resolved가 아닐 때) 기록하는 종결 이벤트 |
 
 **주요 메서드**:
-- `append(event)`: 이벤트 삽입. `idempotency_key` 기반 중복 방지
+- `append(event)`: 이벤트 삽입. sequence_no는 같은 case_id의 `MAX(sequence_no) + 1`. `reflect`의 milestone 이벤트는 `EpisodeContinuityService`가 `idempotency_key`로 중복을 막으며 삽입한다
 - `addEdge(fromId, toId, edgeType, confidence)`: DAG 엣지 추가
 - `addEvidence(fragmentId, eventId, kind)`: 파편-이벤트 증거 연결
 - `getByCase(caseId)`: 케이스의 전체 이벤트 시간순 조회
@@ -902,7 +1007,7 @@ weight/confidence 변경 이력 감사 테이블. `ReconsolidationEngine.reconso
 | 액션 | 동작 |
 |------|------|
 | `reinforce` | `weight += delta`, `confidence = min(1, confidence + 0.05)`. 유용하다고 평가된 링크 강화 |
-| `decay` | `weight = max(0, weight - delta)`, `confidence = max(0, confidence - 0.03)`. 무관하다고 평가된 링크 약화 |
+| `decay` | `weight = max(0, weight - delta)`, `confidence = max(0, confidence - 0.1)`. 무관하다고 평가된 링크 약화 |
 | `quarantine` | `quarantine_state = 'soft'`. 모순 링크 격리 (검색 결과에서 제외) |
 
 `restore` (격리 해제) 및 `soft_delete` (weight=0 soft-delete) 액션도 지원된다.
@@ -975,7 +1080,7 @@ probabilistic result
 | ClaimConflictDetector | polarity 충돌 + severity heuristic |
 | LinkIntegrityChecker | cycle 탐지 (sessionLinker.wouldCreateCycle 재사용) |
 | ExplanationBuilder | 6 reason codes annotate (불변 복사) |
-| PolicyRules | 5 predicate soft gating |
+| PolicyRules | 6 predicate soft gating |
 | CbrEligibility | 4 제약 CBR 필터 |
 
 Rule files (`lib/symbolic/rules/v1/`): `explain.js`, `proactive-gate.js`. `PolicyRules`, `LinkIntegrityChecker`, `ClaimConflictDetector`는 각 호출부에서 직접 쓰인다.
@@ -1018,7 +1123,7 @@ SessionLinker.wouldCreateCycle의 tenant isolation 사각지대가 봉인되어 
 
 `lib/memory/ModeRegistry.js`. Mode preset JSON을 로드하여 세션별 도구 필터와 skill_guide_override를 적용한다.
 
-- preset 정의 파일: `config/modes/*.json` (recall-only, write-only, onboarding, audit)
+- preset 정의 파일: `lib/memory/modes/*.json` (recall-only, write-only, onboarding, audit)
 - `X-Memento-Mode` 헤더 또는 `initialize.params.mode`에서 preset 이름을 읽음
 - `api_keys.default_mode` 컬럼(migration-034)으로 키 단위 기본값 설정 가능
 - tools/list 응답을 preset에 따라 필터링하여 허용 도구만 노출
@@ -1043,6 +1148,8 @@ ModeRegistry.resolve(mode)
 - `_suggestion` 객체: `{code, message, recommendedTool, recommendedArgs}` 또는 null
 
 ### LocalTransformersEmbedder
+
+`lib/embeddings/normalize.js`는 L2 정규화(`normalizeL2`)를 담은 말단 모듈이며 `lib/tools/embedding.js`와 `LocalTransformersEmbedder`가 공유한다. `lib/tools/embedding.js`는 `normalizeL2`를 재export한다.
 
 `lib/embeddings/LocalTransformersEmbedder.js`. `@huggingface/transformers` 라이브러리를 사용하는 로컬 임베딩 생성기. `getLocalEmbedder(modelId, dimensions)` 팩토리가 modelId별 싱글톤 인스턴스를 반환한다.
 
@@ -1103,7 +1210,7 @@ LLM_PRIMARY=gemini-cli
 - 환경변수 `OPENAI_API_KEY` 또는 Codex CLI 자체 설정 파일로 인증
 
 **copilot-cli provider** (`lib/llm/providers/CopilotCliProvider.js`):
-- GitHub Copilot CLI(`gh copilot suggest`)를 래퍼로 호출
+- GitHub Copilot CLI(`copilot -p <프롬프트> --output-format text`)를 래퍼로 호출
 - `extractJsonBlock()` 유틸리티로 응답 말미의 통계/배너 텍스트 제거 후 JSON 추출
 
 **qwen-cli provider** (`lib/llm/providers/QwenCliProvider.js`):
@@ -1112,12 +1219,14 @@ LLM_PRIMARY=gemini-cli
 - 요청 옵션이 비어 있으면 provider config의 `model`, `timeoutMs`를 fallback으로 사용하고, `model`까지 비어 있으면 CLI 기본 모델 사용
 - `qwen auth` 인증 필요
 
+**CLI 도구 승인** (`lib/llm/util/cli-approval.js`): gemini-cli, copilot-cli, opencode-cli의 도구 실행 승인 방식은 호출 시점의 `MEMENTO_LLM_CLI_TOOL_APPROVAL`(`none` 기본, `all`)로 정한다. `none`에서는 세 CLI가 프로세스당 한 번 만든 빈 임시 디렉터리에서 실행되고, gemini는 `-y` 없이, copilot은 쓰기, 셸, URL 도구와 내장 MCP를 거부하는 인자와 함께, opencode는 `OPENCODE_PERMISSION={"*":"deny"}`로 실행된다. `all`에서는 서버 작업 디렉터리에서 실행되며 gemini `-y`, copilot `--allow-all-tools`를 쓴다. CLI 자식 프로세스의 환경 변수는 `lib/llm/util/cli-env.js`의 허용 목록과 `MEMENTO_LLM_CLI_ENV_PASSTHROUGH`로 정해진다.
+
 **circuit breaker 및 timeout** (`config/memory.js`):
 - `geminiTimeoutMs: 60000` (이전 15000에서 상향). Gemini CLI 대형 프롬프트의 지연 증가 대응
 - circuit breaker 실패 임계(LLM_CB_FAILURE_THRESHOLD=5), OPEN 지속(LLM_CB_OPEN_DURATION_MS=60000)은 기존과 동일
 
 **LLM_PRIMARY 허용값 전체 목록**:
-`gemini-cli`, `agy-cli`, `anthropic`, `openai`, `google-gemini-api`, `groq`, `openrouter`, `xai`, `ollama`, `vllm`, `deepseek`, `mistral`, `cohere`, `zai`, `codex-cli`, `copilot-cli`, `qwen-cli`, `opencode-cli`
+`gemini-cli`, `agy-cli`, `anthropic`, `openai`, `gemini`, `groq`, `openrouter`, `xai`, `ollama`, `vllm`, `deepseek`, `mistral`, `cohere`, `zai`, `codex-cli`, `copilot-cli`, `qwen-cli`, `opencode-cli`
 
 ### 검색 파이프라인 — _suggestion 후처리
 
@@ -1351,7 +1460,7 @@ BatchRememberProcessor는 `_getPool()` 내부에서 `getBatchPool()`을 기본 �
 3. `{ async: true, accepted, rejected, jobId }` 즉시 반환
 4. BatchRememberWorker가 백그라운드에서 큐 폴링 → BatchRememberProcessor 동기 경로로 INSERT 처리
 
-Redis 미설정(stub 상태)이면 async 플래그를 무시하고 동기 경로로 폴백한다. 서버 종료 시 `gracefulShutdown`이 `getBatchRememberWorker().stop()`으로 worker drain을 대기한다 (`server.js`).
+Redis 미설정(stub 상태)이면 async 플래그를 무시하고 동기 경로로 폴백한다. 서버 종료 시 `gracefulShutdown`이 워커 레지스트리에 등록된 워커를 일괄 배수한다 (`server.js`, `lib/memory/workers/registry.js`).
 
 ### migration-035: fragments.morpheme_indexed
 
