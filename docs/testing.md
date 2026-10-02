@@ -61,7 +61,7 @@ npm run test:integration:llm
 | `npm run test:ci` | `npm test && npm run test:integration`. 로컬 일괄 실행용 (DB 필요). CI는 아래 워크플로 작업으로 나눠 돈다 |
 | `npm run test:integration:llm` | 실제 LLM CLI 통합 시험 4종 순차 실행 |
 | `npm run test:e2e:local` | `scripts/run-e2e-tests.sh`로 테스트 DB를 띄운 뒤 e2e 실행 |
-| `npm run test:db` | tests/db-concurrency. 마이그레이션된 PostgreSQL에서 파편 행 잠금 순서(교착 0건)와 링크 일괄 생성의 `linked_to` 정합 확인. 실행마다 전용 데이터베이스(`dbl_<pid>_<hex>`)를 만들어 마이그레이션하고 끝나면 지운다. 서버는 POSTGRES_* 로 지정하며 로컬 호스트, 포트 35433, 사용자 memento, 비밀번호 memento_test 가 아니면 연결 전에 거부한다(다른 일회용 서버는 `DB_LANE_SERVER_ALLOW=<host:port>`). 서버에 닿지 못하면 건너뛰지 않고 실패. `npm test`에는 포함되지 않음 |
+| `npm run test:db` | tests/db-concurrency. 마이그레이션된 PostgreSQL에서 파편 행 잠금 순서(교착 0건)와 링크 일괄 생성의 `linked_to` 정합, 감쇠와 utility 묶음 갱신(잠금 순서, 무변경 재기록, 최소 변화량) 확인. 표 전체를 갱신하는 시험은 병렬 레인에 두지 않고 이 직렬 레인에만 둔다. 실행마다 전용 데이터베이스(`dbl_<pid>_<hex>`)를 만들어 마이그레이션하고 끝나면 지운다. 서버는 POSTGRES_* 로 지정하며 로컬 호스트, 포트 35433, 사용자 memento, 비밀번호 memento_test 가 아니면 연결 전에 거부한다(다른 일회용 서버는 `DB_LANE_SERVER_ALLOW=<host:port>`). 서버에 닿지 못하면 건너뛰지 않고 실패. `npm test`에는 포함되지 않음 |
 | `npm run lint` | eslint 전체 |
 | `npm run audit:ci` | 런타임 의존성 audit-ci 검사 |
 | `npm run lint:migrations` | migration SQL body-only 규약 검사 (MIGRATION_LINT_FROM 기준) |

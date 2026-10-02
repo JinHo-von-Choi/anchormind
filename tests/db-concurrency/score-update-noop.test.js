@@ -5,20 +5,24 @@
  * 작성일: 2026-10-03
  *
  * 값이 바뀌지 않는 행은 두 번째 실행에서 다시 쓰이지 않아야 한다(xmin 불변).
- * DATABASE_URL이 없으면 건너뛴다.
+ * 실행마다 전용 데이터베이스를 만들어 쓰고 끝나면 지운다.
  */
-import "./_cleanup.js";
 import { describe, it, before, after } from "node:test";
 import assert                          from "node:assert/strict";
 import pg                              from "pg";
 
-const DB_URL = process.env.DATABASE_URL;
-const TAG    = `noop${Date.now().toString(36)}`;
+const { prepareLaneDatabase, dropLaneDatabase, directClientConfig } = await import("./_harness.js");
+
+/** 앱 모듈이 풀을 만들기 전에 실행 전용 데이터베이스를 준비한다. */
+await prepareLaneDatabase();
+
+const { shutdownPool } = await import("../../lib/tools/db.js");
+
+const TAG = `noop${Date.now().toString(36)}`;
 let   client;
 
 before(async () => {
-  if (!DB_URL) return;
-  client = new pg.Client({ connectionString: DB_URL });
+  client = new pg.Client(directClientConfig());
   await client.connect();
   /** 30일 미만, 접근 3회: utility = importance * (1 + ln 3), 시각에 의존하지 않는다 */
   for (let i = 0; i < 20; i++) {
@@ -33,12 +37,15 @@ before(async () => {
 });
 
 after(async () => {
-  if (!client) return;
-  await client.query(`DELETE FROM agent_memory.fragments WHERE id LIKE $1`, [`${TAG}-%`]);
-  await client.end();
+  try {
+    await client.end();
+    await shutdownPool();
+  } finally {
+    await dropLaneDatabase();
+  }
 });
 
-describe("utility_score 무변경 재기록", { skip: !DB_URL }, () => {
+describe("utility_score 무변경 재기록", () => {
   it("두 번째 실행은 값이 같은 행을 다시 쓰지 않는다", async () => {
     const { MemoryConsolidator } = await import("../../lib/memory/consolidate/MemoryConsolidator.js");
     const run = () => MemoryConsolidator.prototype._updateUtilityScores.call({});

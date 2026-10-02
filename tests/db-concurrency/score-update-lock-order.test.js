@@ -6,26 +6,33 @@
  *
  * 거래 T1이 id가 작은 행 a를 잠근 뒤, 물리 위치가 앞인 행 z를 갱신한다.
  * 같은 두 행을 다루는 배경 문장이 id 순으로 잠그면 교착이 생기지 않는다.
- * DATABASE_URL이 없으면 건너뛴다.
+ * 실행마다 전용 데이터베이스를 만들어 쓰고 끝나면 지운다.
  */
-import "./_cleanup.js";
 import { describe, it, before, after } from "node:test";
 import assert                          from "node:assert/strict";
 import pg                              from "pg";
 
-const DB_URL = process.env.DATABASE_URL;
-let   admin;
+const { prepareLaneDatabase, dropLaneDatabase, directClientConfig } = await import("./_harness.js");
+
+/** 앱 모듈이 풀을 만들기 전에 실행 전용 데이터베이스를 준비한다. */
+await prepareLaneDatabase();
+
+const { shutdownPool } = await import("../../lib/tools/db.js");
+
+let admin;
 
 before(async () => {
-  if (!DB_URL) return;
-  admin = new pg.Client({ connectionString: DB_URL });
+  admin = new pg.Client(directClientConfig());
   await admin.connect();
 });
 
 after(async () => {
-  if (!admin) return;
-  await admin.query(`DELETE FROM agent_memory.fragments WHERE id LIKE 'lo-%'`);
-  await admin.end();
+  try {
+    await admin.end();
+    await shutdownPool();
+  } finally {
+    await dropLaneDatabase();
+  }
 });
 
 /**
@@ -54,7 +61,7 @@ async function seedPair(tag, extra = {}) {
  */
 async function interleave(ids, background, waitPattern, rearm = async () => {}) {
   for (let attempt = 0; attempt < 5; attempt++) {
-    const t1 = new pg.Client({ connectionString: DB_URL });
+    const t1 = new pg.Client(directClientConfig());
     await t1.connect();
     try {
       await t1.query("BEGIN");
@@ -90,7 +97,7 @@ async function interleave(ids, background, waitPattern, rearm = async () => {}) 
   assert.fail("배경 문장이 T1의 잠금을 기다려야 한다");
 }
 
-describe("잠금 순서", { skip: !DB_URL }, () => {
+describe("잠금 순서", () => {
   it("decayImportance는 id 순 거래와 교착하지 않는다", async () => {
     const ids = await seedPair(`d${Date.now().toString(36)}`);
     const { FragmentGC } = await import("../../lib/memory/consolidate/FragmentGC.js");
