@@ -32,7 +32,7 @@ const LIB  = path.resolve(HERE, "..", "..", "lib");
  */
 const ALLOWED = {
   /** 고정 위치 파라미터로 격리를 박은 질의와 격리가 아닌 회계·멤버십 질의 */
-  "admin/ApiKeyStore.js": 2,
+  "admin/ApiKeyStore.js": 4, // 키 삭제 전 그 키의 파편, 재공고화 이력 수를 세는 회계 질의 2곳
   "admin/admin-keys.js": 1,
   "memory/CaseEventStore.js": 2,
   "memory/consolidate/MemoryConsolidator.js": 2,

@@ -857,8 +857,16 @@ export async function renderKeys(container) {
         msg.textContent = "This action is irreversible. Delete permanently?";
         showModal("Confirm Permanent Deletion", msg, [
           { id: "confirm", label: "DELETE", cls: "btn-danger", handler: async () => {
-            await api("/keys/" + keyId, { method: "DELETE" });
+            const res = await api("/keys/" + keyId, { method: "DELETE" });
             closeModal();
+            if (res.status === 409) {
+              showToast("Key has " + (res.data?.fragments ?? 0) + " stored fragments. Deactivate it instead.", "warning");
+              return;
+            }
+            if (!res.ok) {
+              showToast(res.data?.error ?? "Delete failed", "error");
+              return;
+            }
             state.selectedKeyId = null;
             showToast("Key deleted", "success");
             renderKeys(container);

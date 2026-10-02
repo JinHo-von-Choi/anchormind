@@ -28,7 +28,7 @@ const LIB  = path.resolve(HERE, "..", "..", "lib");
 
 /** 파일별 fragments 직접 접근 허용 개수. */
 const ALLOWED = {
-  "admin/ApiKeyStore.js": 1,
+  "admin/ApiKeyStore.js": 2, // 키 삭제 전 그 키의 파편 수(닫힌 파편 포함)를 키 행 잠금과 같은 트랜잭션에서 센다
   "admin/admin-export.js": 2,
   "admin/admin-keys.js": 1,
   "admin/admin-memory.js": 12,
