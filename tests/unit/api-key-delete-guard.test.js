@@ -21,6 +21,7 @@ const pool = {
   connect: async () => client
 };
 mock.module("../../lib/tools/db.js", { exports: { getPrimaryPool: () => pool } });
+mock.module("../../lib/sessions.js", { exports: { closeSessionsByKeyId: async () => 0 } });
 
 const { handleKeys } = await import("../../lib/admin/admin-keys.js");
 const ADMIN_BASE     = "/v1/internal/model/nothing";
