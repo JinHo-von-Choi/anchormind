@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- `GET /health/live`(항상 200)와 `GET /health/ready`(주 DB가 상한 안에 응답하면 200, 아니면 `db_timeout` 또는 `db_error` 사유의 503). `GET /health`의 응답은 같다.
+- `MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`(기본 2000): `/health/ready`의 DB 확인 상한.
+- `MEMENTO_SHUTDOWN_DEADLINE_MS`(기본 60000, 0은 상한 없음): 종료 절차 전체 상한. 두 번째 종료 신호는 기록만 한다.
+
 ### Changed
 
 - API 키로 연 MCP 세션은 사용할 때 키 상태를 `MEMENTO_SESSION_KEY_RECHECK_MS`(기본 30000ms, `0`이면 끔) 주기로 다시 읽는다. 비활성 또는 삭제된 키의 세션은 닫히고 404 `Session not found`를 받으며, 권한 변경은 열린 세션에 반영된다. 관리 API로 키를 비활성화하거나 삭제하면 이 프로세스의 그 키 세션이 즉시 닫힌다.

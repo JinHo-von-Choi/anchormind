@@ -36,6 +36,20 @@ curl -si -H 'Origin: https://evil.example' http://localhost:57332/mcp | head
 
 ---
 
+## 상태 확인 경로
+
+| 경로 | 용도 | 응답 |
+|-|-|-|
+| `GET /health/live` | 재시작 판단. 이벤트 루프가 요청을 처리하는지만 본다 | 항상 200 `{"status":"alive","uptime":...}` |
+| `GET /health/ready` | 의존 서비스 상태. 주 DB가 `MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`(기본 2000) 안에 응답하는지 본다 | 200 `{"status":"ready"}` 또는 503 `{"status":"not_ready","reason":"db_timeout"\|"db_error"}` |
+| `GET /health` | 기존 종합 상태(DB, Redis, pgvector, 워커) | 기존과 같다 |
+
+세 경로 모두 인증 없이 호출할 수 있다. 호출 수와 지연은 `mcp_http_requests_total`의 `endpoint` 라벨로 구분한다.
+
+종료 신호(SIGTERM, SIGINT)는 한 번만 처리하며, 이미 종료 중일 때 오는 신호는 `Shutdown already in progress` 로그만 남긴다. 종료 절차가 `MEMENTO_SHUTDOWN_DEADLINE_MS`(기본 60000, 0은 상한 없음) 안에 끝나지 않으면 종료 코드 1로 강제 종료한다.
+
+---
+
 ## 메트릭 모니터링
 
 서버 건전성 지표를 확인하는 두 가지 경로다. 목적에 따라 선택한다.

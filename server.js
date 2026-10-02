@@ -10,7 +10,7 @@
  *   - GET  /mcp                  : SSE 채널 (서버→클라 알림)
  *   - DELETE /mcp                : 세션 종료
  *   - GET  /sse, POST /message   : 레거시 SSE 호환 채널
- *   - GET  /health, /metrics, /openapi.json
+ *   - GET  /health, /health/live, /health/ready, /metrics, /openapi.json
  *   - GET  /.well-known/oauth-* : OAuth 2.0 메타데이터 / 동적 클라이언트 등록
  *
  * 인증:
@@ -22,7 +22,7 @@ import http from "http";
 import { resolveClientIp, applyBaseResponseHeaders } from "./lib/http/helpers.js";
 
 /** 설정 */
-import { PORT, ACCESS_KEY, AUTH_DISABLED, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI } from "./lib/config.js";
+import { PORT, ACCESS_KEY, AUTH_DISABLED, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI, SHUTDOWN_DEADLINE_MS } from "./lib/config.js";
 import { MEMORY_CONFIG }          from "./config/memory.js";
 import { validateMemoryConfig }   from "./config/validate-memory-config.js";
 
@@ -56,7 +56,7 @@ import { preloadReranker } from "./lib/memory/read/Reranker.js";
 /** 형태소 분석기 워밍업 */
 import { warmup as warmupMorpheme } from "./lib/memory/embedding/MorphemeTokenizer.js";
 import { logInfo, logWarn, logError } from "./lib/logger.js";
-import { installProcessGuards }     from "./lib/process-guards.js";
+import { installProcessGuards, createShutdownGuard } from "./lib/process-guards.js";
 
 /** 임베딩 차원 일관성 검증 */
 import { checkEmbeddingConsistency } from "./scripts/check-embedding-consistency.js";
@@ -71,6 +71,8 @@ import { buildSpec }              from "./lib/openapi.js";
 /** HTTP 핸들러 */
 import {
   handleHealth,
+  handleLive,
+  handleReady,
   handleMetrics,
   handleMcpPost,
   handleMcpGet,
@@ -102,6 +104,13 @@ setInterval(() => rateLimiter.cleanup(), 5 * 60_000).unref();
 
 const ADMIN_BASE = "/v1/internal/model/nothing";
 
+/** 상태 확인 경로별 처리기 */
+const HEALTH_ROUTES = new Map([
+  ["/health",       handleHealth],
+  ["/health/live",  handleLive],
+  ["/health/ready", handleReady]
+]);
+
 /**
  * HTTP 서버
  */
@@ -116,9 +125,9 @@ const server = http.createServer(async (req, res) => {
 
   const url = new URL(req.url || "/", "http://localhost");
 
-  /* GET /health */
-  if (req.method === "GET" && url.pathname === "/health") {
-    await handleHealth(req, res, startTime);
+  /* GET /health, /health/live, /health/ready */
+  if (req.method === "GET" && HEALTH_ROUTES.has(url.pathname)) {
+    await HEALTH_ROUTES.get(url.pathname)(req, res, startTime);
     return;
   }
 
@@ -423,14 +432,21 @@ async function gracefulShutdown(signal, { exitCode = 0 } = {}) {
   process.exit(exitCode);
 }
 
-process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+const shutdown = createShutdownGuard({
+  deadlineMs: SHUTDOWN_DEADLINE_MS,
+  run       : gracefulShutdown,
+  exit      : (code) => process.exit(code),
+  logError  : (msg, meta) => logError(msg, null, meta)
+});
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
 installProcessGuards({
   logError: (msg, meta) => logError(msg, null, meta),
   onFatal:  () => {
     /** drain 행 방지 — graceful 경로가 35초 내 못 끝나면 강제 종료 */
     setTimeout(() => process.exit(1), 35_000).unref();
-    gracefulShutdown("uncaughtException", { exitCode: 1 });
+    shutdown("uncaughtException", { exitCode: 1 });
   }
 });

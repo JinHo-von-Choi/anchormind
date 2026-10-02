@@ -279,6 +279,8 @@ POSTGRES_* 접두어가 DB_* 접두어보다 우선한다. 두 형식을 혼용�
 | DB_IDLE_TIMEOUT_MS | 유휴 연결 반환 대기 시간 ms. 기본 30000 |
 | DB_CONN_TIMEOUT_MS | 연결 획득 타임아웃 ms. 기본 10000 |
 | DB_QUERY_TIMEOUT | 쿼리 타임아웃 ms. 기본 30000 |
+| MEMENTO_HEALTH_READY_DB_TIMEOUT_MS | `GET /health/ready`가 주 DB 응답을 기다리는 상한 ms. 기본 2000. 와치독 curl 상한 5초보다 짧게 둔다 |
+| MEMENTO_SHUTDOWN_DEADLINE_MS | SIGTERM/SIGINT 종료 절차 전체 상한 ms. 넘기면 종료 코드 1로 강제 종료한다. 기본 60000, 0은 상한 없음 |
 | DB_BACKGROUND_MAX_CONNECTIONS | 스케줄러·워커가 동시에 쓰는 Primary 풀 연결 상한. 기본 DB_MAX_CONNECTIONS의 40%(최소 1). DB_MAX_CONNECTIONS-1을 넘지 않는다. 초과 요청은 FIFO로 대기한다 |
 | DB_BACKGROUND_WAIT_MAX_MS | 백그라운드 슬롯 대기 상한(ms). 기본 120000. 넘기면 해당 작업만 실패하고 다음 회차에 재시도한다 |
 | PGVECTOR_SCHEMA | pgvector 확장이 설치된 스키마. 미설정 시 기동 시 자동 감지 |

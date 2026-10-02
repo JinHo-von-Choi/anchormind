@@ -280,6 +280,8 @@ POSTGRES_* prefixes take precedence over DB_* prefixes. Both formats can be mixe
 | DB_IDLE_TIMEOUT_MS | Idle connection return timeout ms. Default 30000 |
 | DB_CONN_TIMEOUT_MS | Connection acquisition timeout ms. Default 10000 |
 | DB_QUERY_TIMEOUT | Query timeout ms. Default 30000 |
+| MEMENTO_HEALTH_READY_DB_TIMEOUT_MS | How long `GET /health/ready` waits for the primary DB, in ms. Default 2000. Keep it below the 5 second watchdog curl limit |
+| MEMENTO_SHUTDOWN_DEADLINE_MS | Upper bound for the whole SIGTERM/SIGINT shutdown sequence, in ms. Forces exit code 1 when exceeded. Default 60000, 0 means no limit |
 | DB_BACKGROUND_MAX_CONNECTIONS | Primary pool connections that schedulers and workers may hold at once. Default 40% of DB_MAX_CONNECTIONS (min 1). Capped at DB_MAX_CONNECTIONS-1. Excess acquisitions wait in FIFO order |
 | DB_BACKGROUND_WAIT_MAX_MS | Background slot wait limit (ms). Default 120000. Only the waiting job fails and retries on the next cycle |
 | PGVECTOR_SCHEMA | Schema where the pgvector extension is installed. Detected automatically at startup when unset |
