@@ -122,6 +122,7 @@ Delete noisy fragments that satisfy `util_score`, `importance`, and inactivity c
 ```bash
 node bin/memento.js cleanup            # dry-run (preview only)
 node bin/memento.js cleanup --execute  # execute deletions
+node bin/memento.js cleanup --execute --include-nli  # also delete NLI-conflict fragments
 ```
 
 Alternative direct invocation:
@@ -162,19 +163,24 @@ node bin/memento.js stats --json
 node bin/memento.js stats --remote https://memento.anchormind.net/mcp --key mmcp_xxx
 ```
 
-Example output (`--format table`):
+`--format table` prints a key/value table (Fragments, Anchors, Active, Expired, Topics, Avg utility, Noise ratio) followed by a table of the top 5 topics.
 
-```
-fragments   anchors   topics
-----------  --------  ------
-1204        38        12
-```
-
-Example output (`--format json`):
+Example output (`--format json`, local):
 
 ```json
-{"fragments": 1204, "anchors": 38, "topics": 12}
+{
+  "fragments": 1204,
+  "anchors": 38,
+  "active": 1180,
+  "expired": 24,
+  "topics": 12,
+  "avgUtility": 0.62,
+  "noiseEstimate": { "count": 9, "ratio": 0.7 },
+  "topTopics": [{ "topic": "infra", "fragments": 210 }]
+}
 ```
+
+`stats` in `--remote` mode calls the server's `memory_stats` tool, so it needs a master key, and the output is the statistics object the server returns.
 
 Help:
 
@@ -223,11 +229,12 @@ Options:
 | Flag | Description |
 |------|-------------|
 | `--topic <t>` | Topic filter |
-| `--type <t>` | Fragment type filter (fact, error, procedure, decision, preference, episode) |
+| `--type <t>` | Fragment type filter (fact, decision, error, preference, procedure, relation) |
 | `--limit <n>` | Maximum results to return (default: 10) |
 | `--time-range from,to` | Date range filter (ISO 8601) |
 | `--workspace <name>` | Search that workspace plus global (NULL) fragments |
 | `--all-workspaces` | Master-only explicit cross-workspace search |
+| `--include-peer-agents` | Master-only. Include fragments of all agents within the key/workspace scope |
 
 Without a workspace or key default, recall searches global (NULL) fragments only. If writes used an explicit workspace, pass that same `--workspace` when reading; an empty-result hint calls out this scope difference. Use `--all-workspaces` explicitly for the former master-wide behavior.
 
@@ -262,8 +269,11 @@ Options:
 | Flag | Description |
 |------|-------------|
 | `--topic <t>` | Topic tag (recommended) |
-| `--type <t>` | Fragment type (fact, error, procedure, decision, preference, episode) |
-| `--importance <n>` | Importance score 0.0--1.0 |
+| `--type <t>` | Fragment type (fact, decision, error, preference, procedure, relation; default: fact) |
+| `--importance <n>` | Importance score 0.0--1.0 (type default when omitted) |
+| `--keywords <a,b,c>` | Comma-separated keywords |
+| `--source <name>` | Source label (default: cli) |
+| `--stdin` | Read the content from stdin (auto-detected when not a TTY, max 1MB) |
 | `--idempotency-key <k>` | Skip storage if a fragment with this key already exists |
 
 Help:
@@ -311,13 +321,13 @@ memento-mcp session delete <sessionId>
 memento-mcp session rotate <sessionId> [--reason "suspected_leak"]
 ```
 
-`session rotate` rebinds only the ID while preserving the Redis-stored session state. In-progress work and memory fragments are unaffected. `reason` is up to 128 chars of audit-log text (default `explicit_rotate`).
+`session rotate` rebinds only the ID while preserving the Redis-stored session state. In-progress work and memory fragments are unaffected. `reason` is up to 128 chars of audit-log text (CLI default `user_request`; a direct HTTP call defaults to `explicit_rotate`).
 
 Rotate endpoint policy:
 
 - HTTP: `POST /session/rotate` (body: `{ "reason": "..." }`)
 - Auth: `Authorization: Bearer <API key or master key>` plus `Mcp-Session-Id` header for target session
-- CSRF guard: `Origin` header mandatory; missing Origin returns 403
+- Origin check: without an `Origin` header only requests from a loopback socket are accepted. When `ALLOWED_ORIGINS` or `ADMIN_ALLOWED_ORIGINS` is set, an Origin outside both lists gets 403
 - Rate limit: `MEMENTO_ROTATE_RATE_LIMIT_PER_MIN` per IP per minute (default 5); exceeding returns 429
 - Metrics: `mcp_session_rotation_total` (label: `outcome`, values: `rotated`, `not_found`, `expired`, `forbidden`, `unavailable`, `error`), `mcp_rotate_rate_limited_total`
 
@@ -430,7 +440,7 @@ node bin/memento.js stats
 node bin/memento.js remember "deployment complete" --topic deploy --type procedure
 ```
 
-Using `--remote` with `serve`, `migrate`, `cleanup`, `backfill`, `health`, or `update` returns an error.
+Using `--remote` or `MEMENTO_CLI_REMOTE` with a local-only command (`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`) returns an error.
 
 ---
 
@@ -463,8 +473,18 @@ frag-00def456,procedure,deploy-2026,0.70,"deployment complete"
 | `npm run migrate` | `node scripts/migrate.js` |
 | `npm run backfill:embeddings` | `node scripts/backfill-embeddings.js` |
 | `npm test` | node:test unit tests |
+| `npm run test:coverage` | Run the unit tests, then compare line, branch and function coverage totals with `coverage-baseline.json` (`scripts/check-coverage.js`) |
 | `npm run test:integration` | Integration and E2E tests (all) |
 | `npm run test:integration:llm` | LLM provider integration tests (sequential) |
+| `npm run test:e2e` | E2E tests only |
+| `npm run test:e2e:local` | Runs `scripts/run-e2e-tests.sh` |
+| `npm run test:db` | Real-PostgreSQL concurrency tests (row lock order, batch link creation consistency). Creates and drops a dedicated database per run |
+| `npm run test:ci` | `npm test` followed by `npm run test:integration` |
+| `npm run lint` | ESLint |
+| `npm run lint:ratchet` | `scripts/lint-ratchet.js`. Fails when a per-rule metric grows past the baseline (`scripts/lint-baseline.json`) |
+| `npm run lint:migrations` | `scripts/lint-migrations.js`. Checks migration numbering conflicts and convention violations |
+| `npm run audit:ci` | audit-ci dependency check (`audit-ci.jsonc`) |
+| `npm run release -- X.Y.Z` | `scripts/release.js`. Release preparation (version markers, commit, annotated tag). Prints the push and Release commands without running them |
 
 ---
 
@@ -506,6 +526,26 @@ Normalize embedding vectors to unit length. Run once after switching providers.
 DATABASE_URL=$DATABASE_URL node scripts/normalize-vectors.js
 ```
 
+### OAuth client cleanup
+
+Removes old dynamically registered clients that were never used. Clients bound to an API key are excluded. The default is a preview that prints the candidate count and a sample; `--execute` deletes in batches of 200.
+
+```bash
+node scripts/purge-oauth-clients.js                         # preview
+node scripts/purge-oauth-clients.js --older-than-days 45    # cutoff (default 30)
+node scripts/purge-oauth-clients.js --execute               # delete
+```
+
+Deletion cannot be undone, so keep a copy of the table with `pg_dump -t agent_memory.oauth_clients` before running it.
+
+### Import cycle check
+
+```bash
+node scripts/import-cycles.js
+```
+
+Finds cycles of size 2 or more among the relative imports of `lib`, `config` and `server.js`, and prints the result for static imports only and the result including dynamic imports separately.
+
 ### benchmark
 
 Measures recall quality against a goldset of (stored text, paraphrased query) pairs. Seeds the stored texts into an isolated key scope, runs the queries, computes Recall@k / MRR / latency from the rank of the expected fragment, and removes the seeded fragments when finished.
@@ -517,7 +557,9 @@ node bin/memento.js benchmark --save-baseline scripts/baseline-recall.json
 node bin/memento.js benchmark --baseline scripts/baseline-recall.json
 ```
 
-Options: `--goldset <path>` (default `tests/fixtures/recall-goldset.jsonl`), `--baseline <path>`, `--save-baseline <path>`, `--limit <n>`, `--repeat <n>`, `--synthetic`, `--page-size <n>`, `--key-scope isolated|corpus`, `--no-seed`, `--no-cleanup`.
+Options: `--goldset <path>` (default `tests/fixtures/recall-goldset.jsonl`), `--baseline <path>`, `--save-baseline <path>`, `--limit <n>`, `--repeat <n>`, `--synthetic`, `--page-size <n>`, `--key-scope isolated|corpus`, `--agent-id <id>` (default `benchmark-harness`), `--workspace <name>` (default `__benchmark__`), `--no-seed`, `--no-cleanup`, `--format table|json`.
+
+Before seeding, one line with the target DB (host, port, database) is written to stderr. A run with zero embedded fragments (including `--no-seed`) is refused by `--save-baseline`. The baseline file records the embedding provider, model and dimensions, and a `--baseline` comparison warns when the model or dimensions differ. The `isolated` mode creates the isolation key `benchmark-harness-key` (status `inactive`) row in `api_keys` once.
 
 `--synthetic` generates synthetic reverse queries for the seeded fragments before evaluating, so the augmentation can be measured as a controlled variable. It costs one LLM call per fragment and is therefore off by default.
 
