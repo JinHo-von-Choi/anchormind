@@ -40,6 +40,9 @@ async function recheckErrors() {
 
 const failing = async () => { throw new Error("db down"); };
 
+/** 실패 창은 조회가 실제로 걸린 시간만큼 뒤로 밀리므로, 창 경계 검사는 이 여유만큼 떨어져서 한다. */
+const PAST_WINDOW_MS = KEY_STATE_FAILURE_WINDOW_MS + 60_000;
+
 beforeEach(() => {
   delete process.env.MEMENTO_SESSION_KEY_RECHECK_MS;
   invalidateKeyState(KEY_ID);
@@ -63,7 +66,7 @@ describe("키 상태 조회 실패 창", () => {
     const t0 = 2_000_000;
     for (let i = 0; i < 10; i++) await getCachedKeyState(KEY_ID, t0 + i * 100);
     assert.equal(warns.length, 1);
-    await getCachedKeyState(KEY_ID, t0 + KEY_STATE_FAILURE_WINDOW_MS + 1);
+    await getCachedKeyState(KEY_ID, t0 + PAST_WINDOW_MS);
     assert.equal(warns.length, 2);
   });
 
@@ -81,9 +84,9 @@ describe("키 상태 조회 실패 창", () => {
     assert.equal(await getCachedKeyState(KEY_ID, t0), null);
     lookup = async () => REVOKED;
     assert.equal(await getCachedKeyState(KEY_ID, t0 + KEY_STATE_FAILURE_WINDOW_MS - 1), null);
-    assert.deepEqual(await getCachedKeyState(KEY_ID, t0 + KEY_STATE_FAILURE_WINDOW_MS + 1), REVOKED);
+    assert.deepEqual(await getCachedKeyState(KEY_ID, t0 + PAST_WINDOW_MS), REVOKED);
     assert.equal(lookups.length, 2);
-    assert.deepEqual(await getCachedKeyState(KEY_ID, t0 + KEY_STATE_FAILURE_WINDOW_MS + 2), REVOKED);
+    assert.deepEqual(await getCachedKeyState(KEY_ID, t0 + PAST_WINDOW_MS + 1), REVOKED);
     assert.equal(lookups.length, 2);
   });
 
@@ -105,6 +108,17 @@ describe("키 상태 조회 실패 창", () => {
     assert.equal(lookups.length, 1);
   });
 
+  it("느린 조회가 실패해도 창은 실제 소요 시간만큼 뒤로 밀려 유지된다", async () => {
+    lookup   = async () => { await new Promise((r) => setTimeout(r, 20)); throw new Error("timeout"); };
+    const t0 = 6_500_000;
+    assert.equal(await getCachedKeyState(KEY_ID, t0), null);
+    assert.equal(await getCachedKeyState(KEY_ID, t0 + KEY_STATE_FAILURE_WINDOW_MS + 5), null);
+    assert.equal(lookups.length, 1);
+    lookup = async () => ACTIVE;
+    assert.deepEqual(await getCachedKeyState(KEY_ID, t0 + PAST_WINDOW_MS), ACTIVE);
+    assert.equal(lookups.length, 2);
+  });
+
   it("무효화하면 실패 창도 지운다", async () => {
     lookup   = failing;
     const t0 = 7_000_000;
@@ -117,7 +131,8 @@ describe("키 상태 조회 실패 창", () => {
 
   it("조회 중에 무효화되면 늦게 끝난 결과를 캐시하지 않는다", async () => {
     let release;
-    lookup   = () => new Promise((resolve) => { release = () => resolve(ACTIVE); });
+    const gate = new Promise((resolve) => { release = () => resolve(ACTIVE); });
+    lookup   = () => gate;
     const t0 = 8_000_000;
     const inflight = getCachedKeyState(KEY_ID, t0);
     invalidateKeyState(KEY_ID);
