@@ -180,7 +180,7 @@ const server = http.createServer(async (req, res) => {
 
   /* GET /sse */
   if (req.method === "GET" && url.pathname === "/sse") {
-    handleLegacySseGet(req, res);
+    handleLegacySseGet(req, res, rateLimiter);
     return;
   }
 
