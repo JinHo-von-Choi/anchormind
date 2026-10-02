@@ -24,6 +24,8 @@
 | MEMENTO_VECTOR_FORCE_INDEX | (applied) | `off` disables the index-forcing planner hint for vector search |
 | MEMENTO_SEMANTIC_THRESHOLD_MODE | inner | `outer` selects max(limit, 80) nearest neighbours first and applies the similarity threshold outside the KNN query |
 | MEMENTO_SCORE_UPDATE_BATCH | 200 | Batch size for id-ordered importance decay and utility updates. 0 runs a single UPDATE statement. Only integers of 0 or more are accepted (a negative or non-integer value falls back to the default) and values above 10000 are capped at 10000. The `linked_to` cleanup of `forget` always locks rows in id order regardless of this value |
+| MEMENTO_DECAY_MIN_DELTA | 0 | Skips rows whose decay change is below this value; rows last decayed more than 24 hours ago are always updated. Ignored when `MEMENTO_SCORE_UPDATE_BATCH` is 0 |
+| MEMENTO_UTILITY_MIN_DELTA | 0 | Skips utility_score rewrites when the stored value differs by at most this value. Ignored when `MEMENTO_SCORE_UPDATE_BATCH` is 0 |
 | MEMENTO_RUNTIME | (none) | `docker` marks the installation as Docker |
 | GITHUB_TOKEN | (none) | GitHub API authentication token for update checks |
 | WORKER_ID | single | workerId shown in the health response |

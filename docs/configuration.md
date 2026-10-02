@@ -24,6 +24,8 @@
 | MEMENTO_VECTOR_FORCE_INDEX | (적용) | `off`면 벡터 검색의 인덱스 강제 planner 힌트를 끈다 |
 | MEMENTO_SEMANTIC_THRESHOLD_MODE | inner | `outer`면 시맨틱 검색이 이웃 max(limit, 80)개를 먼저 고르고 유사도 임계값을 바깥에서 적용한다 |
 | MEMENTO_SCORE_UPDATE_BATCH | 200 | 감쇠와 utility 갱신을 id 오름차순 묶음으로 나눌 때의 묶음 크기. 0이면 단일 UPDATE 문장. 0 이상의 정수만 받고(음수와 정수 아님은 기본값) 10000을 넘으면 10000으로 줄인다. `forget`의 `linked_to` 정리는 이 값과 무관하게 항상 id 오름차순으로 잠근다 |
+| MEMENTO_DECAY_MIN_DELTA | 0 | 감쇠량이 이 값보다 작은 행을 건너뛴다. 마지막 감쇠 후 24시간이 지난 행은 항상 갱신. `MEMENTO_SCORE_UPDATE_BATCH`가 0이면 적용하지 않는다 |
+| MEMENTO_UTILITY_MIN_DELTA | 0 | 저장값과의 차이가 이 값 이하인 utility_score를 다시 쓰지 않는다. `MEMENTO_SCORE_UPDATE_BATCH`가 0이면 적용하지 않는다 |
 | MEMENTO_RUNTIME | (없음) | `docker`면 Docker 설치로 판정한다 |
 | GITHUB_TOKEN | (없음) | 업데이트 확인 시 GitHub API 인증 토큰 |
 | WORKER_ID | single | health 응답의 workerId 표기 |
