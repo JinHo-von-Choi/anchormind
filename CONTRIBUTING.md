@@ -36,7 +36,7 @@ docker build -t memento-mcp .
 
 ## Architecture: lib/memory/processors/
 
-`lib/memory/processors/` 디렉토리는 v2.10.0(Phase 5-B)에서 MemoryManager를 1252줄에서 259줄 facade로 축소하면서 신설됐다. MemoryRememberer / MemoryRecaller / MemoryReflector / MemoryLinker 4개 클래스가 책임별로 분리되어 있다.
+`lib/memory/MemoryManager.js`는 얇은 facade이고, 실제 처리는 `lib/memory/processors/`의 MemoryRememberer / MemoryRecaller / MemoryReflector / MemoryLinker 4개 클래스가 책임별로 나눠 맡는다.
 
 - MemoryRememberer: `remember` / `batchRemember`
 - MemoryRecaller: `recall` / `context`
@@ -52,7 +52,10 @@ facade와 프로세서 간 공유 프로퍼티(embedder, fragmentStore 등)는 `
 - Unit tests: `tests/unit/` (node:test runner)
 - Integration tests: `tests/integration/` — `npm run test:integration` runs via node:test
 - E2E tests: `tests/e2e/` (requires PostgreSQL)
+- DB concurrency tests: `tests/db-concurrency/` - `npm run test:db` (requires PostgreSQL; creates and drops a dedicated database per run)
 - Run all unit tests: `npm test`
+- Unit tests with coverage: `npm run test:coverage` compares line, branch and function coverage totals with `coverage-baseline.json` (tolerance 0.5 percentage points) through `scripts/check-coverage.js`. Lowering the baseline needs `--allow-decrease`
+- Import cycles: `node scripts/import-cycles.js` lists cycles of size 2 or more among relative imports under `lib`, `config` and `server.js`; a unit test requires that there is no static cycle
 
 ### 신규 unit 테스트 작성 시 lifecycle 가드 필수
 
@@ -77,12 +80,12 @@ after(async () => {
 - prom-client default metrics는 `MEMENTO_METRICS_DEFAULT=off`로 무력화된다.
   `npm test` 스크립트가 이 환경변수를 자동 주입한다.
   단일 파일 실행 시에도 `MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test tests/unit/<file>.test.js`로 실행한다.
-- 회귀 가드: `tests/unit/test-lifecycle-guard.test.js` 4 케이스가 헬퍼 동작을 검증한다.
+- 회귀 가드: `tests/unit/test-lifecycle-guard.test.js`가 헬퍼 동작을 검증한다.
 - 상세 내용: `tests/README.md` §Lifecycle 가드 참조
 
 ## Pull Request Checklist
 
-- [ ] `npm test` passes; with PostgreSQL available, `npm run test:integration` (integration + e2e) passes. CI runs these as separate jobs in `.github/workflows/test.yml`
+- [ ] `npm test` passes; with PostgreSQL available, `npm run test:integration` (integration + e2e) passes. CI runs these as separate jobs in `.github/workflows/test.yml` (unit with lint, lint ratchet, migration lint and coverage; runtime boot on Node 20, 22 and 24; e2e; DB concurrency, reported without failing the workflow). Dependency audit runs in `.github/workflows/audit.yml`
 - [ ] `npm run lint && npm run lint:ratchet` passes
 - [ ] New migration file if DB schema changed; run `npm run lint:migrations` to verify body-only convention (see `docs/migration-conventions.md`)
 - [ ] `docs/features.md` ledger updated for any new or removed feature
