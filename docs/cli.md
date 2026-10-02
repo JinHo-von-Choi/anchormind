@@ -320,7 +320,7 @@ rotate 엔드포인트 정책:
 - 인증: `Authorization: Bearer <API key or master key>` + `Mcp-Session-Id` 헤더로 대상 세션 지정
 - CSRF 방어: `Origin` 헤더 필수. 누락 시 403
 - Rate limit: IP당 분당 `MEMENTO_ROTATE_RATE_LIMIT_PER_MIN` (기본 5) 초과 시 429
-- 메트릭: `mcp_session_rotation_total` (label: `reason`)
+- 메트릭: `mcp_session_rotation_total` (label: `outcome`, 값: `rotated`, `not_found`, `expired`, `forbidden`, `unavailable`, `error`), `mcp_rotate_rate_limited_total`
 
 CLI는 초과 시 표준 에러로 `HTTP 429`를 출력한다. 원격 모드에서도 동일한 rate-limit이 적용된다.
 

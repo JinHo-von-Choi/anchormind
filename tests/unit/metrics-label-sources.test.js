@@ -30,6 +30,7 @@ const LABEL_PARAMS = new Map([
   ["recordTenantIsolationBlocked",  [0]],
   ["recordRedisSessionSaveFailure", [0]],
   ["recordSessionRecovery",         [0]],
+  ["recordSessionRotation",         [0]],
   ["recordOAuthTokenIssued",        [0]],
   ["recordOriginRejected",          [0]],
   ["recordProtocolVersionRejected", [0]],

@@ -319,7 +319,7 @@ Rotate endpoint policy:
 - Auth: `Authorization: Bearer <API key or master key>` plus `Mcp-Session-Id` header for target session
 - CSRF guard: `Origin` header mandatory; missing Origin returns 403
 - Rate limit: `MEMENTO_ROTATE_RATE_LIMIT_PER_MIN` per IP per minute (default 5); exceeding returns 429
-- Metric: `mcp_session_rotation_total` (label: `reason`)
+- Metrics: `mcp_session_rotation_total` (label: `outcome`, values: `rotated`, `not_found`, `expired`, `forbidden`, `unavailable`, `error`), `mcp_rotate_rate_limited_total`
 
 The CLI surfaces `HTTP 429` on stderr when the rate limit is exceeded. The same limit applies to remote mode.
 

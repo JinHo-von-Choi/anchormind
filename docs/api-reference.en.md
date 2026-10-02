@@ -183,7 +183,7 @@ Policy:
 - Origin check: without an `Origin` header only loopback-socket requests are accepted. localhost/127.0.0.1 origins are always accepted. When both `ALLOWED_ORIGINS` and `ADMIN_ALLOWED_ORIGINS` are empty any Origin is accepted; otherwise only origins in those lists. Anything else returns 403
 - Rate limit: `MEMENTO_ROTATE_RATE_LIMIT_PER_MIN` requests per client address per minute (default 5); exceeding returns 429 with `Retry-After`. The client address follows `TRUST_PROXY_HOPS`
 - `reason` is an audit-log field (max 128 chars); defaults to `explicit_rotate` when omitted
-- Metrics: `mcp_session_rotation_total{reason}` counter + `mcp_rotate_rate_limited_total` counter
+- Metrics: `mcp_session_rotation_total{outcome}` counter (outcome: `rotated`, `not_found`, `expired`, `forbidden`, `unavailable`, `error`) + `mcp_rotate_rate_limited_total` counter
 - CLI: use `memento-mcp session rotate <sessionId>` for the same capability; see `docs/cli.en.md` for details
 
 ### tools/list response fields

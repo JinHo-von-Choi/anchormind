@@ -187,7 +187,7 @@ Content-Type: application/json
 - Origin 확인: `Origin` 헤더가 없으면 루프백 소켓에서 온 요청만 받는다. localhost/127.0.0.1 Origin은 항상 허용한다. `ALLOWED_ORIGINS`와 `ADMIN_ALLOWED_ORIGINS`가 모두 비어 있으면 모든 Origin을 받고, 하나라도 설정되어 있으면 두 목록에 있는 Origin만 받는다. 그 밖은 403
 - Rate limit: 클라이언트 주소당 분당 `MEMENTO_ROTATE_RATE_LIMIT_PER_MIN` 회 (기본 5). 초과 시 429와 `Retry-After`. 클라이언트 주소는 `TRUST_PROXY_HOPS` 설정에 따라 정해진다
 - `reason` 필드는 감사 로그용으로 최대 128자. 지정하지 않으면 `explicit_rotate`
-- 메트릭: `mcp_session_rotation_total{reason}` 카운터 + `mcp_rotate_rate_limited_total` 카운터
+- 메트릭: `mcp_session_rotation_total{outcome}` 카운터(outcome: `rotated`, `not_found`, `expired`, `forbidden`, `unavailable`, `error`) + `mcp_rotate_rate_limited_total` 카운터
 - CLI: `memento-mcp session rotate <sessionId>` 서브명령으로 동일 기능 호출. 자세한 사용법은 `docs/cli.md` 참조
 
 ### tools/list 응답 필드
