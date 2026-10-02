@@ -70,6 +70,7 @@
 | ENABLE_SPREADING_ACTIVATION | false | Enable SpreadingActivation. When true, the contextText parameter in recall proactively activates related fragments. Recommended to measure latency impact before enabling |
 | ENABLE_PATTERN_ABSTRACTION | (unused) | Reserved for pattern abstraction. No code reads this variable, so setting it has no effect |
 | MEMENTO_METRICS_DEFAULT | (none) | Set to `off` to skip prom-client default metrics (CPU, memory, …). Any other value keeps collection on |
+| MEMENTO_ADMIN_AUTH_BACKOFF | `off` | When `on`, after 5 consecutive admin authentication failures the next attempt is delayed 1, 2, 4 seconds and so on up to 60 seconds. During the delay even the correct key receives 429 (Retry-After). Failure records are written regardless of this value |
 | MEMENTO_ADMIN_METRICS_SAMPLING | (none) | Set to `off` to disable admin console metric sampling. Any other value keeps sampling on |
 | UPDATE_CHECK_DISABLED | false | Set to `true` to skip new-version checks |
 | UPDATE_CHECK_INTERVAL_HOURS | 24 | New-version check interval (hours) |
