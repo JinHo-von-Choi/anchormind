@@ -21,6 +21,7 @@
 | MEMENTO_ROTATE_RATE_LIMIT_PER_MIN | 5 | Per-IP calls per minute for /session/rotate |
 | MEMENTO_SPLIT_LLM_PRIMARY / MEMENTO_SPLIT_LLM_FALLBACKS | (none) | Dedicated LLM chain for long-fragment splitting. The global chain is used when unset |
 | MEMENTO_VECTOR_FORCE_INDEX | (applied) | `off` disables the index-forcing planner hint for vector search |
+| MEMENTO_SEMANTIC_THRESHOLD_MODE | inner | `outer` selects max(limit, 80) nearest neighbours first and applies the similarity threshold outside the KNN query |
 | MEMENTO_RUNTIME | (none) | `docker` marks the installation as Docker |
 | GITHUB_TOKEN | (none) | GitHub API authentication token for update checks |
 | WORKER_ID | single | workerId shown in the health response |
