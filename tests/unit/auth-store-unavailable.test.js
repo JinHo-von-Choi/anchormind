@@ -54,6 +54,7 @@ describe("인증 저장소 조회 실패", () => {
     const result = await validateAuthentication(bearer("mmcp_raw_key_value"), null);
     assert.equal(result.valid, false);
     assert.equal(result.unavailable, true);
+    assert.equal(result.error, "Invalid or missing access key");
     assert.equal(await counterValue("memento_auth_denied_total", { reason: "store_unavailable" }), before + 1);
   });
 
@@ -71,6 +72,7 @@ describe("인증 저장소 조회 실패", () => {
     const result = await validateAuthentication(bearer("oauth-access-token"), null);
     assert.equal(result.valid, false);
     assert.equal(result.unavailable, true);
+    assert.equal(result.error, "non-API-key OAuth denied");
     assert.equal(await counterValue("mcp_oauth_nonapikey_rejected_total"), before);
   });
 
