@@ -26,7 +26,11 @@ const RELEASE_FILES  = ["CHANGELOG.md", "package.json", "package-lock.json", "SK
 const CODE_PATHS     = ["lib", "server.js", "scripts", "bin", "config"];
 const USAGE          = "사용법: node scripts/release.js X.Y.Z [--date YYYY-MM-DD] [--skip-ci-check] [--allow-branch]";
 const RELEASE_BRANCH = "main";
-const CHECKOUT_HINT  = `변경 파일 되돌리기: git checkout -- ${RELEASE_FILES.join(" ")}`;
+/**
+ * 커밋 전 단계의 실패 안내. git add 이후 커밋이 실패하면 변경이 인덱스에 올라가 있으므로
+ * 인덱스 기준의 git checkout -- 로는 되돌려지지 않는다. HEAD 기준으로 인덱스와 작업 트리를 함께 되돌린다.
+ */
+const CHECKOUT_HINT  = `변경 파일 되돌리기: git checkout HEAD -- ${RELEASE_FILES.join(" ")}`;
 
 /** 릴리스 준비를 멈춰야 하는 조건 */
 export class ReleaseError extends Error {
@@ -379,11 +383,16 @@ function withHint(hint, step) {
   }
 }
 
+/** 셸 메타문자가 있으면 작은따옴표로 감싼다. */
+function shellQuote(text) {
+  return /^[\w./@+-]+$/.test(text) ? text : `'${text.replace(/'/g, "'\\''")}'`;
+}
+
 function printNextSteps(ws, { version, notesPath, branch, skipCi }) {
   const lines = ["", `[release] 커밋과 태그 v${version} 을 만들었다. 아래 명령은 소유자가 직접 실행한다:`];
   if (skipCi) lines.push("[release] 경고: --skip-ci-check 로 HEAD 의 CI 결과를 확인하지 않았다");
   lines.push(
-    `  git push origin ${branch}`,
+    `  git push origin ${shellQuote(branch)}`,
     `  git push origin v${version}`,
     `  gh release create v${version} --title v${version} --notes-file ${notesPath}`,
     ""

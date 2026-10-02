@@ -428,7 +428,7 @@ describe("릴리스 절차 (임시 저장소, 가짜 gh)", () => {
     f.setRunsFor("success");
     const before = f.head();
 
-    await assert.rejects(f.run(["5.13.0"]), /검사가 실패했다.*git checkout --/s);
+    await assert.rejects(f.run(["5.13.0"]), /검사가 실패했다.*git checkout HEAD --/s);
 
     assert.equal(f.head(), before);
     assert.equal(f.git("tag", "-l", "v5.13.0").trim(), "");
@@ -536,7 +536,7 @@ describe("릴리스 절차 (임시 저장소, 가짜 gh)", () => {
         return fs.renameSync(from, to);
       }
     };
-    await assert.rejects(f.run(["5.13.0"], { fsImpl: failingFs }), /복원하지 못한 파일이 있다: package\.json.*git checkout -- CHANGELOG\.md/s);
+    await assert.rejects(f.run(["5.13.0"], { fsImpl: failingFs }), /복원하지 못한 파일이 있다: package\.json.*git checkout HEAD -- CHANGELOG\.md/s);
   });
 
   it("검사가 실패하면 되돌리기 명령을 안내하고 파일은 바뀐 채로 둔다", async () => {
@@ -544,9 +544,65 @@ describe("릴리스 절차 (임시 저장소, 가짜 gh)", () => {
     f.failLint();
     f.setRunsFor("success");
 
-    await assert.rejects(f.run(["5.13.0"]), /검사가 실패했다.*\n변경 파일 되돌리기: git checkout -- CHANGELOG\.md package\.json package-lock\.json SKILL\.md SECURITY\.md/s);
+    await assert.rejects(f.run(["5.13.0"]), /검사가 실패했다.*\n변경 파일 되돌리기: git checkout HEAD -- CHANGELOG\.md package\.json package-lock\.json SKILL\.md SECURITY\.md/s);
 
     assert.equal(JSON.parse(f.read("package.json")).version, "5.13.0");
+  });
+
+  it("커밋 단계 실패(pre-commit 훅) 시 안내된 명령이 인덱스와 작업 트리를 HEAD 로 되돌린다", async () => {
+    const f = await fresh();
+    f.setRunsFor("success");
+    const hook = path.join(f.dir, ".git", "hooks", "pre-commit");
+    fs.mkdirSync(path.dirname(hook), { recursive: true });
+    fs.writeFileSync(hook, "#!/bin/sh\nexit 1\n");
+    fs.chmodSync(hook, 0o755);
+    const before = f.snapshot();
+    const head   = f.head();
+
+    const err = await f.run(["5.13.0"]).then(() => null, e => e);
+
+    assert.ok(err instanceof ReleaseError);
+    assert.notEqual(f.git("diff", "--cached", "--name-only").trim(), "", "변경이 스테이징되어 있어야 한다");
+    assert.equal(f.head(), head);
+    assert.equal(f.git("tag", "-l", "v5.13.0").trim(), "");
+    assert.doesNotMatch(err.message, /git tag -d/);
+
+    const hintLine = err.message.split("\n").find(line => line.startsWith("변경 파일 되돌리기: "));
+    assert.ok(hintLine, `안내 줄이 없다: ${err.message}`);
+    const command = hintLine.slice("변경 파일 되돌리기: ".length);
+    assert.equal(command, "git checkout HEAD -- CHANGELOG.md package.json package-lock.json SKILL.md SECURITY.md");
+
+    assertOwnTempRepo(f.dir);
+    execFileSync("sh", ["-c", command], { cwd: f.dir, env: gitEnv() });
+
+    assert.deepEqual(f.snapshot(), before);
+    assert.equal(f.git("diff", "--cached", "--name-only").trim(), "");
+    assert.equal(f.git("status", "--porcelain", "--untracked-files=no").trim(), "");
+  });
+
+  it("커밋 후 단계가 실패하면 되돌리기 명령을 출력만 하고 실행하지 않는다", async () => {
+    const f = await fresh();
+    f.setRunsFor("success");
+    const before = f.head();
+
+    const err = await f.run(["5.13.0"], { notesDir: path.join(f.base, "없는-디렉터리") }).then(() => null, e => e);
+
+    assert.ok(err instanceof ReleaseError);
+    assert.match(err.message, /\n커밋과 태그 되돌리기: git tag -d v5\.13\.0; git reset --hard HEAD~1$/);
+    assert.doesNotMatch(err.message, /git checkout/);
+    assert.equal(f.git("rev-parse", "HEAD~1").trim(), before);
+    assert.equal(f.git("log", "-1", "--format=%s").trim(), "release: 5.13.0");
+    assert.equal(f.git("cat-file", "-t", "v5.13.0").trim(), "tag");
+  });
+
+  it("push 명령의 브랜치 이름은 셸 메타문자가 있으면 따옴표로 감싼다", async () => {
+    const f = await fresh();
+    f.git("checkout", "-q", "-b", "feat;x");
+    f.setRunsFor("success");
+
+    const { logs } = await f.run(["5.13.0", "--allow-branch"]);
+
+    assert.match(logs.join("\n"), /git push origin 'feat;x'\n/);
   });
 
   it("gh 호출이 실패하면 원문 출력 없이 ReleaseError 로 멈춘다", async () => {
