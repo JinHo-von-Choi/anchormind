@@ -50,6 +50,7 @@
 | MEMENTO_SESSION_ID_POLICY | warn | How MCP session ids are received. `warn` (default): a session id received in the query string (`?sessionId=`, `?mcp-session-id=`) and auto-recovery of an id that is not in the server-issued format (UUID) are logged as `[Session] session id received in query string` and `recovery requested for non-issued id format` warnings and processed normally. `enforce`: a query-string id gets 400, and recovery of a non-UUID id gets 404. UUID sessions sent in the `MCP-Session-Id` header are unaffected by either value. Session ids in logs and the reflect prompt show only the first 8 characters. Sessions recovered with a client-chosen id during the `warn` period keep working after the switch to `enforce` until they expire. Legacy `/message?sessionId=` is required by the protocol and is not covered |
 | MCP_ALLOW_AUTO_DCR_REGISTER | false | Set to `true` to allow auto-registration of unregistered `client_id` in `/authorize` (legacy behavior). Default `false` — enforces RFC 7591 `POST /register` endpoint for client registration |
 | OAUTH_ALLOWED_REDIRECT_URIS | (none) | OAuth redirect_uri exact-match allowed list (comma-separated). Operates independently of OAUTH_TRUSTED_ORIGINS |
+| MEMENTO_DCR_MAX_PER_HOUR | 100 | Hourly cap on `/register` (fixed window, per process). Above the cap the response is 429 with `Retry-After: 3600`. `0` disables the cap. Read at call time |
 | DEFAULT_DAILY_LIMIT | 10000 | Default daily call limit when creating API keys |
 | DEFAULT_PERMISSIONS | read,write | Default permissions when creating API keys |
 | DEFAULT_FRAGMENT_LIMIT | (none) | Default fragment quota when creating API keys. Unlimited when unset |
@@ -239,8 +240,8 @@ OAuth token TTLs are linked to the session TTL.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| OAUTH_TOKEN_TTL_SECONDS | 2592000 | OAuth access token TTL (seconds). Calculated as `SESSION_TTL_MINUTES * 60`. Default 30 days |
-| OAUTH_REFRESH_TTL_SECONDS | 5184000 | OAuth refresh token TTL (seconds). `OAUTH_TOKEN_TTL_SECONDS * 2`. Default 60 days |
+| OAUTH_ACCESS_TOKEN_TTL_SECONDS | (unset) | OAuth access token TTL (seconds, positive integer). When unset, `SESSION_TTL_MINUTES * 60` (default 2592000, 30 days). Does not change the refresh token TTL |
+| OAUTH_REFRESH_TTL_SECONDS | 5184000 | OAuth refresh token TTL (seconds). `SESSION_TTL_MINUTES * 60 * 2`. Default 60 days |
 
 Sliding window: each time an OAuth-authenticated request arrives, the Redis TTL for that access token is reset to `OAUTH_TOKEN_TTL_SECONDS`. The token never expires as long as tools continue to be used.
 

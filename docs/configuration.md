@@ -50,6 +50,7 @@
 | MEMENTO_SESSION_ID_POLICY | warn | MCP 세션 ID 수신 처리. `warn`(기본): 쿼리스트링(`?sessionId=`, `?mcp-session-id=`)으로 받은 ID와 서버 발급 형식(UUID)이 아닌 ID의 자동 복구를 `[Session] session id received in query string`, `recovery requested for non-issued id format` 경고로 기록하고 정상 처리한다. `enforce`: 쿼리 ID는 400, UUID가 아닌 ID의 복구는 404로 응답한다. 헤더(`MCP-Session-Id`)로 보낸 UUID 세션은 두 값 모두 영향이 없다. 로그와 reflect 프롬프트의 세션 ID는 앞 8자만 표기한다. `warn` 기간에 클라이언트가 정한 ID로 복구된 세션은 `enforce`로 바꾼 뒤에도 만료될 때까지 계속 동작한다. Legacy `/message?sessionId=`는 프로토콜 요구라 대상이 아니다 |
 | MCP_ALLOW_AUTO_DCR_REGISTER | false | `true`로 설정 시 `/authorize`에서 미등록 `client_id`의 자동 등록 허용 (기존 동작). 기본 `false` — RFC 7591 `POST /register` 엔드포인트 경유 강제 |
 | OAUTH_ALLOWED_REDIRECT_URIS | (없음) | OAuth redirect_uri 정확 일치 허용 목록 (쉼표 구분). OAUTH_TRUSTED_ORIGINS와 별도로 동작 |
+| MEMENTO_DCR_MAX_PER_HOUR | 100 | `/register` 시간당 등록 상한 (프로세스 단위 고정 창). 초과하면 429와 `Retry-After: 3600`. `0`이면 상한 없음. 호출 시점에 읽는다 |
 | DEFAULT_DAILY_LIMIT | 10000 | API 키 생성 시 기본 일일 호출 한도 |
 | DEFAULT_PERMISSIONS | read,write | API 키 생성 시 기본 권한 |
 | DEFAULT_FRAGMENT_LIMIT | (없음) | API 키 생성 시 기본 파편 할당량. 미설정 시 무제한 |
@@ -238,8 +239,8 @@ OAuth 토큰 TTL은 세션 TTL과 연동된다.
 
 | 환경변수 | 기본값 | 설명 |
 |----------|--------|------|
-| OAUTH_TOKEN_TTL_SECONDS | 2592000 | OAuth 액세스 토큰 TTL (초). `SESSION_TTL_MINUTES * 60`으로 산출. 기본값 30일 |
-| OAUTH_REFRESH_TTL_SECONDS | 5184000 | OAuth 리프레시 토큰 TTL (초). `OAUTH_TOKEN_TTL_SECONDS * 2`. 기본값 60일 |
+| OAUTH_ACCESS_TOKEN_TTL_SECONDS | (없음) | OAuth 액세스 토큰 TTL (초, 양의 정수). 미설정이면 `SESSION_TTL_MINUTES * 60`(기본 2592000, 30일). 리프레시 토큰 TTL에는 영향 없음 |
+| OAUTH_REFRESH_TTL_SECONDS | 5184000 | OAuth 리프레시 토큰 TTL (초). `SESSION_TTL_MINUTES * 60 * 2`. 기본값 60일 |
 
 슬라이딩 윈도우: OAuth 인증된 요청이 들어올 때마다 해당 액세스 토큰의 Redis TTL을 `OAUTH_TOKEN_TTL_SECONDS`로 재설정한다. 도구를 계속 사용하는 한 토큰이 만료되지 않는다.
 
