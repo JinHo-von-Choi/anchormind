@@ -14,6 +14,22 @@
 - `MEMENTO_API_KEY_DELETE_GUARD`(기본 `true`): 저장된 파편이나 재통합 이력이 있는 API 키는 삭제하지 않고 409(`key_in_use`)를 돌려준다. `false`면 확인을 건너뛴다.
 - `npm run test:db`: 실제 PostgreSQL에서 행 잠금 순서와 링크 일괄 생성의 정합을 확인하는 시험 레인. 실행마다 전용 데이터베이스를 만들고 지운다.
 - `node scripts/lint-ratchet.js`: 무처리 catch 처리기, 복잡도, 파일 길이, 직접 환경 변수 읽기의 수치가 기준선(`scripts/lint-baseline.json`)보다 늘면 실패한다. 기준선 상향에는 `--update --allow-increase`가 필요하다.
+- `MEMENTO_CONFIG_STRICT`(기본 `false`): 숫자, 열거, 불리언 환경 변수의 값 문제(숫자 아님, 정수 아님, 허용 범위 밖, 허용 목록 밖)를 기동 시 한 줄로 기록한다. `true`면 문제가 있을 때 종료 코드 78로 멈춘다. 공백만 있는 값은 미설정과 같다.
+- `MEMENTO_SESSION_ID_POLICY`(`warn`, `enforce`, 기본 `warn`): MCP 세션 ID 수신 처리. `warn`은 쿼리스트링 ID와 서버 발급 형식(UUID)이 아닌 ID의 자동 복구를 경고 로그로 기록하고 정상 처리한다. `enforce`는 쿼리 ID에 400, UUID가 아닌 ID의 복구에 404를 돌려준다. 헤더로 보낸 UUID 세션과 `/message?sessionId=`는 영향이 없다.
+- `MEMENTO_RESERVED_AGENT_IDS`(`warn`, `enforce`, 기본 `warn`): 내부 작업 전용 agentId(`system`, `admin`) 처리 방식. `warn`은 API 키 요청의 예약 agentId에 경고 로그(키 앞 8자 포함)만 남기고, `enforce`는 FORBIDDEN(-32001)으로 거부한다. master 키는 두 방식 모두 허용한다.
+- `OAUTH_ACCESS_TOKEN_TTL_SECONDS`(양의 정수, 기본 미설정): OAuth 접근 토큰 수명(초). 미설정이면 `SESSION_TTL_MINUTES * 60`을 쓴다. 리프레시 토큰 수명은 영향받지 않는다.
+- `MEMENTO_DCR_MAX_PER_HOUR`(기본 100, 0은 상한 없음): `/register`의 시간당 등록 상한(프로세스 단위). 초과하면 429와 `Retry-After: 3600`을 돌려준다.
+- `node scripts/purge-oauth-clients.js`: 한 번도 쓰이지 않은 오래된 동적 등록 클라이언트를 정리한다. 기본은 미리보기이고 `--execute`로 삭제한다. `--older-than-days`(기본 30)를 받으며 키에 묶인 클라이언트는 제외한다.
+- `MEMENTO_ADMIN_AUTH_BACKOFF`(`on`, `off`, 기본 `off`): `on`이면 관리 인증이 연속 5회 실패한 뒤 1, 2, 4초 순으로 최대 60초까지 다음 시도를 늦추고, 지연 중에는 올바른 키도 429(`Retry-After`)를 받는다. 실패 기록은 이 값과 무관하게 남는다.
+- `MEMENTO_REMEMBER_DUPLICATE_GUARD`(기본 `false`): `true`면 `remember`가 같은 키 범위의 기존 파편과 같은 본문을 받았을 때 기존 파편에 후처리, TTL 조정, 재색인을 하지 않고 응답의 `existing`, `duplicate`(`same_scope`, `other_workspace`, `closed`, `unknown`)로 상태만 알린다.
+- 지표 `mcp_remember_duplicate_total{kind}`: `remember` 중복 적중을 분류해 센다. 플래그와 무관하게 동작한다.
+- 지표 `memento_consolidate_split_step_failed_total{step}`: 분할 커밋의 `rollback_delete`, `link_related`, `link_part_of`, `outcome_record` 단계 실패를 센다. 같은 실패는 `split <step> failed` 경고 로그에도 남는다.
+- `npm run release -- X.Y.Z`: 작업 트리와 HEAD의 Tests 워크플로 결과를 확인한 뒤 CHANGELOG의 `[Unreleased]`를 버전 절로 옮기고 `package.json`, `package-lock.json`, `SKILL.md`, `SECURITY.md`의 버전 표기를 갱신한다. lint와 단위 시험이 통과하면 `release: X.Y.Z` 커밋과 annotated tag를 만들고 push와 `gh release create` 명령을 출력한다. main 브랜치에서만 실행되며 다른 브랜치는 `--allow-branch`가 필요하다.
+- `npm run test:coverage`와 `scripts/check-coverage.js`: 단위 시험의 줄, 분기, 함수 커버리지 합계를 `coverage-baseline.json`(허용 폭 0.5%p)과 비교해 아래로 내려가면 실패한다. 입력이 읽을 수 없거나 기준선이 객체가 아니면 종료 코드 2로 끝난다. `--write`는 기준선을 낮추지 않으며 낮추는 갱신은 `--allow-decrease`가 필요하다. CI의 단위 시험 단계가 이 명령을 쓴다.
+- 관리 `/stats`의 `healthFlags`에 `trust_proxy_hops_unset`. `TRUST_PROXY_HOPS`가 미설정인 상태에서 `X-Forwarded-For`를 처음 받으면 `[Proxy]` 경고를 프로세스당 한 번 남긴다. 기동 시 운영 권장 설정 중 빠진 이름은 `[Startup] Recommended settings not applied:` 한 줄로 나열한다.
+- 도구 호출 감사 기록에 행위자 정보(`key=`, `sid=` 앞 8자, `ip=`)가 붙는다. 관리 API의 변경 요청(GET 제외)과 관리 인증의 성공과 실패가 `admin_auth`, `admin <METHOD> <path>` 감사 기록으로 남는다.
+- `remember`, `amend`, `link`, `tool_feedback`의 열거형 인자 값이 저장소 제약에 맞지 않으면 `Invalid arguments for <tool>: <param>: must be one of a|b|c` 메시지와 `code: "INVALID_ARGUMENT"`를 돌려준다.
+- 기동 점검 실패는 `[Startup]` 오류 로그로, 리랭커 사전 적재 실패는 `[Reranker] preload failed (non-fatal)` 경고로 남는다.
 
 ### Changed
 
@@ -36,6 +52,12 @@
 - 와치독 스크립트(`memento-watchdog.sh`)는 `/health/live`가 응답하지 않을 때만 서비스를 재시작하고, 연속 재시작의 간격을 지수로 늘리며, 중복 실행을 잠금으로 막는다. 상태는 재시작 전에 기록한다.
 - 종료 신호를 받은 서버는 `MEMENTO_SHUTDOWN_DEADLINE_MS` 안에 종료하지 못하면 종료 코드 1로 강제 종료한다.
 - 실제 PostgreSQL에서 행 잠금 순서와 링크 일괄 생성의 `linked_to` 정합을 확인하는 `npm run test:db`와 CI 작업 `DB Concurrency (with DB)`를 추가한다. 이 작업은 결과를 보고만 한다.
+- 로그와 reflect 프롬프트에 나오는 세션 ID는 앞 8자만 표기한다. 접근 로그와 Redis 세션 로그도 같다. 클라이언트에 보내는 `endpoint` 이벤트의 ID는 전체 값이다.
+- 숫자, 열거, 불리언 환경 변수는 공용 도우미로 읽는다. 숫자가 아닌 값은 기본값으로 돌아가고, 정수가 아니거나 허용 범위 밖인 값은 그대로 쓰며 기록만 한다. `MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`(100 이상 4500 이하), `MEMENTO_SHUTDOWN_DEADLINE_MS`(0 이상), `MEMENTO_SCORE_UPDATE_BATCH`(0 이상, 10000 초과는 10000), `MEMENTO_SESSION_KEY_RECHECK_MS`(0 이상)는 범위 밖이면 기본값을 쓴다. 비어 있는 `LLM_CB_*` 값은 기본값이다.
+- OAuth 토큰 수명은 접근 토큰 `OAUTH_ACCESS_TOKEN_TTL_SECONDS`(미설정이면 세션 수명), 리프레시 토큰 `OAUTH_REFRESH_TTL_SECONDS`(`SESSION_TTL_MINUTES * 60 * 2`, 기본 60일)로 각각 정해진다. 인가 코드 교환으로 발급되는 리프레시 토큰의 만료도 `OAUTH_REFRESH_TTL_SECONDS`를 따른다.
+- 도구 설명에서 내부 이력 표기와 단계 번호 문구를 줄였다. `tools/list` 응답은 일반 키 기준 약 1.1KB 작다. `context`의 `types` 기본값 문구는 실제 기본값과 같은 목록에서 만든다.
+- 도구 감사 기록의 `ip=`는 `resolveClientIp`가 채택한 클라이언트 주소다. 관리 감사 기록의 경로 표기는 세션과 키의 UUID 구간을 앞 8자로 줄인다.
+- `SECURITY.md`의 지원 버전 표는 5.12.x까지를 지원으로 적는다.
 
 ## [5.12.0] - 2026-10-02
 
