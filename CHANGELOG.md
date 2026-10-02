@@ -10,7 +10,7 @@
 - `MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS`(`401`, `503`, 기본 `401`): API 키 저장소 조회 실패로 인증을 판정하지 못한 initialize와 세션 자동 복구의 응답 상태. `503`이면 `Retry-After: 10`을 붙인다.
 - 지표 `mcp_auth_store_errors_total{operation}`. `memento_auth_denied_total`의 `reason`에 `store_unavailable`.
 - `MEMENTO_SEMANTIC_THRESHOLD_MODE`(`inner`, `outer`, 기본 `inner`): 시맨틱 검색의 유사도 임계값을 이웃 조회 안쪽(현행)에서 적용할지, 바깥에서 적용할지 정한다.
-- `MEMENTO_SCORE_UPDATE_BATCH`(기본 200, 0은 단일 문장): 감쇠와 utility 점수 갱신, `forget`의 `linked_to` 정리를 id 오름차순으로 잠근 묶음 단위로 처리한다.
+- `MEMENTO_SCORE_UPDATE_BATCH`(기본 200, 0은 단일 문장): 감쇠와 utility 점수 갱신을 id 오름차순으로 잠근 묶음 단위로 처리한다. 0이면 단일 문장으로 돌아간다. `forget`의 `linked_to` 정리는 이 값과 무관하게 항상 id 오름차순으로 행을 잠근다.
 - `MEMENTO_API_KEY_DELETE_GUARD`(기본 `true`): 저장된 파편이나 재통합 이력이 있는 API 키는 삭제하지 않고 409(`key_in_use`)를 돌려준다. `false`면 확인을 건너뛴다.
 - `npm run test:db`: 실제 PostgreSQL에서 행 잠금 순서와 링크 일괄 생성의 정합을 확인하는 시험 레인. 실행마다 전용 데이터베이스를 만들고 지운다.
 - `node scripts/lint-ratchet.js`: 무처리 catch 처리기, 복잡도, 파일 길이, 직접 환경 변수 읽기의 수치가 기준선(`scripts/lint-baseline.json`)보다 늘면 실패한다. 기준선 상향에는 `--update --allow-increase`가 필요하다.
@@ -22,6 +22,12 @@
 - `initialize`의 협상 프로토콜 버전은 항상 지원 목록(2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05) 중 하나다. YYYY-MM-DD 형식이 아닌 값은 가장 오래된 지원 버전으로, 목록 사이의 날짜는 그 이하의 가장 가까운 지원 버전으로 협상한다. `mcp_protocol_version_negotiations_total`의 `requested_version`, `negotiated_version`과 `mcp_protocol_version_reanchored_total`의 `from`, `to` 라벨 값은 지원 버전, `none`, `other`(from은 `null` 포함)다.
 - README와 벤치마크 문서의 LongMemEval 수치에 측정 조건(데이터셋, 단계별 소요 시간)과 논문 링크(arXiv 2410.10813)를 맞춘다. 임베딩 없이 동작하는 회상 범위를 명시한다.
 - 키에 묶인 OAuth 클라이언트의 토큰 교환은 해당 키를 `client_secret`(또는 Basic 인증)으로 제시한 요청에서만 성립한다. API 키 원문 형식의 `client_id`는 클라이언트 행으로 등록하지 않는다.
+- 키에 묶인 OAuth 클라이언트의 인가 요청은 `redirect_uri`가 허용 목록에 있어도 항상 동의 화면을 거친다.
+- `POST /token`은 `invalid_client` 오류에 HTTP 401을 돌려준다. 오류 코드는 표준 `invalid_client`다. 다른 오류는 400이다.
+- 키에 묶여 등록된 클라이언트의 동적 등록 응답은 `token_endpoint_auth_method`로 `client_secret_post`를 알린다. 묶이지 않은 등록은 `none`이다.
+- `initialize` 안내문의 `recall` 호출 예시는 인자 이름으로 `text`를 쓴다.
+- `remember`의 `keywords`는 유한한 숫자를 받아 문자열로 바꿔 저장한다. 문자열과 숫자가 아닌 항목은 코드 -32602 검증 오류로 거절한다.
+- `tool_feedback`의 링크 재통합은 양 끝 파편이 모두 호출 키 범위에 있는 링크에만 적용된다.
 - 도구 응답의 오류 문구는 내부 예외 원문 대신 공용 메시지를 쓴다. 원문은 로그와 감사 기록에만 남는다.
 - `remember`의 `supersedes`는 호출한 키가 소유한 유효 파편에만 적용된다. 다른 키의 파편이나 이미 닫힌 파편은 링크 없이 경고 로그만 남긴다.
 - utility 점수와 중요도 하향 갱신은 저장값이 실제로 바뀌는 행만 기록한다.
