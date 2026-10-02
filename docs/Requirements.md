@@ -48,9 +48,11 @@
 | gemini | `npm install -g @google/gemini-cli` | 기본 LLM provider (`LLM_PRIMARY=gemini-cli`) |
 | agy | Google Antigravity 공식 installer | Google Antigravity CLI provider (`LLM_PRIMARY=agy-cli`) |
 | codex | `npm install -g @openai/codex` | OpenAI Codex CLI fallback |
-| copilot | `npm install -g @githubnext/github-copilot-cli` | GitHub Copilot CLI fallback |
+| copilot | `npm install -g @github/copilot` | GitHub Copilot CLI fallback (`LLM_PRIMARY=copilot-cli`) |
+| opencode | `opencode` 실행 파일을 PATH에 설치 | OpenCode CLI provider (`LLM_PRIMARY=opencode-cli`) |
+| qwen | `qwen` 실행 파일을 PATH에 설치 | Qwen CLI provider (`LLM_PRIMARY=qwen-cli`) |
 
-각 CLI는 설치 후 별도 로그인이 필요하다(`gemini auth login`, `agy`, `codex auth login`, `github-copilot-cli auth`). 미설치 또는 인증 실패 시 해당 provider는 다음 fallback으로 전환된다.
+각 CLI는 설치 후 별도 로그인이 필요하다. 미설치 또는 인증 실패 시 해당 provider는 다음 fallback으로 전환된다. gemini-cli, copilot-cli, opencode-cli는 기본(`MEMENTO_LLM_CLI_TOOL_APPROVAL=none`)에서 제한된 도구 승인으로 서버 작업 디렉터리가 아닌 빈 임시 디렉터리에서 실행된다.
 
 ---
 
