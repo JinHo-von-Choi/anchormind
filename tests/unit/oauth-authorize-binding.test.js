@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
  */
 const VICTIM   = "550e8400-e29b-41d4-a716-446655440000";
 const REDIRECT = "https://example.test/cb";
+const RAW_KEY  = `mmcp_legit_${"c".repeat(32)}`;
 
 const realStore = await import("../../lib/admin/OAuthClientStore.js");
 const realKeys  = await import("../../lib/admin/ApiKeyStore.js");
@@ -20,7 +21,7 @@ mock.module("../../lib/admin/OAuthClientStore.js", {
 mock.module("../../lib/admin/ApiKeyStore.js", {
   namedExports: {
     ...realKeys,
-    validateApiKeyFromDB: async () => ({ valid: false }),
+    validateApiKeyFromDB: async (raw) => (raw === RAW_KEY ? { valid: true, keyId: VICTIM } : { valid: false }),
     validateApiKeyById  : async () => ({ valid: true, keyId: VICTIM })
   }
 });
@@ -30,7 +31,7 @@ const { handleAuthorize, handleToken, validateAccessToken } = await import("../.
 const VERIFIER  = "v".repeat(64);
 const CHALLENGE = createHash("sha256").update(VERIFIER).digest("base64url");
 
-async function issueToken(clientId) {
+async function issueToken(clientId, clientSecret) {
   const auth = await handleAuthorize({
     response_type        : "code",
     client_id            : clientId,
@@ -44,7 +45,8 @@ async function issueToken(clientId) {
     grant_type   : "authorization_code",
     code         : auth.code,
     redirect_uri : REDIRECT,
-    code_verifier: VERIFIER
+    code_verifier: VERIFIER,
+    ...(clientSecret ? { client_secret: clientSecret } : {})
   });
   return validateAccessToken(tok.access_token);
 }
@@ -52,7 +54,7 @@ async function issueToken(clientId) {
 describe("/authorize 키 바인딩 인정 조건", () => {
   it("서버가 부여한 client_id 형식이면 바인딩을 인정한다", async () => {
     stored = { client_id: "legit-conn_550e8400", client_name: `apikey:${VICTIM}`, redirect_uris: [REDIRECT] };
-    const v = await issueToken("legit-conn_550e8400");
+    const v = await issueToken("legit-conn_550e8400", RAW_KEY);
     assert.equal(v.bound_key_id, VICTIM);
   });
 
