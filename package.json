@@ -35,6 +35,7 @@
     "test:e2e:local": "bash scripts/run-e2e-tests.sh",
     "test:ci": "npm test && npm run test:integration",
     "lint": "eslint .",
+    "lint:ratchet": "node scripts/lint-ratchet.js",
     "backfill:embeddings": "node scripts/backfill-embeddings.js",
     "lint:migrations": "node scripts/lint-migrations.js",
     "audit:ci": "audit-ci --config audit-ci.jsonc",

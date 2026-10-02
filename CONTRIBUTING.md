@@ -83,7 +83,7 @@ after(async () => {
 ## Pull Request Checklist
 
 - [ ] `npm test` passes; with PostgreSQL available, `npm run test:integration` (integration + e2e) passes. CI runs these as separate jobs in `.github/workflows/test.yml`
-- [ ] `npx eslint . --max-warnings 0` passes
+- [ ] `npm run lint && npm run lint:ratchet` passes
 - [ ] New migration file if DB schema changed; run `npm run lint:migrations` to verify body-only convention (see `docs/migration-conventions.md`)
 - [ ] `docs/features.md` ledger updated for any new or removed feature
 - [ ] `docs/concurrency.md` updated if a new write path is introduced

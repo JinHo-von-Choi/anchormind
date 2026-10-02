@@ -19,6 +19,8 @@ jobs:
       - run: npm ci
       - name: Lint
         run: npm run lint
+      - name: Lint ratchet
+        run: npm run lint:ratchet
       # 번호 중복은 파일 둘이 각각은 규약을 지키면서도 함께 있을 때만 어긋나므로
       # 사람이 아니라 여기서 본다.
       - name: Lint migrations

@@ -4,7 +4,7 @@
 
 ## Testing
 - [ ] `npm test` passes
-- [ ] `npx eslint . --max-warnings 0` passes
+- [ ] `npm run lint && npm run lint:ratchet` passes
 - [ ] Manual smoke test performed
 
 ## Migration

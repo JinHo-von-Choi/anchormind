@@ -1,4 +1,5 @@
 import js from "@eslint/js";
+import noSilentCatch from "./scripts/eslint-rules/no-silent-catch.js";
 
 export default [
   { ignores: ["node_modules/**", ".worktrees/**"] },
@@ -50,6 +51,22 @@ export default [
       "no-empty": ["error", { "allowEmptyCatch": true }],
       "no-undef": "error"
     }
+  },
+  {
+    files  : ["lib/**/*.js", "server.js", "bin/**/*.js", "scripts/**/*.{js,mjs}", "config/**/*.js"],
+    plugins: { local: { rules: { "no-silent-catch": noSilentCatch } } },
+    rules  : {
+      "complexity"              : ["warn", { max: 20 }],
+      "max-lines-per-function"  : ["warn", { max: 120, skipBlankLines: true, skipComments: true }],
+      "max-lines"               : ["warn", { max: 800, skipBlankLines: true, skipComments: true }],
+      "max-depth"               : ["warn", 5],
+      "local/no-silent-catch"   : "warn",
+      "no-restricted-properties": ["warn", { object: "process", property: "env", message: "환경 변수는 lib/config.js에서 읽는다" }]
+    }
+  },
+  {
+    files: ["lib/config.js", "config/**/*.js", "bin/**/*.js", "scripts/**/*.{js,mjs}"],
+    rules: { "no-restricted-properties": "off" }
   },
   {
     files: ["assets/**/*.js"],
