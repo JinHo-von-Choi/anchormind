@@ -12,7 +12,7 @@
  * 아무것도 쓰지 않고 실패하며, 낮추는 갱신은 --allow-decrease 를 함께 줄 때만 한다.
  * 같은 lcov 에서는 항상 같은 파일을 만든다.
  * 입력이 숫자로 읽히지 않거나(LF:abc, 음수, LH > LF), 합계가 0..100 의 유한한 수가 아니거나,
- * 기준선에 숫자가 아닌 필드가 있으면 통과시키지 않고 종료 코드 2로 끝난다.
+ * 기준선이 객체가 아니거나 숫자가 아닌 필드가 있으면 통과시키지 않고 종료 코드 2로 끝난다.
  *
  * 사용:
  *   node scripts/check-coverage.js coverage/lcov.info
@@ -165,10 +165,11 @@ export function findDrops(current, baseline) {
  */
 export function planWrite(current, prev, allowDecrease) {
   assertMetrics(current, "현재");
-  if (prev) assertBaseline(prev);
-  const tolerance = prev?.tolerance ?? DEFAULT_TOLERANCE;
+  const hasPrev = prev !== null && prev !== undefined;
+  if (hasPrev) assertBaseline(prev);
+  const tolerance = hasPrev ? prev.tolerance ?? DEFAULT_TOLERANCE : DEFAULT_TOLERANCE;
   const next      = { lines: current.lines, branches: current.branches, functions: current.functions, tolerance };
-  const lowered   = prev ? findDrops(current, { ...prev, tolerance: 0 }) : [];
+  const lowered   = hasPrev ? findDrops(current, { ...prev, tolerance: 0 }) : [];
   return { ok: lowered.length === 0 || allowDecrease, next, lowered };
 }
 
@@ -178,13 +179,18 @@ function isSourceFile(file) {
   return !rel.startsWith("..") && !rel.startsWith(`tests${path.sep}`) && !rel.includes("node_modules");
 }
 
-/** 기준선 파일을 읽는다. 읽기나 해석에 실패하면 읽을 수 없는 입력으로 취급한다. */
+/** 기준선 파일을 읽는다. 읽기나 해석에 실패하거나 객체가 아니면 읽을 수 없는 입력으로 취급한다. */
 function readBaseline(baselinePath) {
+  let parsed;
   try {
-    return JSON.parse(fs.readFileSync(baselinePath, "utf8"));
+    parsed = JSON.parse(fs.readFileSync(baselinePath, "utf8"));
   } catch (err) {
     throw new CoverageInputError(`기준선 ${baselinePath} 을 읽을 수 없다: ${err.message}`);
   }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new CoverageInputError(`기준선 ${baselinePath} 이 객체가 아니다`);
+  }
+  return parsed;
 }
 
 function execute(argv, baselinePath, io) {

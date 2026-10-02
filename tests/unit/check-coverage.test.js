@@ -161,6 +161,24 @@ describe("읽을 수 없는 입력은 통과시키지 않는다", () => {
     assert.equal(fs.existsSync(badLcov.basePath), false);
   });
 
+  it("객체가 아닌 값으로 해석되는 기준선은 --write 에서도 덮어쓰지 않고 2로 끝난다", () => {
+    for (const raw of ["null", "0", "false", '""', "[]"]) {
+      const res = exec(lcovOf(), raw, ["--write"]);
+      assert.equal(res.code, 2, `기준선 ${raw}`);
+      assert.equal(fs.readFileSync(res.basePath, "utf8"), raw, `기준선 ${raw} 는 그대로 남는다`);
+      assert.equal(exec(lcovOf(), raw).code, 2, `점검 모드 기준선 ${raw}`);
+    }
+  });
+
+  it("planWrite 는 기준선 자리의 null, 0, false, 빈 문자열을 없는 기준선으로 보지 않는다", () => {
+    const current = { lines: 80, branches: 70, functions: 60, files: 3 };
+    for (const prev of [0, false, ""]) {
+      assert.throws(() => planWrite(current, prev, false), CoverageInputError, `prev ${JSON.stringify(prev)}`);
+    }
+    assert.equal(planWrite(current, null, false).ok, true);
+    assert.equal(planWrite(current, undefined, false).ok, true);
+  });
+
   it("기준선 아래로 내려가면 1, 허용 폭 안이면 0으로 끝난다", () => {
     assert.equal(exec(lcovOf(), { ...GOOD_BASELINE, lines: 90 }).code, 1);
     assert.equal(exec(lcovOf(), { ...GOOD_BASELINE, lines: 80.3 }).code, 0);
