@@ -12,7 +12,7 @@
 |-|-|
 | 0 이상의 정수 | CACHE_DB_TTL, CACHE_SESSION_TTL, DB_CONN_TIMEOUT_MS, DB_IDLE_TIMEOUT_MS, DB_QUERY_TIMEOUT, DB_STATEMENT_TIMEOUT_MS, EMBEDDING_MAX_RETRIES, EMBEDDING_SEM_WAIT_MS, HEADERS_TIMEOUT_MS, KEEP_ALIVE_TIMEOUT_MS, LLM_CB_OPEN_DURATION_MS, LLM_CHAIN_TIMEOUT_MS, LLM_CONCURRENCY_WAIT_MS, LLM_PROVIDER_TIMEOUT_MS, LLM_TOKEN_BUDGET_INPUT, LLM_TOKEN_BUDGET_OUTPUT, QUOTA_NEAR_LIMIT_MARGIN, REDIS_DB, REQUEST_TIMEOUT_MS, RERANKER_EXTERNAL_COOLDOWN_MS, SSE_RETRY_MS, TRUST_PROXY_HOPS |
 | 0 이상의 숫자 | MCP_IDLE_REFLECT_HOURS, UPDATE_CHECK_INTERVAL_HOURS |
-| 1 이상의 정수 | DEFAULT_DAILY_LIMIT, DEFAULT_FRAGMENT_LIMIT, FRAGMENT_DEFAULT_LIMIT, EMBEDDING_CONCURRENCY, EMBEDDING_DIMENSIONS, EMBEDDING_TIMEOUT_MS, LLM_CB_FAILURE_THRESHOLD, LLM_CB_FAILURE_WINDOW_MS, LLM_TOKEN_BUDGET_WINDOW_SEC, NLI_TIMEOUT_MS, RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, RATE_LIMIT_WINDOW_MS, RERANKER_TIMEOUT_MS, SESSION_TTL_MINUTES |
+| 1 이상의 정수 | DEFAULT_DAILY_LIMIT, DEFAULT_FRAGMENT_LIMIT, FRAGMENT_DEFAULT_LIMIT, EMBEDDING_CONCURRENCY, EMBEDDING_DIMENSIONS, EMBEDDING_TIMEOUT_MS, LLM_CB_FAILURE_THRESHOLD, LLM_CB_FAILURE_WINDOW_MS, LLM_TOKEN_BUDGET_WINDOW_SEC, NLI_TIMEOUT_MS, RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, RATE_LIMIT_WINDOW_MS, RERANKER_TIMEOUT_MS, SESSION_TTL_MINUTES, SSE_MAX_HEARTBEAT_FAILURES |
 | 2 이상의 정수 | DB_MAX_CONNECTIONS |
 | 1000 이상의 정수 | SSE_HEARTBEAT_INTERVAL_MS |
 | 1 이상 65535 이하의 정수 | POSTGRES_PORT, DB_PORT, REDIS_PORT |
@@ -27,6 +27,7 @@
 | inner, outer (그 밖의 값은 inner) | MEMENTO_SEMANTIC_THRESHOLD_MODE |
 | none, all (그 밖의 값은 none) | MEMENTO_LLM_CLI_TOOL_APPROVAL |
 | true, false (그 밖의 값은 false) | MEMENTO_CONFIG_STRICT |
+| true, false (그 밖의 값은 `MEMORY_CONFIG` 검증에서 기동 실패) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (그 밖의 값은 off) | MEMENTO_ADMIN_AUTH_BACKOFF |
 | true, false (false가 아닌 값은 true) | MEMENTO_API_KEY_DELETE_GUARD |
 | true, false (true가 아닌 값은 false) | MEMENTO_REMEMBER_DUPLICATE_GUARD |
@@ -77,7 +78,7 @@
 | MCP_REJECT_NONAPIKEY_OAUTH | true | 기본 `true`는 `is_api_key=false` OAuth 토큰 인증을 거부한다. `false`는 해당 인증만 허용하며 master 권한을 부여하지 않는다. API 키 바인딩이 없는 OAuth 세션의 도구 호출은 `-32001`로 거부된다. API 키 기반 OAuth 토큰(`is_api_key=true`)과 Bearer ACCESS_KEY 직접 사용은 영향 없음 |
 | MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS | 401 | `api_keys` 조회 실패로 인증을 판정하지 못한 MCP `initialize`와 세션 자동 복구의 응답 상태. `401`(기본)은 키 무효와 같은 응답이며 세션 복구는 404다. `503`은 `Retry-After: 10`을 붙인 일시 장애 응답이다. 마스터 키 인증은 저장소와 무관하다. 조회 실패는 `mcp_auth_store_errors_total{operation}`과 `memento_auth_denied_total{reason="store_unavailable"}`로 집계한다 |
 | MEMENTO_SESSION_ID_POLICY | warn | MCP 세션 ID 수신 처리. `warn`(기본): 쿼리스트링(`?sessionId=`, `?mcp-session-id=`)으로 받은 ID와 서버 발급 형식(UUID)이 아닌 ID의 자동 복구를 `[Session] session id received in query string`, `recovery requested for non-issued id format` 경고로 기록하고 정상 처리한다. `enforce`: 쿼리 ID는 400, UUID가 아닌 ID의 복구는 404로 응답한다. 헤더(`MCP-Session-Id`)로 보낸 UUID 세션은 두 값 모두 영향이 없다. 로그와 reflect 프롬프트의 세션 ID는 앞 8자만 표기한다. `warn` 기간에 클라이언트가 정한 ID로 복구된 세션은 `enforce`로 바꾼 뒤에도 만료될 때까지 계속 동작한다. Legacy `/message?sessionId=`는 프로토콜 요구라 대상이 아니다 |
-| MCP_ALLOW_AUTO_DCR_REGISTER | false | `true`로 설정 시 `/authorize`에서 미등록 `client_id`의 자동 등록 허용 (기존 동작). 기본 `false` — RFC 7591 `POST /register` 엔드포인트 경유 강제 |
+| MCP_ALLOW_AUTO_DCR_REGISTER | false | `true`로 설정 시 `/authorize`에서 신뢰 목록(기본 신뢰 도메인, `OAUTH_TRUSTED_ORIGINS`, `OAUTH_ALLOWED_REDIRECT_URIS`, localhost)에 없는 `redirect_uri`를 가진 미등록 `client_id`의 자동 등록을 허용한다. 기본 `false`는 그 경우 `invalid_client`로 거부하고 RFC 7591 `POST /register` 경유를 요구한다. 신뢰 목록에 있는 `redirect_uri`는 이 값과 무관하게 자동 등록된다 |
 | OAUTH_ALLOWED_REDIRECT_URIS | (없음) | OAuth redirect_uri 정확 일치 허용 목록 (쉼표 구분). OAUTH_TRUSTED_ORIGINS와 별도로 동작 |
 | MEMENTO_DCR_MAX_PER_HOUR | 100 | `/register` 시간당 등록 상한 (프로세스 단위 고정 창). 초과하면 429와 `Retry-After: 3600`. `0`이면 상한 없음. 호출 시점에 읽는다 |
 | DEFAULT_DAILY_LIMIT | 10000 | API 키 생성 시 기본 일일 호출 한도 |
@@ -171,7 +172,7 @@
 
 #### LLM Provider Fallback Chain
 
-Gemini CLI 외 15개 provider로 자동 fallback 가능. 기본값에서 기존 동작 완전 보존.
+Gemini CLI 외 17개 provider로 자동 fallback 가능. 기본값에서 기존 동작 완전 보존.
 
 ##### 기본 설정
 
@@ -186,7 +187,7 @@ Gemini CLI 외 15개 provider로 자동 fallback 가능. 기본값에서 기존 
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| LLM_CB_FAILURE_THRESHOLD | 5 | 연속 실패 허용 횟수. 초과 시 해당 provider OPEN 상태 전환 |
+| LLM_CB_FAILURE_THRESHOLD | 5 | `LLM_CB_FAILURE_WINDOW_MS` 안의 실패가 이 횟수에 닿으면 해당 provider를 OPEN 상태로 전환한다. 성공하면 실패 기록이 초기화된다 |
 | LLM_CB_OPEN_DURATION_MS | 60000 | OPEN 지속 시간 (ms). 경과 후 자동 CLOSE |
 | LLM_CB_FAILURE_WINDOW_MS | 60000 | 실패 카운트 윈도우 (ms) |
 
@@ -227,7 +228,7 @@ REDIS_ENABLED=true면 Redis에 상태 저장, 아니면 in-memory.
 
 ##### 지원 Provider 목록
 
-gemini-cli, **agy-cli**, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai, **codex-cli**, **copilot-cli**, **qwen-cli**, **opencode-cli**
+gemini-cli, **agy-cli**, anthropic, openai, gemini, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai, **codex-cli**, **copilot-cli**, **qwen-cli**, **opencode-cli**
 
 **agy-cli**: Google Antigravity CLI(`agy`)를 `--print --output-format text --mode plan --sandbox` 제약으로 실행한다. AnchorMind의 LLM 변환은 JSON 응답만 사용하므로, provider는 파일 수정과 도구 승인을 하지 않는 plan/sandbox 경로만 사용한다. Antigravity 로그인과 `agy` 바이너리가 필요하며, `model`, `timeoutMs` 설정은 실제 CLI 호출에 전달된다:
 ```json
@@ -243,7 +244,7 @@ macOS launchd로 서버를 실행하는 경우 셸 프로필을 읽지 않으므
 [{"provider": "codex-cli", "model": "gpt-5.3-codex-spark"}]
 ```
 
-**copilot-cli**: GitHub Copilot CLI(`gh copilot suggest`)를 래퍼로 호출한다. `gh` CLI와 Copilot 구독이 필요하다:
+**copilot-cli**: GitHub Copilot CLI(`copilot -p <프롬프트> --output-format text`)를 래퍼로 호출한다. `copilot` 바이너리와 Copilot 구독이 필요하다:
 ```json
 [{"provider": "copilot-cli"}]
 ```
@@ -273,7 +274,7 @@ OAuth 토큰 TTL은 세션 TTL과 연동된다.
 | 환경변수 | 기본값 | 설명 |
 |----------|--------|------|
 | OAUTH_ACCESS_TOKEN_TTL_SECONDS | (없음) | OAuth 액세스 토큰 TTL (초, 양의 정수). 미설정이면 `SESSION_TTL_MINUTES * 60`(기본 2592000, 30일). 리프레시 토큰 TTL에는 영향 없음 |
-| OAUTH_REFRESH_TTL_SECONDS | 5184000 | OAuth 리프레시 토큰 TTL (초). `SESSION_TTL_MINUTES * 60 * 2`. 기본값 60일 |
+| OAUTH_REFRESH_TTL_SECONDS | 5184000 | OAuth 리프레시 토큰 TTL (초). 환경 변수로 읽지 않고 `SESSION_TTL_MINUTES * 60 * 2`로 정해진다. 기본값 60일 |
 
 슬라이딩 윈도우: OAuth 인증된 요청이 들어올 때마다 해당 액세스 토큰의 Redis TTL을 `OAUTH_TOKEN_TTL_SECONDS`로 재설정한다. 도구를 계속 사용하는 한 토큰이 만료되지 않는다.
 
@@ -287,6 +288,7 @@ MEMENTO_CORS_MODE=allowlist
 MEMENTO_FRAME_OPTIONS=deny
 MEMENTO_OAUTH_REDIRECT_CHECK=enforce
 MEMENTO_SSE_QUERY_KEY=deny
+MEMENTO_TOOL_ARGS_VALIDATION=enforce
 ```
 
 - `ALLOWED_ORIGINS`에는 서비스 자신의 origin만 둔다. 설정하면 목록 밖 Origin을 가진 요청은 403으로 끝나므로, 브라우저에서 쓰는 관리 화면의 origin이 목록에 있어야 한다. 목록을 두지 않고 `MEMENTO_CORS_MODE=allowlist`만 쓰면 기본 신뢰 도메인 밖 Origin의 응답에는 `Access-Control-Allow-Origin`이 붙지 않는다(요청 자체는 처리된다).
@@ -373,7 +375,7 @@ POSTGRES_* 접두어가 DB_* 접두어보다 우선한다. 두 형식을 혼용�
 |------|--------|------|
 | OPENAI_API_KEY | (없음) | OpenAI API 키. `EMBEDDING_PROVIDER=openai` 시 사용 |
 | EMBEDDING_PROVIDER | openai | 임베딩 provider. `openai` \| `gemini` \| `ollama` \| `localai` \| `cloudflare` \| `custom` \| `transformers` |
-| EMBEDDING_API_KEY | (없음) | 범용 임베딩 API 키. 미설정 시 `OPENAI_API_KEY` 사용 |
+| EMBEDDING_API_KEY | (없음) | 범용 임베딩 API 키. 미설정 시 `GEMINI_API_KEY`, `CF_API_TOKEN`(또는 `CLOUDFLARE_API_TOKEN`), `OPENAI_API_KEY` 순으로 사용 |
 | EMBEDDING_BASE_URL | (없음) | `EMBEDDING_PROVIDER=custom` 시 OpenAI 호환 엔드포인트 URL |
 | EMBEDDING_MODEL | (provider 기본값) | 사용할 임베딩 모델. 생략 시 provider별 기본값 자동 적용 |
 | EMBEDDING_DIMENSIONS | (provider 기본값) | 임베딩 벡터 차원 수. DB 스키마의 vector 차원과 일치해야 한다 |
@@ -472,7 +474,9 @@ export const MEMORY_CONFIG = {
   },
   rrfSearch: {
     k             : 60,   // RRF 분모 상수. 값이 클수록 상위 랭크 의존도 완화
-    l1WeightFactor: 2.0   // L1 Redis 결과에 곱하는 가중치 배수 (최우선 주입)
+    l1WeightFactor: 2.0,  // L1 Redis 결과에 곱하는 가중치 배수 (최우선 주입)
+    graphWeightFactor     : 1.5,  // L2.5 그래프 이웃 결과 가중치 배수
+    candidateMinImportance: 0.1   // 비앵커 RRF 후보의 중요도 하한
   },
   linkedFragmentLimit: 10,  // recall의 includeLinks 시 1-hop 연결 파편 최대 수
   embeddingWorker: {
@@ -486,6 +490,7 @@ export const MEMORY_CONFIG = {
     maxCoreFragments   : 15,     // Core Memory 최대 파편 수
     maxWmFragments     : 10,     // Working Memory 최대 파편 수
     typeSlots          : {       // 유형별 최대 슬롯
+      learning   : 3,
       preference : 5,
       error      : 5,
       procedure  : 5,
@@ -519,7 +524,7 @@ export const MEMORY_CONFIG = {
   },
   reflectionPolicy: {
     maxAgeDays       : 30,       // session_reflect 파편 삭제 기준 (일)
-    maxImportance    : 0.3,      // 이 값 미만이면 삭제 대상
+    maxImportance    : 0.55,     // 이 값 미만이면 삭제 대상
     keepPerType      : 5,        // type별 최신 N개 보존
     maxDeletePerCycle: 30        // 1회 최대 삭제 건수
   },
@@ -547,14 +552,14 @@ importanceWeight + recencyWeight + semanticWeight의 합은 1.0이어야 한다.
 
 | 키 | ENV | 기본값 | 설명 |
 |-|-|-|-|
-| `mode` | `MEMENTO_PROACTIVE_RECALL_MODE` | `"auto"` | `"auto"`: 조건 충족 시 자동 실행. `"off"`: 비활성화 |
+| `mode` | `MEMENTO_PROACTIVE_RECALL_MODE` | `"auto"` | `"auto"`: 조건 충족 시 자동 실행. `"legacy"`: 키워드 겹침 기준만으로 링크를 만들고 workspace 불일치만 제외(symbolic gate와 caseIdPolicy 미적용). `"off"`: 비활성화 |
 | `keywordOverlapMin` | `MEMENTO_PROACTIVE_KW_OVERLAP_MIN` | `0.5` | 키워드 중복 비율 하한. 저장 파편과 후보 파편 간 공통 키워드 비율이 이 값 이상이어야 링크 생성 대상이 됨 |
-| `requireSameWorkspace` | — | `true` | workspace가 다른 파편은 ProactiveRecall 대상에서 제외 |
-| `caseIdPolicy` | `MEMENTO_PROACTIVE_CASE_POLICY` | `"strict-or-adjacent"` | `"both-required"`: 두 파편 모두 동일 case_id 필요. `"strict-or-adjacent"`: 동일 case_id 또는 adjacencyWindowMs 이내 다른 케이스 허용. `"loose"`: case_id 불일치 시도 허용 |
-| `adjacencyWindowMs` | — | `86400000` (24h) | `"strict-or-adjacent"` 정책에서 인접 케이스 허용 시간 범위 (ms) |
-| `requireSameTopicOrType` | — | `false` | true 설정 시 topic 또는 type이 동일한 파편끼리만 링크 |
+| `requireSameWorkspace` | - | `true` | workspace가 다른 파편은 ProactiveRecall 대상에서 제외 |
+| `caseIdPolicy` | `MEMENTO_PROACTIVE_CASE_POLICY` | `"strict-or-adjacent"` | `"both-required"`: 두 파편 모두 동일 case_id 필요. `"strict-or-adjacent"`: 두 파편이 모두 case_id를 가지면 일치해야 하고(불일치는 `cohort_mismatch`), 한쪽이라도 없으면 sessionId 동일, adjacencyWindowMs 이내, workspace 동일 중 하나를 요구한다. `"loose"`: case_id 불일치 시도 허용 |
+| `adjacencyWindowMs` | - | `86400000` (24h) | `"strict-or-adjacent"` 정책에서 인접 케이스 허용 시간 범위 (ms) |
+| `requireSameTopicOrType` | - | `false` | 설정값만 있고 현재 이 값을 읽는 처리는 없다 |
 
-`proactive-gate.js` symbolic 게이트는 `workspace_mismatch`와 `case_policy` 차단 사유를 평가하며, `MEMENTO_SYMBOLIC_PROACTIVE_GATE=true` 환경변수로 활성화된다. proactiveRecall 블록의 caseIdPolicy와 keywordOverlapMin은 런타임 중 환경변수로 변경 가능하다 — 서버 재시작 없이 MEMENTO_PROACTIVE_CASE_POLICY 값을 갱신하면 다음 호출부터 즉시 반영된다. proactiveRecall 비활성화는 mode를 `"off"`로 설정한다.
+`proactive-gate.js` symbolic 게이트는 `workspace_mismatch`와 `case_policy` 차단 사유를 평가하며, `MEMENTO_SYMBOLIC_ENABLED=true`와 `MEMENTO_SYMBOLIC_PROACTIVE_GATE=true`가 모두 설정됐을 때 `auto` 모드에서 실행된다. proactiveRecall 블록의 caseIdPolicy와 keywordOverlapMin은 런타임 중 환경변수로 변경 가능하다. 서버 재시작 없이 MEMENTO_PROACTIVE_CASE_POLICY 값을 갱신하면 다음 호출부터 즉시 반영된다. proactiveRecall 비활성화는 mode를 `"off"`로 설정한다.
 
 ### consolidate.schemaFit
 
@@ -1097,6 +1102,15 @@ EMBEDDING_DIMENSIONS=768
 | 037 | migration-037-hnsw-index-rename.sql | HNSW 인덱스명 정합화 (idx_frag_embedding), ef_construction=128 적용 |
 | 038 | migration-038-fragment-versions-case-fields.sql | `fragment_versions`에 `resolution_status`·`outcome`·`phase` 컬럼 추가. amend 직전 케이스 상태를 이력에 보존 |
 | 039 | migration-039-feedback-instrumentation.sql | `task_feedback`에 `outcome`·`evaluator`·`evidence`·`unmet_requirements` 컬럼 + `outcome`·`evaluator` CHECK 제약, `tool_feedback`에 `irrelevance_reason` 컬럼 + CHECK 제약 + partial index `idx_tf_irrelevance`. 기존 행은 백필하지 않으므로 NULL이 "미보고"를 뜻한다 |
+| 040 | migration-040-workspace-audit-columns.sql | `fragments.workspace_source TEXT`(explicit / key_default / inferred / unscoped CHECK, NULL은 미기록), `fragments.quality_rationale TEXT` |
+| 041 | migration-041-workspace-backfill-inference.sql | `fragments.workspace_inferred`, `inference_confidence`(0.0~1.0 CHECK), `backfill_batch_id`. 추론 결과를 workspace 컬럼과 분리해 기록 |
+| 042 | migration-042-api-keys-allowed-workspaces.sql | `api_keys.allowed_workspaces TEXT[]`. NULL은 무제한, 빈 배열은 workspace 주장 전면 차단 |
+| 043 | migration-043-fragment-synthetic-query.sql | `fragment_synthetic_query` 표(합성 역질의와 임베딩, HNSW 인덱스, 에이전트 격리 정책) |
+| 044 | migration-044-idempotency-records.sql | `idempotency_records` 표(`amend`, `tool_feedback`의 재시도 응답 기록, 기본 7일 만료) |
+| 045 | migration-045-fragment-rls.sql | `fragments`, `fragment_links`에 RLS ENABLE와 격리 정책. `FORCE ROW LEVEL SECURITY`는 적용하지 않음 |
+| 047 | migration-047-agent-scope-audit.sql | `search_events.effective_agent_scope`, `include_peer_agents`, `fragment_versions`와 `case_events`의 `agent_id`, `workspace` snapshot 컬럼 |
+| 048 | migration-048-case-events-case-closed.sql | `case_events.event_type` CHECK에 `case_closed` 추가 |
+| 049 | migration-049-align-synthetic-query-embedding.sql | 이력 표식. `fragment_synthetic_query.embedding` 차원을 `fragments.embedding`에 맞추는 DDL은 `scripts/migrate.js`가 번호 마이그레이션 뒤에 적용 |
 
 ---
 
@@ -1112,7 +1126,7 @@ EMBEDDING_DIMENSIONS=768
 |--------|------|------------------------|----------------|
 | `recall-only` | 읽기 전용. 쓰기 도구 차단 | remember, batch_remember, amend, forget, link, reflect, memory_consolidate | 읽기 권한만 부여된 공유 API 키, 조회 전용 대시보드 연동 |
 | `write-only` | 쓰기 전용. 검색 도구 차단 | recall, context, reconstruct_history, graph_explore, fragment_history, search_traces, memory_stats | CI/크론 잡에서 결과만 기록할 때. 불필요한 조회 도구 노출 없이 토큰 소비 최소화 |
-| `onboarding` | 신규 사용자 안내. 모든 도구 노출 + 초심자 가이드 주입 | (없음 — excluded_tools: []) | 파편 수 50개 이하일 때 자동 진입. 50개 초과 시 일반 모드로 자동 전환 |
+| `onboarding` | 신규 사용자 안내. 모든 도구 노출 + 초심자 가이드 주입 | (없음, excluded_tools: []) | 신규 사용자 세션. 헤더, initialize 파라미터, 키 기본값으로 지정한다 |
 | `audit` | 감사/컴플라이언스. master key 전용. 쓰기 전체 차단 | remember, batch_remember, amend, forget, link, reflect | 운영 감사, 히스토리 재구성, 메모리 통계 조회 전용. `requiresMaster: true` |
 
 각 preset의 `fixed_tools`(명시 노출 목록), `skill_guide_override`(도구 안내 오버라이드), `requiresMaster` 필드는 `lib/memory/modes/<preset>.json`에 정의되어 있다.

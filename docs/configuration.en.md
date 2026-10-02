@@ -12,7 +12,7 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 |-|-|
 | Integer, 0 or more | CACHE_DB_TTL, CACHE_SESSION_TTL, DB_CONN_TIMEOUT_MS, DB_IDLE_TIMEOUT_MS, DB_QUERY_TIMEOUT, DB_STATEMENT_TIMEOUT_MS, EMBEDDING_MAX_RETRIES, EMBEDDING_SEM_WAIT_MS, HEADERS_TIMEOUT_MS, KEEP_ALIVE_TIMEOUT_MS, LLM_CB_OPEN_DURATION_MS, LLM_CHAIN_TIMEOUT_MS, LLM_CONCURRENCY_WAIT_MS, LLM_PROVIDER_TIMEOUT_MS, LLM_TOKEN_BUDGET_INPUT, LLM_TOKEN_BUDGET_OUTPUT, QUOTA_NEAR_LIMIT_MARGIN, REDIS_DB, REQUEST_TIMEOUT_MS, RERANKER_EXTERNAL_COOLDOWN_MS, SSE_RETRY_MS, TRUST_PROXY_HOPS |
 | Number, 0 or more | MCP_IDLE_REFLECT_HOURS, UPDATE_CHECK_INTERVAL_HOURS |
-| Integer, 1 or more | DEFAULT_DAILY_LIMIT, DEFAULT_FRAGMENT_LIMIT, FRAGMENT_DEFAULT_LIMIT, EMBEDDING_CONCURRENCY, EMBEDDING_DIMENSIONS, EMBEDDING_TIMEOUT_MS, LLM_CB_FAILURE_THRESHOLD, LLM_CB_FAILURE_WINDOW_MS, LLM_TOKEN_BUDGET_WINDOW_SEC, NLI_TIMEOUT_MS, RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, RATE_LIMIT_WINDOW_MS, RERANKER_TIMEOUT_MS, SESSION_TTL_MINUTES |
+| Integer, 1 or more | DEFAULT_DAILY_LIMIT, DEFAULT_FRAGMENT_LIMIT, FRAGMENT_DEFAULT_LIMIT, EMBEDDING_CONCURRENCY, EMBEDDING_DIMENSIONS, EMBEDDING_TIMEOUT_MS, LLM_CB_FAILURE_THRESHOLD, LLM_CB_FAILURE_WINDOW_MS, LLM_TOKEN_BUDGET_WINDOW_SEC, NLI_TIMEOUT_MS, RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, RATE_LIMIT_WINDOW_MS, RERANKER_TIMEOUT_MS, SESSION_TTL_MINUTES, SSE_MAX_HEARTBEAT_FAILURES |
 | Integer, 2 or more | DB_MAX_CONNECTIONS |
 | Integer, 1000 or more | SSE_HEARTBEAT_INTERVAL_MS |
 | Integer, 1 to 65535 | POSTGRES_PORT, DB_PORT, REDIS_PORT |
@@ -27,6 +27,7 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | inner, outer (any other value is inner) | MEMENTO_SEMANTIC_THRESHOLD_MODE |
 | none, all (any other value is none) | MEMENTO_LLM_CLI_TOOL_APPROVAL |
 | true, false (any other value is false) | MEMENTO_CONFIG_STRICT |
+| true, false (any other value fails startup in `MEMORY_CONFIG` validation) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (any other value is off) | MEMENTO_ADMIN_AUTH_BACKOFF |
 | true, false (any value other than false is true) | MEMENTO_API_KEY_DELETE_GUARD |
 | true, false (any value other than true is false) | MEMENTO_REMEMBER_DUPLICATE_GUARD |
@@ -77,7 +78,7 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | MCP_REJECT_NONAPIKEY_OAUTH | true | The default `true` rejects authentication with `is_api_key=false` OAuth tokens. `false` permits that authentication only and never grants master privileges. OAuth sessions without an API-key binding receive `-32001` on tool calls. API-key-based OAuth tokens (`is_api_key=true`) and direct Bearer ACCESS_KEY use are unaffected |
 | MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS | 401 | Response status for MCP `initialize` and session auto-recovery when an `api_keys` lookup failed and authentication could not be decided. `401` (default) matches the invalid-key response, and session recovery answers 404. `503` adds `Retry-After: 10`. Master key authentication does not depend on the store. Lookup failures are counted in `mcp_auth_store_errors_total{operation}` and `memento_auth_denied_total{reason="store_unavailable"}` |
 | MEMENTO_SESSION_ID_POLICY | warn | How MCP session ids are received. `warn` (default): a session id received in the query string (`?sessionId=`, `?mcp-session-id=`) and auto-recovery of an id that is not in the server-issued format (UUID) are logged as `[Session] session id received in query string` and `recovery requested for non-issued id format` warnings and processed normally. `enforce`: a query-string id gets 400, and recovery of a non-UUID id gets 404. UUID sessions sent in the `MCP-Session-Id` header are unaffected by either value. Session ids in logs and the reflect prompt show only the first 8 characters. Sessions recovered with a client-chosen id during the `warn` period keep working after the switch to `enforce` until they expire. Legacy `/message?sessionId=` is required by the protocol and is not covered |
-| MCP_ALLOW_AUTO_DCR_REGISTER | false | Set to `true` to allow auto-registration of unregistered `client_id` in `/authorize` (legacy behavior). Default `false` — enforces RFC 7591 `POST /register` endpoint for client registration |
+| MCP_ALLOW_AUTO_DCR_REGISTER | false | Set to `true` to allow `/authorize` to auto-register an unregistered `client_id` whose `redirect_uri` is not in the trusted list (default trusted origins, `OAUTH_TRUSTED_ORIGINS`, `OAUTH_ALLOWED_REDIRECT_URIS`, localhost). The default `false` rejects that case with `invalid_client` and requires RFC 7591 `POST /register`. A `redirect_uri` in the trusted list is registered automatically regardless of this value |
 | OAUTH_ALLOWED_REDIRECT_URIS | (none) | OAuth redirect_uri exact-match allowed list (comma-separated). Operates independently of OAUTH_TRUSTED_ORIGINS |
 | MEMENTO_DCR_MAX_PER_HOUR | 100 | Hourly cap on `/register` (fixed window, per process). Above the cap the response is 429 with `Retry-After: 3600`. `0` disables the cap. Read at call time |
 | DEFAULT_DAILY_LIMIT | 10000 | Default daily call limit when creating API keys |
@@ -176,7 +177,7 @@ The `api_keys.symbolic_hard_gate` column (migration-033) enables per-key hard ga
 
 #### LLM Provider Fallback Chain
 
-Automatic fallback to 15 providers beyond Gemini CLI. Existing behavior is fully preserved with default settings.
+Automatic fallback to 17 providers beyond Gemini CLI. Existing behavior is fully preserved with default settings.
 
 ##### Basic Configuration
 
@@ -191,7 +192,7 @@ Automatic fallback to 15 providers beyond Gemini CLI. Existing behavior is fully
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| LLM_CB_FAILURE_THRESHOLD | 5 | Consecutive failure tolerance. Exceeding this threshold transitions the provider to OPEN state |
+| LLM_CB_FAILURE_THRESHOLD | 5 | The provider moves to OPEN state when failures within `LLM_CB_FAILURE_WINDOW_MS` reach this count. A success clears the failure record |
 | LLM_CB_OPEN_DURATION_MS | 60000 | OPEN state duration (ms). Automatically transitions to CLOSED after this interval |
 | LLM_CB_FAILURE_WINDOW_MS | 60000 | Failure count window (ms) |
 
@@ -232,7 +233,7 @@ The default slot limit for providers not listed is 10. When `LLM_CONCURRENCY` is
 
 ##### Supported Providers
 
-gemini-cli, **agy-cli**, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai, **codex-cli**, **copilot-cli**, **qwen-cli**, **opencode-cli**
+gemini-cli, **agy-cli**, anthropic, openai, gemini, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai, **codex-cli**, **copilot-cli**, **qwen-cli**, **opencode-cli**
 
 **agy-cli**: Runs Google Antigravity CLI (`agy`) with `--print --output-format text --mode plan --sandbox`. AnchorMind uses the provider only for JSON transformations, so the CLI is constrained from editing files or approving tool calls. Antigravity authentication and the `agy` binary are required; `model` and `timeoutMs` are passed to the CLI invocation:
 ```json
@@ -248,7 +249,7 @@ On macOS launchd deployments, shell profiles are not loaded. Add `~/.local/bin` 
 [{"provider": "codex-cli", "model": "gpt-5.3-codex-spark"}]
 ```
 
-**copilot-cli**: Wraps GitHub Copilot CLI (`gh copilot suggest`). Requires `gh` CLI and a Copilot subscription:
+**copilot-cli**: Wraps GitHub Copilot CLI (`copilot -p <prompt> --output-format text`). Requires the `copilot` binary and a Copilot subscription:
 ```json
 [{"provider": "copilot-cli"}]
 ```
@@ -263,6 +264,10 @@ On macOS launchd deployments, shell profiles are not loaded. Add `~/.local/bin` 
 
 This value is passed to the `geminiCLIJson(userPrompt, { timeoutMs: cfg.geminiTimeoutMs })` call inside `MorphemeIndex._tokenizeViaLLM()`, which is invoked only when `MEMENTO_MORPHEME_TOKENIZER=llm`. With the default setting (`MEMENTO_MORPHEME_TOKENIZER=local`), the local analyzer (MorphemeTokenizer) is used and this value is not referenced. When the LLM path fails, no morphemes are extracted and the L3 morpheme search path degrades gracefully via `_fallbackTokenize`.
 
+**Morpheme auxiliary search (morphemeIndex.minSimilarity / fallbackThreshold / fallbackLimit)**: An auxiliary search based on the morpheme mean vector runs in parallel with L3 semantic search. Morpheme mean vectors have systematically lower cosine similarity than sentence embeddings, so a dedicated threshold `morphemeIndex.minSimilarity` (default 0.15) is used instead of reusing `semanticSearch.minSimilarity` (default 0.4). The auxiliary results are adopted only when the default L3 result count is at or below `fallbackThreshold` (default 5), and up to `fallbackLimit` (default 5) of them are merged. The probe itself runs in parallel, so whether it is adopted does not affect response latency.
+
+**GEMINI_TIMEOUT_MS**: The LLM chain call timeout in `lib/memory/processors/AutoReflect.js` is fixed at 30,000 ms (the `GEMINI_TIMEOUT_MS = 30_000` code constant, with no `process.env` reference). Changing it requires editing the constant in that file. It is separate from `geminiTimeoutMs` in MorphemeIndex (config/memory.js, default 60000).
+
 **buildChain ordering logic** (`lib/llm/index.js` `buildChain()`): An entries array is constructed from `LLM_PRIMARY` followed by `LLM_FALLBACKS` in declaration order. A `seen` Set removes duplicate providers, and each provider's `isAvailable()` check determines whether it is included in the chain. If `LLM_PRIMARY` also appears in `LLM_FALLBACKS`, the fallback config object takes precedence. A provider that fails `isAvailable()` is excluded from the chain and the next provider is tried immediately. The resulting chain order corresponds 1:1 with the env variable declaration order.
 
 For detailed operational guidance, see `docs/operations/llm-providers.md`.
@@ -274,7 +279,7 @@ OAuth token TTLs are linked to the session TTL.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | OAUTH_ACCESS_TOKEN_TTL_SECONDS | (unset) | OAuth access token TTL (seconds, positive integer). When unset, `SESSION_TTL_MINUTES * 60` (default 2592000, 30 days). Does not change the refresh token TTL |
-| OAUTH_REFRESH_TTL_SECONDS | 5184000 | OAuth refresh token TTL (seconds). `SESSION_TTL_MINUTES * 60 * 2`. Default 60 days |
+| OAUTH_REFRESH_TTL_SECONDS | 5184000 | OAuth refresh token TTL (seconds). Not read from the environment; it is set to `SESSION_TTL_MINUTES * 60 * 2`. Default 60 days |
 
 Sliding window: each time an OAuth-authenticated request arrives, the Redis TTL for that access token is reset to `OAUTH_TOKEN_TTL_SECONDS`. The token never expires as long as tools continue to be used.
 
@@ -288,6 +293,7 @@ MEMENTO_CORS_MODE=allowlist
 MEMENTO_FRAME_OPTIONS=deny
 MEMENTO_OAUTH_REDIRECT_CHECK=enforce
 MEMENTO_SSE_QUERY_KEY=deny
+MEMENTO_TOOL_ARGS_VALIDATION=enforce
 ```
 
 - Put only the service's own origin in `ALLOWED_ORIGINS`. When it is set, requests carrying an Origin outside the list end with 403, so the origin of the browser-based admin console must be in the list. Using `MEMENTO_CORS_MODE=allowlist` without a list omits `Access-Control-Allow-Origin` for Origins outside the default trusted domains (the request itself is still processed).
@@ -374,7 +380,7 @@ This feature operates asynchronously only when `REDIS_ENABLED=true`. When `REDIS
 |----------|---------|-------------|
 | OPENAI_API_KEY | (none) | OpenAI API key. Used when `EMBEDDING_PROVIDER=openai` |
 | EMBEDDING_PROVIDER | openai | Embedding provider. `openai` \| `gemini` \| `ollama` \| `localai` \| `cloudflare` \| `custom` \| `transformers` |
-| EMBEDDING_API_KEY | (none) | Generic embedding API key. Falls back to `OPENAI_API_KEY` when unset |
+| EMBEDDING_API_KEY | (none) | Generic embedding API key. When unset, `GEMINI_API_KEY`, `CF_API_TOKEN` (or `CLOUDFLARE_API_TOKEN`), then `OPENAI_API_KEY` are used in that order |
 | EMBEDDING_BASE_URL | (none) | OpenAI-compatible endpoint URL when `EMBEDDING_PROVIDER=custom` |
 | EMBEDDING_MODEL | (provider default) | Embedding model to use. Provider-specific default applied when omitted |
 | EMBEDDING_DIMENSIONS | (provider default) | Embedding vector dimensions. Must match the DB schema's vector dimension |
@@ -444,7 +450,9 @@ export const MEMORY_CONFIG = {
   },
   rrfSearch: {
     k             : 60,   // RRF denominator constant. Larger values reduce top-rank dependency
-    l1WeightFactor: 2.0   // Weight multiplier for L1 Redis results (highest priority injection)
+    l1WeightFactor: 2.0,  // Weight multiplier for L1 Redis results (highest priority injection)
+    graphWeightFactor     : 1.5,  // Weight multiplier for L2.5 graph neighbor results
+    candidateMinImportance: 0.1   // Importance floor for non-anchor RRF candidates
   },
   linkedFragmentLimit: 10,  // Max 1-hop linked fragments on recall with includeLinks
   embeddingWorker: {
@@ -458,6 +466,7 @@ export const MEMORY_CONFIG = {
     maxCoreFragments   : 15,     // Core Memory max fragment count
     maxWmFragments     : 10,     // Working Memory max fragment count
     typeSlots          : {       // Per-type max slots
+      learning   : 3,
       preference : 5,
       error      : 5,
       procedure  : 5,
@@ -486,7 +495,7 @@ export const MEMORY_CONFIG = {
   },
   reflectionPolicy: {
     maxAgeDays       : 30,       // session_reflect fragment deletion threshold (days)
-    maxImportance    : 0.3,      // Below this = deletion candidate
+    maxImportance    : 0.55,     // Below this = deletion candidate
     keepPerType      : 5,        // Keep latest N per type
     maxDeletePerCycle: 30        // Max deletions per cycle
   },
@@ -514,14 +523,14 @@ Post-processing settings for the automatic link creation that runs immediately a
 
 | Key | ENV | Default | Description |
 |-|-|-|-|
-| `mode` | `MEMENTO_PROACTIVE_RECALL_MODE` | `"auto"` | `"auto"`: runs automatically when conditions are met. `"off"`: disabled |
+| `mode` | `MEMENTO_PROACTIVE_RECALL_MODE` | `"auto"` | `"auto"`: runs automatically when conditions are met. `"legacy"`: links by keyword overlap alone and only skips workspace mismatches (symbolic gate and caseIdPolicy are not applied). `"off"`: disabled |
 | `keywordOverlapMin` | `MEMENTO_PROACTIVE_KW_OVERLAP_MIN` | `0.5` | Minimum keyword overlap ratio. The ratio of common keywords between the stored fragment and a candidate must reach this threshold for a link to be created |
-| `requireSameWorkspace` | — | `true` | Fragments from a different workspace are excluded from ProactiveRecall |
-| `caseIdPolicy` | `MEMENTO_PROACTIVE_CASE_POLICY` | `"strict-or-adjacent"` | `"both-required"`: both fragments must share the same case_id. `"strict-or-adjacent"`: same case_id or a different case within adjacencyWindowMs. `"loose"`: case_id mismatches are allowed |
-| `adjacencyWindowMs` | — | `86400000` (24h) | Time window (ms) within which a different case is considered adjacent under the `"strict-or-adjacent"` policy |
-| `requireSameTopicOrType` | — | `false` | When true, only fragments sharing the same topic or type are eligible for linking |
+| `requireSameWorkspace` | - | `true` | Fragments from a different workspace are excluded from ProactiveRecall |
+| `caseIdPolicy` | `MEMENTO_PROACTIVE_CASE_POLICY` | `"strict-or-adjacent"` | `"both-required"`: both fragments must share the same case_id. `"strict-or-adjacent"`: when both fragments have a case_id they must match (a mismatch is `cohort_mismatch`), and when either lacks one it requires the same sessionId, creation within adjacencyWindowMs, or the same workspace. `"loose"`: case_id mismatches are allowed |
+| `adjacencyWindowMs` | - | `86400000` (24h) | Time window (ms) within which a different case is considered adjacent under the `"strict-or-adjacent"` policy |
+| `requireSameTopicOrType` | - | `false` | A setting only; nothing currently reads this value |
 
-The `proactive-gate.js` symbolic gate evaluates `workspace_mismatch` and `case_policy` block reasons. Activated by `MEMENTO_SYMBOLIC_PROACTIVE_GATE=true`.
+The `proactive-gate.js` symbolic gate evaluates `workspace_mismatch` and `case_policy` block reasons. It runs in `auto` mode only when both `MEMENTO_SYMBOLIC_ENABLED=true` and `MEMENTO_SYMBOLIC_PROACTIVE_GATE=true` are set.
 
 ### consolidate.schemaFit
 
@@ -1013,6 +1022,15 @@ Run `npm run migrate` to execute unapplied migrations in order. History is manag
 | 037 | migration-037-hnsw-index-rename.sql | Aligns the HNSW index name (idx_frag_embedding), applies ef_construction=128 |
 | 038 | migration-038-fragment-versions-case-fields.sql | Adds `resolution_status`, `outcome`, and `phase` to `fragment_versions`, preserving the pre-amend case state in history |
 | 039 | migration-039-feedback-instrumentation.sql | Adds `outcome`, `evaluator`, `evidence`, `unmet_requirements` (+ CHECK constraints on `outcome` and `evaluator`) to `task_feedback` and `irrelevance_reason` (+ CHECK constraint and partial index `idx_tf_irrelevance`) to `tool_feedback`. Existing rows are not backfilled, so NULL means "unreported" |
+| 040 | migration-040-workspace-audit-columns.sql | `fragments.workspace_source TEXT` (CHECK explicit / key_default / inferred / unscoped, NULL means not recorded), `fragments.quality_rationale TEXT` |
+| 041 | migration-041-workspace-backfill-inference.sql | `fragments.workspace_inferred`, `inference_confidence` (0.0 to 1.0 CHECK), `backfill_batch_id`. Records inference results separately from the workspace column |
+| 042 | migration-042-api-keys-allowed-workspaces.sql | `api_keys.allowed_workspaces TEXT[]`. NULL is unlimited, an empty array blocks every workspace claim |
+| 043 | migration-043-fragment-synthetic-query.sql | `fragment_synthetic_query` table (synthetic queries and embeddings, HNSW index, agent isolation policy) |
+| 044 | migration-044-idempotency-records.sql | `idempotency_records` table (retry responses of `amend` and `tool_feedback`, default 7-day expiry) |
+| 045 | migration-045-fragment-rls.sql | Enables RLS and isolation policies on `fragments` and `fragment_links`. `FORCE ROW LEVEL SECURITY` is not applied |
+| 047 | migration-047-agent-scope-audit.sql | `search_events.effective_agent_scope`, `include_peer_agents`, and `agent_id`, `workspace` snapshot columns on `fragment_versions` and `case_events` |
+| 048 | migration-048-case-events-case-closed.sql | Adds `case_closed` to the `case_events.event_type` CHECK |
+| 049 | migration-049-align-synthetic-query-embedding.sql | History marker. The DDL that aligns the `fragment_synthetic_query.embedding` dimension with `fragments.embedding` is applied by `scripts/migrate.js` after the numbered migrations |
 
 ---
 
@@ -1028,7 +1046,7 @@ Locks the session operation scope to a preset. Three configuration paths are ava
 |--------|-------------|-------------------------------|---------------------|
 | `recall-only` | Read-only. Write tools blocked | remember, batch_remember, amend, forget, link, reflect, memory_consolidate | Shared API keys with read-only grants; read-only dashboard integrations |
 | `write-only` | Write-only. Search tools blocked | recall, context, reconstruct_history, graph_explore, fragment_history, search_traces, memory_stats | CI/cron jobs that only record results. Minimizes token consumption by hiding unnecessary retrieval tools |
-| `onboarding` | New-user guidance. All tools exposed + beginner guide injected | (none — excluded_tools: []) | Auto-entered when fragment count is below 50; automatically transitions to normal mode once the threshold is exceeded |
+| `onboarding` | New-user guidance. All tools exposed + beginner guide injected | (none, excluded_tools: []) | A new-user session. Set through the header, the initialize parameter, or the key default |
 | `audit` | Audit/compliance. Master key only. All writes blocked | remember, batch_remember, amend, forget, link, reflect | Operational audits, history reconstruction, memory statistics. `requiresMaster: true` |
 
 Each preset's `fixed_tools` (explicit exposure list), `skill_guide_override` (tool guide override), and `requiresMaster` fields are defined in `lib/memory/modes/<preset>.json`.
