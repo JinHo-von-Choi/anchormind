@@ -72,7 +72,7 @@ CLI provider(`gemini-cli`, `agy-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`, `o
 | ollama | 16 |
 | openai\|https://token-plan-sgp.xiaomimimo.com/v1\|mimo-v2-pro | 8 |
 
-표에 없는 provider는 기본 10슬롯이다. `LLM_CONCURRENCY`는 기본값 위에 병합된다. `LLM_CONCURRENCY_ENABLED=false`로 세마포어 전체 우회 가능. 슬롯 대기 타임아웃은 `LLM_CONCURRENCY_WAIT_MS`(기본 30000ms).
+표에 없는 provider는 기본 10슬롯이다. `LLM_CONCURRENCY`는 기본값 위에 병합된다. `LLM_CONCURRENCY_ENABLED=false`로 세마포어 전체를 끌 수 있다. 슬롯 대기 타임아웃은 `LLM_CONCURRENCY_WAIT_MS`(기본 30000ms).
 
 재정의 예시:
 ```bash
