@@ -36,4 +36,10 @@ describe("CI 워크플로 배치", () => {
     assert.match(yml, /run: npm run audit:ci/);
     assert.match(yml, /^permissions:\s*\n\s+contents: read/m);
   });
+
+  it("시험 워크플로는 실제 DB 동시성 작업에서 npm run test:db 를 실행한다", () => {
+    assert.match(TEST_YML, /^\s{2}db-concurrency:\s*$/m);
+    assert.match(TEST_YML, /run: npm run test:db/);
+    assert.match(TEST_YML, /image: pgvector\/pgvector:pg15[\s\S]*run: npm run test:db/);
+  });
 });

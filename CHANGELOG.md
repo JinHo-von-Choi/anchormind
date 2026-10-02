@@ -19,6 +19,7 @@
 - `remember`의 `supersedes`는 호출한 키가 소유한 유효 파편에만 적용된다. 다른 키의 파편이나 이미 닫힌 파편은 링크 없이 경고 로그만 남긴다.
 - utility 점수와 중요도 하향 갱신은 저장값이 실제로 바뀌는 행만 기록한다.
 - 의존성 감사(`audit:ci`)는 별도 워크플로(`audit.yml`)에서 push, pull request, 매일 예약 실행으로 돈다. 단위 시험은 감사 결과와 무관하게 실행된다.
+- 실제 PostgreSQL에서 행 잠금 순서와 링크 일괄 생성의 `linked_to` 정합을 확인하는 `npm run test:db`와 CI 작업 `DB Concurrency (with DB)`를 추가한다. 이 작업은 결과를 보고만 한다.
 
 ## [5.12.0] - 2026-10-02
 

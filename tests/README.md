@@ -7,6 +7,7 @@
 | `tests/unit/` | `node --test` | 단위 테스트 — mock/stub 기반, DB 불필요 |
 | `tests/integration/` | `node --test` | 통합 테스트 — 실제 DB/Redis 연결 필요 |
 | `tests/e2e/` | `node --test` | E2E — 서버 프로세스 기동 후 HTTP 요청 |
+| `tests/db-concurrency/` | `node --test` | 실제 PostgreSQL 동시성. 행 잠금 순서, linked_to 정합 (`npm run test:db`) |
 
 ## Commands
 
@@ -15,6 +16,7 @@
 | `npm test` | unit 전체 (`tests/unit/*.test.js`, `tests/unit/**/*.test.js`) |
 | `npm run test:integration` | 통합 + e2e (DB/Redis 필요) |
 | `npm run test:e2e` | e2e만 |
+| `npm run test:db` | DB 동시성 시험만 (마이그레이션된 PostgreSQL 필요, POSTGRES_* 지정) |
 | `npm run test:ci` | 단위(test) + 통합·e2e(test:integration) — CI 단일 게이트 |
 | `DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false node --experimental-test-module-mocks --test tests/unit/<file>.test.js` | 단일 파일 실행 |
 

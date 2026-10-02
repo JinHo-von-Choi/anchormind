@@ -33,6 +33,7 @@
     "test:integration:llm": "MEMENTO_METRICS_DEFAULT=off node --test --test-concurrency=1 tests/integration/llm-cli-smoke.test.js tests/integration/llm-timeout.test.js tests/integration/morpheme-llm-real.test.js tests/integration/llm-chain-real.test.js",
     "test:e2e": "DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test --test-concurrency=1 tests/e2e/*.test.js",
     "test:e2e:local": "bash scripts/run-e2e-tests.sh",
+    "test:db": "DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false node --experimental-test-module-mocks --test --test-concurrency=1 tests/db-concurrency/*.test.js",
     "test:ci": "npm test && npm run test:integration",
     "lint": "eslint .",
     "lint:ratchet": "node scripts/lint-ratchet.js",

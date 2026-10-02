@@ -60,11 +60,12 @@ npm run test:integration:llm
 | `npm run test:ci` | `npm test && npm run test:integration`. 로컬 일괄 실행용 (DB 필요). CI는 아래 워크플로 작업으로 나눠 돈다 |
 | `npm run test:integration:llm` | 실제 LLM CLI 통합 시험 4종 순차 실행 |
 | `npm run test:e2e:local` | `scripts/run-e2e-tests.sh`로 테스트 DB를 띄운 뒤 e2e 실행 |
+| `npm run test:db` | tests/db-concurrency. 마이그레이션된 PostgreSQL에서 파편 행 잠금 순서(교착 0건)와 링크 일괄 생성의 `linked_to` 정합 확인. POSTGRES_* 환경변수로 DB 지정, DB가 없으면 건너뛰지 않고 실패. `npm test`에는 포함되지 않음 |
 | `npm run lint` | eslint 전체 |
 | `npm run audit:ci` | 런타임 의존성 audit-ci 검사 |
 | `npm run lint:migrations` | migration SQL body-only 규약 검사 (MIGRATION_LINT_FROM 기준) |
 
-CI(.github/workflows/test.yml): `unit` 작업(lint, lint:migrations, npm test, 외부 서비스 없는 통합시험), 별도 워크플로 `.github/workflows/audit.yml`(push, pull_request, 매일 예약 실행에서 `audit:ci`), `runtime-matrix` 작업(Node 20/22/24에서 모듈 적재와 키 미설정 기동 거부 확인), `e2e` 작업(pgvector/pgvector:pg15, migrate 후 test:e2e). 로컬 임베딩 e2e는 e2e-local-embed.yml이 맡는다.
+CI(.github/workflows/test.yml): `unit` 작업(lint, lint:migrations, npm test, 외부 서비스 없는 통합시험), 별도 워크플로 `.github/workflows/audit.yml`(push, pull_request, 매일 예약 실행에서 `audit:ci`), `runtime-matrix` 작업(Node 20/22/24에서 모듈 적재와 키 미설정 기동 거부 확인), `e2e` 작업(pgvector/pgvector:pg15, migrate 후 test:e2e). `db-concurrency` 작업(같은 DB 구성에서 test:db, `continue-on-error`로 결과만 보고하며 결과 요약은 `GITHUB_STEP_SUMMARY`에 남음). 로컬 임베딩 e2e는 e2e-local-embed.yml이 맡는다.
 
 ---
 
