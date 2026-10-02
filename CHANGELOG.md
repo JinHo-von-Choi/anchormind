@@ -7,6 +7,11 @@
 - 런타임 의존성 `moment`를 2.31.0으로 올렸다.
 - `initialize`의 협상 프로토콜 버전은 항상 지원 목록(2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05) 중 하나다. YYYY-MM-DD 형식이 아닌 값은 가장 오래된 지원 버전으로, 목록 사이의 날짜는 그 이하의 가장 가까운 지원 버전으로 협상한다. `mcp_protocol_version_negotiations_total`의 `requested_version`, `negotiated_version`과 `mcp_protocol_version_reanchored_total`의 `from`, `to` 라벨 값은 지원 버전, `none`, `other`(from은 `null` 포함)다.
 - README와 벤치마크 문서의 LongMemEval 수치에 측정 조건(데이터셋, 단계별 소요 시간)과 논문 링크(arXiv 2410.10813)를 맞춘다. 임베딩 없이 동작하는 회상 범위를 명시한다.
+- 키에 묶인 OAuth 클라이언트의 토큰 교환은 해당 키를 `client_secret`(또는 Basic 인증)으로 제시한 요청에서만 성립한다. API 키 원문 형식의 `client_id`는 클라이언트 행으로 등록하지 않는다.
+- 도구 응답의 오류 문구는 내부 예외 원문 대신 공용 메시지를 쓴다. 원문은 로그와 감사 기록에만 남는다.
+- `remember`의 `supersedes`는 호출한 키가 소유한 유효 파편에만 적용된다. 다른 키의 파편이나 이미 닫힌 파편은 링크 없이 경고 로그만 남긴다.
+- utility 점수와 중요도 하향 갱신은 저장값이 실제로 바뀌는 행만 기록한다.
+- 의존성 감사(`audit:ci`)는 별도 워크플로(`audit.yml`)에서 push, pull request, 매일 예약 실행으로 돈다. 단위 시험은 감사 결과와 무관하게 실행된다.
 
 ## [5.12.0] - 2026-10-02
 

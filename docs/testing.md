@@ -64,7 +64,7 @@ npm run test:integration:llm
 | `npm run audit:ci` | 런타임 의존성 audit-ci 검사 |
 | `npm run lint:migrations` | migration SQL body-only 규약 검사 (MIGRATION_LINT_FROM 기준) |
 
-CI(.github/workflows/test.yml): `unit` 작업(lint, lint:migrations, audit:ci, npm test, 외부 서비스 없는 통합시험), `runtime-matrix` 작업(Node 20/22/24에서 모듈 적재와 키 미설정 기동 거부 확인), `e2e` 작업(pgvector/pgvector:pg15, migrate 후 test:e2e). 로컬 임베딩 e2e는 e2e-local-embed.yml이 맡는다.
+CI(.github/workflows/test.yml): `unit` 작업(lint, lint:migrations, npm test, 외부 서비스 없는 통합시험), 별도 워크플로 `.github/workflows/audit.yml`(push, pull_request, 매일 예약 실행에서 `audit:ci`), `runtime-matrix` 작업(Node 20/22/24에서 모듈 적재와 키 미설정 기동 거부 확인), `e2e` 작업(pgvector/pgvector:pg15, migrate 후 test:e2e). 로컬 임베딩 e2e는 e2e-local-embed.yml이 맡는다.
 
 ---
 
