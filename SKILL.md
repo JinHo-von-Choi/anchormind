@@ -205,13 +205,13 @@ recall 호출
 export MEMENTO_CLI_REMOTE=https://memento.anchormind.net/mcp
 export MEMENTO_CLI_KEY=mmcp_xxx
 memento-mcp recall "query"
-memento-mcp context
+memento-mcp stats
 
 # 플래그 방식 (일회성 호출)
 memento-mcp recall "query" --remote https://memento.anchormind.net/mcp --key mmcp_xxx
 ```
 
-local-only 명령(migrate, admin 등)을 원격 모드에서 호출하면 에러가 반환된다.
+원격 모드는 recall, remember, stats, inspect, session만 지원한다. local-only 명령(serve, migrate, cleanup, backfill, health, update, export, import, benchmark, anchor-scope)을 원격 모드에서 호출하면 에러가 반환된다.
 
 내부 동작: CLI가 MCP initialize → tools/call 2단계 세션을 생성하고 같은 세션을 재사용한다(`lib/cli/_mcpClient.js`).
 
@@ -246,7 +246,7 @@ master key 또는 limit=null 설정인 키는 헤더가 생략된다.
 recall / context 응답에서 `_meta` 필드를 통해 검색 메타데이터를 읽는다.
 
 ```javascript
-const res = await recall({ query: "nginx 설정" });
+const res = await recall({ text: "nginx 설정" });
 const eventId = res._meta.searchEventId;   // tool_feedback에 사용
 const hint    = res._meta.hints;           // signal + trigger
 const suggest = res._meta.suggestion;      // recommendedTool + recommendedArgs
@@ -260,7 +260,7 @@ top-level `_searchEventId` / `_memento_hint` / `_suggestion` mirror 필드는 �
 
 ```json
 {
-  "query": "postgresql",
+  "text": "postgresql",
   "fields": ["id", "content", "type", "importance"]
 }
 ```
@@ -306,7 +306,7 @@ top-level `_searchEventId` / `_memento_hint` / `_suggestion` mirror 필드는 �
 4개 preset:
 - `recall-only`: 조회 전용. remember/amend/forget/link/reflect/memory_consolidate 차단.
 - `write-only`: 저장 전용. recall/context 차단. CI/크론 잡용.
-- `onboarding`: 파편 수 < 50일 때 자동 진입. skill_guide 확장판 + 도구 전체 노출.
+- `onboarding`: 도구 전체를 노출하고 초심자용 skill_guide를 반환. 앞의 세 경로로 지정할 때만 적용된다.
 - `audit`: master key 전용. memory_stats/search_traces/reconstruct_history 중심.
 
 tools/list 응답이 mode의 excluded_tools 필터링 후 반환된다. get_skill_guide는 mode별 skill_guide_override를 우선 반환한다.
@@ -373,7 +373,10 @@ CLI provider는 API 키 불필요. 로컬 바이너리(`gemini`/`agy`/`codex`/`c
 
 - **토큰 기반 세션 재사용**: 같은 Bearer/API 키로 initialize 재호출 시 기존 세션 재활용. claude.ai 커넥터의 Mcp-Session-Id 유실 문제 대응
 - **null crash 방어**: 빈 POST body를 400 Invalid Request로 거부
-- **MorphemeIndex LLM timeout**: 15s → 60s. `MEMENTO_MORPHEME_TOKENIZER=llm` 경로 사용 시에만 적용. 기본 경로(`local`)는 로컬 CPU 분석기(MorphemeTokenizer)를 사용하므로 이 값을 참조하지 않는다.
+- **MorphemeIndex LLM timeout**: 60s. `MEMENTO_MORPHEME_TOKENIZER=llm` 경로 사용 시에만 적용. 기본 경로(`local`)는 로컬 CPU 분석기(MorphemeTokenizer)를 사용하므로 이 값을 참조하지 않는다.
+- **키 상태 재확인**: API 키로 연 세션은 `MEMENTO_SESSION_KEY_RECHECK_MS`(기본 30000ms, `0`이면 끔) 주기로 키 상태를 다시 읽는다. 비활성 또는 삭제된 키의 세션은 닫히고 404 `Session not found`를 받으며, 권한 변경은 열린 세션에 반영된다. 관리 API로 키를 비활성화하거나 삭제하면 그 키의 세션이 즉시 닫힌다.
+- **세션 ID 수신**: `MEMENTO_SESSION_ID_POLICY`(`warn` 기본, `enforce`)가 쿼리스트링 세션 ID와 서버 발급 형식(UUID)이 아닌 ID의 자동 복구를 다룬다. `warn`은 경고 로그를 남기고 처리하며 `enforce`는 쿼리 ID에 400, UUID가 아닌 ID의 복구에 404를 돌려준다. 세션 ID는 `MCP-Session-Id` 헤더로 보낸다.
+- **인증 저장소 조회 실패**: API 키 저장소 조회가 실패해 인증을 판정하지 못한 initialize와 세션 자동 복구는 기본 401로 응답한다. `MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS=503`이면 `Retry-After: 10`과 함께 503으로 응답한다.
 
 ---
 
@@ -397,7 +400,7 @@ Symbolic Verification Layer는 확률론적 검색 파이프라인 위에 추가
 
 ### OAuth
 
-- 동의 화면: `GET /authorize`는 `redirect_uri`가 localhost이거나 `OAUTH_ALLOWED_REDIRECT_URIS` 또는 `OAUTH_TRUSTED_ORIGINS`에 맞으면 동의 화면 없이 바로 인가 코드를 발급하고, 그 밖의 클라이언트에는 동의 화면을 보여 준다. 오류 응답의 리다이렉트 대상 확인은 `MEMENTO_OAUTH_REDIRECT_CHECK`(기본 `warn`, `enforce`면 미등록 대상에 400)로 정한다.
+- 동의 화면: `GET /authorize`는 `redirect_uri`가 localhost이거나 `OAUTH_ALLOWED_REDIRECT_URIS` 또는 `OAUTH_TRUSTED_ORIGINS`에 맞으면 동의 화면 없이 바로 인가 코드를 발급하고, 그 밖의 클라이언트에는 동의 화면을 보여 준다. `POST /register`에 API 키를 Bearer 헤더로 보내 등록한 클라이언트(키에 묶인 클라이언트)는 `redirect_uri`가 허용 목록에 있어도 항상 동의 화면을 거친다. 오류 응답의 리다이렉트 대상 확인은 `MEMENTO_OAUTH_REDIRECT_CHECK`(기본 `warn`, `enforce`면 미등록 대상에 400)로 정한다.
 
 ### RBAC
 
@@ -421,7 +424,14 @@ Symbolic Verification Layer는 확률론적 검색 파이프라인 위에 추가
 | `MEMENTO_FRAME_OPTIONS` | string | (없음) | `deny`일 때만 `X-Frame-Options: DENY`를 붙인다. |
 | `MEMENTO_OAUTH_REDIRECT_CHECK` | string | `warn` | `/authorize` 오류 응답의 리다이렉트 대상 확인(`warn`, `enforce`). |
 | `MEMENTO_SSE_QUERY_KEY` | string | `allow` | Legacy SSE `?accessKey=` 처리(`allow`: master 키만, `deny`: 401). |
-| `MEMENTO_TOOL_ARGS_VALIDATION` | string | `warn` | tools/call 인자 inputSchema 점검 모드(`off`, `warn`, `enforce`: 위반 시 -32602). |
+| `MEMENTO_TOOL_ARGS_VALIDATION` | string | `warn` | tools/call 인자 inputSchema 점검 모드(`off`, `warn`, `enforce`: 위반 시 -32602). 스키마의 `maxLength`, `maxItems`, `pattern`, `oneOf`, `enum`, 범위를 해석한다. |
+| `MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN` | boolean | `false` | `true`이면 스키마에 없는 인자 이름을 위반으로 보지 않는다. |
+| `MEMENTO_SESSION_KEY_RECHECK_MS` | number | `30000` | API 키 세션의 키 상태 재확인 주기(ms). `0`이면 끈다. |
+| `MEMENTO_SESSION_ID_POLICY` | string | `warn` | 쿼리스트링 세션 ID와 UUID가 아닌 ID의 복구 처리(`warn`, `enforce`). |
+| `MEMENTO_RESERVED_AGENT_IDS` | string | `warn` | 예약 agentId(`system`, `admin`) 처리(`warn`, `enforce`: API 키 요청은 -32001로 거부, master 키 허용). |
+| `MEMENTO_DCR_MAX_PER_HOUR` | number | `100` | `/register`의 시간당 등록 상한(프로세스 단위, `0`은 상한 없음). 초과 시 429와 `Retry-After: 3600`. |
+| `MEMENTO_ADMIN_AUTH_BACKOFF` | string | `off` | `on`이면 관리 인증 연속 5회 실패 뒤 최대 60초까지 다음 시도를 늦춘다. |
+| `MEMENTO_LLM_CLI_TOOL_APPROVAL` | string | `none` | gemini-cli, copilot-cli, opencode-cli의 도구 실행 승인 방식. `none`은 제한된 승인과 빈 임시 디렉터리에서 실행하고, `all`은 gemini `-y`, copilot `--allow-all-tools`를 쓰고 서버 작업 디렉터리에서 실행한다. |
 
 ---
 
@@ -446,7 +456,7 @@ AnchorMind는 MCP(Model Context Protocol) 기반의 장기 기억 서버다. AI 
 
 ```
 context() 호출
--> core_memory: 앵커 + 고중요도 파편 (preference, error, procedure)
+-> core_memory: 앵커 + 고중요도 파편 (preference, error, procedure, decision)
    (앵커는 기본 최대 20개가 항상 포함된다. effective workspace가 있으면 기본 10개를 workspace 상위 anchor에 먼저 예약하고, 나머지는 잔여 workspace/global 통합 중요도순으로 채운다. total만 바꾸면 reserve는 total/2 내림, 최대 10으로 유도된다. `MEMENTO_CONTEXT_ANCHOR_LIMIT`, `MEMENTO_CONTEXT_WORKSPACE_ANCHOR_RESERVE`로 설정)
 -> working_memory: 현재 세션의 워킹 메모리
 -> system_hints: 미반영 세션 경고, 시스템 알림
@@ -771,7 +781,8 @@ curl -s -X POST $SERVER_URL \
 curl 응답 검증 체크:
 - HTTP 200 + `result` 필드 존재 → 성공
 - `error.code` 존재 → 메시지 파싱 후 재시도 또는 사용자 보고
-- `error.code === -32001` 또는 `-32002` (세션 관련) → `initialize`부터 다시 수행
+- HTTP 404 `Session not found`(-32000) → `initialize`부터 다시 수행
+- `error.code === -32001` → 권한 오류. 도구 권한과 키 상태를 확인
 - 응답 본문이 비어 있거나 파싱 실패 → 네트워크·방화벽 문제, `SERVER_URL`과 포트 노출 상태 확인
 
 ## 다중 플랫폼/디바이스 기억 관리
@@ -822,6 +833,8 @@ Codex Desktop 등 일부 MCP 클라이언트는 도구를 deferred/lazy 로딩�
 ## 도구 레퍼런스 (20개)
 
 RBAC default-deny: 등록되지 않은 도구 이름은 `Unknown tool: <name>`(-32601)으로, `TOOL_PERMISSIONS`에 없는 도구는 `Permission denied`(-32001)로 거부된다.
+
+도구 처리 중 내부 예외(DB 드라이버, 런타임 오류)는 응답에 `Internal error`로 나가고 원문은 서버 로그와 감사 기록에만 남는다. `remember`, `amend`, `link`, `tool_feedback`의 열거형 인자 값이 저장소 제약에 맞지 않으면 `Invalid arguments for <tool>: <param>: must be one of a|b|c` 메시지와 `code: "INVALID_ARGUMENT"`를 돌려준다.
 
 ### remember
 
@@ -884,7 +897,7 @@ async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기�
 | keywords | string[] | - | 키워드 검색 (L1->L2) |
 | text | string | - | 자연어 쿼리 (L3 시맨틱) |
 | topic | string | - | 주제 필터 |
-| type | string | - | 타입 필터 (episode 제외. episode는 text/topic으로 검색) |
+| type | string | - | 타입 필터 (fact, decision, error, preference, procedure, relation, episode) |
 | tokenBudget | number | - | 최대 반환 토큰. 기본 1000. |
 | includeLinks | boolean | - | 연결 파편 포함. 기본 true. |
 | linkRelationType | string | - | 연결 관계 필터 (related, caused_by, resolved_by, part_of, contradicts) |
@@ -1002,7 +1015,7 @@ task_effectiveness 세부 필드:
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | tokenBudget | number | - | 기본 2000 |
-| types | string[] | - | 기본: preference, error, procedure |
+| types | string[] | - | 기본: preference, error, procedure, decision |
 | sessionId | string | - | 워킹 메모리 로드용 |
 | structured | boolean | - | 계층 구조 반환. 기본 false. |
 | includeKeyName | boolean | X | true 시 fragments 각 항목에 key_id·key_name(액세스 키 라벨) 포함. structured=true 트리 응답에는 적용되지 않음. 기본 false |
@@ -1075,9 +1088,9 @@ id가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permissio
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| section | string | - | overview, lifecycle, keywords, search, episode, multiplatform, codex, tools, importance, experiential, cbr, triggers, antipatterns |
+| section | string | - | overview, lifecycle, keywords, search, episode, multiplatform, collaboration, codex, tools, importance, experiential, cbr, triggers, workspace, antipatterns |
 
-미지정 시 전체 가이드(~12KB) 반환.
+미지정 시 전체 가이드를 반환한다. 활성 mode에 `skill_guide_override`가 있고 `section`이 없으면 그 텍스트가 우선 반환된다.
 
 ### reconstruct_history
 
@@ -1161,7 +1174,7 @@ snake_case 파라미터에는 camelCase alias가 있다: `eventType`, `entityKey
 
 **목적**: `batch_remember(async: true)`가 반환한 `jobId`의 처리 상태를 조회한다. 읽기 전용.
 
-**반환 state**: `queued` | `processing` | `completed` | `dead`. Redis 비활성 시 `status: null`.
+**반환**: `{ success, jobId, status }`. `status.state`는 `queued` | `processing` | `completed` | `dead`이고 `accepted`, `inserted`, `skipped`, `error`, `ts`가 함께 실린다(값은 문자열). Redis 비활성이거나 알 수 없는 jobId면 `status: null`.
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|---|---|
@@ -1169,10 +1182,10 @@ snake_case 파라미터에는 camelCase alias가 있다: `eventType`, `entityKey
 
 **예시**:
 ```json
-{ "jobId": "batch:550e8400-e29b-41d4-a716-446655440000" }
+{ "jobId": "brw-1750000000000-a1b2c" }
 ```
 
-반환값 예시: `{ "jobId": "...", "state": "completed", "accepted": 42, "processed": 42, "failed": 0 }`
+반환값 예시: `{ "success": true, "jobId": "...", "status": { "state": "completed", "accepted": "42", "inserted": "42", "skipped": "0", "ts": "1750000012345" } }`
 
 ### check_update
 
@@ -1229,7 +1242,7 @@ git 설치본에서 `UPDATE_REQUIRE_SIGNED_TAG=true`(기본 `false`)이면 `inst
 | procedure | 0.8 | 0.6 | 안정적 회상 필요. 0.6 초과 지정 시 0.6으로 clamp됨. |
 | decision | 0.7 | 0.7 | 모순 방지 |
 | fact | 0.6 | 0.7 | 일반 사실. 0.7 이하까지 허용됨. |
-| episode | 0.6 | 없음 | 맥락 보존용 |
+| episode | 0.6 | 0.7 | 맥락 보존용 |
 | relation | 0.5 | 0.7 | 관계 기록 |
 
 코드 기준(`lib/memory/write/FragmentWriter.js` `MAX_INITIAL_IMPORTANCE`): `isAnchor=true`이면 상한 제거. content 20자 미만이면 최대 0.2로 추가 제한.
@@ -1586,7 +1599,7 @@ recall 시 신뢰도 기반 판단:
   └─ remember(type="decision", importance=0.7) 즉시 저장
 
 "이전에/저번에/전에" 언급
-  └─ recall(query=관련 내용) 즉시 호출
+  └─ recall(text=관련 내용) 즉시 호출
 
 세션 종료 의도 감지 ("잠깐", "나중에", "오늘은 여기까지" 등)
   └─ reflect(summary=[...], decisions=[...], errors_resolved=[...])
@@ -1642,7 +1655,8 @@ Gemini CLI 외 `agy-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`를 포함한 18
 - `errorHasResolutionPath` — error 타입인데 해결 경로 부재 → cause/fix 키워드 또는 `resolutionStatus` 명시
 - `procedureHasStepMarkers` — procedure 타입인데 단계 부재 → "1.", "2.", "먼저", "다음" 등 마커 포함
 - `caseIdHasResolutionStatus` — case_id 보유 파편인데 resolution_status 미설정 → `resolutionStatus: "resolved"` 등 명시
-- `assertionNotContradictory` — 기존 assertion과 충돌 → `amend` 또는 `forget`으로 과거 파편 정리
+- `assertionNotContradictory` - assertion이 verified이면서 rejected로 표시됨 → `amend` 또는 `forget`으로 정리
+- `fragmentHasWorkspace` - workspace가 명시값과 키 기본값 어느 쪽으로도 해석되지 않음 → `workspace` 명시. 저장 차단 대상은 `MEMENTO_WORKSPACE_GATE=true`일 때뿐이다
 
 경고는 soft gate이므로 기본적으로 저장을 차단하지 않는다. `api_keys.symbolic_hard_gate=true`로 전환하면 해당 키는 경고 발생 시 저장이 거부된다. 이 경우 MCP 도구 에러가 아닌 JSON-RPC **프로토콜 레벨** 에러 코드 `-32003` (SYMBOLIC_POLICY_VIOLATION)이 반환된다:
 
