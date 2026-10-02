@@ -26,7 +26,7 @@ jobs:
       - name: Lint migrations
         run: npm run lint:migrations
       - name: All unit tests (node:test)
-        run: npm test
+        run: npm run test:coverage
       # 통합시험은 외부 서비스 없이 도는 것을 전제로 작성돼 있다. 실제로 그런지
       # 여기서 확인한다. 외부 의존이 새로 생기면 이 단계가 먼저 깨진다.
       - name: Integration tests (no external services)

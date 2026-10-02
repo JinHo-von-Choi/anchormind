@@ -55,6 +55,7 @@ npm run test:integration:llm
 | 스크립트 | 실행 범위 |
 |--------|---------|
 | `npm test` | unit 전체 (node:test) |
+| `npm run test:coverage` | unit 전체를 커버리지와 함께 실행하고 `coverage/lcov.info`의 줄, 분기, 함수 합계를 `coverage-baseline.json`과 비교한다. 합계가 기준선에서 허용 폭(0.5%p)을 뺀 값보다 낮으면 실패한다. 로컬 72코어에서 약 40초로 `npm test`(약 35초)보다 조금 길다. 기준선보다 오른 값은 `node scripts/check-coverage.js coverage/lcov.info --write`로 올리고, 낮추는 갱신은 소유자 승인 아래 `--write --allow-decrease`로만 한다 |
 | `npm run test:integration` | 통합 + e2e (tests/integration/*.test.js + tests/e2e/*.test.js) |
 | `npm run test:e2e` | e2e만 |
 | `npm run test:ci` | `npm test && npm run test:integration`. 로컬 일괄 실행용 (DB 필요). CI는 아래 워크플로 작업으로 나눠 돈다 |
@@ -65,7 +66,7 @@ npm run test:integration:llm
 | `npm run audit:ci` | 런타임 의존성 audit-ci 검사 |
 | `npm run lint:migrations` | migration SQL body-only 규약 검사 (MIGRATION_LINT_FROM 기준) |
 
-CI(.github/workflows/test.yml): `unit` 작업(lint, lint:migrations, npm test, 외부 서비스 없는 통합시험), 별도 워크플로 `.github/workflows/audit.yml`(push, pull_request, 매일 예약 실행에서 `audit:ci`), `runtime-matrix` 작업(Node 20/22/24에서 모듈 적재와 키 미설정 기동 거부 확인), `e2e` 작업(pgvector/pgvector:pg15, migrate 후 test:e2e). `db-concurrency` 작업(같은 DB 구성에서 test:db, `continue-on-error`로 결과만 보고하며 결과 요약은 `GITHUB_STEP_SUMMARY`에 남음). 로컬 임베딩 e2e는 e2e-local-embed.yml이 맡는다.
+CI(.github/workflows/test.yml): `unit` 작업(lint, lint:migrations, test:coverage, 외부 서비스 없는 통합시험), 별도 워크플로 `.github/workflows/audit.yml`(push, pull_request, 매일 예약 실행에서 `audit:ci`), `runtime-matrix` 작업(Node 20/22/24에서 모듈 적재와 키 미설정 기동 거부 확인), `e2e` 작업(pgvector/pgvector:pg15, migrate 후 test:e2e). `db-concurrency` 작업(같은 DB 구성에서 test:db, `continue-on-error`로 결과만 보고하며 결과 요약은 `GITHUB_STEP_SUMMARY`에 남음). 로컬 임베딩 e2e는 e2e-local-embed.yml이 맡는다.
 
 ---
 
