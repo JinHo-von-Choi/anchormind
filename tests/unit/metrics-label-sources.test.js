@@ -43,6 +43,9 @@ const LABEL_PARAMS = new Map([
 /** 기록 함수 안에서 protocolVersionLabel로 값을 닫는 함수 */
 const BOUNDED_RECORDERS = new Set(["recordProtocolNegotiation", "recordProtocolVersionReanchored"]);
 
+/** mcp_auth_store_errors_total{operation}의 허용 값 */
+const AUTH_STORE_OPERATIONS = new Set(["validate_raw_key", "validate_by_id", "session_recheck"]);
+
 /** 지표 정의 모듈. 이 안의 .inc()/.observe()는 매개변수를 그대로 쓰므로 호출부에서 본다. */
 const METRIC_MODULES = new Set([
   "lib/metrics.js",
@@ -154,6 +157,16 @@ describe("지표 라벨 값의 출처", () => {
     const used  = new Set(found);
     const stale = [...REVIEWED.keys()].filter(key => !used.has(key));
     assert.deepEqual(stale, [], `코드에서 사라진 검토 항목:\n${stale.join("\n")}`);
+  });
+
+  it("recordAuthStoreError의 operation 값은 허용 집합 안의 리터럴이다", () => {
+    const seen = new Set();
+    for (const file of listJs(path.join(ROOT, "lib"))) {
+      const src = fs.readFileSync(file, "utf8");
+      for (const m of src.matchAll(/recordAuthStoreError\(\s*"([^"]+)"\s*\)/g)) seen.add(m[1]);
+    }
+    assert.deepEqual([...seen].filter(v => !AUTH_STORE_OPERATIONS.has(v)), []);
+    assert.deepEqual([...AUTH_STORE_OPERATIONS].filter(v => !seen.has(v)), [], "호출되지 않는 허용 값");
   });
 
   it("값을 닫는 기록 함수는 protocolVersionLabel을 거친다", () => {
