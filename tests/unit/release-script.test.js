@@ -69,6 +69,16 @@ describe("promoteUnreleased", () => {
   it("같은 버전 절이 이미 있으면 ReleaseError", () => {
     assert.throws(() => promoteUnreleased(CHANGELOG, "5.12.0", "2026-10-10"), /이미 있다/);
   });
+
+  it("하위 제목만 있는 [Unreleased]는 비어 있는 것으로 본다", () => {
+    const headingsOnly = CHANGELOG.replace("### Changed\n\n- 항목 하나.\n\n", "### Changed\n\n### Added\n\n");
+    assert.throws(() => promoteUnreleased(headingsOnly, "5.13.0", "2026-10-10"), /비어 있다/);
+  });
+
+  it("줄 시작이 아닌 위치의 [Unreleased] 표기는 제목으로 보지 않는다", () => {
+    const inline = "# Changelog\n\n설명 ## [Unreleased] 문장\n\n## [5.12.0] - 2026-10-02\n\n- 항목.\n";
+    assert.throws(() => promoteUnreleased(inline, "5.13.0", "2026-10-10"), /Unreleased\] 절이 없다/);
+  });
 });
 
 describe("extractReleaseNotes", () => {
@@ -146,6 +156,8 @@ function gitEnv(extra = {}) {
 const FAKE_GH = [
   "#!/bin/sh",
   "echo \"$@\" >> \"$FAKE_GH_LOG\"",
+  "if [ \"$FAKE_GH_MODE\" = \"fail\" ]; then echo \"HTTP 401 https://api.example.invalid/secret-path\" >&2; exit 1; fi",
+  "if [ \"$FAKE_GH_MODE\" = \"garbage\" ]; then echo \"<html>https://example.invalid/login</html>\"; exit 0; fi",
   "if [ \"$1\" = \"run\" ] && [ \"$2\" = \"list\" ]; then cat \"$FAKE_GH_RUNS\"; exit 0; fi",
   "echo \"unexpected gh call: $*\" >&2",
   "exit 97",
@@ -242,6 +254,22 @@ class Fixture {
     return this.git("rev-parse", "HEAD").trim();
   }
 
+  commitFile(file, text) {
+    this.write(file, text);
+    this.git("add", "-A");
+    this.git("commit", "-q", "-m", `${file} 수정`);
+  }
+
+  snapshot() {
+    return Object.fromEntries(
+      ["CHANGELOG.md", "package.json", "package-lock.json", "SKILL.md", "SECURITY.md"].map(file => [file, this.read(file)])
+    );
+  }
+
+  leftoverTemps() {
+    return fs.readdirSync(this.dir).filter(name => name.endsWith(".release-tmp"));
+  }
+
   setRuns(runs) {
     fs.writeFileSync(this.ghRuns, JSON.stringify(runs));
   }
@@ -250,8 +278,9 @@ class Fixture {
     this.setRuns([{ headSha: this.head(), status, conclusion, databaseId: 4242 }]);
   }
 
-  env() {
+  env(extra = {}) {
     return gitEnv({
+      ...extra,
       PATH         : `${this.bin}${path.delimiter}${process.env.PATH}`,
       FAKE_GH_LOG  : this.ghLog,
       FAKE_GH_RUNS : this.ghRuns
@@ -403,6 +432,153 @@ describe("릴리스 절차 (임시 저장소, 가짜 gh)", () => {
 
     assert.equal(f.head(), before);
     assert.equal(f.git("tag", "-l", "v5.13.0").trim(), "");
+  });
+
+  it("--skip-ci-check 경고를 최종 요약에도 반복한다", async () => {
+    const f = await fresh();
+    const { logs } = await f.run(["5.13.0", "--skip-ci-check"]);
+    assert.match(logs.join("\n"), /경고: --skip-ci-check/);
+  });
+
+  it("main 이 아닌 브랜치는 거부하고 아무것도 바꾸지 않는다", async () => {
+    const f = await fresh();
+    f.git("checkout", "-q", "-b", "feature/x");
+    f.setRunsFor("success");
+    const before = f.snapshot();
+    const head   = f.head();
+
+    await assert.rejects(f.run(["5.13.0"]), /main 가 아니다: feature\/x.*--allow-branch/);
+
+    assert.deepEqual(f.snapshot(), before);
+    assert.equal(f.head(), head);
+    assert.deepEqual(f.ghCalls(), []);
+    assert.equal(f.git("tag", "-l", "v5.13.0").trim(), "");
+  });
+
+  it("분리된 HEAD는 거부한다", async () => {
+    const f = await fresh();
+    f.git("checkout", "-q", "--detach");
+    f.setRunsFor("success");
+    await assert.rejects(f.run(["5.13.0"]), /HEAD 가 분리되어 있다/);
+    await assert.rejects(f.run(["5.13.0", "--allow-branch"]), /HEAD 가 분리되어 있다/);
+    assert.equal(f.git("tag", "-l", "v5.13.0").trim(), "");
+  });
+
+  it("--allow-branch 는 경고하고 실제 브랜치 이름으로 push 명령을 출력한다", async () => {
+    const f = await fresh();
+    f.git("checkout", "-q", "-b", "feature/x");
+    f.setRunsFor("success");
+
+    const { logs, warns } = await f.run(["5.13.0", "--allow-branch"]);
+
+    assert.match(warns.join("\n"), /--allow-branch: main 가 아닌 브랜치 feature\/x/);
+    const text = logs.join("\n");
+    assert.match(text, /git push origin feature\/x\n/);
+    assert.doesNotMatch(text, /git push origin main/);
+    assert.equal(f.git("cat-file", "-t", "v5.13.0").trim(), "tag");
+  });
+
+  it("뒤쪽 변환이 실패하면 다섯 파일 모두 바뀌지 않는다", async () => {
+    const f = await fresh();
+    f.commitFile("SKILL.md", "# Skill\n\n현재 버전 줄 없음\n");
+    f.setRunsFor("success");
+    const before = f.snapshot();
+    const head   = f.head();
+
+    await assert.rejects(f.run(["5.13.0"]), /SKILL\.md 의 현재 버전 줄을 찾지 못했다/);
+
+    assert.deepEqual(f.snapshot(), before);
+    assert.equal(f.head(), head);
+    assert.equal(f.git("status", "--porcelain", "--untracked-files=no").trim(), "");
+    assert.deepEqual(f.markerLines(), []);
+  });
+
+  it("마지막 변환이 실패해도 다섯 파일 모두 바뀌지 않는다", async () => {
+    const f = await fresh();
+    f.commitFile("SECURITY.md", "표 없음\n");
+    f.setRunsFor("success");
+    const before = f.snapshot();
+
+    await assert.rejects(f.run(["5.13.0"]), /SECURITY\.md 지원 표 형식을 찾지 못했다/);
+
+    assert.deepEqual(f.snapshot(), before);
+  });
+
+  it("쓰기가 도중에 실패하면 먼저 쓴 파일을 원래 내용으로 복원한다", async () => {
+    const f = await fresh();
+    f.setRunsFor("success");
+    const before    = f.snapshot();
+    const failingFs = {
+      ...fs,
+      renameSync: (from, to) => {
+        if (to.endsWith("SKILL.md")) throw new Error("디스크 쓰기 실패");
+        return fs.renameSync(from, to);
+      }
+    };
+
+    await assert.rejects(f.run(["5.13.0"], { fsImpl: failingFs }), /파일 쓰기가 실패했다\(디스크 쓰기 실패\).*복원했다/);
+
+    assert.deepEqual(f.snapshot(), before);
+    assert.deepEqual(f.leftoverTemps(), []);
+    assert.equal(f.git("status", "--porcelain", "--untracked-files=no").trim(), "");
+    assert.deepEqual(f.markerLines(), []);
+  });
+
+  it("복원까지 실패하면 되돌리기 명령을 안내한다", async () => {
+    const f = await fresh();
+    f.setRunsFor("success");
+    let   packageWrites = 0;
+    const failingFs     = {
+      ...fs,
+      renameSync: (from, to) => {
+        if (to.endsWith("package.json") && ++packageWrites === 2) throw new Error("복원 쓰기 실패");
+        if (to.endsWith("SKILL.md")) throw new Error("디스크 쓰기 실패");
+        return fs.renameSync(from, to);
+      }
+    };
+    await assert.rejects(f.run(["5.13.0"], { fsImpl: failingFs }), /복원하지 못한 파일이 있다: package\.json.*git checkout -- CHANGELOG\.md/s);
+  });
+
+  it("검사가 실패하면 되돌리기 명령을 안내하고 파일은 바뀐 채로 둔다", async () => {
+    const f = await fresh();
+    f.failLint();
+    f.setRunsFor("success");
+
+    await assert.rejects(f.run(["5.13.0"]), /검사가 실패했다.*\n변경 파일 되돌리기: git checkout -- CHANGELOG\.md package\.json package-lock\.json SKILL\.md SECURITY\.md/s);
+
+    assert.equal(JSON.parse(f.read("package.json")).version, "5.13.0");
+  });
+
+  it("gh 호출이 실패하면 원문 출력 없이 ReleaseError 로 멈춘다", async () => {
+    const f = await fresh();
+    const err = await f.run(["5.13.0"], { env: f.env({ FAKE_GH_MODE: "fail" }) }).then(() => null, e => e);
+
+    assert.ok(err instanceof ReleaseError);
+    assert.match(err.message, /조회하지 못했다.*--skip-ci-check/);
+    assert.doesNotMatch(err.message, /example\.invalid|HTTP 401|secret-path/);
+    assert.equal(f.git("tag", "-l", "v5.13.0").trim(), "");
+    assert.equal(f.git("status", "--porcelain", "--untracked-files=no").trim(), "");
+  });
+
+  it("gh 출력이 JSON 이 아니면 원문 없이 ReleaseError 로 멈춘다", async () => {
+    const f = await fresh();
+    const err = await f.run(["5.13.0"], { env: f.env({ FAKE_GH_MODE: "garbage" }) }).then(() => null, e => e);
+
+    assert.ok(err instanceof ReleaseError);
+    assert.match(err.message, /해석하지 못했다/);
+    assert.doesNotMatch(err.message, /example\.invalid|<html>/);
+    assert.equal(f.git("status", "--porcelain", "--untracked-files=no").trim(), "");
+  });
+
+  it("CRLF 파일은 쓰기 전에 거부한다", async () => {
+    const f = await fresh();
+    f.commitFile("SKILL.md", "# Skill\r\n\r\n## 현재 버전: v5.12.0\r\n");
+    f.setRunsFor("success");
+    const before = f.snapshot();
+
+    await assert.rejects(f.run(["5.13.0"]), /SKILL\.md 이 CRLF 줄바꿈이다/);
+
+    assert.deepEqual(f.snapshot(), before);
   });
 
   it("명령줄 실행은 CI가 붉은 HEAD에서 종료 코드 1과 메시지를 낸다", async () => {
