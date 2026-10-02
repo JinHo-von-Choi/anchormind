@@ -350,7 +350,7 @@ LLM_PRIMARY                   - 주 LLM provider (기본: gemini-cli). gemini-cl
 LLM_FALLBACKS                 - JSON 배열. 각 원소: {"provider":"anthropic","apiKey":"...","model":"claude-opus-4-6"}
 MEMENTO_REMEMBER_ATOMIC       - true로 설정 시 remember() quota 체크+INSERT를 단일 트랜잭션으로 원자화 (기본: false)
 MEMENTO_CASE_BACKPROP_ENABLED - true로 설정 시 CaseRewardBackprop 활성화 — case_id 단위 reward 역전파 (기본: false)
-MEMENTO_STORAGE               - 스토리지 어댑터 선택. pgvector (기본) 지원. 추가 어댑터는 lib/storage/ 참조
+MEMENTO_STORAGE               - 저장소 백엔드 이름. 현재 pgvector 하나이며 이 값은 동작에 영향을 주지 않는다
 MEMENTO_FEEDBACK_SAMPLING     - remember/amend/forget 성공 응답에 tool_feedback 요청 힌트를 확률적으로 동봉 (기본: true)
 MEMENTO_SPLIT_SUBJECT_GATE    - 분할 자식이 부모의 주어 앵커를 하나도 담지 못하면 폐기 (기본: true)
 MEMENTO_SPLIT_MODALITY_GATE   - 분할 자식이 부모에 없던 양상(예정·의도·추측·당위)을 도입하면 폐기 (기본: true)

@@ -150,23 +150,7 @@ lib/logging/
 └── audit.js           감사 로그 및 접근 이력 기록
 ```
 
-스토리지 어댑터 계층은 `lib/storage/`에 분리되어 있다.
-
-```
-lib/storage/
-├── index.js         getStorage() 팩토리 싱글톤. MEMENTO_STORAGE 환경변수로 어댑터 선택
-│                    pgvector(기본) → PgVectorStore / sqlite-vec → SqliteVecStore
-│                    알 수 없는 값은 경고 없이 pgvector로 폴백
-├── PgVectorStore.js PostgreSQL + pgvector 어댑터. lib/tools/db.js의 getPrimaryPool()과
-│                    queryWithAgentVector()를 StorageAdapter 인터페이스에 맞게 위임
-│                    engine='pgvector', vectorSupport='native'
-└── SqliteVecStore.js SQLite + sqlite-vec 어댑터 (미구현 스텁)
-                     engine='sqlite-vec', vectorSupport='extension'
-```
-
-StorageAdapter 공통 인터페이스: `query(sql, params)`, `queryAsAgent(agentId, sql, params)`, `transaction(fn)`, `migrate(filePath, opsClass)`, `close()`, `engine`, `vectorSupport`.
-
-기존 lib/tools/db.js 직접 호출 사이트는 향후 getStorage()로 마이그레이션할 예정이다. 현 시점에서 lib/tools/db.js는 primary pool 및 batch pool을 계속 직접 제공한다.
+저장소 접근은 `lib/tools/db.js`의 `getPrimaryPool`, `queryWithAgentVector`가 맡는다.
 
 도구 구현은 `lib/tools/`에 분리되어 있다.
 

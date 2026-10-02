@@ -31,7 +31,6 @@ AnchorMind의 주요 모듈을 한 페이지로 정리한 ledger. 새 모듈 추
 |`SearchSideEffects` (`lib/memory/read/SearchSideEffects.js`)|검색 결과 배열 + ctx|searchEventId, co_retrieved 업데이트, EMA 갱신|DB 장애 시 soft fail. topic 정확일치로 0건인 검색은 SearchParamAdaptor 학습에서 제외(search_events 기록은 유지)|-|-|migration-027|
 |`TopicResolver` (`lib/memory/read/TopicResolver.js`)|store + 키 스코프 + 요청 topic|근접 topic 후보 `[{topic, count}]`. recall `_meta.hints`의 `topic_mismatch` 재료|후보 없으면 빈 배열 → 힌트 미발행|—|—|—|
 |`FeedbackSampler` (`lib/memory/signals/FeedbackSampler.js`)|도구명 + sessionId|`feedback_sampled` 힌트 객체 또는 null|Redis 미가용 시 세션 상한·쿨다운 미적용(fail-open)|`MEMENTO_FEEDBACK_SAMPLING`|—|migration-039 (irrelevance_reason 수집처)|
-|`PgVectorStore` / `SqliteVecStore` (`lib/storage/`)|SQL 문 + 파라미터|rows 배열|연결 오류 시 throw; SqliteVecStore는 미구현 스텁|`MEMENTO_STORAGE`|—|—|
 
 ## 실험적 기능 플래그
 
@@ -52,7 +51,7 @@ AnchorMind의 주요 모듈을 한 페이지로 정리한 ledger. 새 모듈 추
 |HNSW 인덱스 강제 검색|—|벡터 검색 트랜잭션 시작 시 `SET LOCAL enable_seqscan = off`, `SET LOCAL enable_bitmapscan = off`, `SET LOCAL hnsw.iterative_scan = relaxed_order` 적용. planner가 seqscan·bitmap scan으로 우회하는 것을 차단하여 HNSW index scan 경로를 강제하며, 필터 조건이 붙는 쿼리에서 308ms→7ms 단축 확인. `lib/tools/db.js` L3 검색 경로 고정|
 |NLIClassifier|`NLI_SERVICE_URL`|설정 시 외부 HTTP 서비스 호출, 미설정 시 in-process ONNX 모델로 동일 분류를 수행. 항상 활성|
 |AutoReflect|—|`sessions.js`의 세션 종료/회전 흐름에서 자동 호출. 비활성화하면 세션 학습이 손실되므로 운영에서 항상 활성|
-|storage 어댑터|`MEMENTO_STORAGE`|`pgvector`(기본) → `PgVectorStore` / `sqlite-vec` → `SqliteVecStore`. `getStorage()` 팩토리가 반환 타입을 결정. 호출 사이트 마이그레이션은 향후 점진 수행 예정|
+|저장소 접근|`MEMENTO_STORAGE`|저장소 백엔드 이름. 현재 `pgvector` 하나이며 이 값은 동작에 영향을 주지 않는다. 저장소 접근은 `lib/tools/db.js`의 `getPrimaryPool`, `queryWithAgentVector`가 맡는다.|
 |recall 적응형 임계값 하한|`MEMENTO_RECALL_MIN_SIM_FLOOR`|미설정 시 `SearchParamAdaptor.getMinSimilarity`의 반환값을 그대로 사용. 설정 시 `Math.max(floor, learned)`로 하한 강제. 한국어 long-tail query에서 노이즈 fragment 통과를 차단|
 
 ## 새 모듈 추가 규약

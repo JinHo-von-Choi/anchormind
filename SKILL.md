@@ -16,7 +16,7 @@ AnchorMind 서버는 AI 에이전트의 세션 간 장기 기억을 파편(Fragm
 - `tool_reflect` 응답에 `_meta.link_suggestions[]`가 포함된다. 이 목록은 schema-fit gate를 통과하지 못해 자동 링크되지 않은 인과 관계 후보다. LLM은 후보를 검토하여 정당한 인과로 판단되는 항목만 `link(fromId, toId, relationType=...)` 도구로 명시 호출한다.
 - recall/context 응답에서 `_meta.serverTime.display_kst` 또는 `_meta.serverTime.iso`로 현재 시점을 재확인하고 파편의 `created_at`·`age_days`와 대조하여 stale 여부를 판단한다. 응답 메타에 명시된 서버 시각이 자체 추정 시각과 다르면 서버 시각이 정답이다.
 - 긴 파편 자동 분할(`splitLongFragments`)은 자식 파편에 본문 기반 keywords를 부여하므로 분할된 내용도 키워드 검색으로 회수된다. 자식 합집합이 원문의 수치 앵커(날짜·금액·비율)를 모두 담지 못하면 분할을 중단하고 원문을 그대로 유지하며, 자식이 남아 있는 원문은 GC 물리 삭제 대상에서 제외된다.
-- `lib/storage/` 어댑터 계층이 `getStorage()` 팩토리 형태로 존재하며, `MEMENTO_STORAGE` 환경변수로 storage 백엔드를 선택한다.
+- 저장소 접근은 `lib/tools/db.js`의 `getPrimaryPool`, `queryWithAgentVector`가 맡는다. `MEMENTO_STORAGE` 환경변수는 저장소 백엔드 이름이며 동작에 영향을 주지 않는다.
 - 검색 레이어는 `lib/memory/read/SearchScope.js`를 통해 `(workspace, caseId, resolutionStatus, phase, affect, type, topic, isAnchor, keyId)` scope를 처음부터 정합 적용한다.
 - 실제 로직은 `lib/memory/processors/` 4개 클래스(MemoryRememberer·MemoryRecaller·MemoryReflector·MemoryLinker)와 `lib/memory/` 하위 6개 서브디렉토리(`read/`, `write/`, `link/`, `consolidate/`, `embedding/`, `signals/`)로 구성된다.
 
@@ -281,7 +281,7 @@ top-level `_searchEventId` / `_memento_hint` / `_suggestion` mirror 필드는 �
 
 ### 내부 구조
 
-사용자 MCP API는 안정적이다. 실제 로직은 `lib/memory/processors/` 4개 클래스로 분리됐으며, 핵심 모듈은 `lib/memory/` 하위 6개 서브디렉토리(`read/`, `write/`, `link/`, `consolidate/`, `embedding/`, `signals/`)로 분류돼 있다. 기존 위치에는 stub re-export가 유지되어 외부 import가 무변경이다. `lib/storage/` 어댑터 계층이 존재한다.
+사용자 MCP API는 안정적이다. 실제 로직은 `lib/memory/processors/` 4개 클래스로 분리됐으며, 핵심 모듈은 `lib/memory/` 하위 6개 서브디렉토리(`read/`, `write/`, `link/`, `consolidate/`, `embedding/`, `signals/`)로 분류돼 있다. 기존 위치에는 stub re-export가 유지되어 외부 import가 무변경이다.
 
 - MemoryRememberer: remember / batchRemember
 - MemoryRecaller: recall / context
@@ -414,7 +414,7 @@ Symbolic Verification Layer는 확률론적 검색 파이프라인 위에 추가
 | `SESSION_TTL_MINUTES` | number | `43200` | 세션 TTL(분). OAuth access token 유효 시간도 이 값 × 60초로 산출된다(기본 30일). refresh token 유효 시간은 그 두 배(기본 60일)다. |
 | `MEMENTO_REMEMBER_ATOMIC` | boolean | `false` | `true` 시 remember()의 quota check + INSERT를 단일 트랜잭션으로 원자화(TOCTOU 완전 차단). 동시 요청이 드문 환경에서는 기본값 유지. |
 | `MEMENTO_CASE_BACKPROP_ENABLED` | boolean | `false` | `true` 시 case verification 이벤트마다 증거 파편 importance를 자동 역전파(CaseRewardBackprop). 비활성 시 no-op. |
-| `MEMENTO_STORAGE` | string | `pgvector` | storage 어댑터 선택. `pgvector`(기본, PgVectorStore) 또는 `sqlite-vec`(SqliteVecStore). |
+| `MEMENTO_STORAGE` | string | `pgvector` | 저장소 백엔드 이름. 현재 `pgvector` 하나이며 이 값은 동작에 영향을 주지 않는다. |
 | `MIGRATION_LINT_FROM` | string | (없음) | `npm run lint:migrations` cutoff override. 지정 마이그레이션 번호 이후만 검사. |
 | `TRUST_PROXY_HOPS` | number | (없음) | 신뢰하는 리버스 프록시 hop 수. 미설정 시 `X-Forwarded-For` 첫 항목, `0`이면 소켓 주소, N이면 체인 오른쪽에서 N번째 항목을 클라이언트 주소로 쓴다. |
 | `MEMENTO_CORS_MODE` | string | `observe` | `ALLOWED_ORIGINS` 미설정 시 교차 출처 응답 방식(`observe`, `reflect`, `allowlist`). |

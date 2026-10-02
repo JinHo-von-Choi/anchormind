@@ -1209,7 +1209,7 @@ curl -si -X POST https://anchormind.example.com/mcp \
 |-|-|-|
 | `MEMENTO_REMEMBER_ATOMIC` | `false` | `true` 시 remember 경로가 `_rememberAtomic`으로 전환. `SELECT api_keys FOR UPDATE` + 단일 BEGIN/COMMIT 트랜잭션으로 quota 재검증과 INSERT를 원자적으로 처리. `_runPolicyGate`는 양 경로 모두 동일하게 실행되므로 `validation_warnings` 포맷에 차이 없음. |
 | `MEMENTO_CASE_BACKPROP_ENABLED` | `false` | `true` 시 case_id를 가진 파편의 amend(resolutionStatus 변경) 시점에 동일 caseId 파편들의 importance를 역전파 조정. `lib/config.js`의 `CASE_BACKPROP_ENABLED` 상수로 export. case 해결 완료 시 관련 파편의 활성화 점수가 상향되어 이후 recall 정밀도를 높인다. |
-| `MEMENTO_STORAGE` | `pgvector` | 스토리지 어댑터 선택. `pgvector`(기본, 프로덕션용 PgVectorStore) 또는 `sqlite-vec`(SqliteVecStore). 어댑터 교체 시 `transaction(fn)` 인터페이스가 유지되므로 write 경로 동시성 시맨틱은 동일하게 보존됨. |
+| `MEMENTO_STORAGE` | `pgvector` | 저장소 백엔드 이름. 현재 `pgvector` 하나이며 이 값은 동작에 영향을 주지 않는다. |
 | `MEMENTO_SYMBOLIC_POLICY_RULES` | `false` | `true` 시 `_runPolicyGate`가 PolicyRules soft gate를 평가하여 위반 rule 이름을 `validation_warnings`에 누적. |
 | `MEMENTO_FEEDBACK_SAMPLING` | `true` | remember·amend·forget 성공 응답에 `feedback_sampled` 힌트를 확률적으로 동봉. `false` 시 힌트를 전혀 붙이지 않으며 응답 형태는 이전과 동일하다. |
 

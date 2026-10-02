@@ -169,7 +169,7 @@ See [integration guides](docs/getting-started/) for platform-specific setup.
 | `recall` | Returns only relevant memories via keyword + semantic 3-tier search. `SearchScope` consistently applies workspace/caseId/affect and other scope filters across all L1-L3 layers. |
 | `context` | Restores key context. `agentId=X` returns `X + default`; omission returns shared `default` memory only. |
 | Auto-cleanup | Duplicate merging, contradiction detection, importance decay, TTL-based forgetting |
-| Storage adapter layer | `lib/storage/` holds the storage abstraction. The `getStorage()` factory returns `PgVectorStore` (default) or `SqliteVecStore` (stub, not yet implemented) based on the `MEMENTO_STORAGE` environment variable. |
+| Storage access | Storage access is handled by `getPrimaryPool` and `queryWithAgentVector` in `lib/tools/db.js`. `MEMENTO_STORAGE` is the storage backend name and does not affect behavior. |
 | **Link Reconsolidation** | `tool_feedback` signals update fragment_links weight/confidence in real time (ReconsolidationEngine). Contradicting links are automatically quarantined. |
 | **Spreading Activation** | Passing `contextText` to `recall` pre-boosts activation_score for contextually related fragments, surfacing more relevant results (SpreadingActivation). |
 | **Episode Continuity** | After `reflect`, `preceded_by` edges are automatically created between episode fragments to preserve the flow of experience as a graph (EpisodeContinuityService). |

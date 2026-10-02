@@ -416,7 +416,7 @@ LLM_PRIMARY                   - Primary LLM provider (default: gemini-cli). Opti
 LLM_FALLBACKS                 - JSON array of fallback providers: [{"provider":"anthropic","apiKey":"...","model":"claude-opus-4-6"}]
 MEMENTO_REMEMBER_ATOMIC       - When true, atomizes quota check + INSERT in remember() into a single transaction to eliminate TOCTOU (default: false)
 MEMENTO_CASE_BACKPROP_ENABLED - When true, enables CaseRewardBackprop — reward back-propagation per case_id (default: false)
-MEMENTO_STORAGE               - Storage adapter selection. pgvector (default). See lib/storage/ for additional adapters
+MEMENTO_STORAGE               - Storage backend name. Currently pgvector only; this value does not affect behavior
 MEMENTO_FEEDBACK_SAMPLING     - Attaches a tool_feedback request hint to successful remember/amend/forget responses with a fixed probability (default: true)
 MEMENTO_SPLIT_SUBJECT_GATE    - Discards a split child carrying none of the parent's subject anchors (default: true)
 MEMENTO_SPLIT_MODALITY_GATE   - Discards a split child introducing a modality absent from the parent (default: true)

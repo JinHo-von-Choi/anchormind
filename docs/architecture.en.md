@@ -147,23 +147,7 @@ lib/logging/
 +-- audit.js           Audit logging and access history recording
 ```
 
-The storage adapter layer is separated into `lib/storage/`.
-
-```
-lib/storage/
-+-- index.js         getStorage() factory singleton. Selects adapter via MEMENTO_STORAGE env var
-|                    pgvector (default) -> PgVectorStore / sqlite-vec -> SqliteVecStore
-|                    Unknown values fall back to pgvector without warning
-+-- PgVectorStore.js PostgreSQL + pgvector adapter. Wraps lib/tools/db.js getPrimaryPool() and
-|                    queryWithAgentVector() to conform to the StorageAdapter interface
-|                    engine='pgvector', vectorSupport='native'
-+-- SqliteVecStore.js SQLite + sqlite-vec adapter (unimplemented stub)
-                     engine='sqlite-vec', vectorSupport='extension'
-```
-
-StorageAdapter common interface: `query(sql, params)`, `queryAsAgent(agentId, sql, params)`, `transaction(fn)`, `migrate(filePath, opsClass)`, `close()`, `engine`, `vectorSupport`.
-
-Existing lib/tools/db.js call sites will be migrated to getStorage() in a future release. At present, lib/tools/db.js continues to provide the primary pool and batch pool directly.
+Storage access is handled by `getPrimaryPool` and `queryWithAgentVector` in `lib/tools/db.js`.
 
 Tool implementations are separated into `lib/tools/`.
 

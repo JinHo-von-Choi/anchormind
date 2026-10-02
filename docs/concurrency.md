@@ -54,16 +54,16 @@ read 경로는 write 경로와 달리 row-level lock을 사용하지 않는다. 
 
 `SearchScope` 객체는 `SearchScope.fromQuery(sq)`로 생성되며, `applyTo(fragment)` 호출이 `false`를 반환하면 해당 fragment를 결과에서 제외한다. workspace가 `null`인 scope는 전역 fragment(workspace=null)를 포함한다. `isNoop()`이 `true`인 경우 filter 루프를 건너뛸 수 있다.
 
-## 스토리지 어댑터 트랜잭션
+## 저장소 트랜잭션
 
-`lib/storage/index.js`의 `transaction(fn)` 인터페이스는 어댑터 종류에 관계없이 원자적 블록을 실행한다. `fn(client)`가 반환하는 Promise가 reject되면 자동 ROLLBACK된다. write 경로가 어댑터를 직접 교체해도 트랜잭션 시맨틱이 보존된다.
+`lib/tools/db.js`의 `withTransaction(pool, fn)`이 원자적 블록을 실행한다. `fn(client)`가 반환하는 Promise가 reject되면 자동 ROLLBACK된다.
 
 ## 관련 환경 변수
 
 |변수|기본|영향|
 |-|-|-|
 |`MEMENTO_REMEMBER_ATOMIC`|`false`|`true`이면 remember 경로가 atomic 트랜잭션 사용|
-|`MEMENTO_STORAGE`|`pgvector`|스토리지 어댑터 선택. `pgvector`(기본, 프로덕션) 또는 `sqlite-vec`(미구현 스텁)|
+|`MEMENTO_STORAGE`|`pgvector`|저장소 백엔드 이름. 현재 `pgvector` 하나이며 이 값은 동작에 영향을 주지 않는다.|
 |`LLM_CONCURRENCY_ENABLED`|`true`|`false`이면 dispatcher가 semaphore 없이 chain 호출|
 |`LLM_CONCURRENCY_WAIT_MS`|`30000`|semaphore 슬롯 대기 timeout|
 |`LLM_CONCURRENCY`|JSON|chainKey 또는 provider name 기준 limit override|

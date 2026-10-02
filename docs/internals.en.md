@@ -800,28 +800,9 @@ const output = await this._pipeline(text, { pooling: "mean", normalize: true });
 
 ---
 
-## lib/storage Adapter Layer
+## Storage Access
 
-`lib/storage/index.js` returns a storage adapter singleton based on the `MEMENTO_STORAGE` environment variable.
-
-| Value | Adapter | Status |
-|-|-|-|
-| `pgvector` (default) | `PgVectorStore` | Production |
-| `sqlite-vec` | `SqliteVecStore` | Unimplemented stub |
-
-All adapters implement a common interface of 5 methods + 2 properties.
-
-| Member | Kind | Description |
-|-|-|-|
-| `query(sql, params?)` | method | Executes SQL on the primary pool. Returns `{rows, rowCount}` |
-| `queryAsAgent(agentId, sql, params?)` | method | Executes SQL with `SET LOCAL app.current_agent_id` and vector type support enabled |
-| `transaction(fn)` | method | Runs `fn(client)` callback wrapped in BEGIN/COMMIT/ROLLBACK. Returns fn's return value |
-| `migrate(filePath, opsClass)` | method | Reads the SQL file and delegates to `opsClass.apply(sql)`. Returns the count of applied SQL statements |
-| `close()` | method | Closes the connection pool or file handle |
-| `engine` | property | `'pgvector'` or `'sqlite-vec'`. Read-only |
-| `vectorSupport` | property | `'native'` (engine-native vector type and indexes) / `'extension'` (external extension) / `'none'` |
-
-`getStorage()` returns the adapter using a singleton pattern. `resetStorageSingleton()` is available for test environments only and must not be called from production code.
+Storage access is handled by `getPrimaryPool` and `queryWithAgentVector` in `lib/tools/db.js`. `getPrimaryPool()` returns the primary connection pool, and `queryWithAgentVector(agentId, sql, params, opts)` runs a query with vector type support after setting `SET LOCAL app.current_agent_id`. `withTransaction(pool, fn)` runs the `fn(client)` callback wrapped in BEGIN/COMMIT/ROLLBACK. `MEMENTO_STORAGE` is the storage backend name; it is currently `pgvector` only and does not affect behavior.
 
 ---
 

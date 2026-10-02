@@ -820,28 +820,9 @@ const output = await this._pipeline(text, { pooling: "mean", normalize: true });
 
 ---
 
-## lib/storage 어댑터 계층
+## 저장소 접근
 
-`lib/storage/index.js`가 `MEMENTO_STORAGE` 환경변수에 따라 스토리지 어댑터 싱글톤을 반환한다.
-
-| 값 | 어댑터 | 상태 |
-|-|-|-|
-| `pgvector` (기본) | `PgVectorStore` | 운영 |
-| `sqlite-vec` | `SqliteVecStore` | 미구현 스텁 |
-
-모든 어댑터는 아래 5개 메서드 + 2개 프로퍼티를 공통 인터페이스로 구현한다.
-
-| 멤버 | 유형 | 설명 |
-|-|-|-|
-| `query(sql, params?)` | method | Primary 풀에서 단순 SQL 실행. `{rows, rowCount}` 반환 |
-| `queryAsAgent(agentId, sql, params?)` | method | `SET LOCAL app.current_agent_id` 설정 후 SQL 실행. 벡터 타입 지원 활성화 |
-| `transaction(fn)` | method | `fn(client)` 콜백을 BEGIN/COMMIT/ROLLBACK으로 감싸 실행. fn의 반환값을 그대로 반환 |
-| `migrate(filePath, opsClass)` | method | SQL 파일을 읽어 `opsClass.apply(sql)`에 위임. 적용된 SQL 구문 수 반환 |
-| `close()` | method | 연결 풀 또는 파일 핸들 종료 |
-| `engine` | property | `'pgvector'` 또는 `'sqlite-vec'`. 읽기 전용 |
-| `vectorSupport` | property | `'native'` (pgvector 네이티브 인덱스) / `'extension'` (외부 확장) / `'none'` |
-
-`getStorage()`는 싱글톤 패턴으로 어댑터를 반환한다. 테스트 전용 `resetStorageSingleton()`으로 싱글톤을 초기화할 수 있다. 프로덕션 코드에서 호출 금지.
+저장소 접근은 `lib/tools/db.js`의 `getPrimaryPool`, `queryWithAgentVector`가 맡는다. `getPrimaryPool()`은 Primary 연결 풀을 반환하고, `queryWithAgentVector(agentId, sql, params, opts)`는 `SET LOCAL app.current_agent_id` 설정 후 벡터 타입을 지원하는 쿼리를 실행한다. `withTransaction(pool, fn)`은 `fn(client)` 콜백을 BEGIN/COMMIT/ROLLBACK으로 감싸 실행한다. `MEMENTO_STORAGE`는 저장소 백엔드 이름이며 현재 `pgvector` 하나이고 동작에 영향을 주지 않는다.
 
 ---
 

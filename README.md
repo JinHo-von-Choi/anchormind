@@ -169,7 +169,7 @@ Claude.ai Web / ChatGPT 연동은 OAuth를 사용한다. 발급한 API 키(`mmcp
 | `recall` | 키워드 + 시맨틱 3계층 검색으로 필요한 기억만 반환. `SearchScope`가 workspace/caseId/affect 등 scope를 L1~L3 전 레이어에 정합 적용. |
 | `context` | 세션 시작 시 핵심 맥락을 자동 복원. `agentId=X`는 `X + default`, 생략 시 `default` 공유 기억만 반환. |
 | 자동 정리 | 중복 병합, 모순 탐지, 중요도 감쇠, TTL 기반 망각 |
-| storage 어댑터 계층 | `lib/storage/`에 스토리지 추상화 계층이 있다. `getStorage()` 팩토리가 `MEMENTO_STORAGE` ENV에 따라 `PgVectorStore`(기본) 또는 `SqliteVecStore`(스텁, 미구현)를 반환한다. |
+| 저장소 접근 | 저장소 접근은 `lib/tools/db.js`의 `getPrimaryPool`, `queryWithAgentVector`가 맡는다. `MEMENTO_STORAGE`는 저장소 백엔드 이름이며 동작에 영향을 주지 않는다. |
 | 링크 재통합 | `tool_feedback` 피드백이 fragment_links의 weight/confidence에 실시간 반영 (ReconsolidationEngine). 모순 링크는 자동 격리(quarantine). |
 | 확산 활성화 | `recall` 시 `contextText`를 전달하면 관련 파편의 activation_score를 선제적으로 부스트하여 맥락 연관성 높은 결과 우선 반환 (SpreadingActivation). |
 | 에피소드 연속성 | `reflect` 후 생성된 episode 파편 간 `preceded_by` 엣지를 자동 생성하여 경험 흐름을 그래프로 보존 (EpisodeContinuityService). |
@@ -321,7 +321,6 @@ lib/
     embedding/   # EmbeddingWorker, EmbeddingCache, MorphemeIndex
     signals/     # SpreadingActivation, CaseRewardBackprop 등
     processors/  # facade — MemoryRecaller, MemoryReflector 등
-  storage/       # PgVectorStore(기본), SqliteVecStore(스텁, 미구현) 어댑터 계층
   llm/           # dispatchChain, provider 구현체
   symbolic/      # SymbolicVerificationLayer (opt-in)
 docs/
