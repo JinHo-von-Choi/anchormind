@@ -726,7 +726,7 @@ Query the processing state of an async batch job started by `batch_remember(asyn
 The response is `{ success: true, jobId, status }`. `status` is the job state object, or null for an unknown or expired jobId. All values are returned as strings.
 
 | `status` field | Description |
-|-------|-------------|
+|-|-|
 | state | `queued` \| `processing` \| `completed` \| `dead` |
 | accepted | Fragments enqueued |
 | inserted | Fragments stored once processing completed |

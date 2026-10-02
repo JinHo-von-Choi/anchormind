@@ -743,7 +743,7 @@ violations 있는 경우 (soft gate — 저장됨):
 응답은 `{ success: true, jobId, status }`다. `status`는 처리 상태 객체이며 알 수 없거나 만료된 jobId는 null이다. 값은 모두 문자열로 반환된다.
 
 | `status` 필드 | 설명 |
-|------|------|
+|-|-|
 | state | `queued` \| `processing` \| `completed` \| `dead` |
 | accepted | 큐에 적재된 파편 수 |
 | inserted | 처리 완료 시 저장된 파편 수 |
