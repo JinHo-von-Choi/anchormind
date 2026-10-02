@@ -50,6 +50,30 @@ curl -si -H 'Origin: https://evil.example' http://localhost:57332/mcp | head
 
 ---
 
+## 와치독
+
+`memento-watchdog.sh`는 cron이 매분 실행한다. `GET /health/live`가 200이 아니면(연결 실패, 5초 시간 초과 포함) 서비스를 재시작한다. `/health/live`가 404인 서버는 `/health`가 응답하면 살아 있는 것으로 본다. `/health/ready`는 호출해 상태 변화만 로그에 남기며, 준비 실패는 재시작 사유가 아니다.
+
+| 환경 변수 | 기본값 | 의미 |
+|-|-|-|
+| `MEMENTO_WATCHDOG_BASE_URL` | `http://127.0.0.1:57332` | 상태 확인 대상 주소 |
+| `MEMENTO_WATCHDOG_SERVICE` | `memento-mcp.service` | 재시작할 systemd 서비스 이름 |
+| `MEMENTO_WATCHDOG_STATE_FILE` | `/tmp/memento-watchdog.state` | 상태 파일 경로. 연속 재시작 횟수, 마지막 재시작 시각, 마지막 ready 응답 코드를 한 줄로 기록한다 |
+| `MEMENTO_WATCHDOG_LOCK_FILE` | 상태 파일 경로에 `.lock`을 붙인 값 | 중복 실행을 막는 잠금 파일. 이미 실행 중이면 조용히 끝난다 |
+| `MEMENTO_WATCHDOG_STARTUP_GRACE_SEC` | `120` | 서비스 기동 후 이 시간 안에는 응답이 없어도 재시작하지 않는다 |
+| `MEMENTO_WATCHDOG_BACKOFF_BASE_SEC` | `60` | 연속 재시작 사이의 첫 대기 시간 |
+| `MEMENTO_WATCHDOG_BACKOFF_MAX_SEC` | `1800` | 연속 재시작 대기 시간의 상한 |
+| `MEMENTO_WATCHDOG_RESTART_CMD` | (없음) | 지정하면 `sudo systemctl restart`를 대신해 이 명령을 실행한다 |
+| `MEMENTO_WATCHDOG_NOW` | 현재 시각(epoch 초) | 시각 주입. 시험용 |
+| `MEMENTO_WATCHDOG_SERVICE_AGE_SEC` | (없음) | 서비스 기동 후 경과 초 주입. 시험용 |
+| `MEMENTO_WATCHDOG_ACTIVE_ENTER_TIMESTAMP` | (없음) | 서비스 기동 시각 주입. 시험용 |
+
+연속 재시작의 대기 시간은 60초에서 시작해 재시작마다 두 배로 늘어 1800초에서 멈춘다. 대기 시간 안에 다시 응답 실패를 만나면 재시작하지 않고 로그만 남긴다. `/health/live`가 200으로 돌아오면 연속 재시작 횟수는 0으로 돌아간다.
+
+재시작 이력은 재시작 명령을 부르기 전에 임시 파일을 거쳐 상태 파일에 기록한다. 상태 디렉터리에 쓸 수 없어 이력을 남길 수 없으면 간격을 지킬 수 없으므로 재시작을 건너뛰고 한 줄을 로그에 남긴다. 상태 파일이 손상됐으면 방금 재시작한 것으로 보고 첫 대기 구간부터 다시 시작한다.
+
+---
+
 ## 메트릭 모니터링
 
 서버 건전성 지표를 확인하는 두 가지 경로다. 목적에 따라 선택한다.
