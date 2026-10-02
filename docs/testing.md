@@ -2,17 +2,18 @@
 
 작성자: 최진호
 작성일: 2026-04-29
-수정일: 2026-10-02
+수정일: 2026-10-03
 
 ---
 
 ## 개요
 
-memento-mcp의 테스트는 세 계층으로 구성된다.
+memento-mcp의 테스트는 네 계층으로 구성된다.
 
 - 단위 테스트 (node:test): 외부 의존성 없이 모듈 단위 검증
 - 통합 테스트: DB/Redis 연결 가능 여부를 런타임 자동 판단 또는 환경변수 활성화
 - E2E 테스트(tests/e2e): PostgreSQL(pgvector)에 마이그레이션을 적용한 상태에서 도는 전단 검증. 실제 LLM CLI 검증은 `npm run test:integration:llm`(tests/integration)이 맡는다.
+- DB 동시성 레인(tests/db-concurrency, `npm run test:db`): 실제 PostgreSQL에서 행 잠금 순서와 링크 일괄 생성의 정합을 확인하는 직렬 레인. `npm test`에 포함되지 않는다.
 
 단위 테스트 러너는 Node.js 내장 `node:test`만 사용한다. jest 의존성은 없다.
 
@@ -30,7 +31,7 @@ MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test \
   'tests/unit/**/*.test.js'
 ```
 
-`MEMENTO_METRICS_DEFAULT=off`는 prom-client 레지스트리 중복 초기화 경고를 억제한다.
+`MEMENTO_METRICS_DEFAULT=off`는 prom-client 기본 프로세스 지표(CPU, 메모리 등) 수집을 생략한다. `npm test`는 `DOTENV_CONFIG_PATH=.env.test`, `REDIS_ENABLED=false`, `CACHE_ENABLED=false`도 함께 지정한다.
 단위 테스트는 DB, Redis, EMBEDDING_API_KEY 없이 실행된다.
 
 ---
@@ -63,10 +64,13 @@ npm run test:integration:llm
 | `npm run test:e2e:local` | `scripts/run-e2e-tests.sh`로 테스트 DB를 띄운 뒤 e2e 실행 |
 | `npm run test:db` | tests/db-concurrency. 마이그레이션된 PostgreSQL에서 파편 행 잠금 순서(교착 0건)와 링크 일괄 생성의 `linked_to` 정합, 감쇠와 utility 묶음 갱신(잠금 순서, 무변경 재기록, 최소 변화량) 확인. 표 전체를 갱신하는 시험은 병렬 레인에 두지 않고 이 직렬 레인에만 둔다. 실행마다 전용 데이터베이스(`dbl_<pid>_<hex>`)를 만들어 마이그레이션하고 끝나면 지운다. 서버는 POSTGRES_* 로 지정하며 로컬 호스트, 포트 35433, 사용자 memento, 비밀번호 memento_test 가 아니면 연결 전에 거부한다(다른 일회용 서버는 `DB_LANE_SERVER_ALLOW=<host:port>`). 서버에 닿지 못하면 건너뛰지 않고 실패. `npm test`에는 포함되지 않음 |
 | `npm run lint` | eslint 전체 |
+| `npm run lint:ratchet` | 무처리 catch 처리기, 복잡도, 파일 길이, 직접 환경 변수 읽기의 수치를 `scripts/lint-baseline.json`과 비교한다. 기준선보다 늘면 실패하며 기준선 상향에는 `--update --allow-increase`가 필요하다 |
 | `npm run audit:ci` | 런타임 의존성 audit-ci 검사 |
 | `npm run lint:migrations` | migration SQL body-only 규약 검사 (MIGRATION_LINT_FROM 기준) |
+| `node scripts/import-cycles.js` | `lib`, `config`, `server.js`의 상대 경로 import 순환 검사. 정적 import만 본 결과와 동적 import를 포함한 결과를 따로 출력한다. 단위 시험(`import-cycles.test.js`)이 정적 순환 0건과 동적 포함 순환의 허용 목록을 확인한다 |
+| `npm run release -- X.Y.Z` | 작업 트리와 HEAD의 Tests 워크플로 결과를 확인한 뒤 CHANGELOG와 버전 표기를 갱신하고 `release: X.Y.Z` 커밋과 annotated tag를 만든다. main 브랜치에서만 실행한다(`scripts/release.js`, 시험은 `release-script.test.js`) |
 
-CI(.github/workflows/test.yml): `unit` 작업(lint, lint:migrations, test:coverage, 외부 서비스 없는 통합시험), 별도 워크플로 `.github/workflows/audit.yml`(push, pull_request, 매일 예약 실행에서 `audit:ci`), `runtime-matrix` 작업(Node 20/22/24에서 모듈 적재와 키 미설정 기동 거부 확인), `e2e` 작업(pgvector/pgvector:pg15, migrate 후 test:e2e). `db-concurrency` 작업(같은 DB 구성에서 test:db, `continue-on-error`로 결과만 보고하며 결과 요약은 `GITHUB_STEP_SUMMARY`에 남음). 로컬 임베딩 e2e는 e2e-local-embed.yml이 맡는다.
+CI(.github/workflows/test.yml): `unit` 작업(lint, lint:ratchet, lint:migrations, test:coverage, 외부 서비스 없는 통합시험), `runtime-matrix` 작업(Node 20/22/24에서 모듈 적재와 키 미설정 기동 거부 종료 코드 78 확인), `e2e` 작업(pgvector/pgvector:pg15, migrate 후 test:e2e), `db-concurrency` 작업(같은 DB 구성에서 test:db, 제한 시간 10분, `continue-on-error`로 결과만 보고하고 워크플로 결론에는 반영하지 않음). 별도 워크플로 `.github/workflows/audit.yml`(push, pull_request, 매일 예약 실행에서 `audit:ci`), `.github/workflows/codeql.yml`(CodeQL 정적 분석), 로컬 임베딩 e2e는 `.github/workflows/e2e-local-embed.yml`이 맡는다.
 
 ---
 
@@ -107,7 +111,7 @@ describe("example mock.module 패턴", () => {
 
 ## cleanup 표준 패턴
 
-`lib/sessions.js`, `lib/redis.js`, `lib/db.js` 등 timer·socket을 활성화하는 모듈을
+`lib/sessions.js`, `lib/redis.js`, `lib/tools/db.js` 등 timer·socket을 활성화하는 모듈을
 import하는 단위 테스트는 `after()` 훅에서 반드시 정리해야 한다.
 
 ```js
@@ -158,6 +162,19 @@ MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test \
 | `consolidator-schema-fit-gate.test.js` | evaluateSchemaFitGate SQL 조건 3종 |
 | `reflect-meta-link-suggestions.test.js` | tool_reflect 응답 _meta.link_suggestions 구조 |
 | `reflect-session-reingest.test.js` | 반복 reflect 시 저장된 세션 파편 재저장 없음, WM error 해결 상태, 세션 그룹 workspace 보존 |
+| `health-live-ready.test.js` | `probeWithDeadline`, `/health/live`, `/health/ready` 처리기 응답 |
+| `watchdog-script.test.js` | `memento-watchdog.sh` 재시작 판정(생존 확인, 시작 유예, 지수 간격, 잠금, 상태 파일). 응답을 고정한 로컬 HTTP 서버와 재시작 명령 대체로 확인 |
+| `shutdown-guard.test.js` | `createShutdownGuard`의 1회 실행, 이후 신호 무시, 종료 상한 |
+| `config-env-parse.test.js` | `envInt`, `envFloat`, `envBool`, `envEnum` 파싱과 모듈 적재 시점, 호출 시점의 값 검사 |
+| `id-ordered-update.test.js` | `idOrderedUpdate.js`의 id 오름차순 묶음 갱신과 최소 변화량 계산 |
+| `release-script.test.js` | `scripts/release.js`의 문서 변환 함수와 임시 git 저장소 위의 전체 절차 |
+| `check-coverage.test.js` | 커버리지 하한 점검 함수(허용 폭, 기준선 갱신, 입력 오류 종료 코드) |
+| `lint-ratchet.test.js` | `scripts/lint-ratchet.js`의 기준선 비교 로직 |
+| `eslint-no-silent-catch.test.js` | `scripts/eslint-rules/no-silent-catch.js` 규칙 |
+| `import-cycles.test.js` | 정적 import 순환 0건과 동적 포함 순환 허용 목록 |
+| `monitoring-doc-structure.test.js` | `docs/operations/monitoring.md` 규칙이 참조하는 지표 이름과 라벨이 등록된 지표와 일치하는지 |
+| `ci-workflow-layout.test.js` | 의존성 감사가 별도 워크플로에서 돌고 예약 실행을 가지는지 |
+| `db-lane-guard.test.js` | DB 동시성 레인의 실행 허용 조건(로컬 시험 서버, 전용 데이터베이스 이름 형식)을 DB 없이 확인 |
 
 ### 통합 테스트 (tests/integration/)
 
@@ -167,26 +184,27 @@ MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test \
 | `session-linker-deadlock.test.js` | DATABASE_URL 필수. 미설정 시 전체 skip |
 | `reflect-large-payload.test.js` | DB/Redis/API키 불필요. 항상 실행 가능 |
 
-`reflect-large-payload.test.js`와 `embedding-worker-batch.test.js`는 모든 의존성을
-stub으로 격리하므로 `npm test`(단위 테스트 러너)로도 실행 가능하다.
+`reflect-large-payload.test.js`는 모든 의존성을 stub으로 격리하므로 CI `unit` 작업의
+외부 서비스 없는 통합시험 단계에서 실행된다. `npm test`는 tests/unit만 실행한다.
 
----
+### DB 동시성 시험 (tests/db-concurrency/)
 
-## 알려진 결함
+| 파일 | 검증 내용 |
+|---|---|
+| `lock-order.test.js` | 접근 기록 갱신, 연결 파편 접근 기록, 임베딩 일괄 갱신, 링크 일괄 생성을 겹쳐 실행해도 교착(SQLSTATE 40P01)이 나지 않음 |
+| `linked-to-pairs.test.js` | 링크 일괄 생성 후 각 파편의 `linked_to`가 자기 쌍의 상대 id만 담고, 이미 있던 값은 중복 없이 유지됨 |
+| `score-update-lock-order.test.js` | `decayImportance`, `_updateUtilityScores`, `FragmentWriter.delete`의 `linked_to` 정리가 id 순 거래와 교착하지 않고, 묶음 감쇠의 행별 결과가 같은 기준 시각의 단일 계산과 같음 |
+| `score-update-noop.test.js` | 값이 바뀌지 않는 행을 두 번째 실행에서 다시 쓰지 않음(xmin 불변) |
+| `score-update-min-delta.test.js` | `MEMENTO_DECAY_MIN_DELTA`, `MEMENTO_UTILITY_MIN_DELTA` 적용 |
 
-아래 3건은 LLM provider CLI 통합 계층의 기존 결함이다. 메모리 코어 로직과 무관하다.
-CI에서 전체 통과 수를 비교할 때 이 3건을 기준에서 제외하여 판단한다.
-
-| 테스트 | 원인 | 상태 |
-|---|---|---|
-| codex-cli provider SyntaxError | codex-cli 외부 바이너리 파싱 결함 | upstream 이슈 |
-| qwen-cli provider SyntaxError | qwen-cli 외부 바이너리 파싱 결함 | upstream 이슈 |
-| llm-provider-cooldown timeout | 의도된 타임아웃 동작 검증 케이스 | 의도적 설계, 수정 불필요 |
+`_guard.js`와 `_harness.js`는 시험이 아니라 허용 조건 검사와 전용 데이터베이스 준비·삭제를 맡는 도우미다.
 
 ---
 
 ## 전체 테스트 현황
 
-- 단위 테스트: node:test 단일 러너. DB·Redis·EMBEDDING_API_KEY 불필요. 378개 테스트 파일(tests/unit 368, tests/unit/symbolic 10), 통합 13개, e2e 4개, 전체 395개. v4.6.0 신규: batch-remember-async.test.js, batch-remember-worker.test.js, session-activity-scan-limit.test.js, rrf-importance-cutoff.test.js, remember-write-paths.test.js, mcp-session-context.test.js.
+- 시험 파일: 455개(tests/unit 432, 그중 tests/unit/symbolic 9, tests/integration 14, tests/e2e 4, tests/db-concurrency 5).
+- 단위 테스트: node:test 단일 러너. DB·Redis·EMBEDDING_API_KEY 불필요. 마지막 실행 기준 3706개 테스트(통과 3704, 건너뜀 2, 실패 0).
 - 통합 테스트: DB/Redis 환경에서 전체 통과
 - E2E: PostgreSQL 환경에서 전체 통과(CI e2e 작업). LLM CLI 검증은 CLI 인증 환경에서 `npm run test:integration:llm`으로 수행
+- DB 동시성 레인: PostgreSQL 환경에서 `npm run test:db`로 실행. CI에서는 결과만 보고한다.
