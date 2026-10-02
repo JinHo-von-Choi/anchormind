@@ -38,9 +38,10 @@ mock.module("../../lib/tools/db.js", {
 
 /* ── MemoryManager mock ── */
 let mgrCalls = [];
+let mgrError = null;
 const mgrStub = {
-  remember:        (p) => { mgrCalls.push(["remember", p]);        return Promise.resolve({ success: true, id: "new-frag" }); },
-  amend:           (p) => { mgrCalls.push(["amend", p]);           return Promise.resolve({ updated: true, fragment: { id: p.id } }); },
+  remember:        (p) => { mgrCalls.push(["remember", p]);        return mgrError ? Promise.reject(mgrError) : Promise.resolve({ success: true, id: "new-frag" }); },
+  amend:           (p) => { mgrCalls.push(["amend", p]);           return mgrError ? Promise.reject(mgrError) : Promise.resolve({ updated: true, fragment: { id: p.id } }); },
   forget:          (p) => { mgrCalls.push(["forget", p]);          return Promise.resolve(p.dryRun ? { dryRun: true, simulated: { would_delete: true } } : { deleted: 1, protected: 0 }); },
   recall:          (p) => { mgrCalls.push(["recall", p]);          return Promise.resolve({ fragments: [{ id: "f1" }], searchPath: ["L1:1"], count: 1, totalCount: 1 }); },
   fragmentHistory: (p) => { mgrCalls.push(["fragmentHistory", p]); return Promise.resolve({ current: { id: p.id }, versions: [] }); }
@@ -90,6 +91,7 @@ beforeEach(() => {
   queryCalls   = [];
   queryResults = [];
   mgrCalls     = [];
+  mgrError     = null;
 });
 
 /* ── GET /keys/:id/stats ── */
@@ -194,6 +196,17 @@ describe("POST /memory/fragments", () => {
     assert.equal(params.content, "c");
   });
 
+  it("검증 오류(-32602)는 400과 검증 문구로 응답한다", async () => {
+    mgrError = Object.assign(new Error("keywords[0] must be a string"), { code: -32602 });
+    const res = fakeRes();
+    await handleMemory(
+      jsonReq("POST", { key_id: "key-9", content: "c", topic: "t", type: "fact", keywords: [{}] }),
+      res, makeUrl(`${ADMIN_BASE}/memory/fragments`)
+    );
+    assert.equal(res.statusCode, 400);
+    assert.deepEqual(JSON.parse(res.body), { error: "keywords[0] must be a string" });
+  });
+
   it("필수 필드 누락 시 400", async () => {
     const res = fakeRes();
     await handleMemory(
@@ -206,6 +219,12 @@ describe("POST /memory/fragments", () => {
 });
 
 /* ── PATCH /memory/fragments/:id ── */
+async function patchWith(body) {
+  const res = fakeRes();
+  await handleMemory(jsonReq("PATCH", body), res, makeUrl(`${ADMIN_BASE}/memory/fragments/frag-1`));
+  return res;
+}
+
 describe("PATCH /memory/fragments/:id", () => {
   it("amend를 필드 매핑·스코프와 함께 호출한다", async () => {
     const res = fakeRes();
@@ -220,6 +239,20 @@ describe("PATCH /memory/fragments/:id", () => {
     assert.equal(params.isAnchor, true);
     assert.equal(params.assertionStatus, "verified");
     assert.deepEqual(params._groupKeyIds, ["a", "b"]);
+  });
+
+  it("검증 오류(-32602)는 400과 검증 문구로 응답한다", async () => {
+    mgrError = Object.assign(new Error("content length 5000 exceeds max 4000"), { code: -32602 });
+    const res = await patchWith({ content: "x" });
+    assert.equal(res.statusCode, 400);
+    assert.deepEqual(JSON.parse(res.body), { error: "content length 5000 exceeds max 4000" });
+  });
+
+  it("그 밖의 예외는 500과 고정 문구로 응답한다", async () => {
+    mgrError = new Error("connect ECONNREFUSED 10.0.0.5:5432");
+    const res = await patchWith({ content: "x" });
+    assert.equal(res.statusCode, 500);
+    assert.deepEqual(JSON.parse(res.body), { error: "Internal error" });
   });
 });
 
