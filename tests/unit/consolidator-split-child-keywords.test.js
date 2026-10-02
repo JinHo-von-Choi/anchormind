@@ -31,6 +31,7 @@ mock.module("../../lib/config.js", {
   namedExports: {
     resolveSplitChainConfig: () => null,
     ALLOW_LEGACY_UNBOUND_AGENT_SCOPE: false,
+    reservedAgentIdsMode: () => "warn",
     LLM_PRIMARY            : "gemini-cli",
     LLM_FALLBACKS          : [],
     /** FragmentWriter가 요구 — 이 테스트는 DB 경로를 타지 않으므로 값은 무의미 */

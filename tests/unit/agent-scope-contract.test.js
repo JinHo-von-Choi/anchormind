@@ -70,6 +70,15 @@ describe("effective agent scope", () => {
     assert.doesNotMatch(warnings[0], /private/);
     assert.equal((await legacyUnboundAgentScopeTotal.get()).values[0].value, before + 1);
   });
+
+  it("예약 agentId 경고는 키 앞 8자만 싣고 agentId는 싣지 않는다", () => {
+    warnings.length = 0;
+    assertAuthenticatedAgentScope({ agentId: "sy.stem", _keyId: "abcdef01-2345-4678-9abc-def012345678" });
+    const reserved = warnings.find(w => w.includes("reserved agentId requested"));
+    assert.match(reserved, /key=abcdef01 mode=warn/);
+    assert.doesNotMatch(reserved, /sy\.stem|2345-4678/);
+    assert.match(warnings.find(w => w.includes("Legacy unbound")), /key=abcdef01;/);
+  });
   it("agentId 생략은 default-only이다", () => {
     const scope = resolveAgentScope({});
     assert.equal(scope.auditLabel, "default-only");

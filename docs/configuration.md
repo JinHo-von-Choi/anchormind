@@ -320,6 +320,7 @@ POSTGRES_* 접두어가 DB_* 접두어보다 우선한다. 두 형식을 혼용�
 | REDIS_DB | 0 | Redis 데이터베이스 번호 |
 | MEMENTO_REDIS_SESSION_FAIL_CLOSED | false | true이면 Redis 세션 저장 실패 시 요청을 실패 처리. false이면 경고 후 in-memory 세션으로 계속 동작 |
 | MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE | true | 전환 기간 동안 일반 API key의 non-default agentId 주장을 허용. 실제 사용 시 경고와 `mcp_legacy_unbound_agent_scope_total` 기록. 같은 key 내부 agent 인증은 보장하지 않으며, 이관 후 계수 증가가 없는지 확인하고 false로 strict 모드 적용. includePeerAgents는 항상 master 전용 |
+| MEMENTO_RESERVED_AGENT_IDS | warn | 내부 작업 전용 agentId(system, admin) 처리 방식. 정제 후 두 값과 같아지는 입력(예: `SYSTEM`, `sy.stem`)이 대상이다. warn은 요청을 통과시키고 `[AgentScope] reserved agentId requested: key=<키 앞 8자> mode=warn` 경고만 남긴다. enforce는 API key 요청을 FORBIDDEN(-32001)으로 거부한다. master key는 항상 허용. 경고가 일정 기간 없을 때 enforce로 전환 |
 | REDIS_MASTER_NAME | mymaster | Sentinel 마스터 이름 |
 | REDIS_SENTINELS | localhost:26379, localhost:26380, localhost:26381 | Sentinel 노드 목록. 쉼표로 구분된 host:port 형식 |
 

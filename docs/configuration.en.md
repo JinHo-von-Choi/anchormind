@@ -321,6 +321,7 @@ This feature operates asynchronously only when `REDIS_ENABLED=true`. When `REDIS
 | REDIS_DB | 0 | Redis database number |
 | MEMENTO_REDIS_SESSION_FAIL_CLOSED | false | Fail the request when Redis session persistence fails. When false, warn and continue with the in-memory session |
 | MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE | true | Transition compatibility for API-key non-default agentId claims. Each use emits a warning and increments `mcp_legacy_unbound_agent_scope_total`. It does not authenticate agents sharing a key; migrate clients, confirm no further increments, then set false for strict mode. includePeerAgents always requires master authentication |
+| MEMENTO_RESERVED_AGENT_IDS | warn | Handling of agentIds reserved for internal work (system, admin). Inputs that normalize to either value (for example `SYSTEM`, `sy.stem`) are covered. warn lets the request through and only logs `[AgentScope] reserved agentId requested: key=<first 8 chars of key> mode=warn`. enforce rejects API-key requests with FORBIDDEN (-32001). Master keys are always allowed. Switch to enforce once the warning stops appearing |
 | REDIS_MASTER_NAME | mymaster | Sentinel master name |
 | REDIS_SENTINELS | localhost:26379, localhost:26380, localhost:26381 | Sentinel node list. Comma-separated host:port format |
 

@@ -30,6 +30,7 @@ mock.module("../../lib/config.js", {
   namedExports: {
     resolveSplitChainConfig: () => null,
     ALLOW_LEGACY_UNBOUND_AGENT_SCOPE: false,
+    reservedAgentIdsMode: () => "warn",
     LLM_PRIMARY            : "gemini-cli",
     LLM_FALLBACKS          : [],
     buildSearchPath        : () => "agent_memory, public"
