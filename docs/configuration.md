@@ -12,6 +12,18 @@
 | MEMENTO_ACCESS_KEY | (없음) | Bearer 인증 키. 미설정 상태로는 서버가 기동하지 않고 종료 코드 78로 멈춘다. 인증 없이 운용하려면 `MEMENTO_AUTH_DISABLED=true`를 함께 지정해야 한다 |
 | MEMENTO_AUTH_DISABLED | false | `true`로 설정 시 인증을 완전히 비활성화하여 모든 요청을 master 권한으로 처리. 개발·시험 전용이며 이 선언이 없으면 키 없는 기동 자체가 거부된다. `MEMENTO_ACCESS_KEY`가 비어 있을 때만 유효 |
 | DB_STATEMENT_TIMEOUT_MS | 30000 | 사용자 요청 경로의 질의 시간 상한(ms). 0은 무제한. system·admin 유지보수 경로에는 적용하지 않는다 |
+| REQUEST_TIMEOUT_MS | 60000 | 요청 수신 상한(ms). 0은 무제한 |
+| KEEP_ALIVE_TIMEOUT_MS | 75000 | Keep-Alive 연결 유지 시간(ms). 프록시 설정과 맞춘다 |
+| HEADERS_TIMEOUT_MS | 76000 | 요청 헤더 수신 상한(ms). KEEP_ALIVE_TIMEOUT_MS보다 크게 둔다 |
+| LOG_LEVEL | info (NODE_ENV가 production이 아니면 debug) | winston 로그 레벨 |
+| COMPRESSION_LEVEL | 6 | gzip 압축 레벨(0~9) |
+| MIN_COMPRESS_SIZE | 1024 | 이 바이트 미만 응답은 압축하지 않는다 |
+| MEMENTO_ROTATE_RATE_LIMIT_PER_MIN | 5 | /session/rotate의 IP당 분당 호출 상한 |
+| MEMENTO_SPLIT_LLM_PRIMARY / MEMENTO_SPLIT_LLM_FALLBACKS | (없음) | 장문 분할 전용 LLM 체인. 미설정 시 전역 체인 사용 |
+| MEMENTO_VECTOR_FORCE_INDEX | (적용) | `off`면 벡터 검색의 인덱스 강제 planner 힌트를 끈다 |
+| MEMENTO_RUNTIME | (없음) | `docker`면 Docker 설치로 판정한다 |
+| GITHUB_TOKEN | (없음) | 업데이트 확인 시 GitHub API 인증 토큰 |
+| WORKER_ID | single | health 응답의 workerId 표기 |
 | SESSION_TTL_MINUTES | 43200 | 세션 유효 시간 (분). 기본값 30일. 슬라이딩 윈도우 방식으로 도구 사용 시마다 갱신 |
 | LOG_DIR | ./logs | Winston 로그 파일 저장 디렉토리 |
 | ALLOWED_ORIGINS | (없음) | 허용할 Origin 목록. 쉼표로 구분. 미설정 시 모든 Origin 허용 (MCP 클라이언트 호환성 우선) |
@@ -43,6 +55,9 @@
 | MEMENTO_RERANKER_ENABLED | false | in-process 교차 인코더 리랭커 활성화. 기본은 비활성이다. 기본 모델이 영어 전용이라 한국어 코퍼스에서는 끄는 쪽이 낫다. 절제 실험 기준 Recall@1 74%에서 85%, MRR 0.827에서 0.890, p50 561ms에서 126ms로 개선된다. `RERANKER_URL`로 지정한 외부 리랭커는 이 스위치와 무관하게 동작한다 |
 | RERANKER_MODEL | minilm | in-process 리랭커가 활성일 때 쓰는 ONNX 모델. `minilm` (기본값, ~80MB, 영어 전용) 또는 `bge-m3` (~280MB, 다국어). bge-m3는 비영어 판정이 훨씬 낫지만 CPU에서 30건 재정렬에 수 초가 걸리므로 GPU 기반 외부 서비스 뒤에서만 쓴다 |
 | RERANKER_EXTERNAL_FALLBACK | skip | external 리랭커 3회 연속 실패 시 정책. `skip`(기본): in-process 전환 없이 `RERANKER_EXTERNAL_COOLDOWN_MS` 동안 external 호출 자체를 생략하고 원점수(RRF 순서)를 그대로 반환. `inprocess`: ONNX in-process 모드로 전환(opt-in, 이전 동작) |
+| RERANKER_TIMEOUT_MS | 5000 | 외부 리랭커 호출 타임아웃(ms) |
+| NLI_SERVICE_URL | (없음) | 외부 NLI 서비스 URL. 미설정 시 in-process ONNX |
+| NLI_TIMEOUT_MS | 5000 | 외부 NLI 호출 타임아웃(ms) |
 | RERANKER_EXTERNAL_COOLDOWN_MS | 60000 | `RERANKER_EXTERNAL_FALLBACK=skip`일 때의 쿨다운 유지 시간(ms). 창 만료 후 다음 recall이 external을 1건 재시도하며, 성공 시 정상 복귀·실패 시 쿨다운 재진입 |
 | QUOTA_NEAR_LIMIT_MARGIN | 10 | `QuotaChecker.check()`가 FOR UPDATE 정밀 검사로 전환하는 잔여 할당량 임계치. `remaining`이 이 값 이하일 때만 트랜잭션 락을 획득하며, 그 이상이면 10초 TTL 캐시(getUsage) 결과로 락 없이 통과한다 |
 | ENABLE_RECONSOLIDATION | false | ReconsolidationEngine 활성화. true 시 tool_feedback과 contradicts 감지 시 fragment_links weight/confidence를 동적 갱신한다 |
@@ -56,7 +71,7 @@
 | TRUST_PROXY_HOPS | (없음) | 신뢰하는 리버스 프록시 hop 수. `X-Forwarded-For` 체인의 오른쪽에서 이 수번째 항목을 클라이언트 주소로 채택하고, `0`이면 헤더를 무시하고 소켓 주소를 쓴다. 미설정 시 기존 동작(첫 항목 사용). 실제 프록시 단수와 정확히 일치시켜야 하며, 실제보다 크게 잡으면 클라이언트가 보낸 값이 채택된다. 단일 nginx 뒤에서는 `1` |
 | MEMENTO_TOOL_ARGS_VALIDATION | warn | tools/call 인자를 도구의 inputSchema와 대조하는 모드. `off`: 점검 생략, `warn`: 위반을 `[ToolArgs]` 경고 로그로만 남기고 통과, `enforce`: 위반 시 JSON-RPC `-32602`로 거부. 호출 시점에 읽으므로 재시작 없이 바뀐다 |
 | MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN | false | `true`로 설정 시 스키마에 없는 필드를 위반으로 세지 않는다. `enforce` 모드에서 별칭 필드를 쓰는 클라이언트를 수용할 때 쓴다 |
-| MEMENTO_LLM_CLI_ENV_PASSTHROUGH | (없음) | CLI provider(gemini-cli, codex-cli, copilot-cli, qwen-cli, agy-cli, opencode) 자식 프로세스에 추가로 전달할 환경변수 이름(쉼표 구분). 기본으로는 PATH, HOME 등 기본 변수와 CLI별 인증 변수만 전달된다 |
+| MEMENTO_LLM_CLI_ENV_PASSTHROUGH | (없음) | CLI provider(gemini-cli, codex-cli, copilot-cli, qwen-cli, agy-cli, opencode-cli) 자식 프로세스에 추가로 전달할 환경변수 이름(쉼표 구분). 기본으로는 PATH, HOME 등 기본 변수와 CLI별 인증 변수만 전달된다 |
 | MEMENTO_REMEMBER_ATOMIC | false | true 시 remember()의 quota check + INSERT를 단일 트랜잭션으로 원자화. BEGIN → api_keys FOR UPDATE(quota 재검증) → INSERT → COMMIT 순서로 TOCTOU를 완전 차단. false(기본)는 선제 quota check만 수행하며 동시 요청이 드문 환경에 적합 |
 | MEMENTO_CASE_BACKPROP_ENABLED | false | true 시 CaseRewardBackprop 활성화. case verification 이벤트마다 증거 파편 importance를 자동 역전파. 비활성 시 호출 자체가 no-op(DB·메트릭 영향 0). DAG 일관성 베이스라인 확보 후 활성화 권장 |
 | MEMENTO_STORAGE | pgvector | storage 어댑터 선택. `pgvector`(기본, PgVectorStore) 또는 `sqlite-vec`(SqliteVecStore). 변경 시 서버 재시작 필요 |
@@ -141,7 +156,7 @@ REDIS_ENABLED=true면 Redis에 상태 저장, 아니면 in-memory.
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
 | LLM_CONCURRENCY_ENABLED | true | false 시 세마포어 우회. 모든 provider에 동시성 제한 없이 요청 |
-| LLM_CONCURRENCY_WAIT_MS | 30000 | 슬롯 대기 타임아웃 (ms). 초과 시 요청 실패 |
+| LLM_CONCURRENCY_WAIT_MS | 30000 | 슬롯 대기 타임아웃 (ms). 초과 시 해당 provider를 실패로 기록하고 다음 fallback으로 넘어간다 |
 | LLM_CONCURRENCY | (아래 기본값) | JSON 객체. chainKey(`provider|baseUrl|model`) 또는 provider 이름 기준 슬롯 한도 |
 
 `LLM_CONCURRENCY` 기본값 (`DEFAULT_LLM_CONCURRENCY`):
@@ -206,7 +221,7 @@ macOS launchd로 서버를 실행하는 경우 셸 프로필을 읽지 않으므
 
 **GEMINI_TIMEOUT_MS**: `lib/memory/processors/AutoReflect.js`의 LLM chain 호출 timeout은 30,000 ms로 고정된다(`GEMINI_TIMEOUT_MS = 30_000` 코드 상수, `process.env` 참조 없음). 값을 변경하려면 해당 파일의 상수를 직접 수정해야 한다. MorphemeIndex의 `geminiTimeoutMs`(config/memory.js, 기본 60000)와 별개임에 주의한다.
 
-**buildChain 순서 결정 로직** (`lib/llm/index.js:38–68`): `LLM_PRIMARY` → `LLM_FALLBACKS` 선언 순서로 entries 배열을 구성한 뒤, `seen` Set으로 중복 provider를 제거하고, 각 provider의 `isAvailable()` 체크 성공 여부로 chain에 포함 여부를 결정한다. `LLM_PRIMARY`가 `LLM_FALLBACKS` 목록에도 있으면 fallback의 config 객체가 우선 사용된다. `isAvailable()` 실패 시 해당 provider는 체인에서 제외되고 다음 provider로 즉시 넘어간다. 결과적으로 chain 순서는 환경변수 선언 순서와 1:1 대응한다.
+**buildChain 순서 결정 로직** (`lib/llm/index.js` `buildChain()`): `LLM_PRIMARY` → `LLM_FALLBACKS` 선언 순서로 entries 배열을 구성한 뒤, `seen` Set으로 중복 provider를 제거하고, 각 provider의 `isAvailable()` 체크 성공 여부로 chain에 포함 여부를 결정한다. `LLM_PRIMARY`가 `LLM_FALLBACKS` 목록에도 있으면 fallback의 config 객체가 우선 사용된다. `isAvailable()` 실패 시 해당 provider는 체인에서 제외되고 다음 provider로 즉시 넘어간다. 결과적으로 chain 순서는 환경변수 선언 순서와 1:1 대응한다.
 
 자세한 운영 가이드는 `docs/operations/llm-providers.md` 참조.
 
@@ -261,6 +276,9 @@ POSTGRES_* 접두어가 DB_* 접두어보다 우선한다. 두 형식을 혼용�
 | DB_IDLE_TIMEOUT_MS | 유휴 연결 반환 대기 시간 ms. 기본 30000 |
 | DB_CONN_TIMEOUT_MS | 연결 획득 타임아웃 ms. 기본 10000 |
 | DB_QUERY_TIMEOUT | 쿼리 타임아웃 ms. 기본 30000 |
+| DB_BACKGROUND_MAX_CONNECTIONS | 스케줄러·워커가 동시에 쓰는 Primary 풀 연결 상한. 기본 DB_MAX_CONNECTIONS의 40%(최소 1). DB_MAX_CONNECTIONS-1을 넘지 않는다. 초과 요청은 FIFO로 대기한다 |
+| DB_BACKGROUND_WAIT_MAX_MS | 백그라운드 슬롯 대기 상한(ms). 기본 120000. 넘기면 해당 작업만 실패하고 다음 회차에 재시도한다 |
+| PGVECTOR_SCHEMA | pgvector 확장이 설치된 스키마. 미설정 시 기동 시 자동 감지 |
 | BATCH_DATABASE_URL | (없음, 선택) batchPool 전용 PostgreSQL URL. 미설정 시 기본 `DATABASE_URL`을 공유한다. batchPool은 multi-row INSERT 등 무거운 트랜잭션을 전용 풀에서 처리하여 recall 요청의 스타베이션을 방지한다. 풀 크기는 `primaryMax × 0.3`(최소 2)으로 결정되고, `application_name='memento-mcp:batch'`가 pg_stat_activity 분리 모니터링에 사용된다. 풀 크기와 application_name은 코드 내부에서 결정되며 환경변수로 override할 수 없다 |
 
 ### batch_remember 비동기 모드
@@ -590,6 +608,7 @@ recall은 자체 힌트 경로를 이미 갖고 있어 `rates`에서 제외된�
 | `searchEnabled` | `MEMENTO_SYNTHETIC_QUERY_SEARCH` | `true` | 검색 반영. `false`면 이미 쌓인 보조 벡터를 조회하지 않는다 |
 | `minImportance` | `MEMENTO_SYNTHETIC_QUERY_MIN_IMPORTANCE` | `0.8` | 생성 대상 최소 중요도 |
 | `types` | `MEMENTO_SYNTHETIC_QUERY_TYPES` | `error,procedure,decision` | 생성 대상 유형(쉼표 구분) |
+| `intervalMs` | `MEMENTO_SYNTHETIC_QUERY_INTERVAL_MS` | `5000` | 워커 큐 폴링 간격(ms) |
 | `maxCallsPerMinute` | `MEMENTO_SYNTHETIC_QUERY_RPM` | `20` | 분당 LLM 호출 상한. `0`이면 무제한 |
 | `batchSize` | `MEMENTO_SYNTHETIC_QUERY_BATCH` | `5` | 큐에서 한 번에 꺼내는 수 |
 | `backfillBatch` | `MEMENTO_SYNTHETIC_QUERY_BACKFILL` | `20` | 큐가 비었을 때 회수할 미생성 파편 수 |
@@ -962,6 +981,7 @@ EMBEDDING_DIMENSIONS=768
 | Cloudflare Workers AI (bge-small) | 384 | `EMBEDDING_PROVIDER=cloudflare` | 있음 (10K req/일) |
 | Cloudflare Workers AI (bge-large) | 1024 | `EMBEDDING_PROVIDER=cloudflare` | 있음 (10K req/일) |
 | 커스텀 호환 서버 | 가변 | `EMBEDDING_PROVIDER=custom` | — |
+| HuggingFace Transformers (multilingual-e5-small) | 384 | `EMBEDDING_PROVIDER=transformers` | 완전 무료 (로컬) |
 | Cohere embed-v4.0 | 1536 | 코드 교체 | 없음 |
 | Voyage AI voyage-3.5 | 1024 | 코드 교체 | 없음 |
 | Mistral mistral-embed | 1024 | 코드 교체 | 없음 |
@@ -1057,14 +1077,12 @@ Mode가 미지정이거나 NULL이면 RBAC 기반 기존 권한 체계만 적용
 
 ### 전체 테스트 (DB 불필요)
 ```bash
-npm test          # Jest (tests/*.test.js) + node:test (tests/unit/*.test.js) 순차 실행. tests/unit/은 node:test 전용이며 Jest에서 제외된다.
+npm test          # node:test, tests/unit/*.test.js + tests/unit/*/*.test.js (DB 불필요)
 ```
 
 개별 실행:
 ```bash
-npm run test:jest        # Jest — tests/*.test.js
-npm run test:unit:node   # node:test — tests/unit/*.test.js
-npm run test:integration # node:test — tests/integration/*.test.js + tests/e2e/*.test.js
+npm run test:integration # node:test, tests/integration/*.test.js + tests/e2e/*.test.js
 ```
 
 ### E2E 테스트 (PostgreSQL 필요)
@@ -1081,7 +1099,7 @@ DATABASE_URL=postgresql://user:pass@host:port/db npm run test:e2e
 
 ### CI 전체 (DB 필요)
 ```bash
-npm run test:ci          # npm test + test:e2e
+npm run test:ci          # npm test && npm run test:integration
 ```
 
 ---

@@ -11,6 +11,19 @@
 | PORT | 57332 | HTTP listen port |
 | MEMENTO_ACCESS_KEY | (none) | Bearer authentication key. With it unset the server refuses to start and exits with code 78. To run without authentication you must also set `MEMENTO_AUTH_DISABLED=true` |
 | MEMENTO_AUTH_DISABLED | false | When `true`, completely disables authentication and processes all requests with master privileges. Development/testing only. Only effective when `MEMENTO_ACCESS_KEY` is unset |
+| DB_STATEMENT_TIMEOUT_MS | 30000 | Query time limit (ms) for user request paths. 0 means unlimited. Not applied to system and admin maintenance paths |
+| REQUEST_TIMEOUT_MS | 60000 | Request receive limit (ms). 0 means unlimited |
+| KEEP_ALIVE_TIMEOUT_MS | 75000 | Keep-Alive connection lifetime (ms). Match the proxy setting |
+| HEADERS_TIMEOUT_MS | 76000 | Request header receive limit (ms). Keep it larger than KEEP_ALIVE_TIMEOUT_MS |
+| LOG_LEVEL | info (debug when NODE_ENV is not production) | winston log level |
+| COMPRESSION_LEVEL | 6 | gzip compression level (0-9) |
+| MIN_COMPRESS_SIZE | 1024 | Responses smaller than this many bytes are not compressed |
+| MEMENTO_ROTATE_RATE_LIMIT_PER_MIN | 5 | Per-IP calls per minute for /session/rotate |
+| MEMENTO_SPLIT_LLM_PRIMARY / MEMENTO_SPLIT_LLM_FALLBACKS | (none) | Dedicated LLM chain for long-fragment splitting. The global chain is used when unset |
+| MEMENTO_VECTOR_FORCE_INDEX | (applied) | `off` disables the index-forcing planner hint for vector search |
+| MEMENTO_RUNTIME | (none) | `docker` marks the installation as Docker |
+| GITHUB_TOKEN | (none) | GitHub API authentication token for update checks |
+| WORKER_ID | single | workerId shown in the health response |
 | SESSION_TTL_MINUTES | 43200 | Session TTL (minutes). Default 30 days. Sliding window: TTL resets on every tool call |
 | LOG_DIR | ./logs | Winston log file directory |
 | ALLOWED_ORIGINS | (none) | Allowed Origins list. Comma-separated. When unset, all Origins are allowed (MCP client compatibility takes precedence) |
@@ -42,6 +55,9 @@
 | MEMENTO_RERANKER_ENABLED | false | Enables the in-process cross-encoder reranker. It is off by default: the default model is English-only, and on a Korean corpus an ablation showed turning it off improves Recall@1 from 74% to 85%, MRR from 0.827 to 0.890, and p50 latency from 561ms to 126ms. External rerankers configured through `RERANKER_URL` work regardless of this switch |
 | RERANKER_MODEL | minilm | ONNX model used when the in-process reranker is enabled. `minilm` (default, ~80MB, English-only) or `bge-m3` (~280MB, multilingual). bge-m3 ranks non-English text far better but takes several seconds to rerank 30 candidates on CPU, so use it only behind a GPU-backed external service |
 | RERANKER_EXTERNAL_FALLBACK | skip | Policy applied after 3 consecutive external reranker failures. `skip` (default): no switch to in-process — external calls are simply skipped for `RERANKER_EXTERNAL_COOLDOWN_MS`, and original scores (RRF order) are returned as-is. `inprocess`: switches to the ONNX in-process model (opt-in, the previous behavior) |
+| RERANKER_TIMEOUT_MS | 5000 | External reranker call timeout (ms) |
+| NLI_SERVICE_URL | (none) | External NLI service URL. When unset, the in-process ONNX model is used |
+| NLI_TIMEOUT_MS | 5000 | External NLI call timeout (ms) |
 | RERANKER_EXTERNAL_COOLDOWN_MS | 60000 | Cooldown duration (ms) when `RERANKER_EXTERNAL_FALLBACK=skip`. After the window expires, the next recall retries the external call once; success resumes normal operation, failure re-enters cooldown |
 | QUOTA_NEAR_LIMIT_MARGIN | 10 | Remaining-quota threshold at which `QuotaChecker.check()` switches to the precise FOR UPDATE check. The transaction lock is only acquired when `remaining` is at or below this value; above it, the check passes using the 10-second TTL cache (getUsage) without locking |
 | ENABLE_RECONSOLIDATION | false | Enable ReconsolidationEngine. When true, tool_feedback and contradicts detection dynamically update fragment_links weight/confidence |
@@ -55,7 +71,7 @@
 | TRUST_PROXY_HOPS | (unset) | Number of trusted reverse-proxy hops. The Nth entry from the right of the `X-Forwarded-For` chain is taken as the client address; `0` ignores the header and uses the socket address. Unset keeps the previous behavior (first entry). It must equal the real proxy count; a larger value makes a client-supplied entry win. Use `1` behind a single nginx |
 | MEMENTO_TOOL_ARGS_VALIDATION | warn | Mode for checking tools/call arguments against the tool inputSchema. `off`: skip, `warn`: log violations as `[ToolArgs]` warnings and continue, `enforce`: reject with JSON-RPC `-32602`. Read at call time, so changes apply without a restart |
 | MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN | false | When `true`, fields absent from the schema are not counted as violations. Use it under `enforce` to accept clients that send alias fields |
-| MEMENTO_LLM_CLI_ENV_PASSTHROUGH | (unset) | Comma-separated environment variable names to pass to CLI provider child processes (gemini-cli, codex-cli, copilot-cli, qwen-cli, agy-cli, opencode) in addition to base variables such as PATH and HOME and the per-CLI credential variables |
+| MEMENTO_LLM_CLI_ENV_PASSTHROUGH | (unset) | Comma-separated environment variable names to pass to CLI provider child processes (gemini-cli, codex-cli, copilot-cli, qwen-cli, agy-cli, opencode-cli) in addition to base variables such as PATH and HOME and the per-CLI credential variables |
 | MEMENTO_REMEMBER_ATOMIC | false | When true, atomizes the quota check + INSERT in remember() into a single transaction. Sequence: BEGIN → api_keys FOR UPDATE (quota re-validation) → INSERT → COMMIT, fully eliminating TOCTOU. false (default) performs only a pre-check and is appropriate for environments with low concurrent request volume |
 | MEMENTO_CASE_BACKPROP_ENABLED | false | When true, enables CaseRewardBackprop, which back-propagates tool_feedback reward signals along case_id fragment chains. Adjust importance scores of cause fragments based on outcome quality |
 | MEMENTO_STORAGE | pgvector | Storage adapter selection. `pgvector` (default, PostgreSQL + pgvector). Additional adapters can be registered in `lib/storage/`. Changing this value requires all fragments to be re-indexed in the target backend |
@@ -87,7 +103,7 @@
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| MIGRATION_LINT_FROM | (max existing + 1) | Lower-bound migration file number for `npm run lint:migrations`. Files with a number below this value are excluded from the body-only convention check. Useful for gradually adopting the convention on an existing codebase |
+| MIGRATION_LINT_FROM | (unset) | Override for the `npm run lint:migrations` cutoff. Only migrations numbered at or above this value are checked. When unset, every file is checked |
 
 #### CLI Remote Access
 
@@ -145,7 +161,7 @@ When REDIS_ENABLED=true, state is stored in Redis; otherwise in-memory.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | LLM_CONCURRENCY_ENABLED | true | When false, bypasses the semaphore and sends requests to all providers without concurrency limits |
-| LLM_CONCURRENCY_WAIT_MS | 30000 | Slot wait timeout (ms). Request fails if no slot becomes available within this duration |
+| LLM_CONCURRENCY_WAIT_MS | 30000 | Slot wait timeout (ms). On timeout the provider is recorded as failed and the chain moves to the next fallback |
 | LLM_CONCURRENCY | (see below) | JSON object. Slot limit keyed by chainKey (`provider|baseUrl|model`) or provider name |
 
 `LLM_CONCURRENCY` defaults (`DEFAULT_LLM_CONCURRENCY`):
@@ -206,7 +222,7 @@ On macOS launchd deployments, shell profiles are not loaded. Add `~/.local/bin` 
 
 This value is passed to the `geminiCLIJson(userPrompt, { timeoutMs: cfg.geminiTimeoutMs })` call inside `MorphemeIndex._tokenizeViaLLM()`, which is invoked only when `MEMENTO_MORPHEME_TOKENIZER=llm`. With the default setting (`MEMENTO_MORPHEME_TOKENIZER=local`), the local analyzer (MorphemeTokenizer) is used and this value is not referenced. When the LLM path fails, no morphemes are extracted and the L3 morpheme search path degrades gracefully via `_fallbackTokenize`.
 
-**buildChain ordering logic** (`lib/llm/index.js:38–68`): An entries array is constructed from `LLM_PRIMARY` followed by `LLM_FALLBACKS` in declaration order. A `seen` Set removes duplicate providers, and each provider's `isAvailable()` check determines whether it is included in the chain. If `LLM_PRIMARY` also appears in `LLM_FALLBACKS`, the fallback config object takes precedence. A provider that fails `isAvailable()` is excluded from the chain and the next provider is tried immediately. The resulting chain order corresponds 1:1 with the env variable declaration order.
+**buildChain ordering logic** (`lib/llm/index.js` `buildChain()`): An entries array is constructed from `LLM_PRIMARY` followed by `LLM_FALLBACKS` in declaration order. A `seen` Set removes duplicate providers, and each provider's `isAvailable()` check determines whether it is included in the chain. If `LLM_PRIMARY` also appears in `LLM_FALLBACKS`, the fallback config object takes precedence. A provider that fails `isAvailable()` is excluded from the chain and the next provider is tried immediately. The resulting chain order corresponds 1:1 with the env variable declaration order.
 
 For detailed operational guidance, see `docs/operations/llm-providers.md`.
 
@@ -261,6 +277,9 @@ POSTGRES_* prefixes take precedence over DB_* prefixes. Both formats can be mixe
 | DB_IDLE_TIMEOUT_MS | Idle connection return timeout ms. Default 30000 |
 | DB_CONN_TIMEOUT_MS | Connection acquisition timeout ms. Default 10000 |
 | DB_QUERY_TIMEOUT | Query timeout ms. Default 30000 |
+| DB_BACKGROUND_MAX_CONNECTIONS | Primary pool connections that schedulers and workers may hold at once. Default 40% of DB_MAX_CONNECTIONS (min 1). Capped at DB_MAX_CONNECTIONS-1. Excess acquisitions wait in FIFO order |
+| DB_BACKGROUND_WAIT_MAX_MS | Background slot wait limit (ms). Default 120000. Only the waiting job fails and retries on the next cycle |
+| PGVECTOR_SCHEMA | Schema where the pgvector extension is installed. Detected automatically at startup when unset |
 | BATCH_DATABASE_URL | (none, optional) Dedicated PostgreSQL URL for batchPool. Falls back to the primary `DATABASE_URL` when unset. batchPool handles heavy transactions (multi-row INSERTs) in a dedicated pool to prevent starvation of recall requests. Pool size is `primaryMax × 0.3` (minimum 2). `application_name='memento-mcp:batch'` is set for pg_stat_activity monitoring. Pool size and application_name are determined internally and cannot be overridden via environment variables. |
 
 ### batch_remember Async Mode
@@ -470,6 +489,26 @@ Individual activation flags for the 3 stages that involve LLM rewriting and can 
 `MEMENTO_AUTO_PROMOTE_ANCHORS` is an opt-out for the automatic anchor-promotion stage. When unset or empty it defaults to `true`, preserving the existing behavior. When set to `false`, `promote_anchors` returns `status="skipped"` with `reason="disabled_by_config"` and performs no promotion UPDATE. Other non-empty values are rejected as configuration errors. It does not demote existing anchors or disable any other consolidation stage. Restart the server after changing the setting.
 
 A stage with its flag set to `false` emits `status: "skipped"` and proceeds to the next stage. `compressOldFragments` defaults to `false` because it modifies original fragment content.
+
+### fragmentSplit
+
+Controls the details of the `splitLongFragments` stage. Configured in the `fragmentSplit` block of `config/memory.js`.
+
+| Key | Default | Description |
+|-|-|-|
+| `lengthThreshold` | `300` | Fragments longer than this (characters) become split candidates |
+| `batchSize` | `10` | Maximum fragments processed per cycle |
+| `minItems` | `2` | The original is replaced only when the LLM separates it into at least this many items |
+| `maxItems` | `8` | Maximum number of items requested from the LLM |
+| `timeoutMs` | `30000` | LLM timeout per fragment (ms) |
+| `minChildLength` | `20` | Child pieces shorter than this are discarded by the quality gate |
+| `excludeMetaTopics` | `["session_reflect","consolidation","reflection"]` | Topics excluded from splitting |
+| `failureBackoffHours` | `24` | Fragments are excluded from reselection for this many hours after a failed split (`split_attempt_failed_at` column, migration-036) |
+| `requireSubjectAnchor` | `true` | Discards a child that carries none of the parent's subject anchors. ENV: `MEMENTO_SPLIT_SUBJECT_GATE` |
+| `rejectIntroducedModality` | `true` | Discards a child that introduces a modality absent from the parent. ENV: `MEMENTO_SPLIT_MODALITY_GATE` |
+| `subjectAnchorMax` | `12` | Maximum subject anchors extracted from the parent body |
+
+Split child quality gate (`split-gate.js`): a child is rejected when it is shorter than `minChildLength`, contains the replacement character (`�`), mixes in CJK/kana characters (relative to a Hangul body), or starts with a pronoun or meta token. A fact-type child whose importance is below 0.4 after clamping is not stored.
 
 Split children receive their `keywords` from their own body via `FragmentFactory.extractKeywords`, the same path `remember` uses. The parent's keywords are not copied.
 
@@ -954,14 +993,12 @@ Even if a client reconnects without `Mcp-Session-Id`, the server automatically r
 
 ### Full test suite (no DB required)
 ```bash
-npm test          # Jest (tests/*.test.js) + node:test (tests/unit/*.test.js) sequential. tests/unit/ is node:test exclusive and excluded from Jest.
+npm test          # node:test, tests/unit/*.test.js + tests/unit/*/*.test.js (no DB required)
 ```
 
 Individual runs:
 ```bash
-npm run test:jest        # Jest -- tests/*.test.js
-npm run test:unit:node   # node:test -- tests/unit/*.test.js
-npm run test:integration # node:test -- tests/integration/*.test.js + tests/e2e/*.test.js
+npm run test:integration # node:test, tests/integration/*.test.js + tests/e2e/*.test.js
 ```
 
 ### E2E tests (PostgreSQL required)
@@ -1014,9 +1051,13 @@ Generates the questions a user is likely to ask when recalling a fragment and in
 | `searchEnabled` | `MEMENTO_SYNTHETIC_QUERY_SEARCH` | `true` | Search use. `false` stops querying already stored auxiliary vectors |
 | `minImportance` | `MEMENTO_SYNTHETIC_QUERY_MIN_IMPORTANCE` | `0.8` | Minimum importance for generation |
 | `types` | `MEMENTO_SYNTHETIC_QUERY_TYPES` | `error,procedure,decision` | Eligible fragment types (comma separated) |
+| `intervalMs` | `MEMENTO_SYNTHETIC_QUERY_INTERVAL_MS` | `5000` | Worker queue polling interval (ms) |
 | `maxCallsPerMinute` | `MEMENTO_SYNTHETIC_QUERY_RPM` | `20` | LLM calls per minute, `0` for unlimited |
+| `batchSize` | `MEMENTO_SYNTHETIC_QUERY_BATCH` | `5` | Items taken from the queue per cycle |
+| `backfillBatch` | `MEMENTO_SYNTHETIC_QUERY_BACKFILL` | `20` | Ungenerated fragments collected when the queue is empty |
 | `adoptLimit` | `MEMENTO_SYNTHETIC_QUERY_ADOPT` | `5` | Max fragments merged through the auxiliary path per search |
 | `similarityDecay` | - | `0.85` | Decay applied to auxiliary hit similarity |
+| `llmTimeoutMs` | `MEMENTO_SYNTHETIC_QUERY_TIMEOUT_MS` | `20000` | Generation call timeout |
 
 The two switches are independent: generation can be off while stored vectors are still searched, and vice versa.
 

@@ -2,7 +2,7 @@
 
 작성자: 최진호
 작성일: 2026-04-29
-수정일: 2026-05-19
+수정일: 2026-10-02
 
 ---
 
@@ -12,7 +12,7 @@ memento-mcp의 테스트는 세 계층으로 구성된다.
 
 - 단위 테스트 (node:test): 외부 의존성 없이 모듈 단위 검증
 - 통합 테스트: DB/Redis 연결 가능 여부를 런타임 자동 판단 또는 환경변수 활성화
-- E2E 테스트: 실행 중인 서버와 실제 LLM CLI를 대상으로 하는 전단 검증
+- E2E 테스트(tests/e2e): PostgreSQL(pgvector)에 마이그레이션을 적용한 상태에서 도는 전단 검증. 실제 LLM CLI 검증은 `npm run test:integration:llm`(tests/integration)이 맡는다.
 
 단위 테스트 러너는 Node.js 내장 `node:test`만 사용한다. jest 의존성은 없다.
 
@@ -57,8 +57,14 @@ npm run test:integration:llm
 | `npm test` | unit 전체 (node:test) |
 | `npm run test:integration` | 통합 + e2e (tests/integration/*.test.js + tests/e2e/*.test.js) |
 | `npm run test:e2e` | e2e만 |
-| `npm run test:ci` | `npm test && npm run test:integration` — CI 단일 게이트 (DB/Redis 필요) |
+| `npm run test:ci` | `npm test && npm run test:integration`. 로컬 일괄 실행용 (DB 필요). CI는 아래 워크플로 작업으로 나눠 돈다 |
+| `npm run test:integration:llm` | 실제 LLM CLI 통합 시험 4종 순차 실행 |
+| `npm run test:e2e:local` | `scripts/run-e2e-tests.sh`로 테스트 DB를 띄운 뒤 e2e 실행 |
+| `npm run lint` | eslint 전체 |
+| `npm run audit:ci` | 런타임 의존성 audit-ci 검사 |
 | `npm run lint:migrations` | migration SQL body-only 규약 검사 (MIGRATION_LINT_FROM 기준) |
+
+CI(.github/workflows/test.yml): `unit` 작업(lint, lint:migrations, audit:ci, npm test, 외부 서비스 없는 통합시험), `runtime-matrix` 작업(Node 20/22/24에서 모듈 적재와 키 미설정 기동 거부 확인), `e2e` 작업(pgvector/pgvector:pg15, migrate 후 test:e2e). 로컬 임베딩 e2e는 e2e-local-embed.yml이 맡는다.
 
 ---
 
@@ -179,6 +185,6 @@ CI에서 전체 통과 수를 비교할 때 이 3건을 기준에서 제외하�
 
 ## 전체 테스트 현황
 
-- 단위 테스트: node:test 단일 러너. DB·Redis·EMBEDDING_API_KEY 불필요. 368개 테스트 파일(tests/unit), 전체 385개(tests/unit, integration, e2e). v4.6.0 신규: batch-remember-async.test.js, batch-remember-worker.test.js, session-activity-scan-limit.test.js, rrf-importance-cutoff.test.js, remember-write-paths.test.js, mcp-session-context.test.js.
+- 단위 테스트: node:test 단일 러너. DB·Redis·EMBEDDING_API_KEY 불필요. 378개 테스트 파일(tests/unit 368, tests/unit/symbolic 10), 통합 13개, e2e 4개, 전체 395개. v4.6.0 신규: batch-remember-async.test.js, batch-remember-worker.test.js, session-activity-scan-limit.test.js, rrf-importance-cutoff.test.js, remember-write-paths.test.js, mcp-session-context.test.js.
 - 통합 테스트: DB/Redis 환경에서 전체 통과
-- E2E: LLM CLI 인증 환경에서 전체 통과
+- E2E: PostgreSQL 환경에서 전체 통과(CI e2e 작업). LLM CLI 검증은 CLI 인증 환경에서 `npm run test:integration:llm`으로 수행

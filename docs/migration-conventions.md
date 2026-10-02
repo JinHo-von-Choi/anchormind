@@ -8,7 +8,7 @@
 ## 파일명 규약
 
 - 형식: `migration-NNN-<kebab-slug>.sql`
-- `NNN`은 3자리 0-패딩 연속 번호 (예: `036`, `037`)
+- `NNN`은 3자리 0-패딩 번호이며 기존 최대 번호보다 커야 한다. 재번호로 비게 된 번호(현재 `046`)는 다시 쓰지 않는다 (예: `049`)
 - 슬러그는 소문자 영숫자와 하이픈만 허용
 - 예: `migration-036-add-session-index.sql`
 - 번호 충돌이 발생하면 머지 시점에 +1 하여 재번호 부여
@@ -80,7 +80,7 @@ CREATE INDEX IF NOT EXISTS idx_fragments_embedding
 | 테이블 생성 | `CREATE TABLE IF NOT EXISTS` |
 | 인덱스 생성 | `CREATE INDEX IF NOT EXISTS` |
 | 컬럼 추가 | `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` |
-| 타입 생성 | `CREATE TYPE IF NOT EXISTS` (PG 9.6 이상 불가 시 `DO $$ BEGIN ... EXCEPTION WHEN duplicate_object THEN NULL; END $$`) |
+| 타입 생성 | `DO $$ BEGIN CREATE TYPE ...; EXCEPTION WHEN duplicate_object THEN NULL; END $$` |
 | 시퀀스 생성 | `CREATE SEQUENCE IF NOT EXISTS` |
 
 ---
@@ -111,11 +111,11 @@ CREATE INDEX IF NOT EXISTS idx_fragments_embedding
 
 ## 기존 파일 처리 방침
 
-`npm run lint:migrations`는 cutoff 번호 이상인 파일만 검사한다. cutoff는 `MIGRATION_LINT_FROM` 환경변수로 지정하며, 미설정 시 `scripts/lint-migrations.js`가 현존 파일 최대 번호 + 1을 cutoff로 잡는다. 즉 env 없이 실행하면 기존 파일이 전부 제외되고 새로 추가할 파일부터 검사 대상이 된다.
+`npm run lint:migrations`는 cutoff 번호 이상인 파일만 검사한다. cutoff는 `MIGRATION_LINT_FROM` 환경변수로 지정하며, 미설정 시 cutoff는 0이므로 전체 파일을 검사한다. 파일명 규칙에서는 `migration-034-v2.16.0-bundle.sql`만 예외로 둔다.
 
 번호 중복 검사만은 cutoff를 따르지 않고 항상 전체 파일을 본다. 충돌은 파일 둘 사이에서 생기고 그중 하나가 cutoff 아래에 있을 수 있어, 대상을 좁히면 놓치기 때문이다. 이 검사는 CI의 Lint migrations 단계에서도 실행된다.
 
-기존 파일을 함께 검사하려면 하한을 명시한다.
+검사 범위를 특정 번호 이후로 좁히려면 하한을 명시한다.
 
 ```bash
 MIGRATION_LINT_FROM=036 npm run lint:migrations
