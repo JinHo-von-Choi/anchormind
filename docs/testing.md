@@ -13,7 +13,7 @@ memento-mcp의 테스트는 네 계층으로 구성된다.
 - 단위 테스트 (node:test): 외부 의존성 없이 모듈 단위 검증
 - 통합 테스트: DB/Redis 연결 가능 여부를 런타임 자동 판단 또는 환경변수 활성화
 - E2E 테스트(tests/e2e): PostgreSQL(pgvector)에 마이그레이션을 적용한 상태에서 도는 전단 검증. 실제 LLM CLI 검증은 `npm run test:integration:llm`(tests/integration)이 맡는다.
-- DB 동시성 레인(tests/db-concurrency, `npm run test:db`): 실제 PostgreSQL에서 행 잠금 순서와 링크 일괄 생성의 정합, 온라인 색인과 재개형 백필, 중복 판정 범위, 작업 기억 행, outbox 작업자, 내보내기와 가져오기 왕복을 확인하는 직렬 레인. `npm test`에 포함되지 않는다.
+- DB 동시성 레인(tests/db-concurrency, `npm run test:db`): 실제 PostgreSQL에서 행 잠금 순서와 링크 일괄 생성의 정합, 온라인 색인과 재개형 백필, 중복 판정 범위, 작업 기억 행, outbox 작업자, 내보내기와 가져오기 왕복, 앵커 상한, 감사 체인, 검토 대기열, 키 수명, 관리자 계정, 훅 회고, 외부 전송 정책, 읽기 허가를 확인하는 직렬 레인. `npm test`에 포함되지 않는다.
 
 단위 테스트 러너는 Node.js 내장 `node:test`만 사용한다. jest 의존성은 없다.
 
@@ -62,7 +62,7 @@ npm run test:integration:llm
 | `npm run test:ci` | `npm test && npm run test:integration`. 로컬 일괄 실행용 (DB 필요). CI는 아래 워크플로 작업으로 나눠 돈다 |
 | `npm run test:integration:llm` | 실제 LLM CLI 통합 시험 4종 순차 실행 |
 | `npm run test:e2e:local` | `scripts/run-e2e-tests.sh`로 테스트 DB를 띄운 뒤 e2e 실행 |
-| `npm run test:db` | tests/db-concurrency. 마이그레이션된 PostgreSQL에서 파편 행 잠금 순서(교착 0건)와 링크 일괄 생성의 `linked_to` 정합, 감쇠와 utility 묶음 갱신(잠금 순서, 무변경 재기록, 최소 변화량), 온라인 색인 스크립트, 재개형 백필, 중복 판정 범위, 작업 기억 행, outbox 작업자, 내보내기와 가져오기 왕복 확인. 표 전체를 갱신하는 시험은 병렬 레인에 두지 않고 이 직렬 레인에만 둔다. 실행마다 전용 데이터베이스(`dbl_<pid>_<hex>`)를 만들어 마이그레이션하고 끝나면 지운다. 서버는 POSTGRES_* 로 지정하며 로컬 호스트, 포트 35433, 사용자 memento, 비밀번호 memento_test 가 아니면 연결 전에 거부한다(다른 일회용 서버는 `DB_LANE_SERVER_ALLOW=<host:port>`). 서버에 닿지 못하면 건너뛰지 않고 실패. `npm test`에는 포함되지 않음 |
+| `npm run test:db` | tests/db-concurrency. 마이그레이션된 PostgreSQL에서 파편 행 잠금 순서(교착 0건)와 링크 일괄 생성의 `linked_to` 정합, 감쇠와 utility 묶음 갱신(잠금 순서, 무변경 재기록, 최소 변화량), 온라인 색인 스크립트, 재개형 백필, 중복 판정 범위, 작업 기억 행, outbox 작업자, 내보내기와 가져오기 왕복, 앵커 상한, 감사 체인, 검토 대기열, 키 수명, 관리자 계정, 훅 회고, 외부 전송 정책, 읽기 허가 확인. 표 전체를 갱신하는 시험은 병렬 레인에 두지 않고 이 직렬 레인에만 둔다. 실행마다 전용 데이터베이스(`dbl_<pid>_<hex>`)를 만들어 마이그레이션하고 끝나면 지운다. 서버는 POSTGRES_* 로 지정하며 로컬 호스트, 포트 35433, 사용자 memento, 비밀번호 memento_test 가 아니면 연결 전에 거부한다(다른 일회용 서버는 `DB_LANE_SERVER_ALLOW=<host:port>`). 서버에 닿지 못하면 건너뛰지 않고 실패. `npm test`에는 포함되지 않음 |
 | `npm run lint` | eslint 전체 |
 | `npm run lint:ratchet` | 무처리 catch 처리기, 복잡도, 파일 길이, 직접 환경 변수 읽기의 수치를 `scripts/lint-baseline.json`과 비교한다. 기준선보다 늘면 실패하며 기준선 상향에는 `--update --allow-increase`가 필요하다 |
 | `npm run audit:ci` | 런타임 의존성 audit-ci 검사 |
@@ -211,6 +211,19 @@ MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test \
 | `working-memory-rows.test.js` | 작업 기억 행의 기록, 조회, 보관 시간 만료, 보관량 제거, 세션 격리, 조회 대상 제외 |
 | `working-memory-exclusion.test.js` | 기억을 보여 주거나 세는 경로가 작업 기억 행을 빼고 일반 파편과 닫힌 파편은 그대로 보임 |
 | `outbox-worker.test.js` | outbox 기록의 트랜잭션 원자성, 두 작업자 동시 점유에서 이벤트마다 한 번 처리, 임대 만료 재점유, 재시도와 dead-letter, 반납, 보존 정리의 묶음 상한 |
+| `anchor-permission.test.js` | 키 권한과 살아 있는 앵커 수 조회, 권한 변경 전후 값 반환, 부여 스크립트의 dry-run과 `--apply` |
+| `anchor-quota-concurrency.test.js` | 상한 3의 키에 앵커 지정을 동시에 보내도 살아 있는 앵커가 3을 넘지 않음(단건, amend, 일괄 저장, warn과 enforce) |
+| `anchor-quota-mixed.test.js` | 앵커 상한 잠금과 다른 쓰기 경로를 섞은 동시 실행에서 교착(40P01) 0건과 상한 유지 |
+| `audit-events.test.js` | 감사 이벤트가 outbox를 거쳐 단일 해시 체인으로 승격됨. 롤백, 두 작업자 동시 기록, 재전달 멱등, 변조와 삭제 검출, 보존 정리가 마지막 행을 남김 |
+| `egress-policy.test.js` | `api_keys.egress_policy` 편집과 조회 왕복, 열이 없는 설치의 조회, 외부 전송 감사 이벤트가 본문 없이 남고 기본 처리기가 감사 로그 줄을 남김 |
+| `forget-cascade.test.js` | forget이 지운 파편을 출처로 한 사례 요약과 서버 기록 모순 해소 파편이 남지 않음, 키 범위 밖 대상은 건드리지 않음, 고아 요약 정리 스크립트 |
+| `hook-reflect.test.js` | 훅 처리기가 기록한 회고 이벤트를 두 작업자가 처리해도 같은 키, 세션, 이벤트의 reflect가 한 번만 일어남 |
+| `key-lifecycle.test.js` | 해시 이관 전후 인증 결과 동일, 이관 스크립트의 정합 확인과 재실행 안전, 회전과 폐기 |
+| `provenance.test.js` | migration-057의 열과 제약, 쓰기 경로의 출처 열 기록, context 주입 제외, 출처 열 조회 |
+| `review-queue.test.js` | 검토 대기 기록, recall 가시성, 앵커 승격 제외, 승인과 거절과 멱등 재요청, 동시 결정, 30일 자동 거절, 대량 행에서 실행 계획 |
+| `admin-users.test.js` | 부트스트랩 경쟁, 마지막 owner 경쟁, 세션 폐기 연쇄, TOTP 단계와 복구 코드의 한 번 사용 |
+| `admin-scope-filter.test.js` | 관리 질의의 workspace 범위 술어(owner는 전체, 바인딩은 그 workspace, 판정 없음은 빈 결과) |
+| `workspace-read-authz.test.js` | `recall`, `context`, `resources/read`의 workspace 허가(warn은 통과와 계수, enforce는 -32001) |
 | `import-export-roundtrip.test.js` | 시드한 데이터베이스에서 내보낸 JSONL을 두 번째 빈 데이터베이스로 가져와 행 수, `content_hash` 집합, 열 값, 링크, 이력, 집계가 시험이 계산한 값과 같음. 보통 가져오기의 변환과 거부, 되살리기, 재가져오기의 duplicates, 대상 키, dryRun, 관리 API 경로 |
 
 `_guard.js`와 `_harness.js`는 시험이 아니라 허용 조건 검사와 전용 데이터베이스 준비·삭제를 맡는 도우미다.
@@ -219,8 +232,8 @@ MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test \
 
 ## 전체 테스트 현황
 
-- 시험 파일: 530개(tests/unit 493, 그중 tests/unit/symbolic 9, tests/structure 5, tests/integration 14, tests/e2e 4, tests/db-concurrency 14).
-- 단위 테스트: node:test 단일 러너. DB·Redis·EMBEDDING_API_KEY 불필요. 마지막 실행 기준 5574개 테스트(통과 5572, 건너뜀 2, 실패 0, tests/structure 포함).
+- 시험 파일: 658개(tests/unit 595, 그중 tests/unit/symbolic 9, tests/structure 16, tests/integration 14, tests/e2e 4, tests/db-concurrency 29).
+- 단위 테스트: node:test 단일 러너. DB·Redis·EMBEDDING_API_KEY 불필요. 마지막 실행 기준 7397개 테스트(통과 7395, 건너뜀 2, 실패 0, tests/structure 포함).
 - 통합 테스트: DB/Redis 환경에서 전체 통과
 - E2E: PostgreSQL 환경에서 전체 통과(CI e2e 작업). LLM CLI 검증은 CLI 인증 환경에서 `npm run test:integration:llm`으로 수행
 - DB 동시성 레인: PostgreSQL 환경에서 `npm run test:db`로 실행. CI에서는 결과만 보고한다.

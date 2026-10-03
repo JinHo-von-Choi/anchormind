@@ -55,6 +55,10 @@ AnchorMind의 주요 모듈을 한 페이지로 정리한 ledger. 새 모듈 추
 |`SearchSideEffects` (`lib/memory/read/SearchSideEffects.js`)|검색 결과 배열 + ctx|searchEventId, co_retrieved 업데이트, EMA 갱신|DB 장애 시 soft fail. topic 정확일치로 0건인 검색은 SearchParamAdaptor 학습에서 제외(search_events 기록은 유지)|-|-|migration-027|
 |`TopicResolver` (`lib/memory/read/TopicResolver.js`)|store + 키 스코프 + 요청 topic|근접 topic 후보 `[{topic, count}]`. recall `_meta.hints`의 `topic_mismatch` 재료|후보 없으면 빈 배열 → 힌트 미발행|—|—|—|
 |`FeedbackSampler` (`lib/memory/signals/FeedbackSampler.js`)|도구명 + sessionId|`feedback_sampled` 힌트 객체 또는 null|Redis 미가용 시 세션 상한·쿨다운 미적용(fail-open)|`MEMENTO_FEEDBACK_SAMPLING`|—|migration-039 (irrelevance_reason 수집처)|
+|`HookHandler`, `hook-contract`, `hook-reflect-consumer` (`lib/handlers/hook-handler.js`, `lib/hooks/`)|`POST /hooks/{client}/{event}`의 경로, 헤더, 본문(Stop, SessionEnd는 요약 후보 발췌 64 KB 이하)|SessionStart는 구분자 블록의 맥락(`additionalContext`), Stop과 SessionEnd는 202와 outbox topic `hook.reflect` 이벤트|인증 실패 401, 형식 오류 400, 키별 대기 이벤트 상한 429, 같은 세션과 이벤트의 중복은 202(duplicate), 소비자 단계에서 키 비활성이면 dead-letter|`MEMENTO_HOOK_ENDPOINTS`, `MEMENTO_SESSION_KEY_RECHECK_MS`|`memento_hook_calls_total`, `memento_hook_reflect_total`|없음|
+|`AdminUserStore`, `admin-user-auth`, `admin-seal` (`lib/admin/`)|계정 이름, 비밀번호, TOTP 또는 복구 코드, 관리 세션 쿠키와 CSRF 토큰|계정과 역할 바인딩, DB 세션, 관리 요청 주체|`MEMENTO_ADMIN_SEAL_KEY` 없음이면 TOTP 등록 503, 연속 실패 지연 429, 마지막 owner 변경 409|`MEMENTO_ADMIN_USERS`, `MEMENTO_ADMIN_SEAL_KEY`|없음|migration-060|
+|`ApiKeyLifecycleStore`, `key-lifecycle` (`lib/admin/`)|키 id, 만료 시각, 허용 주소 대역, 회전 겹침 시간, 폐기 사유|새 원시 키(한 번), 키 수명 열, `api_key_secrets` 행|폐기된 키 활성화 409, 만료와 허용 대역 밖 주소는 인증 거부|`MEMENTO_KEY_ROTATION_GRACE_HOURS`, `MEMENTO_KEY_LAST_USED_INTERVAL_SEC`|없음|migration-059|
+|`gcChunks` (`lib/memory/consolidate/gcChunks.js`)|만료 후보 조건, 주기당 삭제 상한, 시간 예산|청크(100건) 삭제 건수와 남은 후보 수|청크가 실패하면(잠금 대기 3초 초과 포함) 그 주기를 멈추고 다음 주기에 이어감|`MEMENTO_GC_THROUGHPUT`, `MEMENTO_GC_MAX_DELETE_PER_CYCLE`, `MEMENTO_GC_TIME_BUDGET_MS`|`memento_gc_backlog`|없음|
 
 ## 실험적 기능 플래그
 

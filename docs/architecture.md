@@ -75,6 +75,7 @@ server.js  (HTTP 서버)
             │   ├── write-gate-metrics.js 관문 판정 지표 `memento_write_gate_total{entry,outcome}`, 앵커 판정 지표 `memento_anchor_decision_total{outcome,reason}`
             │   ├── gateApproval.js       관문 통과 표식. WriteGate가 등록한 쓰기 값만 FragmentWriter 의미 메서드가 받는다
             │   ├── serverAnchorDeps.js   anchor 단계의 서버 의존성. 키 권한과 살아 있는 앵커 수 조회(ApiKeyStore.getAnchorState), 판정 감사 기록
+            │   ├── anchorQuota.js        키별 앵커 상한을 쓰기 트랜잭션 안에서 다시 판정(api_keys 행 잠금 뒤 살아 있는 앵커 수 재계산)
             │   ├── anchorAudit.js        앵커 판정(granted, downgraded, rejected, cleared)을 감사 로그 `anchor` 줄로 남긴다
             │   ├── serverWriteGate.js    서버 쓰기 경로의 관문 생성. 키의 workspace 허가 집합과 hard gate 설정을 ApiKeyStore에서 읽어 주입한다
             │   ├── FragmentImporter.js   가져오기 행을 관문에 통과시켜 FragmentWriter로 기록. 대상 키 프로필(owner, restore)을 적용한다 (admin 가져오기와 CLI 가져오기 공용)
@@ -113,6 +114,8 @@ server.js  (HTTP 서버)
             │   ├── ConsolidatorGC.js     피드백 리포트, stale 파편 수집/정리, 긴 파편 분할, 피드백 기반 보정
             │   ├── FragmentGC.js         파편 만료 삭제, 지수 감쇠, TTL 계층 전환 (permanent parole + EMA 배치 감쇠 포함)
             │   ├── idOrderedUpdate.js    감쇠와 utility 점수 갱신을 id 오름차순 묶음(`MEMENTO_SCORE_UPDATE_BATCH`)으로 잠그고 갱신. 최소 변화량(`MEMENTO_DECAY_MIN_DELTA`, `MEMENTO_UTILITY_MIN_DELTA`) 미만 행은 다시 쓰지 않음
+            │   ├── gcChunks.js           만료 파편 정리의 100건 청크 반복(`MEMENTO_GC_THROUGHPUT`, 주기당 삭제 상한과 시간 예산)
+            │   ├── gc-metrics.js         `memento_gc_backlog` 지표
             │   ├── resumableBackfill.js  재개형 백필 도우미(`runResumableBackfill`). 묶음마다 watermark를 기록해 같은 작업 이름으로 이어 실행하고, 행 단위 오류는 `backfill_failures`에 남긴다
             │   ├── decay.js              지수 감쇠 반감기 상수, 순수 계산 함수, ACT-R EMA 활성화 근사 (`updateEmaActivation`, `computeEmaRankBoost`), EMA 기반 동적 반감기 (`computeDynamicHalfLife`), 나이 가중치 utility score (`computeUtilityScore`)
             │   ├── UtilityBaseline.js    파편 utility baseline 계산 (중복 제거/압축 판단 기준선)
@@ -146,6 +149,7 @@ server.js  (HTTP 서버)
             ├── provenance.js             파편 출처와 신뢰 등급 판정(순수 함수). 허용 origin, 출처별 등급, 키 상한(`trusted_origin` 권한 또는 마스터 키 3, 그 밖 2), NULL을 2로 보는 주입 제외 술어와 같은 문턱의 SQL 조각, 관측 클라이언트 표기, INSERT 열 조각
             ├── reviewState.js            검토 상태(pending, approved, rejected), 검토 방식(off, flagged, all), 키 권한 목록의 검토 방식 표지(review_off, review_all)
             ├── LexicalSchema.js          본문 어휘 채널의 스키마 상태. content_tokens 열과 그 열의 GIN 색인(정의로 찾는다)을 60초마다 읽고, 유효한 색인이 있을 때만 채널이 참여한다
+            ├── lexical-metrics.js        어휘 채널 지표(`memento_lexical_channel_skipped_total`, `memento_lexical_tokenize_skipped_total`)
             ├── LexicalCoverage.js        content_tokens 채움 지표 `memento_lexical_tokens_coverage_ratio`, `memento_lexical_tokens_missing`(라벨 없음)
             ├── keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` 공유 헬퍼. key_id 범위 WHERE 절 생성. FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js에서 공유 사용
             ├── anchorPolicy.js           앵커 판정 순수 함수. 앵커 변경 종류(set, clear), 권한과 키별 상한 판정, context 주입 줄의 비식별 주체 표지(`k:` + 키 id sha256 앞 4자)
@@ -174,6 +178,7 @@ lib/
 ├── logger.js          Winston 로거 (daily rotate). REDACT_PATTERNS 기반 redactor format: `lib/security/sensitivePatterns.js` 표의 로그용 항목(Authorization Bearer 토큰, mmcp_ API 키, mmcp_session 쿠키, OAuth code/refresh_token/access_token, 공용 토큰 규칙) 자동 마스킹. content 필드 200자 초과 시 head 50 + tail 50 트리밍
 ├── openapi.js         OpenAPI 3.1.0 스펙 생성기. `ENABLE_OPENAPI=true` 시 `GET /openapi.json` 활성화. 인증 레벨 기반 도구 목록 필터: master key → 전체 경로(Admin REST API 포함), API key → permissions 기반 도구 목록
 ├── rate-limiter.js    IP 기반 sliding window rate limiter
+├── openapi-review.js  OpenAPI 스펙의 검토 대기열 경로 정의(`GET /review`, 승인, 거절)
 ├── rbac.js            RBAC 권한 검사 (read/write/admin 도구 레벨 권한 적용, 앵커 지정 권한 anchor 판정)
 ├── env-parse.js       불리언과 열거 환경 변수 원시값 판독. config.js와 스위치 대장(`config/switches.js`)이 같은 규칙을 쓰는 말단 모듈
 ├── security/          민감 정보 탐지. `sensitivePatterns.js`(저장 경로와 로그가 같이 쓰는 규칙 표, 다른 모듈을 가져오지 않는 잎 모듈)와 `SensitiveScanner.js`(본문 필드와 keywords를 가리고 규칙 이름을 보고하는 순수 함수)
@@ -185,6 +190,7 @@ lib/
 lib/handlers/
 ├── _common.js         applyCorsOrigin, setWorkerRefs, recordConsolidateRun (공통 유틸리티)
 ├── health-handler.js  handleHealth, handleLive, handleReady, handleMetrics
+├── hook-handler.js    POST /hooks/{client}/{event}(`MEMENTO_HOOK_ENDPOINTS`). SessionStart은 맥락을 돌려주고 Stop과 SessionEnd는 회고 이벤트를 outbox에 기록한다
 ├── session-handler.js POST /session/rotate (rotateSession 호출, IP당 분당 호출 상한은 `_rotate-ratelimit.js`)
 ├── _ratelimit-cache.js X-RateLimit-* 헤더용 QuotaChecker.getUsage 위임 래퍼
 ├── _rotate-ratelimit.js /session/rotate 전용 IP 기반 rate limit (`MEMENTO_ROTATE_RATE_LIMIT_PER_MIN`)
@@ -235,7 +241,7 @@ lib/admin/
 assets/admin/
 ├── index.html         Admin SPA app shell (로그인 폼 + 컨테이너)
 ├── admin.css          Admin UI 스타일시트
-├── admin.js           Admin UI 로직 (9개 내비게이션: 개요, API 키, 그룹, 메모리 운영, 세션, 로그, 감사 로그, 지식 그래프, 메트릭)
+├── admin.js           Admin UI 로직 (10개 내비게이션: 개요, API 키, 그룹, 메모리 운영, 세션, 로그, 감사 로그, 관리자 계정, 지식 그래프, 메트릭)
 └── vendor/            Tailwind CSS 3.4.17, d3 7.9.0 스크립트 사본. 콘솔 응답의 CSP는 `script-src 'self' 'unsafe-inline'`이며 외부 스크립트 호스트를 허용하지 않는다. 출처와 sha256은 `PROVENANCE.md`
 
 lib/http/
@@ -256,7 +262,38 @@ lib/outbox/
 ├── OutboxHandlers.js  topic별 처리기 등록부(소비자 확장 지점), `OutboxPermanentError`
 ├── OutboxStore.js     outbox_events 점유(FOR UPDATE SKIP LOCKED와 임대), 완료, 실패, 반납, 보존 정리, 통계 질의
 ├── OutboxWorker.js    폴링 작업자. 점유 순서대로 처리기 실행, 지수 간격 재시도와 dead-letter, 임대 예산, 정리와 게이지 갱신. `MEMENTO_OUTBOX_WORKER`
+├── outbox-sql.js      outbox_events INSERT 문의 단일 위치(`Outbox.js`와 설정을 읽지 않는 로컬 명령이 공유)
 └── outbox-metrics.js  `memento_outbox_*` 지표
+```
+
+outbox topic과 처리기는 다음과 같다. 처리기는 기동 시 `registerOutboxHandler`로 등록하며 처리기가 없는 topic의 미점유 행은 `MEMENTO_OUTBOX_UNHANDLED_DAYS` 뒤 dead-letter로 옮겨진다.
+
+| topic | 기록하는 곳 | 처리기 | 하는 일 |
+|-|-|-|-|
+| `audit.record` | 관리 변경, 관리 인증, 기억 쓰기, 앵커, 관문 거부, 검토 결정(`lib/logging/audit-outbox.js`) | `lib/logging/audit-consumer.js` | `admin_audit_events`에 해시 체인 행으로 승격 |
+| `audit.llm.egress` | 외부 LLM 호출 전 관문(`lib/llm/EgressGate.js`) | `lib/llm/egress-audit-handler.js` | 파일 감사 로그에 한 줄 기록하고 감사 표에도 승격 |
+| `hook.reflect` | 훅 처리기의 Stop, SessionEnd(`lib/handlers/hook-handler.js`) | `lib/hooks/hook-reflect-consumer.js` | 키를 다시 확인한 뒤 요약 후보를 reflect로 넘김 |
+
+```
+lib/hooks/
+├── hook-contract.js         훅 경로, 헤더, 본문 검사, workspace 후보 정규화, 멱등 키, 하네스 출력 형식(순수 함수, 서버와 로컬 CLI 공유)
+├── hook-context.js          SessionStart 주입 본문 렌더러(구분자 블록과 이스케이프, 기억 안의 줄바꿈이 구획처럼 보이지 않게 한다)
+├── hook-excerpt.js          transcript에서 만드는 요약 후보 발췌의 형식과 해석(순수 함수)
+├── hook-auth-cache.js       훅 요청의 API 키 인증 결과 캐시(`MEMENTO_SESSION_KEY_RECHECK_MS`와 같은 보존 시간)
+├── hook-store.js            회고 접수 전 사전 확인(멱등 키 선점 여부와 대기 이벤트 수)
+├── recent-keys.js           최근 접수한 멱등 키의 프로세스 메모리 목록
+├── hook-reflect-consumer.js topic `hook.reflect` 소비자
+└── hook-metrics.js          `memento_hook_calls_total`, `memento_hook_reflect_total`
+
+lib/llm/ (외부 전송 정책)
+├── EgressPolicy.js          키와 workspace 정책(`api_keys.egress_policy`)으로 제공자를 거르는 순수 함수와 제공자 분류
+├── EgressGate.js            호출 전 관문. 정책 조회, 제공자 거르기, 외부 제공자로 보내기 전 마스킹과 감사 이벤트 기록
+├── egress-audit-handler.js  topic `audit.llm.egress`의 기본 처리기
+└── egress-metrics.js        `memento_llm_egress_*` 지표
+
+integrations/
+├── claude-code/             Claude Code 플러그인 원본(`.claude-plugin/plugin.json`, `.mcp.json`, `hooks/hooks.json`, `skills/anchormind/SKILL.md`)
+└── codex/                   Codex 플러그인 원본(`plugin.json`, `hooks/hooks.json`)
 ```
 
 저장소 접근은 `lib/tools/db.js`의 `getPrimaryPool`, `queryWithAgentVector`가 맡는다.
@@ -306,6 +343,9 @@ lib/cli/
 ├── benchmark.js        골드셋 recall 계측 (Recall@k, MRR, 지연)
 ├── anchor-scope.js     non-default anchor 범위 inventory, 승인된 공유 anchor 정규화, 스냅숏 backfill (기본 dry-run)
 ├── session.js          세션 조회, 정리, 교체
+├── hook.js             Claude Code, Codex 훅 실행체(`anchormind hook <event> --client <name>`, 원격 서버 전용, `.env`를 읽지 않는다)
+├── init.js             Claude Code, Codex 플러그인 생성(`anchormind init --target claude|codex`, 기본 dry-run)
+├── admin.js            관리자 계정 비상 복구(`anchormind admin recover`, 명시한 접속 대상만 쓴다)
 ├── audit.js            감사 해시 체인 검증 (`audit verify`, 끊기면 종료 코드 1)
 ├── export.js           파편 JSONL 백업
 ├── import.js           JSONL 파편 복원
@@ -313,7 +353,11 @@ lib/cli/
 ├── completion.js       셸 자동완성
 ├── _mcpClient.js       원격 MCP 클라이언트
 ├── _format.js          출력 포맷터
-└── _stdin.js           표준 입력 읽기
+├── _stdin.js           표준 입력 읽기
+├── _stdout.js          닫힌 표준 출력(EPIPE)에 견디는 출력기
+├── _remoteSettings.js  hook 명령의 서버 주소와 키 출처 결정(같은 출처의 한 쌍만 쓴다)
+├── _fileTransaction.js init이 만드는 파일 묶음의 안전한 검사와 쓰기(심볼릭 링크 거부, 실패 시 되돌림)
+└── _lineDiff.js        init dry-run의 줄 단위 diff
 ```
 
 1회성 유틸리티 스크립트는 `scripts/`에 분리되어 있다.
@@ -338,6 +382,8 @@ scripts/
 ├── ops/backup.sh                                agent_memory 스키마 백업과 매니페스트 (기본 14일 보관)
 ├── ops/restore-verify.mjs                       덤프를 일회용 시험 서버에 복원해 매니페스트와 대조
 ├── ops/online-index.mjs                         대형 표 색인을 작업 목록(`ops/index-manifest.json`)에 따라 `CONCURRENTLY`로 생성
+├── backfill-content-tokens.mjs                  fragments.content_tokens 기존 행 백필(재개형, 기본 미리보기, `--confirm`)
+├── measure-hook-latency.mjs                     훅 회고 접수 지연 측정(일회용 시험 서버, 시험 DB 전용)
 ├── grant-anchor-permission.js                   최근 90일 앵커를 만든 활성 키에 anchor 권한 부여 (기본 dry-run, `--apply`)
 ├── ops/finish-dedup-scope.mjs                   키 범위 content_hash 색인을 지워 중복 판정 범위 전환을 마무리
 ├── ops/backfill-key-secrets.mjs                 api_keys의 현재 해시를 api_key_secrets로 일괄 이관하고 정합 확인
@@ -906,7 +952,7 @@ MCP 클라이언트는 RFC 8414/RFC 7591/RFC 7636 기반 OAuth 2.0 흐름으로 
 
 ### Admin 콘솔 구조
 
-Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + `assets/admin/admin.css` + `assets/admin/admin.js`). 9개 내비게이션 영역으로 나뉜다:
+Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + `assets/admin/admin.css` + `assets/admin/admin.js`). 10개 내비게이션 영역으로 나뉜다:
 
 | 영역 | 설명 | 상태 |
 |------|------|------|
@@ -917,6 +963,7 @@ Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + 
 | 세션 | 세션 목록, 상세 조회, 활동 추적, 수동 reflect, 종료, 만료 정리, 미반영 일괄 reflect | 구현 완료 |
 | 로그 | 로그 파일 목록, 내용 조회(역순 tail), 레벨/검색 필터, 통계 | 구현 완료 |
 | 감사 로그 | 감사 해시 체인 조회(행위, 행위자, 대상, 결과, 기간 조건), 이어 보기, JSONL 내보내기, 체인 검증 | 구현 완료 |
+| 관리자 계정 | 계정 목록, 생성, 역할 교체, 비활성화, TOTP 초기화, 세션 폐기, 첫 owner 부트스트랩 | 구현 완료 |
 | 지식 그래프 | 파편 관계 시각화 (D3.js force-directed), 토픽 필터, 노드 상세 | 구현 완료 |
 | 메트릭 | 프로세스 내 메트릭 카드, 시계열 sparkline, 시간 범위 토글 | 구현 완료 |
 
@@ -926,7 +973,7 @@ Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + 
 
 **Admin UI ESM 구조** (`assets/admin/`):
 
-번들러 없이 브라우저 네이티브 ESM으로 동작한다. `admin.js`는 엔트리포인트로 `assets/admin/modules/` 하위 16개 모듈을 정적 import로 불러온다.
+번들러 없이 브라우저 네이티브 ESM으로 동작한다. `admin.js`는 엔트리포인트로 `assets/admin/modules/` 하위 18개 모듈을 정적 import로 불러온다.
 
 | 모듈 | 역할 |
 |------|------|
@@ -943,6 +990,8 @@ Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + 
 | `graph.js` | D3.js force-directed 지식 그래프 |
 | `logs.js` | 로그 파일 조회 (역순 tail, 레벨/검색 필터) |
 | `audit.js` | 감사 로그 조회(조건, 이어 보기), JSONL 내보내기, 체인 검증 |
+| `admin-users.js` | 관리자 계정 목록과 관리 |
+| `key-lifecycle.js` | API 키 수명 카드(만료, 소유자, 허용 주소, 회전, 폐기, 접근 검토) |
 | `memory.js` | 파편 검색/필터, 이상 탐지, 검색 관측성 |
 | `metrics.js` | 메트릭 카드, 시간 범위 토글 |
 | `metrics-sparkline.js` | 순수 SVG sparkline 렌더러 |

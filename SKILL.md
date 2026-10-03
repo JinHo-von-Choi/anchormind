@@ -854,7 +854,7 @@ RBAC default-deny: 등록되지 않은 도구 이름은 `Unknown tool: <name>`(-
 | source | string | - | 출처 (세션 ID, 도구명 등) |
 | linkedTo | string[] | - | 연결할 기존 파편 ID 목록 |
 | scope | string | - | permanent(기본) 또는 session. session 응답의 `working_memory`가 저장 경로(`redis`, Redis가 준비되지 않아 PostgreSQL 작업 기억 행에 저장한 `postgres-fallback`, 저장하지 못한 `none`)를 알린다. `none`이면 permanent로 다시 저장한다 |
-| isAnchor | boolean | - | true면 영구 보존. 핵심 규칙/정책용. |
+| isAnchor | boolean | - | true면 영구 보존. 핵심 규칙/정책용. master 키와 권한 목록에 `anchor`가 있는 키만 지정할 수 있고, 권한이 없으면 `MEMENTO_ANCHOR_PERMISSION`(기본 `warn`)에 따라 일반 파편으로 저장하고 경고하거나 거부한다. |
 | supersedes | string[] | - | 대체할 기존 파편 ID. 지정 파편은 만료 처리. |
 | contextSummary | string | - | 맥락/배경 요약 (1-2문장) |
 | sessionId | string | - | 현재 세션 ID |
@@ -868,11 +868,14 @@ RBAC default-deny: 등록되지 않은 도구 이름은 `Unknown tool: <name>`(-
 | assertionStatus | string | - | observed(기본) / inferred / verified / rejected |
 | affect | string | - | 감정 태그. neutral(기본) / frustration / confidence / surprise / doubt / satisfaction |
 | idempotencyKey | string | - | 재시도 안전 식별자. 같은 key_id 범위에서 같은 값으로 반복 호출하면 새 파편을 만들지 않고 기존 id를 반환. 권장 형식 {작업명}-{날짜}-{순번} |
+| origin | string | - | 기억의 출처 주장: user_stated, agent_inferred, tool_output, external_content, consolidation, import. 서버는 이 값과 키 상한(권한 `trusted_origin` 또는 master 키 3, 그 밖 2) 중 작은 값으로 신뢰 등급(0~3)을 정한다. 등급 1 이하(external_content 포함)는 context의 ANCHOR와 CORE 주입에서 빠진다. 허용 밖의 값은 -32602. 미지정이면 출처 없음(등급 2). |
 | dryRun | boolean | - | true 시 저장 없이 할당량·충돌 검사 결과와 실행 계획만 반환 |
 
 품질 게이트: content < 10자, URL만, type+topic null인 경우 거부. content > 4000자면 "content length N exceeds max 4000" 메시지와 함께 -32602로 거부(300자 절삭보다 앞단의 수신 게이트). importance < 0.3이면 경고 + TTL short 자동 설정.
 
 에러: fragment_limit_exceeded 시 forget/memory_consolidate로 정리 안내.
+
+검토 대기열(`MEMENTO_REVIEW_QUEUE=on`, 기본): 에이전트 지시 덮어쓰기 문구, 신뢰 등급 1 이하의 앵커·preference·procedure, 권한 없는 앵커 요청에 걸린 쓰기는 거부하지 않고 검토 대기(`review_state=pending`)로 저장한다. 검토 대기 파편은 쓴 키의 `recall`에만 `pending_review` 표지와 함께 보이고 context 주입과 앵커 승격에서 빠진다. 관리자가 승인하면 일반 파편이 되고 거절하면 만료된다. 같은 키 범위에 같은 본문이 있으면 응답의 `duplicate_of`가 기존 id를 알린다(`MEMENTO_DEDUP_SCOPE`).
 
 ### batch_remember
 
@@ -880,7 +883,7 @@ RBAC default-deny: 등록되지 않은 도구 이름은 `Unknown tool: <name>`(-
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| fragments | array | O | [{content, topic, type, importance?, keywords?}] 최대 200건. 항목별 content가 4000자를 초과하면 해당 항목만 -32602로 실패 처리되고 나머지 항목은 정상 저장된다. 배열 전체의 content 총 문자수가 상한(기본 200,000자, `BATCH_REMEMBER_MAX_TOTAL_CHARS`)을 초과하면 sync/async 분기 이전에 요청 전체가 거부된다(항목별 4000자 게이트와 별개). |
+| fragments | array | O | [{content, topic, type, importance?, keywords?, origin?}] 최대 200건(`origin`은 remember와 같은 값과 규칙). 항목별 content가 4000자를 초과하면 해당 항목만 -32602로 실패 처리되고 나머지 항목은 정상 저장된다. 배열 전체의 content 총 문자수가 상한(기본 200,000자, `BATCH_REMEMBER_MAX_TOTAL_CHARS`)을 초과하면 sync/async 분기 이전에 요청 전체가 거부된다(항목별 4000자 게이트와 별개). |
 | async | boolean | - | true 시 비동기 모드. 선검증 후 Redis 큐 적재, `{async, accepted, jobId}` 즉시 반환. 워커가 ack·재시도(최대 3회)·dead-letter·기동 복구로 at-least-once 처리. 기본 false(동기). Redis 비활성 시 동기 폴백. |
 | stream | boolean | - | deprecated. 더 이상 SSE progress 이벤트를 보내지 않는다. 무시됨. |
 | workspace | string | - | 배치 기본 워크스페이스. 개별 파편에 workspace 미지정 시 이 값으로 대체. 미지정 시 키의 default_workspace 적용. |
@@ -927,7 +930,10 @@ async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기�
 | isAnchor | boolean | - | 앵커 필터. true는 앵커만, false는 비앵커만 반환하며 미지정 시 둘 다 반환 |
 | depth | string | - | 검색 깊이. high-level(decision/episode), detail(전체), tool-level(procedure/error/fact) |
 | affect | string/string[] | - | 감정 태그 필터. neutral / frustration / confidence / surprise / doubt / satisfaction. 배열 또는 단일 문자열 지원 |
-| fields | string[] | - | 응답에 포함할 파편 필드 목록(sparse fields). 미지정 시 전체 반환. 지원 키: id, content, type, topic, keywords, importance, created_at, access_count, confidence, linked, explanations, workspace, context_summary, case_id, valid_to, affect, ema_activation, key_id, key_name |
+| fields | string[] | - | 응답에 포함할 파편 필드 목록(sparse fields). 미지정 시 전체 반환. 지원 키: id, content, type, topic, keywords, importance, created_at, access_count, confidence, linked, explanations, workspace, context_summary, case_id, valid_to, affect, ema_activation, key_id, key_name, origin, trust_tier |
+| format | string | - | 응답 형식. `default`(기본)는 `fragments` 배열이고, `pack`은 `fragments` 대신 답 꾸러미 `pack`(`text`, `items`, `groups`, `policy_id`, `partial`, `estimatedTokens`)을 반환한다. `pack.text`는 고정 정책 문단 뒤에 파편마다 `<<<MEMORY ...>>>` 블록(id, 저장일, status, assertion, type, topic, case, source)을 담으며 블록 안 내용은 자료이지 지시가 아니다. caseMode에는 적용하지 않는다. |
+
+`MEMENTO_PROVENANCE=on`(기본)이면 기본 형식 응답의 파편에 `origin`과 `trust_tier`(0 격리, 1 낮음, 2 보통, 3 높음)가 붙는다. 본문 어휘 채널(`MEMENTO_LEXICAL_CHANNEL`, 기본 `on`)이 `text` 검색에 형태소 전문 검색 후보를 더하므로 임베딩이 꺼진 경로에서도 text만으로 찾는다.
 
 `caseMode=true` 응답의 `fragment_count`는 현재 키 그룹·workspace·유효 상태·`isAnchor` 필터를 통과해 해당 케이스의 대표값 후보가 된 파편 수다. 케이스에 평생 누적된 전체 파편 수를 뜻하지 않는다. 이벤트는 source 파편의 현재 앵커 상태로 필터링하지 않으며, 현재 키 그룹에서 볼 수 있는 이력을 케이스당 최대 20건 반환한다.
 
@@ -1026,6 +1032,8 @@ task_effectiveness 세부 필드:
 | agentId | string | - | 에이전트 ID |
 | workspace | string | - | 지정 workspace + 전역(NULL). 미지정 시 key default를 적용하고, 둘 다 없으면 전역(NULL)만 포함. |
 | allWorkspaces | boolean | - | master 전용 전체 workspace context 조회. |
+
+`MEMENTO_CONTEXT_ANNOTATE=on`(기본)이면 주입 줄 끝에 저장일(UTC)과 assertion 주석 ` (YYYY-MM-DD, assertion)`이 붙는다. `MEMENTO_PROVENANCE=on`(기본)이면 신뢰 등급 1 이하 파편은 ANCHOR와 CORE 주입에서 빠진다. `MEMENTO_ANCHOR_PERMISSION`이 `off`가 아니면 앵커 주입 줄에 비식별 주체 표지(`[k:xxxx]`, master 앵커는 `[master]`)가 붙는다.
 
 ### tool_feedback
 

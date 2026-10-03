@@ -72,6 +72,7 @@ server.js  (HTTP server)
             |   +-- write-gate-metrics.js Gate verdict metric `memento_write_gate_total{entry,outcome}`, anchor decision metric `memento_anchor_decision_total{outcome,reason}`
             |   +-- gateApproval.js       Gate approval marks. FragmentWriter semantic methods accept only write values registered by WriteGate
             |   +-- serverAnchorDeps.js   Server dependencies of the anchor step: key permissions and live anchor count lookup (ApiKeyStore.getAnchorState), decision audit
+            |   +-- anchorQuota.js        Re-evaluates the per key anchor cap inside the write transaction (recounts live anchors after locking the api_keys row)
             |   +-- anchorAudit.js        Writes anchor decisions (granted, downgraded, rejected, cleared) as `anchor` audit log lines
             |   +-- serverWriteGate.js    Builds the gate for server write paths, injecting the key's allowed workspace set and hard gate setting from ApiKeyStore
             |   +-- FragmentImporter.js   Passes import rows through the gate and writes them with FragmentWriter. Applies the target key profile (owner, restore) (shared by admin import and CLI import)
@@ -109,6 +110,8 @@ server.js  (HTTP server)
             |   +-- ConsolidatorGC.js     Feedback reports, stale fragment collection/cleanup, long fragment splitting, feedback-based correction
             |   +-- FragmentGC.js         Fragment expiration/deletion, exponential decay, TTL tier transitions (permanent parole + EMA batch decay)
             |   +-- idOrderedUpdate.js    Locks and updates decay and utility score changes in id-ascending batches (`MEMENTO_SCORE_UPDATE_BATCH`). Rows below the minimum change (`MEMENTO_DECAY_MIN_DELTA`, `MEMENTO_UTILITY_MIN_DELTA`) are not rewritten
+            |   +-- gcChunks.js           Expired fragment cleanup in 100 row chunks (`MEMENTO_GC_THROUGHPUT`, per cycle delete cap and time budget)
+            |   +-- gc-metrics.js         `memento_gc_backlog` metric
             |   +-- resumableBackfill.js  Resumable backfill helper (`runResumableBackfill`). Records a watermark per batch so a run with the same job name resumes, and records row-level errors in `backfill_failures`
             |   +-- decay.js              Exponential decay half-life constants, pure computation functions, ACT-R EMA activation approximation (`updateEmaActivation`, `computeEmaRankBoost`), EMA-based dynamic half-life (`computeDynamicHalfLife`), age-weighted utility score (`computeUtilityScore`)
             |   +-- UtilityBaseline.js    Fragment utility baseline computation (dedup/compression decision baseline)
@@ -142,6 +145,7 @@ server.js  (HTTP server)
             +-- provenance.js             Fragment provenance and trust tier decisions (pure functions). Accepted origins, per-origin tiers, key cap (3 with the `trusted_origin` permission or the master key, otherwise 2), the injection exclusion predicate that reads NULL as 2 and the SQL fragment with the same threshold, observed client notation, INSERT column fragment
             +-- reviewState.js            Review states (pending, approved, rejected), review modes (off, flagged, all) and the review mode markers of key permission lists (review_off, review_all)
             +-- LexicalSchema.js          Schema state of the content lexical channel. Reads the content_tokens column and its GIN index (found by definition) every 60 seconds; the channel takes part only while a valid index exists
+            +-- lexical-metrics.js        Lexical channel metrics (`memento_lexical_channel_skipped_total`, `memento_lexical_tokenize_skipped_total`)
             +-- LexicalCoverage.js        content_tokens fill metrics `memento_lexical_tokens_coverage_ratio`, `memento_lexical_tokens_missing` (no labels)
             +-- keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` shared helper. Generates key_id-scoped WHERE clauses. Used by FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js
             +-- anchorPolicy.js           Pure anchor decision functions: change kind (set, clear), permission and per-key limit decision, non-identifying principal label of context lines (`k:` + first 4 characters of the key id sha256)
@@ -170,6 +174,7 @@ lib/
 +-- logger.js          Winston logger (daily rotate). REDACT_PATTERNS-based redactor format: auto-masking with the log entries of the `lib/security/sensitivePatterns.js` table (Authorization Bearer tokens, mmcp_ API keys, mmcp_session cookies, OAuth code/refresh_token/access_token, shared token rules). content field trimmed to head 50 + tail 50 when exceeding 200 chars
 +-- openapi.js         OpenAPI 3.1.0 spec generator. Enabled when `ENABLE_OPENAPI=true` via `GET /openapi.json`. Auth-level-based tool list filtering: master key -> all paths (including Admin REST API), API key -> permissions-based tool list
 +-- rate-limiter.js    IP-based sliding window rate limiter
++-- openapi-review.js  Review queue path definitions of the OpenAPI document (`GET /review`, approve, reject)
 +-- rbac.js            RBAC authorization (read/write/admin tool-level permissions, anchor designation permission)
 +-- env-parse.js       Raw value classification of boolean and enum environment variables. Leaf module that lets config.js and the switch ledger (`config/switches.js`) share one rule
 +-- security/          Sensitive data detection. `sensitivePatterns.js` (the rule table shared by the storage path and the logger, a leaf module with no imports) and `SensitiveScanner.js` (pure functions that mask content fields and keywords and report rule names)
@@ -181,6 +186,7 @@ lib/
 lib/handlers/
 +-- _common.js         applyCorsOrigin, setWorkerRefs, recordConsolidateRun (shared utilities)
 +-- health-handler.js  handleHealth, handleLive, handleReady, handleMetrics
++-- hook-handler.js    POST /hooks/{client}/{event} (`MEMENTO_HOOK_ENDPOINTS`). SessionStart returns context; Stop and SessionEnd record a retrospective event in the outbox
 +-- session-handler.js POST /session/rotate (calls rotateSession; per-IP per-minute cap in `_rotate-ratelimit.js`)
 +-- _ratelimit-cache.js QuotaChecker.getUsage delegating wrapper for X-RateLimit-* headers
 +-- _rotate-ratelimit.js IP-based rate limit dedicated to /session/rotate (`MEMENTO_ROTATE_RATE_LIMIT_PER_MIN`)
@@ -231,7 +237,7 @@ lib/admin/
 assets/admin/
 +-- index.html         Admin SPA app shell (login form + container)
 +-- admin.css          Admin UI stylesheet
-+-- admin.js           Admin UI logic (9 navigation sections: overview, API keys, groups, memory ops, sessions, logs, audit log, knowledge graph, metrics)
++-- admin.js           Admin UI logic (10 navigation sections: overview, API keys, groups, memory ops, sessions, logs, audit log, admin accounts, knowledge graph, metrics)
 +-- vendor/            Copies of the Tailwind CSS 3.4.17 and d3 7.9.0 scripts. The console response CSP is `script-src 'self' 'unsafe-inline'` and allows no external script host. Source and sha256 are in `PROVENANCE.md`
 
 lib/http/
@@ -252,7 +258,38 @@ lib/outbox/
 +-- OutboxHandlers.js  Per-topic handler registry (consumer extension point), `OutboxPermanentError`
 +-- OutboxStore.js     outbox_events claim (FOR UPDATE SKIP LOCKED with a lease), complete, fail, release, retention cleanup and stats queries
 +-- OutboxWorker.js    Polling worker. Runs handlers in claim order, exponential retries and dead-letter, lease budget, cleanup and gauge updates. `MEMENTO_OUTBOX_WORKER`
++-- outbox-sql.js      The single place of the outbox_events INSERT statement (shared by `Outbox.js` and local commands that read no settings)
 +-- outbox-metrics.js  `memento_outbox_*` metrics
+```
+
+Outbox topics and handlers. Handlers register at startup with `registerOutboxHandler`; unclaimed rows of a topic without a handler move to dead-letter after `MEMENTO_OUTBOX_UNHANDLED_DAYS`.
+
+| Topic | Written by | Handler | Does |
+|-|-|-|-|
+| `audit.record` | Admin changes, admin authentication, memory writes, anchors, gate rejections, review decisions (`lib/logging/audit-outbox.js`) | `lib/logging/audit-consumer.js` | Promotes the event to a hash chain row in `admin_audit_events` |
+| `audit.llm.egress` | The gate before an external LLM call (`lib/llm/EgressGate.js`) | `lib/llm/egress-audit-handler.js` | Writes one line to the file audit log and promotes the event to the audit table |
+| `hook.reflect` | Stop and SessionEnd of the hook handler (`lib/handlers/hook-handler.js`) | `lib/hooks/hook-reflect-consumer.js` | Rechecks the key and passes the summary candidate to reflect |
+
+```
+lib/hooks/
++-- hook-contract.js         Hook path, header and body checks, workspace candidate normalization, idempotency key, harness output format (pure functions shared by the server and the local CLI)
++-- hook-context.js          SessionStart injection renderer (delimited block with escaping so newlines inside memories do not look like sections)
++-- hook-excerpt.js          Format and parsing of the summary candidate excerpt built from the transcript (pure functions)
++-- hook-auth-cache.js       Cache of API key authentication results for hook requests (retention equals `MEMENTO_SESSION_KEY_RECHECK_MS`)
++-- hook-store.js            Pre-acceptance check (whether the idempotency key is claimed, pending event count)
++-- recent-keys.js           In-process list of recently accepted idempotency keys
++-- hook-reflect-consumer.js Consumer of topic `hook.reflect`
++-- hook-metrics.js          `memento_hook_calls_total`, `memento_hook_reflect_total`
+
+lib/llm/ (egress policy)
++-- EgressPolicy.js          Pure functions that filter providers by key and workspace policy (`api_keys.egress_policy`) and classify providers
++-- EgressGate.js            Pre-call gate. Policy lookup, provider filtering, masking and audit event before an external provider receives content
++-- egress-audit-handler.js  Default handler of topic `audit.llm.egress`
++-- egress-metrics.js        `memento_llm_egress_*` metrics
+
+integrations/
++-- claude-code/             Claude Code plugin source (`.claude-plugin/plugin.json`, `.mcp.json`, `hooks/hooks.json`, `skills/anchormind/SKILL.md`)
++-- codex/                   Codex plugin source (`plugin.json`, `hooks/hooks.json`)
 ```
 
 Storage access is handled by `getPrimaryPool` and `queryWithAgentVector` in `lib/tools/db.js`.
@@ -302,6 +339,9 @@ lib/cli/
 +-- benchmark.js        Goldset recall measurement (Recall@k, MRR, latency)
 +-- anchor-scope.js     Non-default anchor scope inventory, approved shared-anchor normalization, snapshot backfill (dry-run by default)
 +-- session.js          Session listing, cleanup, rotation
++-- hook.js             Claude Code and Codex hook runner (`anchormind hook <event> --client <name>`, remote server only, does not read `.env`)
++-- init.js             Claude Code and Codex plugin generation (`anchormind init --target claude|codex`, dry-run by default)
++-- admin.js            Emergency recovery for admin accounts (`anchormind admin recover`, uses only the explicit connection target)
 +-- audit.js            Audit hash chain verification (`audit verify`, exit code 1 when broken)
 +-- export.js           Fragment JSONL backup
 +-- import.js           Fragment JSONL restore
@@ -310,6 +350,10 @@ lib/cli/
 +-- _mcpClient.js       Remote MCP client
 +-- _format.js          Output formatter
 +-- _stdin.js           Standard input reader
++-- _stdout.js          Output writer that survives a closed standard output (EPIPE)
++-- _remoteSettings.js  Server address and key source for the hook command (one pair from one source)
++-- _fileTransaction.js Safe inspection and writes of the file set `init` creates (symlinks refused, rollback on failure)
++-- _lineDiff.js        Line diff for the `init` dry-run
 ```
 
 One-time utility scripts are in `scripts/`.
@@ -334,6 +378,8 @@ scripts/
 +-- ops/backup.sh                                agent_memory schema backup with manifest (14 days kept by default)
 +-- ops/restore-verify.mjs                       Restores a dump into a disposable test server and compares it with the manifest
 +-- ops/online-index.mjs                         Builds large table indexes from the work list (`ops/index-manifest.json`) with `CONCURRENTLY`
++-- backfill-content-tokens.mjs                  Backfills existing fragments.content_tokens (resumable, preview by default, `--confirm`)
++-- measure-hook-latency.mjs                     Measures hook retrospective acceptance latency (disposable test server, test DB only)
 +-- grant-anchor-permission.js                   Grants the anchor permission to active keys that created anchors in the last 90 days (dry run by default, `--apply`)
 +-- ops/finish-dedup-scope.mjs                   Drops the per-key content_hash indexes to finish the duplicate detection scope switch
 +-- ops/backfill-key-secrets.mjs                 Moves the current api_keys hashes into api_key_secrets in batches and checks consistency
@@ -902,7 +948,7 @@ Memory isolation is composed of three layers. The layers that operate today are 
 
 ### Admin Console Structure
 
-The Admin UI is built as an app shell architecture (`assets/admin/index.html` + `assets/admin/admin.css` + `assets/admin/admin.js`). It is divided into 9 navigation sections:
+The Admin UI is built as an app shell architecture (`assets/admin/index.html` + `assets/admin/admin.css` + `assets/admin/admin.js`). It is divided into 10 navigation sections:
 
 | Section | Description | Status |
 |---------|-------------|--------|
@@ -913,6 +959,7 @@ The Admin UI is built as an app shell architecture (`assets/admin/index.html` + 
 | Sessions | Session list, detail view, activity tracking, manual reflect, terminate, expired cleanup, bulk unreflected reflect | Implemented |
 | Logs | Log file listing, content viewing (reverse tail), level/search filters, statistics | Implemented |
 | Audit Log | Audit hash chain query (action, actor, target, outcome, time filters), load more, JSONL export, chain verification | Implemented |
+| Admin Accounts | Account list, creation, role replacement, disable, TOTP reset, session revocation, first owner bootstrap | Implemented |
 | Knowledge Graph | Fragment relationship visualization (D3.js force-directed), topic filter, node detail | Implemented |
 | Metrics | In-process metric cards, time-series sparklines, time range toggle | Implemented |
 
@@ -922,7 +969,7 @@ The `/stats` response includes `searchMetrics`, `observability`, `queues`, `heal
 
 **Admin UI ESM Structure** (`assets/admin/`):
 
-Operates as browser-native ESM without a bundler. `admin.js` is the entry point and statically imports the 16 modules under `assets/admin/modules/`.
+Operates as browser-native ESM without a bundler. `admin.js` is the entry point and statically imports the 18 modules under `assets/admin/modules/`.
 
 | Module | Role |
 |--------|------|
@@ -939,6 +986,8 @@ Operates as browser-native ESM without a bundler. `admin.js` is the entry point 
 | `graph.js` | D3.js force-directed knowledge graph |
 | `logs.js` | Log file viewing (reverse tail, level/search filters) |
 | `audit.js` | Audit log query (filters, load more), JSONL export, chain verification |
+| `admin-users.js` | Admin account list and management |
+| `key-lifecycle.js` | API key lifecycle card (expiry, owner, allowed addresses, rotate, revoke, access review) |
 | `memory.js` | Fragment search/filter, anomaly detection, search observability |
 | `metrics.js` | Metric cards, time range toggle |
 | `metrics-sparkline.js` | Pure SVG sparkline renderer |
