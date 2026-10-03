@@ -20,6 +20,8 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | Integer, 0 or more, anything else uses the default | MEMENTO_SHUTDOWN_DEADLINE_MS (60000), MEMENTO_SESSION_KEY_RECHECK_MS (30000), MEMENTO_DCR_MAX_PER_HOUR (100), MEMENTO_SCORE_UPDATE_BATCH (200, values above 10000 are capped at 10000) |
 | Integer of at least 1, otherwise the default | MEMENTO_WM_FALLBACK_MAX_ROWS (2000) |
 | Integer, 100 to 4500, anything else uses 2000 | MEMENTO_HEALTH_READY_DB_TIMEOUT_MS |
+| Integer, 100 to 100000, anything else uses 4000 | MEMENTO_GC_MAX_DELETE_PER_CYCLE |
+| Integer, 1000 to 600000, anything else uses 60000 | MEMENTO_GC_TIME_BUDGET_MS |
 | Integer, 1 to 100, anything else uses 12 | MEMENTO_OUTBOX_MAX_ATTEMPTS |
 | Integer, 1 to 3650, anything else uses 7 | MEMENTO_OUTBOX_RETENTION_DAYS, MEMENTO_OUTBOX_UNHANDLED_DAYS |
 | Integer, 0 to 10, anything else uses 3 | MEMENTO_DB_LOCK_RETRY_MAX |
@@ -36,7 +38,7 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | true, false (any other value is false) | MEMENTO_CONFIG_STRICT |
 | true, false (any other value fails startup in `MEMORY_CONFIG` validation) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (any other value is off) | MEMENTO_ADMIN_AUTH_BACKOFF |
-| on, off (any other value is on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET |
+| on, off (any other value is on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT |
 | mask, reject, off (any other value is mask) | MEMENTO_SENSITIVE_SCAN |
 | workspace, key (any other value is workspace) | MEMENTO_DEDUP_SCOPE |
 | true, false (any value other than false is true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
@@ -77,6 +79,9 @@ The name, documented default, purpose and category of each feature switch are in
 | MEMENTO_DB_LOCK_RETRY_MAX | 3 | Maximum number of times a write transaction that locks several fragment rows is re-run from the start after a deadlock (40P01) or lock timeout (55P03). The wait before a retry starts at 25 ms, doubles per retry up to 400 ms, and is a random value between half of that bound and the bound. 0 disables retries. Only integers from 0 to 10 are accepted; anything else uses the default. Retries are exposed as `memento_db_deadlock_retries_total` (operation label) |
 | MEMENTO_DECAY_MIN_DELTA | 0 | Skips rows whose decay change is below this value; rows last decayed more than 24 hours ago are always updated (rows at the 0.05 floor are therefore rewritten about every fourth cycle). Non-numeric or negative values are treated as 0 with a warning, and values above 1 are capped to 1. Ignored when `MEMENTO_SCORE_UPDATE_BATCH` is 0 |
 | MEMENTO_UTILITY_MIN_DELTA | 0 | Skips utility_score rewrites when the stored value differs by at most this value. Non-numeric or negative values are treated as 0 with a warning, and values above 1 are capped to 1. Ignored when `MEMENTO_SCORE_UPDATE_BATCH` is 0 |
+| MEMENTO_GC_THROUGHPUT | on | Expired fragment cleanup throughput switch. With `on`, the `expired_delete` stage repeats the candidates in chunks of 100 and stops at whichever comes first: the per-cycle delete cap (`MEMENTO_GC_MAX_DELETE_PER_CYCLE`), the time budget (`MEMENTO_GC_TIME_BUDGET_MS`) or running out of candidates. Each chunk runs in its own transaction that locks the target rows in id order and then deletes only the locked rows (lock wait limit 3 seconds; a deadlock or lock wait timeout re-runs the transaction up to `MEMENTO_DB_LOCK_RETRY_MAX` times). When a chunk fails, the stage returns the number deleted so far and the next cycle continues. With `off`, `gc.maxDeletePerCycle` (50) rows are deleted per cycle in one statement. Read at call time |
+| MEMENTO_GC_MAX_DELETE_PER_CYCLE | 4000 | Maximum number of expired fragments one cleanup cycle deletes (`CONSOLIDATE_INTERVAL_MS`, default 6 hours). The default is at least twice the 30-day daily average fragment inflow (about 1900). Only integers from 100 to 100000 are accepted; anything else uses the default. Not used when `MEMENTO_GC_THROUGHPUT=off`. Read at call time |
+| MEMENTO_GC_TIME_BUDGET_MS | 60000 | Time (ms) within which one expired-cleanup cycle may start new chunks. A chunk always runs to completion. Only integers from 1000 to 600000 are accepted; anything else uses the default. Not used when `MEMENTO_GC_THROUGHPUT=off`. At the end of each cleanup the number of remaining expired candidates (an approximation that stops counting at 100000) is recorded in the `memento_gc_backlog` gauge. Read at call time |
 | MEMENTO_RUNTIME | (none) | `docker` marks the installation as Docker |
 | GITHUB_TOKEN | (none) | GitHub API authentication token for update checks |
 | WORKER_ID | single | workerId shown in the health response |
@@ -561,7 +566,8 @@ export const MEMORY_CONFIG = {
     utilityThreshold       : 0.15,   // Below this + inactive = deletion candidate
     gracePeriodDays        : 7,      // Minimum survival period (days)
     inactiveDays           : 60,     // Inactivity period (days)
-    maxDeletePerCycle      : 50,     // Max deletions per cycle
+    maxDeletePerCycle      : 50,     // Deletions per cycle when MEMENTO_GC_THROUGHPUT=off
+    chunkSize              : 100,    // Rows per expired-delete chunk
     factDecisionPolicy     : {
       importanceThreshold  : 0.2,    // GC importance threshold for fact/decision
       orphanAgeDays        : 30      // Orphan fact/decision deletion threshold (days)
@@ -709,7 +715,7 @@ Validated items:
 - `semanticSearch.minSimilarity`, `morphemeIndex.minSimilarity`, `gc.utilityThreshold` are in the 0-1 range
 - All `halfLifeDays` entries are positive
 - `gc.gracePeriodDays` < `gc.inactiveDays`
-- `embeddingWorker.batchSize`, `embeddingWorker.intervalMs`, `pagination.defaultPageSize`, `pagination.maxPageSize`, `gc.maxDeletePerCycle` are positive integers
+- `embeddingWorker.batchSize`, `embeddingWorker.intervalMs`, `pagination.defaultPageSize`, `pagination.maxPageSize`, `gc.maxDeletePerCycle`, `gc.chunkSize` are positive integers
 
 ---
 

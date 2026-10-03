@@ -113,6 +113,7 @@ export const SWITCHES = Object.freeze([
   enumOf("MEMENTO_PROACTIVE_RECALL_MODE", ["off", "auto", "legacy"], "auto", "기억 처리", "remember 직후 related 링크 자동 생성 방식", { off: ["off"] }),
   boolOnStrict("MEMENTO_FEEDBACK_SAMPLING", "기억 처리", "쓰기 응답에 tool_feedback 요청 힌트를 확률적으로 동봉한다"),
   boolOn("MEMENTO_SESSION_SEGMENT", "세션", "유휴와 수명 기준으로 세션 세그먼트를 회전한다"),
+  enumOf("MEMENTO_GC_THROUGHPUT", ["on", "off"], "on", "기억 처리", "만료 파편 정리가 주기당 삭제 상한까지 청크를 반복한다(off는 주기당 50건을 한 번에 지운다)", { off: ["off"] }),
   boolOn("MEMENTO_ENABLE_KUROMOJI", "기억 처리", "일본어 형태소 분석기(kuromoji)를 로드한다"),
 
   /* symbolic */

@@ -18,6 +18,7 @@ await prepareLaneDatabase();
 
 const { shutdownPool }       = await import("../../lib/tools/db.js");
 const { FragmentWriter }     = await import("../../lib/memory/write/FragmentWriter.js");
+const { FragmentGC }         = await import("../../lib/memory/consolidate/FragmentGC.js");
 const { FragmentFactory }    = await import("../../lib/memory/write/FragmentFactory.js");
 const { WriteGate, WRITE_ENTRIES } = await import("../../lib/memory/write/WriteGate.js");
 const wm                     = await import("../../lib/memory/WorkingMemoryRows.js");
@@ -165,11 +166,11 @@ describe("보관 시간 만료와 정리", () => {
     assert.equal(row.rowCount, 1, "valid_to가 비어 있는 행은 작업 기억 행이 아니다");
   });
 
-  it("FragmentWriter.deleteExpired가 만료한 작업 기억 행을 함께 정리한다", async () => {
+  it("FragmentGC.deleteExpired가 만료한 작업 기억 행을 함께 정리한다", async () => {
     const session = `${TAG}-gc`;
     const old     = await writeWmRow({ session });
     await backdate(old, 30 * 3600);
-    await writer.deleteExpired();
+    await new FragmentGC().deleteExpired();
     const row = await client.query("SELECT 1 FROM agent_memory.fragments WHERE id = $1", [old]);
     assert.equal(row.rowCount, 0);
   });

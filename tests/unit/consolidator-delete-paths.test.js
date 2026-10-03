@@ -22,7 +22,7 @@ describe("통합과 GC 삭제 경로", () => {
     for (const rel of [
       "lib/memory/consolidate/ConsolidatorGC.js",
       "lib/memory/consolidate/MemoryConsolidator.js",
-      "lib/memory/write/FragmentWriter.js",
+      "lib/memory/consolidate/FragmentGC.js",
       "lib/memory/write/ConflictResolver.js",
       "lib/memory/link/GraphLinker.js"
     ]) {

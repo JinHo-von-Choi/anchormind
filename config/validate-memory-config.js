@@ -73,6 +73,7 @@ export function validateMemoryConfig(cfg) {
     ["pagination.defaultPageSize",   cfg.pagination.defaultPageSize],
     ["pagination.maxPageSize",       cfg.pagination.maxPageSize],
     ["gc.maxDeletePerCycle",         cfg.gc.maxDeletePerCycle],
+    ["gc.chunkSize",                 cfg.gc.chunkSize],
   ];
   for (const [name, val] of positiveIntFields) {
     if (typeof val !== "number" || val <= 0 || !Number.isInteger(val)) {

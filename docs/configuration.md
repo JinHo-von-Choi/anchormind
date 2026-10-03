@@ -20,6 +20,8 @@
 | 0 이상의 정수, 그 밖은 기본값 | MEMENTO_SHUTDOWN_DEADLINE_MS (60000), MEMENTO_SESSION_KEY_RECHECK_MS (30000), MEMENTO_DCR_MAX_PER_HOUR (100), MEMENTO_SCORE_UPDATE_BATCH (200, 10000을 넘으면 10000) |
 | 1 이상의 정수, 그 밖은 기본값 | MEMENTO_WM_FALLBACK_MAX_ROWS (2000) |
 | 100 이상 4500 이하의 정수, 그 밖은 2000 | MEMENTO_HEALTH_READY_DB_TIMEOUT_MS |
+| 100 이상 100000 이하의 정수, 그 밖은 4000 | MEMENTO_GC_MAX_DELETE_PER_CYCLE |
+| 1000 이상 600000 이하의 정수, 그 밖은 60000 | MEMENTO_GC_TIME_BUDGET_MS |
 | 1 이상 100 이하의 정수, 그 밖은 12 | MEMENTO_OUTBOX_MAX_ATTEMPTS |
 | 1 이상 3650 이하의 정수, 그 밖은 7 | MEMENTO_OUTBOX_RETENTION_DAYS, MEMENTO_OUTBOX_UNHANDLED_DAYS |
 | 0 이상 10 이하의 정수, 그 밖은 3 | MEMENTO_DB_LOCK_RETRY_MAX |
@@ -36,7 +38,7 @@
 | true, false (그 밖의 값은 false) | MEMENTO_CONFIG_STRICT |
 | true, false (그 밖의 값은 `MEMORY_CONFIG` 검증에서 기동 실패) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (그 밖의 값은 off) | MEMENTO_ADMIN_AUTH_BACKOFF |
-| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET |
+| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT |
 | mask, reject, off (그 밖의 값은 mask) | MEMENTO_SENSITIVE_SCAN |
 | workspace, key (그 밖의 값은 workspace) | MEMENTO_DEDUP_SCOPE |
 | true, false (false가 아닌 값은 true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
@@ -77,6 +79,9 @@
 | MEMENTO_DB_LOCK_RETRY_MAX | 3 | 파편 행을 여러 개 잠그는 쓰기 트랜잭션이 교착(40P01)이나 잠금 대기 상한(55P03)으로 끝났을 때 처음부터 다시 실행하는 최대 횟수. 재시도 전 대기는 25ms에서 두 배씩 늘어 400ms를 넘지 않으며 그 범위의 절반에서 상한 사이 임의 값이다. 0이면 재시도하지 않는다. 0 이상 10 이하의 정수만 받고 그 밖은 기본값. 재시도 수는 `memento_db_deadlock_retries_total`(operation 라벨)로 노출된다 |
 | MEMENTO_DECAY_MIN_DELTA | 0 | 감쇠량이 이 값보다 작은 행을 건너뛴다. 마지막 감쇠 후 24시간이 지난 행은 항상 갱신(하한 0.05에 닿은 행은 이 상한 때문에 대략 네 번에 한 번 다시 쓰인다). 숫자가 아니거나 음수인 값은 0으로 처리하고 경고를 남기며 1을 넘는 값은 1로 제한한다. `MEMENTO_SCORE_UPDATE_BATCH`가 0이면 적용하지 않는다 |
 | MEMENTO_UTILITY_MIN_DELTA | 0 | 저장값과의 차이가 이 값 이하인 utility_score를 다시 쓰지 않는다. 숫자가 아니거나 음수인 값은 0으로 처리하고 경고를 남기며 1을 넘는 값은 1로 제한한다. `MEMENTO_SCORE_UPDATE_BATCH`가 0이면 적용하지 않는다 |
+| MEMENTO_GC_THROUGHPUT | on | 만료 파편 정리의 처리량 스위치. `on`이면 정리 단계 `expired_delete`가 후보를 100건 청크로 반복해 주기당 삭제 상한(`MEMENTO_GC_MAX_DELETE_PER_CYCLE`), 시간 예산(`MEMENTO_GC_TIME_BUDGET_MS`), 후보 소진 중 먼저 닿는 것에서 멈춘다. 청크마다 별도 트랜잭션에서 대상 행을 id 오름차순으로 잠근 뒤 잠근 행만 지우며(잠금 대기 상한 3초, 교착과 잠금 대기 초과는 `MEMENTO_DB_LOCK_RETRY_MAX`까지 재실행), 청크가 실패하면 그때까지 지운 수를 돌려주고 다음 주기가 이어간다. `off`이면 주기당 `gc.maxDeletePerCycle`(50)건을 한 문장으로 지운다. 호출 시점에 읽는다 |
+| MEMENTO_GC_MAX_DELETE_PER_CYCLE | 4000 | 만료 파편 정리가 한 주기(`CONSOLIDATE_INTERVAL_MS`, 기본 6시간)에 지우는 최대 건수. 기본값은 30일 일평균 파편 유입(약 1900건)의 두 배 이상이다. 100 이상 100000 이하의 정수만 받고 그 밖은 기본값이다. `MEMENTO_GC_THROUGHPUT=off`이면 쓰지 않는다. 호출 시점에 읽는다 |
+| MEMENTO_GC_TIME_BUDGET_MS | 60000 | 만료 파편 정리 한 주기에서 새 청크를 시작할 수 있는 시간(ms). 청크 하나는 항상 끝까지 실행한다. 1000 이상 600000 이하의 정수만 받고 그 밖은 기본값이다. `MEMENTO_GC_THROUGHPUT=off`이면 쓰지 않는다. 정리 주기가 끝날 때 남은 만료 후보 수(상한 100000에서 세기를 멈추는 근사값)를 `memento_gc_backlog` 게이지에 기록한다. 호출 시점에 읽는다 |
 | MEMENTO_RUNTIME | (없음) | `docker`면 Docker 설치로 판정한다 |
 | GITHUB_TOKEN | (없음) | 업데이트 확인 시 GitHub API 인증 토큰 |
 | WORKER_ID | single | health 응답의 workerId 표기 |
@@ -585,7 +590,8 @@ export const MEMORY_CONFIG = {
     utilityThreshold       : 0.15,   // 이 값 미만 + 비활성 시 삭제 후보
     gracePeriodDays        : 7,      // 최소 생존 기간 (일)
     inactiveDays           : 60,     // 비활성 기간 (일)
-    maxDeletePerCycle      : 50,     // 1회 최대 삭제 건수
+    maxDeletePerCycle      : 50,     // MEMENTO_GC_THROUGHPUT=off일 때의 1회 삭제 건수
+    chunkSize              : 100,    // 만료 삭제 청크 하나의 건수
     factDecisionPolicy     : {
       importanceThreshold  : 0.2,    // fact/decision GC 기준 중요도
       orphanAgeDays        : 30      // 고립 fact/decision 삭제 기준 (일)
@@ -818,7 +824,7 @@ SearchParamAdaptor는 별도 환경변수 없이 자동으로 동작한다. `con
 - `semanticSearch.minSimilarity`, `morphemeIndex.minSimilarity`, `gc.utilityThreshold`는 0~1 범위
 - `halfLifeDays` 모든 항목은 양수
 - `gc.gracePeriodDays` < `gc.inactiveDays`
-- `embeddingWorker.batchSize`, `embeddingWorker.intervalMs`, `pagination.defaultPageSize`, `pagination.maxPageSize`, `gc.maxDeletePerCycle`는 양의 정수
+- `embeddingWorker.batchSize`, `embeddingWorker.intervalMs`, `pagination.defaultPageSize`, `pagination.maxPageSize`, `gc.maxDeletePerCycle`, `gc.chunkSize`는 양의 정수
 
 ---
 

@@ -263,7 +263,10 @@ export const MEMORY_CONFIG = {
     utilityThreshold       : 0.15,
     gracePeriodDays        : 7,
     inactiveDays           : 60,
+    /** MEMENTO_GC_THROUGHPUT=off일 때의 주기당 삭제 건수. on이면 MEMENTO_GC_MAX_DELETE_PER_CYCLE을 쓴다. */
     maxDeletePerCycle      : 50,
+    /** 만료 삭제 청크 하나의 건수 */
+    chunkSize              : 100,
     factDecisionPolicy     : {
       importanceThreshold  : 0.2,
       orphanAgeDays        : 30
