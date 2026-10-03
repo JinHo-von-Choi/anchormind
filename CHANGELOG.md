@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 업그레이드 주의
+
+- 배포 전에 `scripts/grant-anchor-permission.js --apply`로 앵커를 쓰는 키에 `anchor` 권한을 준다. 그렇지 않으면 배포 직후 그 키의 앵커 지정이 일반 파편으로 저장된다(`MEMENTO_ANCHOR_PERMISSION=warn`).
+- migration-053 ~ 060을 적용한다. `case_events(source_fragment_id)` 색인은 마이그레이션 전에, `content_tokens` GIN 색인은 마이그레이션 뒤 백필 전에 `scripts/ops/online-index.mjs`로 만든다. 배포 뒤 `backfill-content-tokens.mjs`, `backfill-key-secrets.mjs --confirm`, case_events 백업 뒤 `purge-orphan-case-summaries.js`를 실행한다. 순서는 `docs/operations/online-migration.md`의 「migration-053 ~ 060 배포 순서」에 있다.
+- 관리자 계정을 등록하기 전에 `MEMENTO_ADMIN_SEAL_KEY`를 설정한다.
+
 ### Added
 
 - `GET /health/live`(항상 200)와 `GET /health/ready`(주 DB가 상한 안에 응답하면 200, 아니면 `db_timeout` 또는 `db_error` 사유의 503). `GET /health`의 응답은 같다.
@@ -62,6 +68,21 @@
 - 내보내기 형식 버전 2: `GET /export`와 CLI `export`가 머리 줄, 파편의 전체 열, 링크 줄, 선택적 수정 이력 줄(`include_versions`, CLI `--include-versions`), 끝 줄을 낸다. `format_version=1`(CLI `--format-version 1`)은 버전 1 형식을 낸다. 형식 버전과 호환 규칙은 `docs/api-versioning.md`에 있다.
 - 가져오기 실행기: `POST /import`와 CLI `import`가 버전 1과 2 파일을 읽어 파편, 링크, 수정 이력을 기록하고 `imported`, `duplicates`, `rejected`(`rejected_by_reason`), `errors`, `transformed`, `ignored` 집계를 돌려준다. 기록 대상 키는 `key_id`(CLI `--key`)가 정하며 파일 행의 `key_id`는 읽지 않는다. `restore=trusted`(CLI `--restore`)는 버전 2 파일의 저장 값(importance, ttl_tier, workspace_source, 품질 판정 열)을 되살리고 감사 기록을 남긴다. 알아볼 수 있는 기록이 없는 입력은 400 `no_valid_records`(CLI 종료 코드 1)다.
 - `MEMENTO_DB_LOCK_RETRY_MAX`(0 이상 10 이하, 기본 3, 0은 재시도 없음): 여러 파편 행을 잠그는 쓰기 트랜잭션이 교착(40P01)이나 잠금 대기 상한(55P03)으로 끝나면 처음부터 다시 실행한다. 지표 `memento_db_deadlock_retries_total{operation}`과 경보 `MementoDbLockRetries`, 경고 로그로 끝낸 배경 쓰기 실패를 세는 `memento_db_write_failures_total{operation}`.
+- 본문 어휘 채널 `MEMENTO_LEXICAL_CHANNEL`(`on`, `off`, 기본 `on`)과 migration-053(`fragments.content_tokens`): 본문을 쓰는 저장 경로가 본문의 형태소 토큰을 같은 문장으로 기록하고, `recall`의 text 검색이 유효한 GIN 색인(`idx_fragments_content_tokens`, 정의로 찾는다)이 있을 때 전문 검색 후보를 RRF에 더한다. 임베딩이 꺼진 경로에서도 text만으로 찾는다. 어휘 채널에서만 찾은 후보는 다른 채널 후보 뒤에서 순위와 토큰 예산을 받는다. 질의 상한 `MEMENTO_LEXICAL_TIMEOUT_MS`(기본 120), 기존 행 백필 `scripts/backfill-content-tokens.mjs`(기본 미리보기, `--confirm`), 지표 `memento_lexical_tokens_coverage_ratio`, `memento_lexical_tokens_missing`, `memento_lexical_channel_skipped_total{reason}`, `memento_lexical_tokenize_skipped_total{reason}`.
+- `MEMENTO_CONTEXT_ANNOTATE`(`on`, `off`, 기본 `on`): `context` 주입 줄 끝에 저장일(UTC)과 assertion 주석 ` (YYYY-MM-DD, assertion)`을 붙인다. 주석의 고정 비용은 토큰 예산 선택에 들어간다. `recall`의 `format:"pack"`은 답 꾸러미(`pack.text`, `items`, `groups`, `policy`)를 돌려준다. 출처와 대체 체인 조회가 실패하면 `partial=true`다.
+- 파편 출처와 신뢰 등급 `MEMENTO_PROVENANCE`(`on`, `off`, 기본 `on`)와 migration-057(`origin`, `observed_client`, `trust_tier`, `review_state`, `review_reason`): `remember`와 `batch_remember`의 `origin` 주장(`user_stated`, `agent_inferred`, `tool_output`, `external_content`, `consolidation`, `import`, 그 밖의 값은 -32602), 관측 클라이언트 이름, 키 상한(권한 표지 `trusted_origin` 또는 마스터 키 3, 그 밖 2)으로 등급을 정한다. 등급 1 이하 파편은 ANCHOR와 CORE 주입에서 빠지고, `recall` 응답과 답 꾸러미, 주입 줄 주석에 출처가 실린다. 지표 `memento_context_core_trust_excluded_total{reason}`.
+- 비차단 검토 대기열 `MEMENTO_REVIEW_QUEUE`(`on`, `off`, 기본 `on`)와 migration-058(`memory_review_decisions`): 에이전트 지시 덮어쓰기 문구, 등급 1 이하의 앵커와 preference와 procedure, 무권한 앵커 요청에 걸린 쓰기를 거부하지 않고 검토 대기로 저장한다. 검토 대기 파편은 쓴 키의 `recall`에만 `pending_review` 표지와 함께 보이고 주입과 앵커 승격에서 빠진다. 키 권한 목록의 `review_off`, `review_all` 표지가 키별 방식을 정한다. 관리 API `GET /review`, `POST /review/:id/approve`, `POST /review/:id/reject`(능력 `review.decide`, 감사 행위 `review.approve`, `review.reject`)와 30일 미결정 자동 거절(`review.auto_reject`). 보류한 앵커는 승인 때 쓰기 경로와 같은 앵커 권한과 키별 상한으로 판정한다. 지표 `memento_review_flag_total{entry,reason}`, `memento_review_decisions_total{decision}`.
+- `MEMENTO_FORGET_CASCADE`(`on`, `off`, 기본 `on`)와 migration-054(`case_events(source_fragment_id)` 부분 색인, 운영 DB는 online-index로 먼저 만든다): `forget`이 대상과 그 대상을 가리키는 모순 해소 기록을 함께 지우고 지운 파편을 출처로 한 사례 요약을 `[삭제됨]`으로 바꾼다. 응답 `purged`(`case_summaries`, `audit_fragments`). 모순 해소 기록은 두 파편의 id만 담는다. 남은 고아 요약 정리 `scripts/purge-orphan-case-summaries.js`(기본 미리보기, `--execute`는 `--i-have-a-backup`과 함께).
+- LLM 외부 전송 정책 `MEMENTO_EGRESS_POLICY`(`on`, `off`, 기본 `on`), `MEMENTO_EGRESS_UNKNOWN_KEY`(`configured`, `local_only`, 기본 `configured`), `MEMENTO_EGRESS_LOCAL_HOSTS`와 migration-055(`api_keys.egress_policy`): 외부 LLM 호출 전에 키와 workspace 정책으로 제공자를 거르고 본문을 마스킹하며 전송을 outbox topic `audit.llm.egress`로 감사한다(파일 감사 로그와 감사 표에 함께 남는다). 키 정책 편집(`PATCH /keys/:id/policy`)의 `egress_policy` 필드는 능력 `egress.policy`가 필요하다. 지표 `memento_llm_egress_*`.
+- 감사 표 `MEMENTO_AUDIT_DB`(`on`, `off`, 기본 `on`), `MEMENTO_AUDIT_RETENTION_DAYS`(기본 400)와 migration-056(`admin_audit_events`): 관리 변경, 관리 인증, 기억 쓰기, 앵커, 관문 거부, 검토 결정, 외부 전송을 해시 체인으로 기록한다. 관리 API `GET /audit`, `GET /audit/export`(JSONL), `POST /audit/verify`와 CLI `anchormind audit verify`.
+- 관리 권한 결정 표: 관리 API의 라우트마다 요구 능력과 범위를 선언한 라우트 표(`lib/admin/admin-route-table.js`)로 판정한다. 역할 프리셋 owner, admin, reviewer, auditor, viewer, service, 표에 없는 경로는 owner 전용, 관리 SQL의 workspace 범위 술어, auditor 응답 마스킹, `GET /me`, `GET /me/explain`(API 키 Bearer 포함).
+- API 키 수명과 migration-059(`api_keys` 수명 열, `api_key_secrets`): 만료 시각, 허용 주소 대역, 소유자, 종류, 설명을 두고 `POST /keys/:id/rotate`(겹침 `MEMENTO_KEY_ROTATION_GRACE_HOURS`, 기본 24), `POST /keys/:id/revoke`, `POST /keys/:id/access-review`, `PATCH /keys/:id`로 관리한다. 마지막 사용 기록 간격 `MEMENTO_KEY_LAST_USED_INTERVAL_SEC`(기본 60). 배포 뒤 `scripts/ops/backfill-key-secrets.mjs --confirm`으로 현재 키 해시를 옮긴다.
+- 관리자 계정 `MEMENTO_ADMIN_USERS`(`on`, `off`, 기본 `on`), `MEMENTO_ADMIN_SEAL_KEY`와 migration-060: 비밀번호와 TOTP(또는 복구 코드) 로그인, DB 세션 쿠키(SameSite=Strict)와 이중 제출 CSRF, 역할 바인딩, 계정 관리 API(`/admin-users`, 능력 `admin_user.manage`, owner 전용), 첫 owner 등록(`POST /admin-users/bootstrap`, 마스터 키), 비상 복구 CLI `anchormind admin recover`(명시한 접속 대상만 쓰고 환경 파일을 읽지 않는다).
+- 앵커 권한 `MEMENTO_ANCHOR_PERMISSION`(`off`, `warn`, `enforce`, 기본 `warn`)과 `MEMENTO_ANCHOR_LIMIT_PER_KEY`(기본 1000): `remember`, `batch_remember`, `amend`의 앵커 지정은 마스터 키와 권한 목록에 `anchor`가 있는 키만 하고 키별 살아 있는 앵커 수 상한을 쓰기 트랜잭션 안에서 다시 센다. `warn`은 일반 파편으로 저장하고 `anchorPermissionRequired`, `anchorLimitExceeded` 경고와 지표 `memento_anchor_decision_total{outcome,reason}`을 남기며, `enforce`는 거부한다. 최근 90일 앵커를 만든 키에 권한을 주는 `scripts/grant-anchor-permission.js`(기본 미리보기, `--apply`).
+- 읽기 경로 workspace 허가 `MEMENTO_WORKSPACE_READ_AUTHZ`(`off`, `warn`, `enforce`, 기본 `warn`): `recall`, `context`, `graph_explore`, `fragment_history`, `reconstruct_history`, `search_traces`, `resources/read`의 대상 workspace를 키의 `allowed_workspaces`로 판정한다. `warn`은 지표 `memento_workspace_read_authz_total`과 로그만 남기고 `enforce`는 -32001로 거부한다. master 전용 mode preset 요청도 같은 스위치로 판정한다.
+- 하네스 훅 `MEMENTO_HOOK_ENDPOINTS`(`on`, `off`, 기본 `on`): `POST /hooks/{client}/{event}`(Claude Code, Codex의 `SessionStart`, `Stop`, `SessionEnd`)가 세션 시작 맥락을 돌려주고 세션 끝 발췌의 요약 후보를 outbox로 회고에 넘긴다. CLI `anchormind hook`(현재 디렉터리의 `.env`를 읽지 않는다)과 플러그인 생성 `anchormind init --target claude|codex`(기본 dry-run, `--write`). 지표 `memento_hook_calls_total`.
+- 만료 GC 처리량 `MEMENTO_GC_THROUGHPUT`(`on`, `off`, 기본 `on`), `MEMENTO_GC_MAX_DELETE_PER_CYCLE`(기본 4000), `MEMENTO_GC_TIME_BUDGET_MS`(기본 60000): 만료 파편 정리가 100건 청크를 주기당 상한과 시간 예산까지 반복한다. 지표 `memento_gc_backlog`.
+- 지표 `memento_modern_protocol_attempts_total`: 세션 없이 들어온 현대식 MCP 프로토콜 시도를 센다.
 
 ### Changed
 
@@ -120,6 +141,9 @@
 - 가져오기 `dryRun`(CLI `--dry-run`)은 DB에 연결해 같은 경로로 처리한 뒤 되돌리므로 집계가 실제 실행과 같다. 관문 지표는 남기지 않는다.
 - `scripts/backfill-reflect-workspace.js`는 대상 workspace에 같은 본문 파편이 이미 있는 파편을 옮기지 않는다.
 - 중복 판정과 `scripts/ops/finish-dedup-scope.mjs`의 키 단위 색인 확인은 두 이름 묶음(`uq_frag_hash_per_key`, `uq_frag_hash_master`와 같은 정의의 `fragments_new_key_id_content_hash_idx`, `fragments_new_content_hash_idx`)을 모두 키 단위 색인으로 본다. 마무리 스크립트는 정의가 같은 쪽을 지우고, 정의가 다른 같은 이름의 색인은 지우지 않고 알린다.
+- API 키 권한 목록(`POST /keys`, `PUT /keys/:id/permissions`)은 `read`, `write` 중 하나 이상과 표지 권한 `trusted_origin`, `anchor`, `review_off`, `review_all`(검토 방식은 하나만)을 받는다. 빈 배열과 표지 권한만 있는 배열은 400이다. 권한 변경은 변경 전후 권한을 감사 기록에 남긴다.
+- `context`의 앵커 주입 줄은 `MEMENTO_ANCHOR_PERMISSION`이 `off`가 아니면 비식별 주체 표지(`[k:xxxx]`, 마스터 앵커는 `[master]`)를 붙이고, 응답 앵커 파편은 `key_id` 대신 `principal`을 싣는다.
+- 관리 API는 요청마다 라우트 표의 요구 능력을 판정한다. 마스터 키와 마스터 키 로그인 세션은 owner로 모든 라우트를 쓴다. 파편 이력과 `/export`는 판정 범위가 전체일 때만 열린다.
 
 ### Removed
 
