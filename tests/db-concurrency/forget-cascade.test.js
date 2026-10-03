@@ -184,6 +184,49 @@ describe("forget 삭제 연쇄(실제 행)", () => {
     assert.deepEqual(left.rows.map(r => r.id), [s.w, s.a2, s.a3].sort());
   });
 
+  it("서로 연결된 해소 기록(같은 topic 자동 연결)은 대상 하나를 지울 때 함께 지워지지 않는다", async () => {
+    const t      = await insertFragment({ id: fid(), content: "fc 형제 대상 본문", keyId: KEY_A });
+    const w      = await insertFragment({ id: fid(), content: "fc 형제 이긴 본문", keyId: KEY_A });
+    const audit1 = await insertFragment({
+      id: fid(), content: "fc 해소 기록 1", topic: CONTRADICTION_AUDIT_TOPIC, type: "decision", linkedTo: [w, t]
+    });
+    const audit2 = await insertFragment({
+      id: fid(), content: "fc 해소 기록 2", topic: CONTRADICTION_AUDIT_TOPIC, type: "decision", linkedTo: [audit1]
+    });
+    await directQuery(
+      `UPDATE ${SCHEMA}.fragments SET linked_to = array_append(linked_to, $2) WHERE id = $1`, [audit1, audit2]
+    );
+    const e2 = await insertEvent(audit2, "fc 해소 기록 2 요약");
+
+    /** master가 해소 기록 하나를 지우면 그 행만 지운다. */
+    const own = await mm.forget({ id: audit1, _keyId: null });
+    assert.equal(own.deleted, 1);
+    assert.deepEqual(own.purged, { case_summaries: 0, audit_fragments: 0 });
+    const left = await directQuery(
+      `SELECT id FROM ${SCHEMA}.fragments WHERE id = ANY($1::text[]) ORDER BY id`, [[t, w, audit2]]
+    );
+    assert.deepEqual(left.rows.map(r => r.id), [t, w, audit2].sort());
+    assert.equal(await leakedSummaries([audit2]), 1, "남은 해소 기록의 요약은 그대로다");
+
+    /** 일반 대상을 지우면 그 대상을 가리키는 해소 기록만 지우고 형제 기록은 남긴다. */
+    const audit3 = await insertFragment({
+      id: fid(), content: "fc 해소 기록 3", topic: CONTRADICTION_AUDIT_TOPIC, type: "decision", linkedTo: [w, t, audit2]
+    });
+    await directQuery(
+      `UPDATE ${SCHEMA}.fragments SET linked_to = array_append(linked_to, $2) WHERE id = $1`, [audit2, audit3]
+    );
+    const res = await mm.forget({ id: t, _keyId: KEY_A, _groupKeyIds: [KEY_A] });
+    assert.equal(res.deleted, 1);
+    assert.deepEqual(res.purged, { case_summaries: 0, audit_fragments: 1 });
+    const after2 = await directQuery(
+      `SELECT id, linked_to FROM ${SCHEMA}.fragments WHERE id = ANY($1::text[]) ORDER BY id`, [[t, audit2, audit3]]
+    );
+    assert.deepEqual(after2.rows.map(r => r.id), [audit2]);
+    assert.ok(!after2.rows[0].linked_to.includes(audit3), "지운 형제의 id는 linked_to에서 빠진다");
+    const ev = await directQuery(`SELECT summary FROM ${SCHEMA}.case_events WHERE event_id = $1`, [e2]);
+    assert.equal(ev.rows[0].summary, "fc 해소 기록 2 요약");
+  });
+
   it("다시 forget하면 이미 없는 대상으로 응답하고 아무것도 바꾸지 않는다", async () => {
     const s = await seedContradiction();
     await mm.forget({ id: s.t, _keyId: KEY_A, _groupKeyIds: [KEY_A] });
@@ -281,5 +324,14 @@ describe("스위치 off와 고아 사본 정리(실제 행)", () => {
     );
     assert.equal(rows[0].summary, "fc 이긴 파편 본문", "원본이 있는 요약은 그대로다");
     assert.equal((await purgeOrphanCaseSummaries(pool)).orphans, 0);
+  });
+
+  it("빈 문자열 출처는 출처 없음으로 보고 정리하지 않는다", async () => {
+    const e = await insertEvent("", "fc 빈 출처 요약");
+    const pool = getPrimaryPool();
+    assert.equal((await purgeOrphanCaseSummaries(pool)).orphans, 0);
+    await purgeOrphanCaseSummaries(pool, { execute: true });
+    const { rows } = await directQuery(`SELECT summary FROM ${SCHEMA}.case_events WHERE event_id = $1`, [e]);
+    assert.equal(rows[0].summary, "fc 빈 출처 요약");
   });
 });

@@ -94,6 +94,14 @@ describe("잠금 문장과 연쇄 문장", () => {
     assert.match(sql, /ORDER BY id FOR UPDATE$/);
   });
 
+  it("linked_to 대조에는 모순 해소 기록이 아닌 대상만 쓴다(해소 기록끼리의 연결로 번지지 않는다)", () => {
+    const sql   = norm(cascadeDeleteLock(["t1"], "k1").sql);
+    const match = sql.slice(sql.indexOf("linked_to &&"));
+    assert.match(match, /t\.key_id = \$2 AND t\.topic IS DISTINCT FROM \$3\)/);
+    const own   = sql.slice(0, sql.indexOf(" OR ("));
+    assert.doesNotMatch(own, /topic IS DISTINCT FROM/, "대상 자신은 topic과 무관하게 지운다");
+  });
+
   it("master(키 없음)는 대상 조회에 키 조건이 없다", () => {
     const lock = cascadeDeleteLock(["t1", "t2"], null);
     assert.deepEqual(lock.params, [["t1", "t2"], CONTRADICTION_AUDIT_TOPIC]);
@@ -244,6 +252,7 @@ describe("purgeOrphanCaseSummaries", () => {
     assert.deepEqual(out, { mode: "dry-run", orphans: 3, sample_event_ids: ["e1"] });
     assert.ok(sqls.every(s => !/^UPDATE/.test(s.sql)));
     assert.ok(sqls.every(s => /NOT EXISTS \(SELECT 1 FROM agent_memory\.fragments f WHERE f\.id = ce\.source_fragment_id\)/.test(s.sql)));
+    assert.ok(sqls.every(s => /ce\.source_fragment_id <> ''/.test(s.sql)), "빈 문자열 출처는 출처 없음으로 본다");
     assert.ok(sqls.every(s => s.params[0] === DELETED_SUMMARY));
   });
 
