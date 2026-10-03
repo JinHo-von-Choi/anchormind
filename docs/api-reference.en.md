@@ -33,9 +33,13 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | GET | /v1/internal/model/nothing/stats | Dashboard statistics (fragment count, API call volume, system metrics, searchMetrics, observability, queues, healthFlags, switches) |
 | GET | /v1/internal/model/nothing/activity | Recent fragment activity log (10 entries) |
 | GET | /v1/internal/model/nothing/metrics-summary | Dashboard metrics summary |
-| GET | /v1/internal/model/nothing/keys | API key list. Includes the policy columns (`default_mode`, `allowed_workspaces`, `symbolic_hard_gate`) |
-| POST | /v1/internal/model/nothing/keys | Create API key. Raw key returned in response exactly once. `permissions` is an array with at least one of `read` and `write`, optionally with the provenance trust marker `trusted_origin`, and defaults to `DEFAULT_PERMISSIONS` when omitted; an empty array, `null`, an array with only `trusted_origin` or any other value returns 400. It may also carry one review queue mode marker: `review_off` (no review flags for that key) or `review_all` (every write of that key goes into review) |
-| PUT | /v1/internal/model/nothing/keys/:id | Change API key status (active <-> inactive) |
+| GET | /v1/internal/model/nothing/keys | API key list. Includes the policy columns (`default_mode`, `allowed_workspaces`, `symbolic_hard_gate`) and the lifecycle columns (`expires_at`, `description`, `owner`, `kind`, `allowed_cidrs`, `revoked_at`, `revoked_by`, `revoke_reason`, `access_reviewed_at`, `access_reviewed_by`, and the rotation overlap end `rotation_overlap_until`) |
+| POST | /v1/internal/model/nothing/keys | Create API key. Raw key returned in response exactly once. `permissions` is an array with at least one of `read` and `write`, optionally with the provenance trust marker `trusted_origin`, and defaults to `DEFAULT_PERMISSIONS` when omitted; an empty array, `null`, an array with only `trusted_origin` or any other value returns 400. It may also carry one review queue mode marker: `review_off` (no review flags for that key) or `review_all` (every write of that key goes into review). The lifecycle columns (`expires_at`, `description`, `owner`, `kind`, `allowed_cidrs`) may be given as well (rules in the key lifecycle section below) |
+| PUT | /v1/internal/model/nothing/keys/:id | Change API key status (active <-> inactive). Activating a revoked key returns 409 `key_revoked` |
+| PATCH | /v1/internal/model/nothing/keys/:id | Change the API key lifecycle columns (`expires_at`, `description`, `owner`, `kind`, `allowed_cidrs`). See the key lifecycle section below |
+| POST | /v1/internal/model/nothing/keys/:id/rotate | Issue a new raw key (returned once). The previous key stays valid for `graceHours`. See the key lifecycle section below |
+| POST | /v1/internal/model/nothing/keys/:id/revoke | Revoke the key and all of its secrets. Body `{ "reason": "..." }` is required. Cannot be undone |
+| POST | /v1/internal/model/nothing/keys/:id/access-review | Record an access review signature (review time and actor) |
 | GET | /v1/internal/model/nothing/keys/:id/stats | Per-key usage statistics |
 | PUT | /v1/internal/model/nothing/keys/:id/daily-limit | Change API key daily call limit. Master key required |
 | PUT | /v1/internal/model/nothing/keys/:id/permissions | Change API key permissions. Accepted values are the same as for POST (at least one of `read` and `write`, optionally `trusted_origin`). An empty array and an array with only `trusted_origin` return 400. A key with `trusted_origin` can reach trust tier 3 through the `origin` claim of remember; other keys are capped at 2 (`MEMENTO_PROVENANCE`). At most one of the review mode markers `review_off` and `review_all` may be present; both return 400 (`MEMENTO_REVIEW_QUEUE`) |
@@ -469,6 +473,36 @@ Response 200:
 Errors: 400 `{ "error": "...", "field": "default_mode" }` (validation failure), 404 (key not found), 409 (`egress_policy` column missing), 413 (body too large).
 
 Effect: `symbolic_hard_gate`, `allowed_workspaces` and `egress_policy` clear this process's lookup cache, but a lookup already in flight when the PATCH lands can still write the old value into the cache. That entry expires within the 30 second TTL, so the change is effective within about 30 seconds at the latest; other instances behave the same. `default_mode` applies to sessions opened after the change. The change is written to the audit log as one `admin key_policy` line (field names with old and new values).
+
+### Key lifecycle: PATCH /keys/:id, POST /keys/:id/rotate, /revoke, /access-review
+
+The path prefix is `/v1/internal/model/nothing`. All of them require master key authentication and every request records an audit event (`admin.key.lifecycle_update`, `admin.key.rotate`, `admin.key.revoke`, `admin.key.access_review`; key creation is `admin.key.create`). Raw keys and description text are not written to the audit detail.
+
+The `PATCH /keys/:id` body holds one or more of the following fields. Only the given fields change, and an empty string is the same as `null`.
+
+| Field | Value | Description |
+|-|-|-|
+| `expires_at` | ISO 8601 timestamp or `null` | The key is refused from this time on (`memento_auth_denied_total{reason="key_expired"}`). `null` means no expiry |
+| `description` | string of at most 500 characters or `null` | Description shown in the console |
+| `owner` | string of at most 128 characters or `null` | Owner label |
+| `kind` | `^[a-z][a-z0-9_-]{0,31}$` or `null` | Key kind label |
+| `allowed_cidrs` | array of IPv4/IPv6 blocks (at most 64) or `null` | The request address must fall in one of the blocks. A single address is stored as `/32` or `/128`. `null` means no restriction, an empty array refuses every address. The request address is the value after `TRUST_PROXY_HOPS` is applied, and an IPv4-mapped IPv6 address is matched as IPv4. A request from outside the blocks gets the same 401 as an invalid key and is counted in `memento_auth_denied_total{reason="cidr_denied"}`. An open session is closed at its key state recheck when the request address is outside the blocks |
+
+Response 200 is `{ "success": true, ...lifecycle columns }`. Expiry and block changes clear the session recheck cache of this process at once.
+
+The optional `POST /keys/:id/rotate` body is `{ "graceHours": 24 }`. `graceHours` is an integer from 0 to 720 and defaults to `MEMENTO_KEY_ROTATION_GRACE_HOURS` (24). A new raw key is created and returned once as `raw_key`; the previous key (including a key still in the overlap of an earlier rotation) authenticates only until `previous_valid_until`. A key whose overlap has ended is counted in `memento_auth_denied_total{reason="key_rotated"}`. A revoked key returns 409 `key_revoked`.
+
+```json
+{ "id": "...", "name": "ci-runner", "key_prefix": "mmcp_cirunner_", "raw_key": "mmcp_cirunner_...", "previous_valid_until": "2026-10-04T12:00:00.000Z", "retired_secrets": 1 }
+```
+
+The `POST /keys/:id/revoke` body is `{ "reason": "..." }` (1 to 500 characters). It records `revoked_at`, `revoked_by` and `revoke_reason`, sets the status to `inactive` and revokes every secret of the key. The session recheck cache and the policy caches of this process are cleared and the key's sessions are closed at once. Revocation cannot be undone, and revoking a revoked key returns 409 `already_revoked`.
+
+`POST /keys/:id/access-review` takes no body. It records `access_reviewed_at` and `access_reviewed_by` (the admin actor label, for example `master:bearer`).
+
+Errors: 400 `{ "error": "...", "field": "..." }` (validation), 404 (no such key), 409 (revocation conflict), 413 (body too large).
+
+Lookup order: the SHA-256 hash of a raw key is looked up in `api_key_secrets` first, and in `api_keys.key_hash` only when the hash is not there. The row found is judged in this order: revoked, inactive, expired, secret row state (revoked, overlap ended), daily limit. Existing keys whose lifecycle columns are empty get the same result as before. The source is counted in `memento_api_key_lookup_total{source="secret"|"legacy"}`.
 
 ---
 

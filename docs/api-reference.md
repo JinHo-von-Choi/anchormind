@@ -36,9 +36,13 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | GET | /v1/internal/model/nothing/stats | 대시보드 통계 (파편 수, API 호출량, 시스템 메트릭, searchMetrics, observability, queues, healthFlags, switches) |
 | GET | /v1/internal/model/nothing/activity | 최근 파편 활동 로그 (10건) |
 | GET | /v1/internal/model/nothing/metrics-summary | 대시보드 메트릭 요약 |
-| GET | /v1/internal/model/nothing/keys | API 키 목록 조회. 정책 열(`default_mode`, `allowed_workspaces`, `symbolic_hard_gate`)을 포함한다 |
-| POST | /v1/internal/model/nothing/keys | API 키 생성. 원시 키는 응답에서 단 1회 반환. `permissions`는 `read`, `write` 중 하나 이상을 담은 배열이며 출처 신뢰 표지 `trusted_origin`을 함께 둘 수 있다. 생략하면 `DEFAULT_PERMISSIONS`. 빈 배열, `null`, `trusted_origin`만 있는 배열, 그 밖의 값은 400. 검토 대기열 방식 표지 `review_off`(그 키의 검토 표지 끔) 또는 `review_all`(그 키의 모든 쓰기를 검토 대기로 둠) 중 하나도 함께 둘 수 있다 |
-| PUT | /v1/internal/model/nothing/keys/:id | API 키 상태 변경 (active ↔ inactive) |
+| GET | /v1/internal/model/nothing/keys | API 키 목록 조회. 정책 열(`default_mode`, `allowed_workspaces`, `symbolic_hard_gate`)과 수명 열(`expires_at`, `description`, `owner`, `kind`, `allowed_cidrs`, `revoked_at`, `revoked_by`, `revoke_reason`, `access_reviewed_at`, `access_reviewed_by`, 회전 겹침 종료 시각 `rotation_overlap_until`)을 포함한다 |
+| POST | /v1/internal/model/nothing/keys | API 키 생성. 원시 키는 응답에서 단 1회 반환. `permissions`는 `read`, `write` 중 하나 이상을 담은 배열이며 출처 신뢰 표지 `trusted_origin`을 함께 둘 수 있다. 생략하면 `DEFAULT_PERMISSIONS`. 빈 배열, `null`, `trusted_origin`만 있는 배열, 그 밖의 값은 400. 검토 대기열 방식 표지 `review_off`(그 키의 검토 표지 끔) 또는 `review_all`(그 키의 모든 쓰기를 검토 대기로 둠) 중 하나도 함께 둘 수 있다. 수명 열(`expires_at`, `description`, `owner`, `kind`, `allowed_cidrs`)을 함께 줄 수 있다(아래 키 수명 절의 규칙) |
+| PUT | /v1/internal/model/nothing/keys/:id | API 키 상태 변경 (active ↔ inactive). 폐기한 키의 활성화는 409 `key_revoked` |
+| PATCH | /v1/internal/model/nothing/keys/:id | API 키 수명 열 변경(`expires_at`, `description`, `owner`, `kind`, `allowed_cidrs`). 아래 키 수명 절 참조 |
+| POST | /v1/internal/model/nothing/keys/:id/rotate | 새 원시 키 발급(응답에서 단 1회). 이전 키는 `graceHours` 동안 유효. 아래 키 수명 절 참조 |
+| POST | /v1/internal/model/nothing/keys/:id/revoke | 키와 모든 비밀 폐기. 본문 `{ "reason": "..." }` 필수. 되돌릴 수 없다 |
+| POST | /v1/internal/model/nothing/keys/:id/access-review | 접근 검토 서명(검토 시각과 행위자) 기록 |
 | GET | /v1/internal/model/nothing/keys/:id/stats | API 키별 사용 통계 |
 | PUT | /v1/internal/model/nothing/keys/:id/daily-limit | API 키 일일 호출 제한 변경. 마스터 키 인증 필요 |
 | PUT | /v1/internal/model/nothing/keys/:id/permissions | API 키 권한 변경. 허용 값은 POST와 같다(`read`, `write` 중 하나 이상, 선택 `trusted_origin`). 빈 배열과 `trusted_origin`만 있는 배열은 400이다. `trusted_origin`이 있는 키는 remember의 `origin` 주장으로 신뢰 등급 3까지 쓸 수 있고, 없는 키는 2가 상한이다(`MEMENTO_PROVENANCE`). 검토 방식 표지 `review_off`, `review_all`은 둘 중 하나만 둘 수 있고 둘 다 있으면 400이다(`MEMENTO_REVIEW_QUEUE`) |
@@ -471,6 +475,36 @@ API 키의 정책 열을 변경한다. 마스터 키 인증 필요. 전달한 �
 오류: 400 `{ "error": "...", "field": "default_mode" }`(검증 실패), 404(키 없음), 409(`egress_policy` 열 없음), 413(본문 과대).
 
 반영 시점: `symbolic_hard_gate`, `allowed_workspaces`, `egress_policy`는 이 프로세스의 조회 캐시를 비우지만, 변경 시점에 이미 진행 중이던 조회가 이전 값을 캐시에 쓸 수 있다. 그 항목은 TTL 30초 안에 만료되므로 늦어도 약 30초 안에 적용되며, 다른 인스턴스도 같다. `default_mode`는 변경 이후 열린 세션부터 적용된다. 변경은 감사 로그에 `admin key_policy` 한 줄(필드 이름과 이전, 이후 값)로 남는다.
+
+### 키 수명: PATCH /keys/:id, POST /keys/:id/rotate, /revoke, /access-review
+
+경로 접두는 `/v1/internal/model/nothing`이다. 모두 마스터 키 인증이 필요하며 요청마다 감사 이벤트를 남긴다(`admin.key.lifecycle_update`, `admin.key.rotate`, `admin.key.revoke`, `admin.key.access_review`. 키 생성은 `admin.key.create`). 원시 키와 설명 본문은 감사 detail에 남기지 않는다.
+
+`PATCH /keys/:id` 본문은 다음 필드 중 하나 이상이다. 전달한 필드만 바꾸며 빈 문자열은 `null`과 같다.
+
+| 필드 | 값 | 설명 |
+|-|-|-|
+| `expires_at` | ISO 8601 시각 또는 `null` | 이 시각부터 키를 거부한다(`memento_auth_denied_total{reason="key_expired"}`). `null`은 무기한 |
+| `description` | 500자 이하 문자열 또는 `null` | 관리 표시용 설명 |
+| `owner` | 128자 이하 문자열 또는 `null` | 소유자 표기 |
+| `kind` | `^[a-z][a-z0-9_-]{0,31}$` 또는 `null` | 키 종류 표기 |
+| `allowed_cidrs` | IPv4/IPv6 대역 배열(최대 64개) 또는 `null` | 요청 주소가 대역 하나에 들어야 인증된다. 단일 주소는 `/32`, `/128`로 저장한다. `null`은 제한 없음, 빈 배열은 모든 주소 거부. 요청 주소는 `TRUST_PROXY_HOPS`를 적용한 값이며 IPv4 매핑 IPv6 주소는 IPv4로 판정한다. 대역 밖 요청은 키 무효와 같은 401이고 `memento_auth_denied_total{reason="cidr_denied"}`로 센다. 열린 세션도 키 상태 재확인 때 대역 밖 주소면 닫힌다 |
+
+응답 200은 `{ "success": true, ...수명 열 }`이다. 만료와 허용 대역 변경은 이 프로세스의 세션 재확인 캐시를 바로 비운다.
+
+`POST /keys/:id/rotate` 본문(선택)은 `{ "graceHours": 24 }`이다. `graceHours`는 0 이상 720 이하의 정수이며 생략하면 `MEMENTO_KEY_ROTATION_GRACE_HOURS`(기본 24)다. 새 원시 키를 만들어 응답 `raw_key`로 한 번만 돌려주고, 이전 키(이전 회전에서 아직 겹침 중인 키 포함)는 `previous_valid_until`까지만 인증된다. 겹침이 끝난 키는 `memento_auth_denied_total{reason="key_rotated"}`로 센다. 폐기한 키는 409 `key_revoked`다.
+
+```json
+{ "id": "...", "name": "ci-runner", "key_prefix": "mmcp_cirunner_", "raw_key": "mmcp_cirunner_...", "previous_valid_until": "2026-10-04T12:00:00.000Z", "retired_secrets": 1 }
+```
+
+`POST /keys/:id/revoke` 본문은 `{ "reason": "..." }`(1자 이상 500자 이하)다. `revoked_at`, `revoked_by`, `revoke_reason`을 남기고 상태를 `inactive`로 바꾸며 그 키의 모든 비밀을 폐기한다. 이 프로세스의 세션 재확인 캐시와 정책 캐시를 비우고 그 키의 세션을 즉시 닫는다. 폐기는 되돌리지 않으며 이미 폐기한 키는 409 `already_revoked`다.
+
+`POST /keys/:id/access-review`는 본문이 없다. `access_reviewed_at`과 `access_reviewed_by`(관리 행위자 표기, 예: `master:bearer`)를 남긴다.
+
+오류: 400 `{ "error": "...", "field": "..." }`(검증 실패), 404(키 없음), 409(폐기 상태 충돌), 413(본문 과대).
+
+인증 조회 순서: 원시 키의 SHA-256 해시를 `api_key_secrets`에서 먼저 찾고, 그 해시가 없을 때만 `api_keys.key_hash`에서 찾는다. 찾은 행은 폐기, 비활성, 만료, 비밀 행 상태(폐기, 겹침 종료), 일일 한도 순으로 판정한다. 수명 열이 비어 있는 기존 키는 종전과 같은 결과다. 찾은 출처는 `memento_api_key_lookup_total{source="secret"|"legacy"}`로 센다.
 
 ---
 

@@ -33,6 +33,7 @@ const LIB  = path.resolve(HERE, "..", "..", "lib");
 const ALLOWED = {
   /** 고정 위치 파라미터로 격리를 박은 질의와 격리가 아닌 회계·멤버십 질의 */
   "admin/ApiKeyStore.js": 4, // 키 삭제 전 그 키의 파편, 재공고화 이력 수를 세는 회계 질의 2곳
+  "admin/ApiKeyLifecycleStore.js": 2, // 회전과 폐기가 api_key_secrets 행을 그 키로 고르는 갱신 2곳(기억 격리 조건이 아님)
   "admin/admin-keys.js": 1,
   "memory/CaseEventStore.js": 2,
   "memory/consolidate/MemoryConsolidator.js": 3, // linked_to 교체는 잠금 문장과 갱신 문장이 같은 키 조건을 고정 위치로 쓴다
