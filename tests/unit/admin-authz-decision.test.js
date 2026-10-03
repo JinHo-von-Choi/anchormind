@@ -7,7 +7,8 @@
  * Core 프리셋 6종과 대표 능력의 교차표를 decide()로 계산해 프리셋 표와 맞는지, 능력 표의 규칙
  * (owner 전용 능력, owner와 admin 한정 능력, 읽기 역할의 쓰기 능력 부재, auditor 메타 마스킹)이
  * 지켜지는지 본다. 이어 결정 표의 단계(주체, 능력, 명시 거부, workspace 범위, 키 allowed_workspaces,
- * 범위 행)를 하나씩 본다. 교차표는 코드의 표에서 계산하며 칸 값을 손으로 옮겨 적지 않는다.
+ * 범위 행)를 하나씩 본다. 기대 교차표 PLAN_TABLE은 능력 표(Core 프리셋 열)를 그대로 옮긴 독립 리터럴이며,
+ * decide()로 계산한 칸과 양방향(허용 칸은 같은 방식으로 허용, "-" 칸은 거부)으로 대조한다.
  */
 
 import { describe, it } from "node:test";
@@ -18,6 +19,47 @@ import {
   CAP_AUTHENTICATED, capabilitiesFromPermissions, isCapability
 } from "../../lib/admin/capabilities.js";
 import { decide, masterPrincipal, apiKeyPrincipal } from "../../lib/admin/AdminAuthz.js";
+
+/**
+ * 능력 표의 Core 프리셋 열. 순서: owner, admin, reviewer, auditor, viewer, service.
+ * logs.read는 서버 로그 파일 조회 능력으로 owner와 admin만 가진다.
+ */
+const PRESET_ORDER = ["owner", "admin", "reviewer", "auditor", "viewer", "service"];
+const PLAN_TABLE   = {
+  "mem.read"           : "O O W M W S",
+  "mem.write"          : "O O - - - S",
+  "mem.anchor"         : "O O - - - S",
+  "mem.delete.soft"    : "O O - - - S",
+  "mem.delete.hard"    : "O O - - - -",
+  "mem.bulk"           : "O O - - - -",
+  "mem.merge"          : "O O - - - -",
+  "review.decide"      : "O O W - - -",
+  "export.data"        : "O O - M - -",
+  "import.data"        : "O O - - - -",
+  "key.manage"         : "O O - - - -",
+  "key.policy"         : "O O - - - -",
+  "egress.policy"      : "O O - - - -",
+  "ws.create"          : "O O - - - -",
+  "ws.quota"           : "O O - - - -",
+  "retention.manage"   : "O O - - - -",
+  "legal_hold.manage"  : "O - - - - -",
+  "erasure.request"    : "O O - - - -",
+  "erasure.execute"    : "O - - - - -",
+  "job.dry_run"        : "O O - - - -",
+  "job.apply"          : "O O - - - -",
+  "audit.read"         : "O O - O - -",
+  "audit.export"       : "O O - O - -",
+  "webhook.manage"     : "O O - - - -",
+  "usage.read"         : "O O - O W -",
+  "quality.read"       : "O O - O W -",
+  "logs.read"          : "O O - - - -",
+  "oauth_client.manage": "O O - - - -",
+  "admin_user.manage"  : "O - - - - -",
+  "system.update"      : "O - - - - -"
+};
+
+/** PLAN_TABLE의 칸 값 */
+const planCell = (cap, role) => PLAN_TABLE[cap].split(" ")[PRESET_ORDER.indexOf(role)];
 
 /** 프리셋 하나를 전역으로 바인딩한 관리자 주체 */
 const roleOf = (role, workspace = null) => ({ kind: "admin_session", id: `s-${role}`, bindings: [{ role, workspace }] });
@@ -46,11 +88,35 @@ describe("프리셋 x 대표 능력 교차표", () => {
       CORE_PRESETS.length * REPRESENTATIVE_CAPABILITIES.length);
   });
 
-  it("칸마다 판정 결과가 프리셋 표의 방식과 같다", () => {
+  it("기대 교차표와 코드의 능력 목록, 프리셋 목록이 서로 빠짐없이 같다", () => {
+    assert.deepEqual(Object.keys(PLAN_TABLE).sort(), [...CAPABILITIES].sort());
+    assert.deepEqual([...PRESET_ORDER].sort(), [...CORE_PRESETS].sort());
+    for (const cap of Object.keys(PLAN_TABLE)) assert.equal(PLAN_TABLE[cap].split(" ").length, PRESET_ORDER.length, cap);
+  });
+
+  it("대표 능력 칸마다 판정 결과가 기대 교차표와 같다", () => {
     for (const role of CORE_PRESETS) {
-      for (const cap of REPRESENTATIVE_CAPABILITIES) {
-        assert.equal(table[role][cap], ROLE_PRESETS[role][cap] ?? "-", `${role} ${cap}`);
+      for (const cap of REPRESENTATIVE_CAPABILITIES) assert.equal(table[role][cap], planCell(cap, role), `${role} ${cap}`);
+    }
+  });
+
+  it("모든 능력 칸에서 허용 칸은 같은 방식으로 허용, - 칸은 거부다(양방향)", () => {
+    for (const role of PRESET_ORDER) {
+      for (const cap of CAPABILITIES) {
+        const d    = decide(roleOf(role), cap);
+        const cell = planCell(cap, role);
+        if (cell === "-") assert.equal(d.allowed, false, `${role} ${cap}는 거부여야 한다`);
+        else {
+          assert.equal(d.allowed, true, `${role} ${cap}는 허용이어야 한다`);
+          assert.equal(d.mode, cell, `${role} ${cap} 방식`);
+        }
       }
+    }
+  });
+
+  it("코드의 프리셋 표가 준 능력은 모두 기대 교차표의 허용 칸이다", () => {
+    for (const role of PRESET_ORDER) {
+      for (const [cap, mode] of Object.entries(ROLE_PRESETS[role])) assert.equal(planCell(cap, role), mode, `${role} ${cap}`);
     }
   });
 
