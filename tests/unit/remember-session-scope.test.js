@@ -31,13 +31,14 @@ const decisionRule = { check: (f) => (f.type === "decision" ? [{ rule: "decision
  * @param {*}       [opts.insertResult] - store.insert가 돌려줄 값. undefined면 파편 id
  */
 function makeRememberer({ redisStores = true, insertResult, policyRules = { check: () => [] }, policyGatingEnabled = false, getHardGate = async () => false } = {}) {
-  const calls = { wm: [], inserted: [], approved: [], budget: [] };
+  const calls = { wm: [], inserted: [], approved: [], budget: [], cap: [], order: [] };
   const store = {
     findByIdempotencyKey            : async () => null,
     findCaseIdBySessionTopic        : async () => null,
     findErrorFragmentsBySessionTopic: async () => [],
     getDuplicateState               : async () => null,
     insert                          : async (f) => {
+      calls.order.push("insert");
       calls.inserted.push(f);
       calls.approved.push(isGateApproved(f));
       return insertResult === undefined ? f.id : insertResult;
@@ -48,7 +49,8 @@ function makeRememberer({ redisStores = true, insertResult, policyRules = { chec
     index                            : async () => {},
     deindex                          : async () => {},
     addToWorkingMemory               : async (sessionId, f) => { calls.wm.push({ sessionId, f }); return redisStores; },
-    enforceFallbackWorkingMemoryBudget: async (sessionId) => { calls.budget.push(sessionId); return 0; }
+    enforceFallbackWorkingMemoryBudget: async (sessionId) => { calls.budget.push(sessionId); return 0; },
+    enforceFallbackKeyCap             : async (keyId) => { calls.order.push("cap"); calls.cap.push(keyId); return 0; }
   };
   const rememberer = new MemoryRememberer({
     store,
@@ -144,9 +146,9 @@ describe("저장소 선택", () => {
     assert.equal(row.is_anchor, false);
     assert.equal(row.idempotency_key, null);
     assert.ok(row.valid_to, "조회 대상에서 빠지지 않았다");
-    assert.equal(row.hash_scope, "wm:sess-wm-0001");
     assert.ok(!row.content.includes(SECRET));
     assert.deepEqual(calls.budget, ["sess-wm-0001"]);
+    assert.equal(row.hash_scope, "wm:sess-wm-0001:default");
     assert.equal(result.working_memory, "postgres-fallback");
     assert.equal(result.id, row.id);
   });
@@ -156,6 +158,19 @@ describe("저장소 선택", () => {
     const result = await rememberer.remember({ ...SESSION_WRITE });
     assert.equal(result._meta.hints.length, 1);
     assert.equal(result._meta.hints[0].signal, "working_memory_fallback");
+  });
+
+  it("키별 상한 정리는 행을 쓰기 전에 그 키로 실행한다", async () => {
+    const { rememberer, calls } = makeRememberer({ redisStores: false });
+    await rememberer.remember({ ...SESSION_WRITE });
+    assert.deepEqual(calls.cap, ["key-1"]);
+    assert.deepEqual(calls.order, ["cap", "insert"]);
+  });
+
+  it("Redis에 넣은 쓰기는 키별 상한 정리를 하지 않는다", async () => {
+    const { rememberer, calls } = makeRememberer({ redisStores: true });
+    await rememberer.remember({ ...SESSION_WRITE });
+    assert.equal(calls.cap.length, 0);
   });
 
   it("DB가 기존 행의 id를 돌려주면 응답 id가 그 id다", async () => {
@@ -171,6 +186,7 @@ describe("저장소 선택", () => {
     assert.equal(calls.inserted.length, 0);
     assert.equal(result.working_memory, "none");
     assert.equal(result._meta.hints[0].signal, "working_memory_unavailable");
+    assert.match(result._meta.hints[0].suggestion, /꺼져 있어/);
   });
 
   it("DB가 쓰기를 받지 못하면(id 없음) 저장하지 않았다고 알린다", async () => {
@@ -179,6 +195,8 @@ describe("저장소 선택", () => {
     assert.equal(result.working_memory, "none");
     assert.equal(calls.budget.length, 0);
     assert.equal(result._meta.hints[0].signal, "working_memory_unavailable");
+    assert.doesNotMatch(result._meta.hints[0].suggestion, /꺼져/, "대체 경로가 켜져 있는데 꺼졌다고 알렸다");
+    assert.match(result._meta.hints[0].suggestion, /저장하지 못했다/);
   });
 
   it("sessionId가 없으면 영구 저장 경로를 타고 working_memory를 싣지 않는다", async () => {

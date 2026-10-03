@@ -22,6 +22,9 @@ const { FragmentFactory }    = await import("../../lib/memory/write/FragmentFact
 const { WriteGate, WRITE_ENTRIES } = await import("../../lib/memory/write/WriteGate.js");
 const wm                     = await import("../../lib/memory/WorkingMemoryRows.js");
 const { processMorphemeBackfill } = await import("../../lib/memory/consolidate/MorphemeBackfill.js");
+const { createApiKey, deleteApiKey } = await import("../../lib/admin/ApiKeyStore.js");
+const { handleKeys }         = await import("../../lib/admin/admin-keys.js");
+const { ADMIN_BASE }         = await import("../../lib/admin/admin-auth.js");
 
 const TAG    = `wm${Date.now().toString(36)}`;
 const writer = new FragmentWriter();
@@ -31,8 +34,19 @@ const factory = new FragmentFactory();
 let client;
 let seq = 0;
 
+/** 응답을 모으는 최소 res 대역 */
+function fakeRes() {
+  return { statusCode: 200, body: "", setHeader() {}, end(b) { if (b !== undefined) this.body = b; } };
+}
+
+async function callKeys(pathname) {
+  const res = fakeRes();
+  await handleKeys({ method: "GET", url: pathname, headers: {} }, res, new URL(pathname, "http://localhost"));
+  return res;
+}
+
 /** 관문을 거친 작업 기억 행을 FragmentWriter로 기록한다. */
-async function writeWmRow({ session = `${TAG}-a`, content = null, tokens = 10, importance = 0.5 } = {}) {
+async function writeWmRow({ session = `${TAG}-a`, content = null, tokens = 10, importance = 0.5, key = null, agent = "default" } = {}) {
   seq += 1;
   const text = content ?? `작업 기억 본문 ${TAG} ${seq} 충분히 길게 적는다`;
   const { draft } = await gate.check({
@@ -41,8 +55,8 @@ async function writeWmRow({ session = `${TAG}-a`, content = null, tokens = 10, i
     fields: { content: text, topic: "wm-test", type: "fact", importance },
     build : (input) => {
       const f = factory.create({ ...input, sessionId: session }, { contentPrepared: true });
-      f.agent_id         = "default";
-      f.key_id           = null;
+      f.agent_id         = agent;
+      f.key_id           = key;
       f.workspace        = null;
       f.estimated_tokens = tokens;
       return f;
@@ -182,5 +196,118 @@ describe("보관량 상한과 격리", () => {
     assert.equal(await wm.evictWorkingMemoryRows(a, [idA1]), 1);
     assert.equal(await wm.clearWorkingMemoryRows(a), 1);
     assert.deepEqual((await wm.listWorkingMemoryRows(b)).map(i => i.id), [idB]);
+  });
+});
+
+describe("에이전트와 키 범위", () => {
+  it("master 경로에서 같은 세션의 다른 에이전트가 같은 본문을 써도 각자의 행이다", async () => {
+    const session = `${TAG}-agents`;
+    const content = `에이전트 구분 본문 ${TAG} 충분히 길게 적는다`;
+    const a1 = await writeWmRow({ session, content, agent: "agent-a1" });
+    const a2 = await writeWmRow({ session, content, agent: "agent-a2" });
+    assert.notEqual(a1, a2);
+    const owners = (await client.query(
+      "SELECT agent_id FROM agent_memory.fragments WHERE id = ANY($1::text[]) ORDER BY agent_id", [[a1, a2]])).rows.map(r => r.agent_id);
+    assert.deepEqual(owners, ["agent-a1", "agent-a2"]);
+  });
+
+  it("키별 상한은 그 키의 오래된 행부터 지우고 다른 키의 행은 지우지 않는다", async () => {
+    const keyA = (await createApiKey({ name: `${TAG}-cap-a` })).id;
+    const keyB = (await createApiKey({ name: `${TAG}-cap-b` })).id;
+    const ids  = [];
+    for (let i = 0; i < 5; i++) {
+      const id = await writeWmRow({ session: `${TAG}-capk-${i}`, key: keyA });
+      await backdate(id, (5 - i) * 60);
+      ids.push(id);
+    }
+    const other = await writeWmRow({ session: `${TAG}-capk-x`, key: keyB });
+
+    assert.equal(await wm.trimWorkingMemoryRowsOfKey(keyA, 2), 3);
+    const left = (await client.query(
+      "SELECT id FROM agent_memory.fragments WHERE key_id = $1 AND source = 'wm-fallback' ORDER BY created_at", [keyA])).rows.map(r => r.id);
+    assert.deepEqual(left, ids.slice(3));
+    const otherLeft = await client.query("SELECT 1 FROM agent_memory.fragments WHERE id = $1", [other]);
+    assert.equal(otherLeft.rowCount, 1);
+  });
+});
+
+describe("만료 정리의 묶음 처리", () => {
+  it("묶음 크기씩 여러 문장으로 지우고 잠금 대기 상한을 건다", async () => {
+    const session = `${TAG}-sweep`;
+    for (let i = 0; i < 25; i++) {
+      const id = await writeWmRow({ session: `${session}-${i}` });
+      await backdate(id, 30 * 3600);
+    }
+    const before = (await client.query(
+      "SELECT count(*)::int AS n FROM agent_memory.fragments WHERE source = 'wm-fallback' AND valid_to IS NOT NULL AND created_at < NOW() - INTERVAL '24 hours'")).rows[0].n;
+    assert.ok(before >= 25);
+    const first = await wm.deleteExpiredWorkingMemoryRows({ chunk: 10, maxChunks: 2 });
+    assert.equal(first, 20);
+    const rest = await wm.deleteExpiredWorkingMemoryRows({ chunk: 10, maxChunks: 50 });
+    assert.equal(first + rest, before);
+  });
+
+  it("잠금을 쥔 행이 있으면 건너뛰고 나머지를 지운다", async () => {
+    const locked = await writeWmRow({ session: `${TAG}-lockA` });
+    const free   = await writeWmRow({ session: `${TAG}-lockB` });
+    await backdate(locked, 30 * 3600);
+    await backdate(free, 30 * 3600);
+    const holder = new pg.Client(directClientConfig());
+    await holder.connect();
+    try {
+      await holder.query("BEGIN");
+      await holder.query("SELECT id FROM agent_memory.fragments WHERE id = $1 FOR UPDATE", [locked]);
+      await wm.deleteExpiredWorkingMemoryRows();
+      const left = (await client.query("SELECT id FROM agent_memory.fragments WHERE id = ANY($1::text[])", [[locked, free]])).rows.map(r => r.id);
+      assert.deepEqual(left, [locked]);
+    } finally {
+      await holder.query("ROLLBACK");
+      await holder.end();
+    }
+  });
+});
+
+describe("API 키 삭제", () => {
+  it("작업 기억 행만 가진 키는 삭제할 수 있고 행도 함께 지워진다", async () => {
+    const key = (await createApiKey({ name: `${TAG}-del-wm` })).id;
+    const id  = await writeWmRow({ session: `${TAG}-del-1`, key });
+    await deleteApiKey(key);
+    const row = await client.query("SELECT 1 FROM agent_memory.fragments WHERE id = $1", [id]);
+    assert.equal(row.rowCount, 0, "키가 없는 채로 남은 작업 기억 행이 있다");
+  });
+
+  it("작업 기억 행은 관리 목록의 파편 수에 세지 않는다", async () => {
+    const key = (await createApiKey({ name: `${TAG}-del-count` })).id;
+    await writeWmRow({ session: `${TAG}-del-2`, key });
+    const res  = await callKeys(`${ADMIN_BASE}/keys/${key}/stats`);
+    const body = JSON.parse(res.body);
+    assert.equal(body.total, 0);
+    assert.equal(body.growth7d, 0);
+    assert.equal(body.growth28d, 0);
+    await deleteApiKey(key);
+  });
+
+  it("일반 파편이 있는 키는 여전히 삭제를 거부하고 작업 기억 행을 지우지 않는다", async () => {
+    const key = (await createApiKey({ name: `${TAG}-del-real` })).id;
+    const wmId = await writeWmRow({ session: `${TAG}-del-3`, key });
+    await client.query(
+      `INSERT INTO agent_memory.fragments (id, content, topic, type, content_hash, key_id)
+       VALUES ($1, 'real', 't', 'fact', md5($1), $2)`, [`${TAG}-real-del`, key]);
+    await assert.rejects(() => deleteApiKey(key), (err) => err.name === "ApiKeyInUseError");
+    const row = await client.query("SELECT 1 FROM agent_memory.fragments WHERE id = $1", [wmId]);
+    assert.equal(row.rowCount, 1);
+  });
+
+  it("삭제 확인을 끄면 작업 기억 행을 먼저 지우고 키를 지운다", async () => {
+    const key = (await createApiKey({ name: `${TAG}-del-off` })).id;
+    const id  = await writeWmRow({ session: `${TAG}-del-4`, key });
+    process.env.MEMENTO_API_KEY_DELETE_GUARD = "false";
+    try {
+      await deleteApiKey(key);
+    } finally {
+      delete process.env.MEMENTO_API_KEY_DELETE_GUARD;
+    }
+    const row = await client.query("SELECT 1 FROM agent_memory.fragments WHERE id = $1", [id]);
+    assert.equal(row.rowCount, 0);
   });
 });

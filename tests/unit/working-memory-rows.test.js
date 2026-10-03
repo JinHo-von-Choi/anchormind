@@ -15,27 +15,35 @@ import { createFakeWmDb } from "./_wm-fake-db.js";
 
 const dbRef = { fake: createFakeWmDb() };
 mock.module("../../lib/tools/db.js", {
-  namedExports: { queryWithAgentVector: (...args) => dbRef.fake.queryWithAgentVector(...args) }
+  namedExports: {
+    queryWithAgentVector: (...args) => dbRef.fake.queryWithAgentVector(...args),
+    withTransaction     : (...args) => dbRef.fake.withTransaction(...args),
+    getPrimaryPool      : (...args) => dbRef.fake.getPrimaryPool(...args)
+  }
 });
 
 const {
   WM_FALLBACK_SOURCE, WM_TTL_SECONDS, WM_MAX_TOKENS, WM_MAX_ROWS,
   workingMemoryCutoff, markWorkingMemoryRow, rowToWorkingMemoryItem,
   selectBudgetEvictionIndices, workingMemoryHints, describeWorkingMemoryBackend,
+  mergeWorkingMemoryItems, WM_NONE_REASON, WM_SWEEP_CHUNK, WM_SWEEP_MAX_CHUNKS,
+  trimWorkingMemoryRowsOfKey,
   listWorkingMemoryRows, evictWorkingMemoryRows, clearWorkingMemoryRows,
   enforceWorkingMemoryRowBudget, deleteExpiredWorkingMemoryRows
 } = await import("../../lib/memory/WorkingMemoryRows.js");
+
+const { deleteWorkingMemoryRowsOfKey } = await import("../../lib/memory/WorkingMemorySql.js");
 
 const T0   = Date.parse("2026-10-03T00:00:00.000Z");
 const HOUR = 3600 * 1000;
 
 let seq = 0;
 /** 작업 기억 행 하나를 대역 DB에 넣는다. */
-function seed({ session = "sess-a", at = T0, tokens = 10, importance = 0.5, key = null, id = null, content = null } = {}) {
+function seed({ session = "sess-a", at = T0, tokens = 10, importance = 0.5, key = null, id = null, content = null, agent = "default" } = {}) {
   seq += 1;
   const rowId = id ?? `wm-${String(seq).padStart(4, "0")}`;
   const fragment = markWorkingMemoryRow({
-    id: rowId, content: content ?? `본문 ${rowId}`, type: "fact", topic: "t", agent_id: "default",
+    id: rowId, content: content ?? `본문 ${rowId}`, type: "fact", topic: "t", agent_id: agent,
     key_id: key, workspace: null, importance, estimated_tokens: tokens, session_id: session
   }, at);
   fragment.created_at = at;
@@ -140,6 +148,14 @@ describe("세션과 항목 격리", () => {
     assert.equal(dbRef.fake.rows.length, 2);
   });
 
+  it("같은 세션에서 다른 에이전트의 같은 본문은 별도 행이다", async () => {
+    const content = "같은 세션 같은 본문 충분히 깁니다";
+    const a1 = seed({ session: "sess-a", content, id: "m1", agent: "a1" });
+    const a2 = seed({ session: "sess-a", content, id: "m2", agent: "a2" });
+    assert.notEqual(a1, a2);
+    assert.equal(dbRef.fake.rows.length, 2);
+  });
+
   it("지정 id 삭제는 다른 세션의 같은 id와 영구 파편을 지우지 않는다", async () => {
     const a = seed({ session: "sess-a", id: "shared-id" });
     seed({ session: "sess-b", id: "other-id" });
@@ -174,9 +190,104 @@ describe("세션과 항목 격리", () => {
   });
 });
 
+describe("만료 정리의 묶음 처리", () => {
+  it("한 문장이 지우는 행 수는 묶음 크기이고 묶음마다 별도 트랜잭션에서 잠금 대기 상한을 건다", async () => {
+    for (let i = 0; i < 250; i++) seed({ at: T0 - 30 * HOUR - i });
+    const deleted = await deleteExpiredWorkingMemoryRows({ now: T0 });
+    assert.equal(deleted, 250);
+    const deletes = dbRef.fake.calls.filter(c => /^\s*DELETE/.test(c.sql));
+    assert.equal(deletes.length, 3);
+    assert.deepEqual(deletes.map(c => c.params[2]), [WM_SWEEP_CHUNK, WM_SWEEP_CHUNK, WM_SWEEP_CHUNK]);
+    const locks = dbRef.fake.calls.filter(c => /SET LOCAL lock_timeout/.test(c.sql));
+    assert.equal(locks.length, 3);
+  });
+
+  it("한 번 실행의 문장 수는 상한이 있고 나머지는 다음 실행이 지운다", async () => {
+    for (let i = 0; i < 25; i++) seed({ at: T0 - 30 * HOUR - i });
+    const first = await deleteExpiredWorkingMemoryRows({ now: T0, chunk: 10, maxChunks: 2 });
+    assert.equal(first, 20);
+    assert.equal(dbRef.fake.rows.length, 5);
+    assert.equal(await deleteExpiredWorkingMemoryRows({ now: T0, chunk: 10, maxChunks: 2 }), 5);
+    assert.equal(WM_SWEEP_MAX_CHUNKS, 50);
+  });
+
+  it("지울 행이 없으면 문장을 한 번만 보낸다", async () => {
+    seed({ at: T0 - HOUR });
+    assert.equal(await deleteExpiredWorkingMemoryRows({ now: T0 }), 0);
+    assert.equal(dbRef.fake.calls.filter(c => /^\s*DELETE/.test(c.sql)).length, 1);
+  });
+
+  it("실패하면 던지지 않고 그때까지 지운 수를 돌려준다", async () => {
+    for (let i = 0; i < 30; i++) seed({ at: T0 - 30 * HOUR - i });
+    dbRef.fake.state.failTransactions = new Error("lock timeout");
+    assert.equal(await deleteExpiredWorkingMemoryRows({ now: T0, chunk: 10 }), 0);
+    assert.equal(dbRef.fake.rows.length, 30);
+  });
+});
+
+describe("키별 상한", () => {
+  it("상한을 넘는 행은 그 키의 오래된 행부터 지우고 다른 키와 master의 행은 지우지 않는다", async () => {
+    const ids = [];
+    for (let i = 0; i < 5; i++) ids.push(seed({ key: "key-1", at: T0 + i * 1000, session: `s${i}` }));
+    const other  = seed({ key: "key-2", at: T0 });
+    const master = seed({ key: null, at: T0 });
+
+    assert.equal(await trimWorkingMemoryRowsOfKey("key-1", 3), 2);
+    const left = dbRef.fake.rows.map(r => r.id);
+    assert.deepEqual(left.filter(id => ids.includes(id)).sort(), ids.slice(2).sort());
+    assert.ok(left.includes(other) && left.includes(master));
+  });
+
+  it("master(키 없음)는 key_id가 비어 있는 행끼리 한 묶음이다", async () => {
+    for (let i = 0; i < 4; i++) seed({ key: null, at: T0 + i * 1000, session: `m${i}` });
+    const keyed = seed({ key: "key-1", at: T0 });
+    assert.equal(await trimWorkingMemoryRowsOfKey(null, 1), 3);
+    assert.equal(dbRef.fake.rows.length, 2);
+    assert.ok(dbRef.fake.rows.some(r => r.id === keyed));
+  });
+
+  it("상한 안이면 아무것도 지우지 않는다", async () => {
+    seed({ key: "key-1" });
+    assert.equal(await trimWorkingMemoryRowsOfKey("key-1", 5), 0);
+  });
+});
+
+describe("키 삭제", () => {
+  it("그 키의 작업 기억 행만 지운다", async () => {
+    seed({ key: "key-1", session: "a" });
+    seed({ key: "key-1", session: "b" });
+    const other = seed({ key: "key-2", session: "a" });
+    dbRef.fake.rows.push({ id: "perm", key_id: "key-1", session_id: "a", source: "session:x", valid_to: null, created_at: new Date(T0) });
+
+    assert.equal(await deleteWorkingMemoryRowsOfKey(dbRef.fake.getPrimaryPool(), "key-1"), 2);
+    assert.deepEqual(dbRef.fake.rows.map(r => r.id).sort(), [other, "perm"].sort());
+  });
+});
+
+describe("항목 합치기", () => {
+  const item = (id, content, at, extra = {}) => ({ id, content, added_at: at, agent_id: "default", key_id: null, ...extra });
+
+  it("행이 없으면 Redis 항목 배열을 그대로 돌려준다", () => {
+    const redis = [item("a", "x", 1)];
+    assert.equal(mergeWorkingMemoryItems(redis, []), redis);
+  });
+
+  it("두 출처를 시각 오름차순으로 합치고 같은 id는 한 번만 둔다", () => {
+    const merged = mergeWorkingMemoryItems([item("a", "x", 5), item("b", "y", 1)], [item("a", "x2", 9), item("c", "z", 3)]);
+    assert.deepEqual(merged.map(i => i.id), ["b", "c", "a"]);
+  });
+
+  it("같은 에이전트와 키의 같은 본문은 한 번만 두고 다른 에이전트의 같은 본문은 둘 다 둔다", () => {
+    const same  = mergeWorkingMemoryItems([item("a", "x", 1)], [item("b", "x", 2)]);
+    assert.deepEqual(same.map(i => i.id), ["a"]);
+    const other = mergeWorkingMemoryItems([item("a", "x", 1)], [item("b", "x", 2, { agent_id: "a2" })]);
+    assert.deepEqual(other.map(i => i.id), ["a", "b"]);
+  });
+});
+
 describe("순수 함수", () => {
   it("markWorkingMemoryRow는 조회 대상에서 빠진 단기 행으로 바꾸고 같은 객체를 돌려준다", () => {
-    const fragment = { id: "f1", content: "c", session_id: "s1", is_anchor: true, idempotency_key: "k", ttl_tier: "warm" };
+    const fragment = { id: "f1", content: "c", session_id: "s1", agent_id: "default", is_anchor: true, idempotency_key: "k", ttl_tier: "warm" };
     const marked   = markWorkingMemoryRow(fragment, T0);
     assert.equal(marked, fragment);
     assert.equal(fragment.source, WM_FALLBACK_SOURCE);
@@ -185,7 +296,7 @@ describe("순수 함수", () => {
     assert.equal(fragment.idempotency_key, null);
     assert.equal(fragment.valid_to, new Date(T0).toISOString());
     assert.equal(fragment.valid_from, fragment.valid_to);
-    assert.equal(fragment.hash_scope, "wm:s1");
+    assert.equal(fragment.hash_scope, "wm:s1:default");
   });
 
   it("rowToWorkingMemoryItem은 Redis 항목과 같은 필드를 만든다", () => {
@@ -217,6 +328,14 @@ describe("순수 함수", () => {
     assert.deepEqual(workingMemoryHints("redis"), []);
     assert.equal(workingMemoryHints("postgres-fallback")[0].signal, "working_memory_fallback");
     assert.equal(workingMemoryHints("none")[0].signal, "working_memory_unavailable");
+  });
+
+  it("미저장 힌트는 대체 경로가 꺼진 경우와 쓰기를 받지 못한 경우의 사유를 구분한다", () => {
+    const off         = workingMemoryHints("none", WM_NONE_REASON.FALLBACK_OFF)[0].suggestion;
+    const unavailable = workingMemoryHints("none", WM_NONE_REASON.WRITE_UNAVAILABLE)[0].suggestion;
+    assert.match(off, /꺼져/);
+    assert.doesNotMatch(unavailable, /꺼져/);
+    assert.match(unavailable, /쓰기를 받지 못/);
   });
 
   it("describeWorkingMemoryBackend는 설정 조합마다 다른 기동 줄을 만든다", () => {

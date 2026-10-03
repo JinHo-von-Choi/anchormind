@@ -60,11 +60,20 @@ describe("DELETE /keys/:id", () => {
     assert.equal(res.statusCode, 409);
   });
 
+  it("파편 수 확인은 작업 기억 행을 세지 않는다", async () => {
+    replies = [{}, { rows: [{ id: "k1" }] }, { rows: [{ fragments: 0, reconsolidations: 0 }] }, { rowCount: 0 }, { rowCount: 1 }, {}];
+    await del("k1");
+    assert.match(sqls[2], /source IS DISTINCT FROM 'wm-fallback'/);
+  });
+
   it("자료가 없으면 키 행을 잠근 뒤 지우고 204", async () => {
-    replies = [{}, { rows: [{ id: "k1" }] }, { rows: [{ fragments: 0, reconsolidations: 0 }] }, { rowCount: 1 }, {}];
+    replies = [{}, { rows: [{ id: "k1" }] }, { rows: [{ fragments: 0, reconsolidations: 0 }] }, { rowCount: 0 }, { rowCount: 1 }, {}];
     const res = await del("k1");
     assert.equal(res.statusCode, 204);
     assert.match(sqls[1], /FOR UPDATE/);
+    const wmIdx  = sqls.findIndex(s => /^DELETE FROM agent_memory\.fragments/.test(s) && /wm|source = \$1/.test(s));
+    const keyIdx = sqls.findIndex(s => /^DELETE FROM agent_memory\.api_keys/.test(s));
+    assert.ok(wmIdx > 0 && wmIdx < keyIdx, "키를 지우기 전에 작업 기억 행을 먼저 지워야 한다");
     assert.ok(sqls.some(s => /^DELETE FROM agent_memory\.api_keys WHERE id = \$1/.test(s)));
     assert.equal(sqls[sqls.length - 1], "COMMIT");
   });
@@ -77,10 +86,11 @@ describe("DELETE /keys/:id", () => {
 
   it("MEMENTO_API_KEY_DELETE_GUARD=false면 확인 없이 지운다", async () => {
     process.env.MEMENTO_API_KEY_DELETE_GUARD = "false";
-    replies = [{ rowCount: 1 }];
+    replies = [{ rowCount: 0 }, { rowCount: 1 }];
     const res = await del("k1");
     assert.equal(res.statusCode, 204);
-    assert.equal(sqls.length, 1);
-    assert.match(sqls[0], /^DELETE FROM agent_memory\.api_keys/);
+    assert.equal(sqls.length, 2);
+    assert.match(sqls[0], /^DELETE FROM agent_memory\.fragments/);
+    assert.match(sqls[1], /^DELETE FROM agent_memory\.api_keys/);
   });
 });

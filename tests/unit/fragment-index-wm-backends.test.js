@@ -69,7 +69,12 @@ mock.module("../../lib/logger.js", {
 });
 const realDb = await import("../../lib/tools/db.js");
 mock.module("../../lib/tools/db.js", {
-  namedExports: { ...realDb, queryWithAgentVector: (...args) => dbRef.fake.queryWithAgentVector(...args) }
+  namedExports: {
+    ...realDb,
+    queryWithAgentVector: (...args) => dbRef.fake.queryWithAgentVector(...args),
+    withTransaction     : (...args) => dbRef.fake.withTransaction(...args),
+    getPrimaryPool      : (...args) => dbRef.fake.getPrimaryPool(...args)
+  }
 });
 
 const { FragmentIndex }        = await import("../../lib/memory/FragmentIndex.js");
@@ -162,11 +167,61 @@ describe("addToWorkingMemory 반환값", () => {
 });
 
 describe("조회, 제거, 삭제", () => {
-  it("redis 저장소는 Redis 항목을 읽고 DB를 부르지 않는다", async () => {
+  it("대체 경로를 끄면 redis 저장소 조회는 Redis만 읽고 DB를 부르지 않는다", async () => {
+    process.env.MEMENTO_WM_PG_FALLBACK = "off";
     const index = new FragmentIndex();
     await index.addToWorkingMemory("sess-1", wmFragment("a"));
     assert.deepEqual((await index.getWorkingMemory("sess-1")).map(i => i.id), ["a"]);
     assert.equal(dbRef.fake.calls.length, 0);
+  });
+
+  it("대체 경로 행이 없으면 redis 저장소 조회의 추가 비용은 인덱스 조회 한 번이고 결과는 Redis 항목 그대로다", async () => {
+    const index = new FragmentIndex();
+    await index.addToWorkingMemory("sess-1", wmFragment("a"));
+    const items = await index.getWorkingMemory("sess-1");
+    assert.deepEqual(items.map(i => i.id), ["a"]);
+    assert.equal(dbRef.fake.calls.length, 1);
+    assert.match(dbRef.fake.calls[0].sql, /session_id = \$1/);
+  });
+
+  it("Redis가 준비되어 있어도 대체 경로로 쓴 같은 세션의 행을 함께 읽는다", async () => {
+    const index = new FragmentIndex();
+    await index.addToWorkingMemory("sess-1", wmFragment("in-redis"));
+    insertFallbackRow(wmFragment("in-rows", { content: "대체 경로로 쓴 본문입니다" }));
+    const ids = (await index.getWorkingMemory("sess-1")).map(i => i.id).sort();
+    assert.deepEqual(ids, ["in-redis", "in-rows"]);
+  });
+
+  it("Redis가 끊겼다 돌아온 뒤에도 끊긴 동안 쓴 행이 보인다", async () => {
+    redisRef.current.status = "end";
+    insertFallbackRow(wmFragment("during-outage"));
+    redisRef.current.status = "ready";
+    const index = new FragmentIndex();
+    await index.addToWorkingMemory("sess-1", wmFragment("after"));
+    assert.deepEqual((await index.getWorkingMemory("sess-1")).map(i => i.id).sort(), ["after", "during-outage"]);
+  });
+
+  it("같은 본문이 두 출처에 있으면 한 번만 돌려준다", async () => {
+    const index = new FragmentIndex();
+    await index.addToWorkingMemory("sess-1", wmFragment("a", { content: "같은 본문입니다 충분히 깁니다" }));
+    insertFallbackRow(wmFragment("b", { content: "같은 본문입니다 충분히 깁니다" }));
+    assert.equal((await index.getWorkingMemory("sess-1")).length, 1);
+  });
+
+  it("Redis에 쓰기가 실패해 행으로 간 항목도 컨텍스트 조합에 나온다", async () => {
+    redisRef.current.rpush = async () => { throw new Error("connection lost"); };
+    const index  = new FragmentIndex();
+    const fragment = wmFragment("fell-back");
+    assert.equal(await index.addToWorkingMemory("sess-1", fragment), false);
+    insertFallbackRow(fragment);
+    const builder = new ContextBuilder({
+      recall : async () => ({ fragments: [] }),
+      store  : { searchBySource: async () => [] },
+      index  : Object.assign(index, { setSeenIds: async () => {} }),
+      getPool: () => null
+    });
+    const result = await builder.build({ sessionId: "sess-1", structured: true });
+    assert.deepEqual(result.working.current_session.map(i => i.id), ["fell-back"]);
   });
 
   it("postgres 저장소는 현재 세션의 행을 같은 항목 모양으로 읽는다", async () => {
@@ -196,12 +251,20 @@ describe("조회, 제거, 삭제", () => {
     assert.deepEqual((await index.getWorkingMemory("sess-1")).map(i => i.id), ["b"]);
   });
 
-  it("redis 저장소의 항목 제거는 Redis 항목만 지우고 DB를 부르지 않는다", async () => {
+  it("redis 저장소의 항목 제거는 Redis 항목과 행 모두에서 지정한 id를 지운다", async () => {
     const index = new FragmentIndex();
     await index.addToWorkingMemory("sess-1", wmFragment("a"));
     await index.addToWorkingMemory("sess-1", wmFragment("b"));
-    assert.equal(await index.evictWorkingMemoryItems("sess-1", ["a"]), 1);
+    insertFallbackRow(wmFragment("c"));
+    assert.equal(await index.evictWorkingMemoryItems("sess-1", ["a", "c"]), 2);
     assert.deepEqual((await index.getWorkingMemory("sess-1")).map(i => i.id), ["b"]);
+  });
+
+  it("대체 경로를 끄면 항목 제거가 DB를 부르지 않는다", async () => {
+    process.env.MEMENTO_WM_PG_FALLBACK = "off";
+    const index = new FragmentIndex();
+    await index.addToWorkingMemory("sess-1", wmFragment("a"));
+    assert.equal(await index.evictWorkingMemoryItems("sess-1", ["a"]), 1);
     assert.equal(dbRef.fake.calls.length, 0);
   });
 
@@ -218,6 +281,22 @@ describe("조회, 제거, 삭제", () => {
     process.env.MEMENTO_WM_PG_FALLBACK = "off";
     await new FragmentIndex().clearWorkingMemory("sess-1");
     assert.equal(dbRef.fake.calls.length, 0);
+  });
+
+  it("키별 상한은 설정한 행 수보다 하나 적게 남겨 새 행이 들어가도 상한 안이다", async () => {
+    process.env.MEMENTO_WM_FALLBACK_MAX_ROWS = "3";
+    try {
+      for (let i = 0; i < 5; i++) {
+        const f = wmFragment(`k${i}`, { key_id: "key-1", session_id: `s${i}`, content: `키 상한 본문 ${i} 충분히 깁니다` });
+        markWorkingMemoryRow(f);
+        f.created_at = Date.now() - (5 - i) * 1000;
+        dbRef.fake.insertFragment(f);
+      }
+      assert.equal(await new FragmentIndex().enforceFallbackKeyCap("key-1"), 3);
+      assert.equal(dbRef.fake.rows.length, 2);
+    } finally {
+      delete process.env.MEMENTO_WM_FALLBACK_MAX_ROWS;
+    }
   });
 
   it("대체 경로 보관량 줄이기는 토큰 상한을 넘는 오래된 행을 지운다", async () => {

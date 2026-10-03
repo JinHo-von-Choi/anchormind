@@ -4,7 +4,7 @@
  * 작성자: 최진호
  * 작성일: 2026-10-03
  *
- * WorkingMemoryRows가 보내는 네 가지 문장(조회, id 지정 삭제, 세션 삭제, 만료 삭제)의 의미만
+ * WorkingMemoryRows가 보내는 여섯 가지 문장(조회, id 지정 삭제, 세션 삭제, 키 단위 삭제, 키별 상한 정리, 만료 정리)의 의미만
  * 흉내 낸다. 문장 종류는 SQL의 모양으로, 조건 값은 매개변수로 읽는다. 실제 SQL의 동작은
  * tests/db-concurrency의 작업 기억 시험이 일회용 DB에서 확인한다.
  */
@@ -14,6 +14,9 @@
  *   rows: Object[],
  *   calls: Array<{sql: string, params: unknown[]}>,
  *   queryWithAgentVector: Function,
+ *   withTransaction: Function,
+ *   getPrimaryPool: Function,
+ *   state: {failTransactions: Error|null},
  *   insertFragment: (fragment: Object) => string
  * }}
  */
@@ -46,10 +49,10 @@ export function createFakeWmDb() {
     return fragment.id;
   }
 
-  async function queryWithAgentVector(_agent, sql, params = []) {
+  /** 문장 하나를 실행한다. 모양은 SQL 문장으로, 조건 값은 매개변수로 읽는다. */
+  function run(sql, params = []) {
     calls.push({ sql, params });
-    const isSelect = /^\s*SELECT/i.test(sql);
-    if (isSelect) {
+    if (/^\s*SELECT/i.test(sql)) {
       const [sessionId, source, cutoff] = params;
       const found = rows
         .filter(r => r.session_id === sessionId && r.source === source
@@ -63,10 +66,22 @@ export function createFakeWmDb() {
       const [sessionId, source, ids] = params;
       doomed = rows.filter(r => r.session_id === sessionId && r.source === source
         && r.valid_to !== null && ids.includes(r.id));
-    } else if (/created_at </.test(sql)) {
-      const [source, cutoff] = params;
-      doomed = rows.filter(r => r.source === source && r.valid_to !== null
-        && r.session_id !== null && r.created_at.getTime() < Date.parse(cutoff));
+    } else if (/OFFSET/.test(sql)) {
+      const [source, keyId, keep] = params;
+      doomed = rows
+        .filter(r => r.source === source && r.valid_to !== null && r.key_id === keyId)
+        .sort((a, b) => b.created_at - a.created_at || (a.id < b.id ? 1 : -1))
+        .slice(keep);
+    } else if (/LIMIT/.test(sql)) {
+      const [source, cutoff, chunk] = params;
+      doomed = rows
+        .filter(r => r.source === source && r.valid_to !== null
+          && r.session_id !== null && r.created_at.getTime() < Date.parse(cutoff))
+        .sort((a, b) => a.created_at - b.created_at)
+        .slice(0, chunk);
+    } else if (/key_id = \$2/.test(sql)) {
+      const [source, keyId] = params;
+      doomed = rows.filter(r => r.key_id === keyId && r.source === source && r.valid_to !== null);
     } else {
       const [sessionId, source] = params;
       doomed = rows.filter(r => r.session_id === sessionId && r.source === source && r.valid_to !== null);
@@ -75,5 +90,23 @@ export function createFakeWmDb() {
     return { rows: [], rowCount: doomed.length };
   }
 
-  return { rows, calls, queryWithAgentVector, insertFragment };
+  const state = { failTransactions: null };
+
+  async function queryWithAgentVector(_agent, sql, params = []) {
+    return run(sql, params);
+  }
+
+  /** db.js의 withTransaction 대역. state.failTransactions에 오류를 넣으면 그 오류로 실패한다. */
+  async function withTransaction(_pool, fn) {
+    if (state.failTransactions) throw state.failTransactions;
+    return fn({ query: async (sql, params) => (/^\s*SET LOCAL/i.test(sql)
+      ? (calls.push({ sql, params: params ?? [] }), { rows: [], rowCount: 0 })
+      : run(sql, params)) });
+  }
+
+  return {
+    rows, calls, state, queryWithAgentVector, withTransaction,
+    getPrimaryPool: () => ({ query: async (sql, params) => run(sql, params) }),
+    insertFragment
+  };
 }
