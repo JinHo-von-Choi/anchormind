@@ -47,8 +47,12 @@
 - 모든 도구가 `title`과 네 가지 `annotations`(`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)를 boolean으로 선언한다. `destructiveHint`는 `forget`, `amend`, `memory_consolidate`, `apply_update`가 true다. 도구별 값과 기준은 `docs/api-reference.md`의 도구 힌트 표에 있다.
 - `ping` 메서드: 인증된 세션에서 빈 객체 `{}`를 돌려주고, 알림으로 보내면 응답 없이 수락한다.
 - `PATCH /v1/internal/model/nothing/keys/:id/policy`: API 키의 `default_mode`(`recall-only`, `write-only`, `onboarding`, `null`), `allowed_workspaces`(문자열 배열 또는 `null`, 최대 64개, 항목당 길이 제한), `symbolic_hard_gate`(boolean)를 전달한 필드만 한 문장으로 갱신한다. 알 수 없는 필드, 빈 객체, 마스터 전용 preset(`audit`)은 400이다. 변경은 `admin key_policy` 감사 기록(필드 이름과 이전, 이후 값)으로 남고 조회 캐시를 비운다. 관리 콘솔의 키 상세에 ACCESS POLICY 카드가 있고, 키 목록 응답은 세 정책 열을 포함한다.
-- `config/switches.js`의 스위치 대장: 기능 스위치 59개의 이름, 기본값, 용도, 분류를 한곳에 두고 환경에서 실제로 적용되는 값을 사용처와 같은 규칙으로 계산한다. `npm run switches`는 적용 값, 기본값, 상태, 기본과 다름, 분류를 표로 출력하고(`.env` 파일은 읽지 않는다), `--strict`는 값이 잘못된 스위치가 있으면 종료 코드 1로 끝난다.
+- `config/switches.js`의 스위치 대장: 기능 스위치 61개의 이름, 기본값, 용도, 분류를 한곳에 두고 환경에서 실제로 적용되는 값을 사용처와 같은 규칙으로 계산한다. `npm run switches`는 적용 값, 기본값, 상태, 기본과 다름, 분류를 표로 출력하고(`.env` 파일은 읽지 않는다), `--strict`는 값이 잘못된 스위치가 있으면 종료 코드 1로 끝난다.
 - 관리 `/stats` 응답의 `switches`(`total`, `on`, `off`, `mode`, `nonDefaultCount`, `nonDefault`, `invalid`)와 기동 로그의 `[Startup] switches: total=N on=N off=N mode=N nonDefault=N ... invalid=N` 한 줄. 값은 담지 않는다.
+- 의미 쓰기 관문(`WriteGate`): `remember`, `amend`, `batch_remember`, reflect 파생 쓰기, AutoReflect, 관리 가져오기, CLI 가져오기, CLI `remember` 로컬 모드, 통합 분할 자식이 같은 관문(정규화, 민감 정보 마스킹, 유형별 길이 상한, PolicyRules, workspace 허가, 앵커 권한)을 트랜잭션 밖에서 거친다. 위반은 `validation_warnings`로 알리고 `api_keys.symbolic_hard_gate=true` 키에서만 거부한다. 판정은 지표 `memento_write_gate_total{entry,outcome}`(`pass`, `warn`, `reject`)로 센다.
+- `MEMENTO_WRITE_GATE`(`on`, `off`, 기본 `on`): `off`이면 진입점별 기본 단계만 적용한다. 호출 시점에 읽는다.
+- `MEMENTO_LOG_STDERR`(기본 `false`): `true`이면 콘솔 로그를 모든 수준에서 표준 오류로 보낸다. CLI는 `serve`를 뺀 명령에서 값이 없으면 `true`로 정해 `--json` 출력을 포함한 표준 출력을 명령 결과에만 쓴다.
+- `FragmentWriter`의 의미 메서드(`insert`, `update`)는 관문을 거치지 않은 의미 열(`content`, `topic`, `keywords`, `is_anchor`, `workspace`, `key_id`, `context_summary`, `goal`, `outcome`) 쓰기를 실행 시점에 거부한다. 의미 열을 쓰는 SQL이 `FragmentWriter`와 허용 목록 밖에 없는지 `tests/structure`의 구조 검사가 단위 시험(`npm test`, `npm run test:coverage`)에서 확인한다.
 
 ### Changed
 
@@ -95,6 +99,11 @@
 - 벤치마크 CLI는 `--no-seed` 실행에서 `--save-baseline`을 거부할 때 `--no-seed`를 사유로 안내한다.
 - `tools/list`는 `recall`, `context`, `remember` 순으로 앞에 두고 나머지를 이름 오름차순으로 돌려준다. 세션과 키가 달라도 노출되는 도구의 상대 순서가 같다. `recall`의 `asOf` 설명은 시간 근접 랭킹의 기준 시각이며 기간 필터가 아니라고 적고, 기간 한정은 `timeRange`를 안내한다.
 - `POST /v1/internal/model/nothing/keys`의 `permissions`는 `read`, `write`로만 이뤄진 비어 있지 않은 배열이어야 하고 생략하면 기본 권한을 쓴다. 빈 배열, `null`, 그 밖의 값은 400이다.
+- `amend`의 `content`는 `remember`와 같은 상한(4000자, 초과 시 -32602)을 따르고 민감 정보를 마스킹하며 300자(episode는 1000자)를 넘으면 잘라 저장한다. 변경으로 새로 생긴 PolicyRules 위반은 `validation_warnings`로 알리고, hard gate 키에서는 갱신하지 않고 도구 응답 `{ "success": false, "error": "policy_violation: ..." }`로 돌려준다.
+- `batch_remember`는 항목마다 같은 관문을 거치고, 경고는 성공한 항목의 `results[i].validation_warnings`로, hard gate 거부는 항목의 `error`로 돌려준다.
+- 관리 가져오기와 CLI 가져오기는 `FragmentWriter.insert`로 행을 기록해 `content_hash`(본문 전체 sha256)와 유형별 importance 상한을 채운다. 같은 본문이 이미 있는 행은 `skipped`, 관문이 받아들이지 않은 행과 행의 값 때문에 DB가 거부한 행(`type`, `assertion_status` CHECK 제약 등)은 `errors`로 세고 다음 행을 계속 가져온다.
+- CLI `remember` 로컬 모드는 서버와 같은 관문과 `FragmentWriter`로 한 트랜잭션에 기록한다. 같은 본문이 이미 있으면 새 행 없이 그 파편의 id를 출력하고, 출력의 importance는 요청 값이다.
+- 통합 분할 자식은 부모의 `key_id`와 workspace로 관문(entry `consolidate_split`)을 거쳐 마스킹과 길이 상한을 받고 부모의 workspace를 물려받는다.
 
 ### Removed
 
