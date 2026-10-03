@@ -6,19 +6,29 @@
  *
  * migration-055가 만든 api_keys.egress_policy 열에서 정책 편집과 조회의 왕복, 열이 없는 설치에서의
  * 조회와 다른 정책 열 편집, 외부 전송 관문의 감사 이벤트가 outbox_events에 본문 없이 남는지 본다.
+ * 기본 처리기를 등록한 outbox 작업자가 감사 이벤트를 소비해 감사 로그 파일에 줄을 남기는지도 본다.
  * 실행마다 전용 데이터베이스를 만들어 쓰고 끝나면 지운다. 외부 제공자는 호출하지 않는다(관문의
  * prepare까지만 부른다).
  */
 import crypto                  from "node:crypto";
+import fs                      from "node:fs";
+import os                      from "node:os";
+import path                    from "node:path";
 import { describe, it, after } from "node:test";
 import assert                  from "node:assert/strict";
 
 const { prepareLaneDatabase, dropLaneDatabase, directQuery } = await import("./_harness.js");
 
-/** 앱 모듈이 풀을 만들기 전에 실행 전용 데이터베이스를 준비한다. */
+/** 앱 모듈이 풀을 만들기 전에 실행 전용 데이터베이스를 준비한다. 감사 로그는 임시 디렉터리에 쓴다. */
 await prepareLaneDatabase();
+const LOG_DIR       = fs.mkdtempSync(path.join(os.tmpdir(), "egress-audit-"));
+process.env.LOG_DIR = LOG_DIR;
 
-const { shutdownPool }  = await import("../../lib/tools/db.js");
+const { shutdownPool, getPrimaryPool } = await import("../../lib/tools/db.js");
+const { OutboxStore }                  = await import("../../lib/outbox/OutboxStore.js");
+const { OutboxWorker }                 = await import("../../lib/outbox/OutboxWorker.js");
+const { SchedulerRegistry }            = await import("../../lib/scheduler-registry.js");
+const { registerEgressAuditHandler }   = await import("../../lib/llm/egress-audit-handler.js");
 const {
   getEgressPolicy,
   invalidateEgressPolicyCache,
@@ -43,6 +53,7 @@ after(async () => {
     await shutdownPool();
   } finally {
     await dropLaneDatabase();
+    fs.rmSync(LOG_DIR, { recursive: true, force: true });
   }
 });
 
@@ -103,6 +114,44 @@ describe("api_keys.egress_policy 왕복", () => {
     assert.deepEqual(payload.workspaces, ["team"]);
     assert.equal(payload.bytes, Buffer.byteLength(sent.prompt) + 1);
     assert.ok(!JSON.stringify(payload).includes("본문"));
+  });
+});
+
+describe("audit.llm.egress 소비", () => {
+  it("기본 처리기를 등록한 작업자가 이벤트를 처리하고 감사 로그에 본문 없는 줄을 남긴다", async () => {
+    const off    = registerEgressAuditHandler();
+    const keyId  = await createKey();
+    const gate   = await openEgressGate({ stage: "split", keyId, workspace: "team" });
+    await gate.prepare({ name: "codex-cli" }, "본문 내용", {});
+    const { rows: [row] } = await directQuery(
+      `SELECT id FROM agent_memory.outbox_events WHERE topic = $1 AND aggregate_id = $2`, [EGRESS_AUDIT_TOPIC, keyId]);
+
+    const worker = new OutboxWorker({
+      store            : new OutboxStore(getPrimaryPool()),
+      schedulerRegistry: new SchedulerRegistry(),
+      settings         : { cleanupIntervalMs: 1e12, statsIntervalMs: 1e12 }
+    });
+    worker.running = true;
+    try {
+      let handled = 0;
+      for (let i = 0; i < 10 && handled === 0; i++) handled += await worker._processBatch();
+      assert.ok(handled >= 1);
+    } finally {
+      worker.running = false;
+      off();
+    }
+
+    const { rows: [state] } = await directQuery(
+      `SELECT processed_at, dead_at FROM agent_memory.outbox_events WHERE id = $1`, [row.id]);
+    assert.ok(state.processed_at, "이벤트가 처리되어야 한다");
+    assert.equal(state.dead_at, null);
+    const lines = fs.readdirSync(LOG_DIR).filter(f => f.startsWith("audit-"))
+      .flatMap(f => fs.readFileSync(path.join(LOG_DIR, f), "utf8").split("\n"))
+      .filter(l => l.includes(`event=${EGRESS_AUDIT_TOPIC}:${row.id}`));
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /\| llm_egress \|/);
+    assert.match(lines[0], new RegExp(`key=${keyId}`));
+    assert.ok(!lines[0].includes("본문") && !lines[0].includes("team"));
   });
 });
 
