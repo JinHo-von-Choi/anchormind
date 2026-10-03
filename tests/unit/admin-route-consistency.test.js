@@ -256,3 +256,38 @@ describe("콘솔 호출 경로와 서버 판정", () => {
     }
   });
 });
+
+/* ------------------------------------------------------------------ */
+/*  3. 관리 콘솔 안내문이 적은 경로와 서버 판정의 정합                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 안내문의 경로 언급을 모은다. 관리자 기저 경로를 붙인 전체 경로와 `METHOD /memory/...` 상대 경로를 본다.
+ * 와일드카드(`*`), 생략 표기(`...`), 정적 자산과 이미지 경로는 판정 대상이 아니다.
+ */
+function collectGuidePaths() {
+  const text  = readFileSync(path.join(ROOT, "docs", "admin-console-guide.md"), "utf8");
+  const found = new Set();
+  const clean = (raw) => raw.replace(/[.,;:)`]+$/, "").replace(/:[A-Za-z_]+/g, PARAM).split("?")[0].replace(/\/+$/, "");
+  const skip  = (p) => p === "" || /\*|\.\.\.|^\/(assets|images)(\/|$)/.test(p);
+
+  for (const m of text.matchAll(/\/v1\/internal\/model\/nothing((?:\/[\w:\-.*]*)*)/g)) {
+    const p = clean(m[1]);
+    if (!skip(p) && !m[1].includes("*")) found.add(p);
+  }
+  for (const m of text.matchAll(/\b(?:GET|POST|PUT|PATCH|DELETE) (\/memory\/[\w/:\-]+)/g)) found.add(clean(m[1]));
+  return [...found].sort();
+}
+
+describe("관리 콘솔 안내문의 경로와 서버 판정", () => {
+  const server = collectServerRoutes().map(p => p.slice(BASE.length));
+  const guide  = collectGuidePaths();
+
+  test("안내문의 경로가 추출된다", () => {
+    assert.ok(guide.length >= 4, `안내문 경로가 ${guide.length}건뿐이다. 추출기가 깨졌을 수 있다`);
+  });
+
+  test("안내문이 적은 모든 경로를 서버가 받는다", () => {
+    for (const p of guide) assert.ok(server.some(route => sameShape(route, p)), `서버에 안내문 경로 ${p} 판정이 없다`);
+  });
+});

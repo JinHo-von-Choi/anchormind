@@ -29,7 +29,7 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | GET | /v1/internal/model/nothing/assets/* | Admin static files (admin.css, admin.js). No authentication required |
 | GET | /v1/internal/model/nothing/images/* | Admin image files. Master key authentication required |
 | POST | /v1/internal/model/nothing/auth | Master key verification endpoint. Per-IP rate limit applies (as for `/keys` POST and `/import` POST). With `MEMENTO_ADMIN_AUTH_BACKOFF=on`, after 5 consecutive failures the next attempt is delayed 1, 2, 4 seconds and so on up to 60 seconds, and during the delay even the correct key receives 429 with `Retry-After` |
-| GET | /v1/internal/model/nothing/stats | Dashboard statistics (fragment count, API call volume, system metrics, searchMetrics, observability, queues, healthFlags) |
+| GET | /v1/internal/model/nothing/stats | Dashboard statistics (fragment count, API call volume, system metrics, searchMetrics, observability, queues, healthFlags, switches) |
 | GET | /v1/internal/model/nothing/activity | Recent fragment activity log (10 entries) |
 | GET | /v1/internal/model/nothing/metrics-summary | Dashboard metrics summary |
 | GET | /v1/internal/model/nothing/keys | API key list. Includes the policy columns (`default_mode`, `allowed_workspaces`, `symbolic_hard_gate`) |

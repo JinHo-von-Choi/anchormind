@@ -810,7 +810,7 @@ Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + 
 
 각 탭의 화면 구성과 조작 방법은 [관리자 콘솔 사용 안내](admin-console-guide.md)를 참고한다.
 
-`/stats` 응답은 기본 통계 외에 `searchMetrics`, `observability`, `queues`, `healthFlags` 필드를 포함한다.
+`/stats` 응답은 기본 통계 외에 `searchMetrics`, `observability`, `queues`, `healthFlags`, `switches` 필드를 포함한다.
 
 **Admin UI ESM 구조** (`assets/admin/`):
 

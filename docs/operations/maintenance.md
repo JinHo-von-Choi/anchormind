@@ -237,6 +237,18 @@ MCP `memory_consolidate` 도구는 master 키 세션 전용이다. 일반 키 �
 
 시맨틱 중복 제거 단계의 차단 건수는 `memento_consolidate_gate_blocked_total`로 노출된다. 라벨이 붙은 카운터라 첫 차단이 발생하기 전에는 값이 출력되지 않는다.
 
+## 스위치 보고
+
+릴리스 보고마다 기능 스위치의 on/off 표를 싣는다. 표는 `scripts/switch-report.mjs`가 만든다.
+
+1. 보고 대상 환경의 환경 변수를 셸에 올린다. 스크립트는 프로세스 환경만 읽고 `.env` 파일을 읽지 않는다. 서비스 환경 파일을 쓰는 설치에서는 `set -a; . <환경 파일 경로>; set +a`로 올린다.
+2. `npm run switches`를 실행해 표를 얻는다. 표에는 스위치, 적용 값, 기본값, 상태(`on`, `off`, 방식 선택 열거는 `mode`), 기본과 다름, 분류, 예외 분류, 용도가 있다. 키, 토큰, 주소를 담는 변수는 표에 없고, 잘못된 원본 값은 출력하지 않는다.
+3. 표를 릴리스 보고에 붙이고 다음을 본문에 적는다. 기본과 다른 스위치와 그 이유, `값 오류`로 표시된 스위치와 조치, 출고 때 켜지 않은 스위치(예외 분류 칸이 채워진 항목과 기본이 `off`인 항목)의 현재 상태.
+4. 서비스가 떠 있으면 같은 요약을 관리 API `GET /v1/internal/model/nothing/stats`의 `switches`와 기동 로그의 `[Startup] switches:` 줄에서 확인할 수 있다. 표와 이 요약의 개수가 같아야 한다.
+5. 스위치를 추가하거나 기본값을 바꾼 변경은 같은 변경에서 `config/switches.js`와 `docs/configuration.md`, `docs/configuration.en.md`, `.env.example`을 함께 고친다. `tests/unit/switch-ledger-structure.test.js`가 누락을 실패로 알린다.
+
+---
+
 ## 스크립트 목록 및 호출 조건
 
 | 스크립트 | 목적 | 호출 조건 | 빈도 |
@@ -255,6 +267,7 @@ MCP `memory_consolidate` 도구는 master 키 세션 전용이다. 일반 키 �
 | `scripts/backfill-split-keywords.js` | keywords가 빈 split 자식 파편에 키워드 소급 생성 | 5.3.1 이하에서 생성된 split 자식이 키워드 검색에 잡히지 않을 때 | 일회성 |
 | `scripts/backfill-body-keywords.js` | 본문 식별자가 keywords에 없는 파편에 추출 결과 소급 병합 | 5.4.1 이하에서 keywords를 지정해 저장한 파편의 코드 식별자가 검색되지 않을 때 | 일회성 |
 | `scripts/benchmark-hot-path.js` | remember/recall/link/reflect 4개 hot path p50/p95/p99 측정 | Symbolic Memory feature flag 전환 전후 회귀 기준선 확보 | 조건부 |
+| `scripts/switch-report.mjs` | 기능 스위치별 적용 값, 기본값, on/off, 기본과 다름을 마크다운 표로 출력 (`npm run switches`, 프로세스 환경만 읽음) | 릴리스 보고, 환경 변경 점검 | 릴리스마다 |
 | `scripts/run-e2e-tests.sh` | Docker 기반 E2E 테스트 실행 | CI/CD 파이프라인 또는 대규모 리팩터링 후 회귀 검증 | CI마다 또는 릴리즈 전 |
 | `scripts/smoke-test-symbolic.sh` | Symbolic Memory end-to-end smoke 검증 | MEMENTO_SYMBOLIC_* 플래그 전환 후 | 조건부 |
 | `scripts/test-llm-callers.mjs` | AutoReflect/ConsolidatorGC/ContradictionDetector/MemoryEvaluator LLM 스키마 E2E 검증 | LLM provider 교체 또는 프롬프트 수정 후 | 조건부 |

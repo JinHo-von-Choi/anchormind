@@ -36,6 +36,16 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | true, false (any value other than true is false) | MEMENTO_REMEMBER_DUPLICATE_GUARD, MEMENTO_REMEMBER_ATOMIC, MEMENTO_WORKSPACE_GATE, MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN, ENABLE_RECONSOLIDATION, ENABLE_SPREADING_ACTIVATION, UPDATE_REQUIRE_SIGNED_TAG, MEMENTO_AUTH_DISABLED, REDIS_ENABLED, REDIS_SENTINEL_ENABLED, MEMENTO_REDIS_SESSION_FAIL_CLOSED, EMBEDDING_SUPPORTS_DIMS_PARAM, MEMENTO_RERANKER_ENABLED, MEMENTO_CASE_BACKPROP_ENABLED, UPDATE_CHECK_DISABLED, ENABLE_OPENAPI, MCP_ALLOW_AUTO_DCR_REGISTER, MCP_STRICT_ORIGIN |
 | true, false (any value other than true takes the value of REDIS_ENABLED) | CACHE_ENABLED |
 
+### Switch Report
+
+The name, documented default, purpose and category of each feature switch are in the registry `config/switches.js`. Given an environment, it computes the value that is actually in effect for every switch. The parsing rules are the ones the readers use, and an invalid value is shown as the value the reader applies.
+
+- Table output: `npm run switches` (`node scripts/switch-report.mjs`) prints a markdown table with switch, effective value, default, state, whether it differs from the default, category, exception class and purpose. It reads only the process environment and never reads a `.env` file. To report on a specific environment, load that environment into the shell first (`set -a; . <path to .env>; set +a; npm run switches`). The registry holds no keys, tokens or addresses, and an invalid raw value is never printed.
+- State column: `on` and `off` say whether a feature is enabled. `mode` marks an enum that selects a method rather than turning something on or off (`MEMENTO_CORS_MODE` and similar). A switch with an invalid value shows `값 오류` (invalid value) in the differs-from-default column and the value the reader applies in the effective-value column.
+- Admin API: `switches` in the `GET /v1/internal/model/nothing/stats` response carries `total`, `on`, `off`, `mode`, `nonDefaultCount`, `nonDefault` (names of switches that differ from the default) and `invalid` (names of switches with an invalid value). No values are included.
+- Startup log: one line `[Startup] switches: total=N on=N off=N mode=N nonDefault=N (name=on|off|enum value, ...) invalid=N (name, ...)`.
+- New switches: a boolean or enum variable read with `envBool` or `envEnum` gets an entry in the registry and a row in `.env.example`, this document and the Korean version. `tests/unit/switch-ledger-structure.test.js` fails when an entry is missing. A variable that only selects a method, without opening or closing a feature, goes into that test's exclusion list with a reason.
+
 ### Server
 
 | Variable | Default | Description |

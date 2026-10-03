@@ -807,7 +807,7 @@ The Admin UI is built as an app shell architecture (`assets/admin/index.html` + 
 
 See [Admin Console Guide](admin-console-guide.md) for screen layouts and operation details for each tab.
 
-The `/stats` response includes `searchMetrics`, `observability`, `queues`, and `healthFlags` fields in addition to basic statistics.
+The `/stats` response includes `searchMetrics`, `observability`, `queues`, `healthFlags`, and `switches` fields in addition to basic statistics.
 
 **Admin UI ESM Structure** (`assets/admin/`):
 

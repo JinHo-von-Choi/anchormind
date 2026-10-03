@@ -36,6 +36,16 @@
 | true, false (true가 아닌 값은 false) | MEMENTO_REMEMBER_DUPLICATE_GUARD, MEMENTO_REMEMBER_ATOMIC, MEMENTO_WORKSPACE_GATE, MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN, ENABLE_RECONSOLIDATION, ENABLE_SPREADING_ACTIVATION, UPDATE_REQUIRE_SIGNED_TAG, MEMENTO_AUTH_DISABLED, REDIS_ENABLED, REDIS_SENTINEL_ENABLED, MEMENTO_REDIS_SESSION_FAIL_CLOSED, EMBEDDING_SUPPORTS_DIMS_PARAM, MEMENTO_RERANKER_ENABLED, MEMENTO_CASE_BACKPROP_ENABLED, UPDATE_CHECK_DISABLED, ENABLE_OPENAPI, MCP_ALLOW_AUTO_DCR_REGISTER, MCP_STRICT_ORIGIN |
 | true, false (true가 아닌 값은 REDIS_ENABLED 값) | CACHE_ENABLED |
 
+### 스위치 보고
+
+기능 스위치의 이름, 문서 기본값, 용도, 분류는 `config/switches.js`의 레지스트리에 있다. 환경을 주면 스위치마다 실제로 적용되는 값을 계산한다. 판독 규칙은 사용처와 같고, 잘못된 값은 사용처가 적용하는 값으로 표시한다.
+
+- 표 출력: `npm run switches`(`node scripts/switch-report.mjs`)가 스위치, 적용 값, 기본값, 상태, 기본과 다름, 분류, 예외 분류, 용도를 마크다운 표로 출력한다. 프로세스 환경만 읽고 `.env` 파일은 읽지 않는다. 특정 환경 기준으로 보려면 그 환경 변수를 셸에 올린 뒤 실행한다(`set -a; . <.env 경로>; set +a; npm run switches`). 키, 토큰, 주소를 담는 변수는 레지스트리에 없고, 잘못된 원본 값은 출력하지 않는다.
+- 상태 칸: `on`과 `off`는 기능이 켜졌는지 꺼졌는지다. `mode`는 켜고 끄는 값이 아니라 방식을 고르는 열거(`MEMENTO_CORS_MODE` 등)다. 값이 잘못된 스위치는 "기본과 다름" 칸에 `값 오류`로 적고, 적용 값 칸에는 사용처가 쓰는 값을 적는다.
+- 관리 API: `GET /v1/internal/model/nothing/stats` 응답의 `switches`에 `total`, `on`, `off`, `mode`, `nonDefaultCount`, `nonDefault`(기본과 다른 스위치 이름), `invalid`(값이 잘못된 스위치 이름)가 있다. 값은 담지 않는다.
+- 기동 로그: `[Startup] switches: total=N on=N off=N mode=N nonDefault=N (이름=on|off|열거 값, ...) invalid=N (이름, ...)` 한 줄을 기록한다.
+- 새 스위치: `envBool`, `envEnum`으로 읽는 불리언과 열거 변수는 레지스트리에 항목을 추가하고 `.env.example`, 이 문서, 영문판에 적는다. `tests/unit/switch-ledger-structure.test.js`가 빠진 항목을 실패로 알린다. 기능 개폐가 아니라 방식만 고르는 변수는 그 시험의 제외 목록에 이유와 함께 둔다.
+
 ### 서버
 
 | 변수 | 기본값 | 설명 |
