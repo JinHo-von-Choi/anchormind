@@ -106,4 +106,4 @@ Format: `[영역] 설명` (예: `[HTTP] 응답 공통 헤더 추가`, `[문서] 
 
 main 브랜치에서만 실행되며 다른 브랜치는 `--allow-branch`를 줘야 한다. 분리된 HEAD는 `--allow-branch`를 줘도 거부한다. lint, 시험, 커밋 중 하나가 실패하면 갱신된 파일이 그대로 남고(커밋 단계 실패면 스테이징된 채) 자동 되돌리기는 없다. `git checkout HEAD -- CHANGELOG.md package.json package-lock.json SKILL.md SECURITY.md`로 인덱스와 작업 트리를 함께 되돌린 뒤 원인을 고치고 다시 실행한다.
 
-마이그레이션 파일이 포함된 릴리스는 운영에 반영하기 직전에 `scripts/ops/backup.sh`로 백업을 만든다. 종료 코드 0과 `written:` 네 줄, 그리고 벌의 시각이 반영 직전인지 확인한 뒤에 `npm run migrate`를 실행한다. 백업이 없으면 마이그레이션을 실행하지 않는다. 절차와 복구 훈련은 `docs/operations/backup-restore.md`에 있다.
+마이그레이션 파일이 포함된 릴리스는 운영에 반영하기 직전에 `scripts/ops/backup.sh --label pre-migration`으로 백업을 만든다. 라벨 벌은 일일 백업의 보관 정리에서 제외된다. 종료 코드 0과 `written:` 네 줄, 그리고 벌의 시각이 반영 직전인지 확인한 뒤에 `npm run migrate`를 실행한다. 백업이 없으면 마이그레이션을 실행하지 않는다. 절차와 복구 훈련은 `docs/operations/backup-restore.md`에 있다.

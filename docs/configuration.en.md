@@ -415,6 +415,15 @@ Environment variables read by `memento-watchdog.sh`. They come from the environm
 | MEMENTO_WATCHDOG_SERVICE_AGE_SEC | (none) | Injects the seconds since the service started. For tests |
 | MEMENTO_WATCHDOG_ACTIVE_ENTER_TIMESTAMP | (none) | Injects the service start time. For tests |
 
+### Backup
+
+Environment variables read by `scripts/ops/backup.sh`. They come from the environment of the shell or cron job that runs the backup, never from the server `.env`, and the server does not read them. Invalid values are rejected with exit code 2. The procedure is in [backup-restore.md](operations/backup-restore.md).
+
+| Variable | Default | Description |
+|-|-|-|
+| MEMENTO_BACKUP_DIR | `$XDG_STATE_HOME/memento-mcp/backups`, otherwise `$HOME/.local/state/memento-mcp/backups` | Backup destination. Must be a path outside the repository (a path inside the repository, the filesystem root and the home directory itself are rejected). The `--dir` argument takes precedence |
+| MEMENTO_BACKUP_KEEP_DAYS | 14 | Number of days to keep. Integer of 1 or more. The `--keep` argument takes precedence |
+
 ---
 
 ## MEMORY_CONFIG

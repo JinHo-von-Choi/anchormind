@@ -439,6 +439,15 @@ DATABASE_URL=$DATABASE_URL node scripts/backfill-embeddings.js
 | MEMENTO_WATCHDOG_SERVICE_AGE_SEC | (없음) | 서비스 기동 후 경과 초 주입. 시험용 |
 | MEMENTO_WATCHDOG_ACTIVE_ENTER_TIMESTAMP | (없음) | 서비스 기동 시각 주입. 시험용 |
 
+### 백업
+
+`scripts/ops/backup.sh`가 읽는 환경 변수다. 서버의 `.env`가 아니라 백업을 실행하는 셸이나 cron 작업의 환경에서만 읽으며 서버는 읽지 않는다. 잘못된 값은 종료 코드 2로 거부한다. 절차는 [backup-restore.md](operations/backup-restore.md)에 있다.
+
+| 변수 | 기본값 | 설명 |
+|-|-|-|
+| MEMENTO_BACKUP_DIR | `$XDG_STATE_HOME/memento-mcp/backups`, 없으면 `$HOME/.local/state/memento-mcp/backups` | 백업 저장 위치. 저장소 밖의 경로여야 한다(저장소 안쪽, 파일 시스템 루트, 홈 디렉터리 자체는 거부). `--dir` 인자가 우선한다 |
+| MEMENTO_BACKUP_KEEP_DAYS | 14 | 보관할 날짜 수. 1 이상의 정수. `--keep` 인자가 우선한다 |
+
 ---
 
 ## MEMORY_CONFIG
