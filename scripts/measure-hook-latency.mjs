@@ -16,7 +16,7 @@
  *   --keys N   동시 요청마다 다른 키(N개를 돌려 쓴다)
  * 처리기의 키별 요청 한도는 측정 동안 높여 둔다(기본 RATE_LIMIT_PER_KEY에 걸리지 않게). 측정 중에는 소비자가 없어
  * 대기 행이 쌓이므로, 키 하나에 500건 넘게 보내는 설정(--keys가 작을 때)은 접수 확인 질의를 실제로 실행하되 대기 수
- * 상한 판정만 건너뛴다(출력의 pendingCapBypassed).
+ * 상한 판정만 건너뛴다(출력의 pendingCapSkipped).
  */
 
 import http       from "node:http";
@@ -97,15 +97,15 @@ function once(i) {
 `;
 
 let server;
-let pendingCapBypassed = false;
+let pendingCapSkipped = false;
 try {
   const keys = [];
   for (let i = 0; i < keyCount; i++) {
     keys.push((await createApiKey({ name: `lane-hook-${Date.now()}-${i}`, permissions: ["read", "write"], daily_limit: 1_000_000 })).raw_key);
   }
   const perKey             = Math.ceil(((2 + rounds) * concurrency + 50) / keyCount);
-  pendingCapBypassed       = perKey >= 500;
-  const admission          = pendingCapBypassed
+  pendingCapSkipped       = perKey >= 500;
+  const admission          = pendingCapSkipped
     ? async (a) => ({ ...(await HOOK_HANDLER_DEFAULTS.admission(a)), pending: 0 })
     : HOOK_HANDLER_DEFAULTS.admission;
   const handler = createHookHandler({
@@ -141,7 +141,7 @@ try {
 
   const statuses = output.concurrent.reduce((acc, { status }) => ({ ...acc, [status]: (acc[status] ?? 0) + 1 }), {});
   console.log(JSON.stringify({
-    concurrency, rounds, keys: keyCount, pendingCapBypassed, statuses,
+    concurrency, rounds, keys: keyCount, pendingCapSkipped, statuses,
     concurrent: summary(output.concurrent.map(r => r.ms)),
     sequential: summary(output.sequential.map(r => r.ms)),
     phases    : Object.fromEntries(Object.entries(phases).map(([name, list]) => [name, summary(list)]))
