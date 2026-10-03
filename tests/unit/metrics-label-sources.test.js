@@ -90,6 +90,7 @@ const REVIEWED = new Map([
   ["lib/llm/EgressGate.js|inc|stageLabel(stage)",                                 "stageLabel이 KNOWN_STAGES 또는 other로 닫는다"],
   ["lib/llm/EgressGate.js|inc|provider.name",                                     "체인의 provider는 registry.createProvider가 등록된 이름으로만 만든다"],
   ["lib/llm/EgressGate.js|inc|input.providerClass",                               "classifyProvider가 local 또는 external만 돌려준다"],
+  ["lib/llm/EgressGate.js|inc|outcome",                                           "prepare 안의 고정 문자열(sent, sent_unaudited)"],
   ["lib/llm/EgressGate.js|inc|skipReason",                                        "decideEgress의 거부 사유 상수(local_only, not_approved)"],
   ["lib/memory/consolidate/ConsolidatorGC.js|recordSplitSkip|reason",             "splitLongFragments 안의 고정 사유 문자열"],
   ["lib/memory/consolidate/ConsolidatorGC.js|recordSplitStepFailure|step",       "_recordSplitStepFailure 호출부의 고정 단계 문자열"],
