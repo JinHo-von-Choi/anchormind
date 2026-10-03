@@ -59,10 +59,11 @@ afterEach(() => {
  * 검색 계층과 저장소를 대역으로 둔 recall 실행기. 호출마다 후보와 연결 파편을 새로 만든다.
  *
  * @param {{makeCombined: () => Object[], links?: Map<string, Object[]>}} scenario
- * @returns {{recaller: MemoryRecaller, access: string[][], calls: {candidates: number, search: number}}}
+ * @returns {{recaller: MemoryRecaller, access: string[][], linkSeeds: string[][], calls: {candidates: number, search: number}}}
  */
 function buildRecaller({ makeCombined, links = new Map() }) {
-  const access = [];
+  const access    = [];
+  const linkSeeds = [];
   const calls  = { candidates: 0, search: 0 };
   const search = new FragmentSearch();
   search._executeSearch = async () => ({
@@ -84,6 +85,7 @@ function buildRecaller({ makeCombined, links = new Map() }) {
   /** fragment_links 조회 대역: from_id 집합의 연결 대상을 id 중복 없이 id 순으로 10건까지 */
   const store = {
     getLinkedFragments: async (fromIds) => {
+      linkSeeds.push([...fromIds].sort());
       const byId = new Map();
       for (const id of fromIds) {
         for (const target of links.get(id) ?? []) if (!byId.has(target.id)) byId.set(target.id, { ...target });
@@ -98,7 +100,7 @@ function buildRecaller({ makeCombined, links = new Map() }) {
     index           : { getSeenIds: async () => new Set() },
     suggestionEngine: { suggest: async () => null }
   });
-  return { recaller, access, calls };
+  return { recaller, access, linkSeeds, calls };
 }
 
 /**
@@ -173,14 +175,14 @@ function randomScenario(seed) {
  * @param {Object} scenario
  * @param {"on"|"off"} mode
  * @param {Object} params
- * @returns {Promise<{result: Object, access: string[][], sideEffects: Object[], calls: Object}>}
+ * @returns {Promise<{result: Object, access: string[][], linkSeeds: string[][], sideEffects: Object[], calls: Object}>}
  */
 async function runWith(scenario, mode, params) {
   process.env.MEMENTO_RANK_BEFORE_BUDGET = mode;
   sideEffectCalls.length = 0;
-  const { recaller, access, calls } = buildRecaller(scenario);
+  const { recaller, access, linkSeeds, calls } = buildRecaller(scenario);
   const result = await recaller.recall({ ...params });
-  return { result, access, sideEffects: sideEffectCalls.splice(0), calls };
+  return { result, access, linkSeeds, sideEffects: sideEffectCalls.splice(0), calls };
 }
 
 const scoreSum  = (fragments, scoreOf) => fragments.reduce((sum, f) => sum + scoreOf(f), 0);
@@ -274,6 +276,22 @@ describe("recall 순위 후 예산 선택", () => {
     }
     assert.ok(bindingCases > 350, `예산이 묶인 시드가 적다: ${bindingCases}`);
     assert.ok(strictGains > 0, "점수 합이 커진 시드가 하나도 없다");
+  });
+
+  it("예산이 묶여도 연결 파편의 기준은 검색 순서 절단이고, 연결 파편까지 예산 안에서 고른다(시드 200개)", async () => {
+    let linkedRuns = 0;
+    for (let seed = 2001; seed <= 2200; seed++) {
+      const scenario = randomScenario(seed);
+      const params   = { ...scenario.params, includeLinks: true, tokenBudget: 1 + Math.floor(scenario.rowTokens * 0.4) };
+
+      const off = await runWith(scenario, "off", params);
+      const on  = await runWith(scenario, "on", params);
+
+      assert.deepStrictEqual(on.linkSeeds, off.linkSeeds, `seed ${seed}: 연결 기준이 다르다`);
+      assert.ok(tokenSum(on.result.fragments) <= params.tokenBudget, `seed ${seed}: 연결 파편 포함 예산 초과`);
+      if (on.linkSeeds.length > 0) linkedRuns++;
+    }
+    assert.ok(linkedRuns > 100, `연결 조회가 일어난 시드가 적다: ${linkedRuns}`);
   });
 
   it("검색 후보는 RANK_CANDIDATE_LIMIT건까지만 예산 선택에 들어간다", async () => {
