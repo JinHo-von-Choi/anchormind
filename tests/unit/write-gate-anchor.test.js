@@ -13,6 +13,7 @@ import assert                                   from "node:assert/strict";
 
 import { WriteGate, WRITE_ENTRIES, anchorStep, isGateEligible, ANCHOR_REQUEST_ENTRIES } from "../../lib/memory/write/WriteGate.js";
 import { anchorDecisionTotal } from "../../lib/memory/write/write-gate-metrics.js";
+import { anchorQuotaOf }       from "../../lib/memory/write/anchorQuota.js";
 
 const KEY = "11111111-2222-4333-8444-555555555555";
 
@@ -42,8 +43,8 @@ describe("anchorStep", () => {
     assert.equal(await anchorStep(state, depsOf({ mode: "off" })), state);
   });
 
-  it("앵커 요청 진입점은 remember와 amend뿐이다", async () => {
-    assert.deepEqual([...ANCHOR_REQUEST_ENTRIES].sort(), [WRITE_ENTRIES.AMEND, WRITE_ENTRIES.REMEMBER].sort());
+  it("앵커 요청 진입점은 remember, amend, batch_remember뿐이다", async () => {
+    assert.deepEqual([...ANCHOR_REQUEST_ENTRIES].sort(), [WRITE_ENTRIES.AMEND, WRITE_ENTRIES.BATCH, WRITE_ENTRIES.REMEMBER].sort());
     const state = stateOf({ entry: WRITE_ENTRIES.ADMIN_IMPORT, draft: { is_anchor: true } });
     const deps  = depsOf();
     assert.equal(await anchorStep(state, deps), state);
@@ -249,5 +250,74 @@ describe("WriteGate.check 앵커 판정", () => {
     const out  = await gate.check(remember());
     assert.equal(out.draft.is_anchor, false);
     assert.deepEqual(out.warnings, ["anchorLookupFailed"]);
+  });
+});
+
+describe("WriteGate.check 앵커 상한 표식", () => {
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+
+  function gateOf(mode = "warn", state = { permissions: ["anchor"], anchorCount: 0 }) {
+    const audits = [];
+    const gate   = new WriteGate({
+      getAnchorState      : async () => state,
+      auditAnchor         : (event) => { audits.push(event); },
+      anchorPermissionMode: () => mode,
+      anchorLimit         : () => 3
+    });
+    return { gate, audits };
+  }
+
+  const request = (extra = {}) => ({
+    entry : WRITE_ENTRIES.BATCH,
+    op    : "create",
+    ctx   : { keyId: KEY },
+    fields: { content: "일괄 저장 항목을 앵커로 고정한다", type: "fact", topic: "t", isAnchor: true },
+    build : (input) => ({ id: "f-batch", ...input, is_anchor: input.isAnchor === true, validation_warnings: [] }),
+    ...extra
+  });
+
+  it("일괄 저장 항목의 앵커 지정도 판정하고 권한이 없으면 낮춘다", async () => {
+    const { gate } = gateOf("warn", { permissions: ["read", "write"], anchorCount: 0 });
+    const out = await gate.check(request());
+    assert.equal(out.draft.is_anchor, false);
+    assert.deepEqual(out.warnings, ["anchorPermissionRequired"]);
+    assert.equal(anchorQuotaOf(out.draft), null);
+  });
+
+  it("허용한 키 지정의 생성 후보와 갱신 열에 키와 상한을 담은 표식을 단다", async () => {
+    const { gate } = gateOf();
+    const created  = await gate.check(request());
+    assert.deepEqual({ keyId: anchorQuotaOf(created.draft).keyId, limit: anchorQuotaOf(created.draft).limit }, { keyId: KEY, limit: 3 });
+
+    const updated = await gate.check({
+      entry: WRITE_ENTRIES.AMEND, op: "update", ctx: { keyId: KEY },
+      fields: { is_anchor: true }, base: { id: "f1", type: "fact", is_anchor: false }
+    });
+    assert.equal(anchorQuotaOf(updated.fields).keyId, KEY);
+  });
+
+  it("master 지정과 dryRun에는 표식을 달지 않는다", async () => {
+    const { gate } = gateOf();
+    assert.equal(anchorQuotaOf((await gate.check(request({ ctx: { keyId: null } }))).draft), null);
+    assert.equal(anchorQuotaOf((await gate.check(request({ mode: "dryRun" }))).draft), null);
+  });
+
+  it("warn의 exceed는 위반을 돌려주고 warnings에 더하며 limit 사유로 감사한다", async () => {
+    const { gate, audits } = gateOf();
+    const out       = await gate.check(request());
+    const violation = anchorQuotaOf(out.draft).exceed();
+    await settle();
+    assert.equal(violation.rule, "anchorLimitExceeded");
+    assert.deepEqual(out.warnings, ["anchorLimitExceeded"]);
+    assert.deepEqual(audits.map(a => [a.outcome, a.reason]), [["granted", "permitted"], ["downgraded", "limit"]]);
+  });
+
+  it("enforce의 exceed는 SymbolicPolicyViolationError를 던지고 거부를 감사한다", async () => {
+    const { gate, audits } = gateOf("enforce");
+    const out = await gate.check(request());
+    assert.throws(() => anchorQuotaOf(out.draft).exceed(),
+      (err) => err.name === "SymbolicPolicyViolationError" && err.violations.includes("anchorLimitExceeded"));
+    await settle();
+    assert.deepEqual(audits.map(a => a.outcome), ["granted", "rejected"]);
   });
 });
