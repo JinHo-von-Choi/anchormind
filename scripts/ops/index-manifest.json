@@ -41,6 +41,10 @@
     { "name": "idx_ce_session_id", "table": "case_events", "baseline": true },
     { "name": "idx_se_created", "table": "search_events", "baseline": true },
     { "name": "idx_se_query_type", "table": "search_events", "baseline": true },
-    { "name": "idx_se_session", "table": "search_events", "baseline": true }
+    { "name": "idx_se_session", "table": "search_events", "baseline": true },
+    { "name": "uq_frag_hash_ws_per_key", "table": "fragments", "unique": true,
+      "definition": "ON agent_memory.fragments (key_id, content_hash, (COALESCE(workspace, ''))) WHERE key_id IS NOT NULL" },
+    { "name": "uq_frag_hash_ws_master", "table": "fragments", "unique": true,
+      "definition": "ON agent_memory.fragments (content_hash, (COALESCE(workspace, ''))) WHERE key_id IS NULL" }
   ]
 }
