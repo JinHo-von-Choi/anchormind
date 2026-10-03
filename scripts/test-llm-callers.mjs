@@ -67,7 +67,7 @@ await test("AutoReflect (_buildReflectPrompts + llmJson)", async () => {
     startedAt   : Date.now() - 3600000,
     lastActivity: Date.now()
   });
-  const result = await llmJson(userPrompt, { timeoutMs: 90000, systemPrompt });
+  const result = await llmJson(userPrompt, { timeoutMs: 90000, systemPrompt, egress: { stage: "auto_reflect" } });
   // AutoReflect 예상 스키마 검증
   if (typeof result !== "object" || result === null) throw new Error("not object");
   const required = ["summary", "decisions", "errors_resolved", "new_procedures", "open_questions"];
@@ -104,7 +104,7 @@ await test("ConsolidatorGC (long text split)", async () => {
     `입력: "${longText}"\n` +
     `출력:`;
 
-  const result = await llmJson(userPrompt, { timeoutMs: 60000, systemPrompt });
+  const result = await llmJson(userPrompt, { timeoutMs: 60000, systemPrompt, egress: { stage: "split" } });
   if (!Array.isArray(result)) throw new Error("not array");
   if (result.length < 2) throw new Error(`too few items: ${result.length}`);
   for (const item of result) {
@@ -174,7 +174,7 @@ await test("MemoryEvaluator (quality evaluation)", async () => {
 
 응답:`;
 
-  const result = await llmJson(userPrompt, { timeoutMs: 60000, systemPrompt });
+  const result = await llmJson(userPrompt, { timeoutMs: 60000, systemPrompt, egress: { stage: "evaluate" } });
   if (typeof result !== "object" || result === null) throw new Error("not object");
   if (typeof result.score !== "number")             throw new Error("score not number");
   if (typeof result.rationale !== "string")         throw new Error("rationale not string");
