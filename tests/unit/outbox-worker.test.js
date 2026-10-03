@@ -18,7 +18,9 @@ import {
 import {
   registerOutboxHandler, OutboxPermanentError, _resetOutboxHandlers
 } from "../../lib/outbox/OutboxHandlers.js";
-import { outboxDeadLetterTotal, outboxLeaseLostTotal, outboxPending, outboxLagSeconds } from "../../lib/outbox/outbox-metrics.js";
+import {
+  outboxDeadLetterTotal, outboxLeaseLostTotal, outboxPending, outboxLagSeconds, outboxStatsUpdated
+} from "../../lib/outbox/outbox-metrics.js";
 import { SchedulerRegistry } from "../../lib/scheduler-registry.js";
 
 /** 수동으로 움직이는 시계 */
@@ -38,7 +40,8 @@ class MemoryStore {
     this.rows    = [];
     this.seq     = 0;
     this.calls   = [];
-    this.cleanupPlan = [];
+    this.cleanupResults = [];
+    this.unhandledResults = [];
     this.statsValue  = { pending: 0, dead: 0, lagSeconds: 0 };
   }
 
@@ -58,10 +61,11 @@ class MemoryStore {
     const due  = this.rows.filter(r => this.pending(r) && r.availableAt <= now && topics.includes(r.topic))
       .sort((a, b) => a.availableAt - b.availableAt || Number(a.id) - Number(b.id)).slice(0, limit);
     return due.map(r => {
+      const dueAt   = new Date(r.availableAt);
       r.attempts   += 1;
       r.availableAt = now + leaseMs;
       r.claimToken  = token;
-      return { id: r.id, topic: r.topic, aggregateId: r.aggregateId, payload: r.payload, attempts: r.attempts, createdAt: r.createdAt };
+      return { id: r.id, topic: r.topic, aggregateId: r.aggregateId, payload: r.payload, attempts: r.attempts, createdAt: r.createdAt, dueAt };
     });
   }
 
@@ -70,8 +74,8 @@ class MemoryStore {
     return row && row.claimToken === token && this.pending(row) ? row : null;
   }
 
-  async complete(id, token) {
-    this.calls.push({ op: "complete", id, token });
+  async complete(id, token, dueAt) {
+    this.calls.push({ op: "complete", id, token, dueAt });
     const row = this.owned(id, token);
     if (!row) return { applied: false, deliverySeconds: null };
     row.processedAt = this.clock();
@@ -106,7 +110,12 @@ class MemoryStore {
 
   async cleanup({ retentionDays, limit }) {
     this.calls.push({ op: "cleanup", retentionDays, limit });
-    return this.cleanupPlan.length > 0 ? this.cleanupPlan.shift() : 0;
+    return this.cleanupResults.length > 0 ? this.cleanupResults.shift() : 0;
+  }
+
+  async deadLetterUnhandled({ topics, olderThanDays, limit }) {
+    this.calls.push({ op: "unhandled", topics, olderThanDays, limit });
+    return this.unhandledResults.length > 0 ? this.unhandledResults.shift() : 0;
   }
 
   async stats() {
@@ -224,6 +233,7 @@ describe("OutboxWorker 전달", () => {
     assert.equal(claim.leaseMs, OUTBOX_WORKER_DEFAULTS.leaseMs);
     assert.equal(claim.limit, OUTBOX_WORKER_DEFAULTS.batchSize);
     assert.equal(store.ops("complete")[0].token, claim.token);
+    assert.equal(store.ops("complete")[0].dueAt.getTime(), store.rows[0].createdAt.getTime());
 
     assert.equal(seen.length, 1);
     assert.equal(seen[0].idempotencyKey, "audit.write:1");
@@ -334,6 +344,39 @@ describe("OutboxWorker 전달", () => {
     assert.deepEqual(store.rows.slice(3).map(r => [r.attempts, r.claimToken]), [[0, null], [0, null]]);
   });
 
+  it("완료 기록이 실패하면 남은 점유를 반납하고 오류를 다시 던진다", async () => {
+    const clock = manualClock();
+    const store = new MemoryStore(clock);
+    const dbErr = new Error("connection terminated");
+    store.complete = async (id, token) => {
+      store.calls.push({ op: "complete", id, token });
+      throw dbErr;
+    };
+    registerOutboxHandler("audit.write", async () => {});
+    for (let i = 0; i < 3; i++) store.add("audit.write");
+
+    await assert.rejects(makeWorker(store, clock)._processBatch(), (err) => err === dbErr);
+    assert.deepEqual(store.ops("release").map(r => r.ids), [["2", "3"]]);
+    assert.deepEqual(store.rows.map(r => [r.attempts, r.claimToken === null]), [[1, false], [0, true], [0, true]]);
+  });
+
+  it("실패 기록이 실패하고 반납까지 실패해도 원래 오류를 던지고 반납 실패를 기록한다", async () => {
+    const clock    = manualClock();
+    const store    = new MemoryStore(clock);
+    const registry = new SchedulerRegistry();
+    const dbErr    = new Error("fail write");
+    store.fail     = async () => { throw dbErr; };
+    store.release  = async () => { throw new Error("release write"); };
+    registerOutboxHandler("audit.write", async () => { throw new Error("handler"); });
+    for (let i = 0; i < 2; i++) store.add("audit.write");
+    const worker = new OutboxWorker({ store, clock, random: () => 0.5, schedulerRegistry: registry,
+      settings: { cleanupIntervalMs: 1e12, statsIntervalMs: 1e12 } });
+    worker.running = true;
+
+    await assert.rejects(worker._processBatch(), (err) => err === dbErr);
+    assert.equal(registry.getAll().outbox.lastError, "release write");
+  });
+
   it("정지 요청을 받으면 처리 중인 이벤트만 마치고 나머지를 반납한다", async () => {
     const clock  = manualClock();
     const store  = new MemoryStore(clock);
@@ -409,7 +452,7 @@ describe("OutboxWorker 정리와 통계", () => {
   it("정리는 묶음이 꽉 찬 동안만 반복하고 회차 상한에서 멈춘다", async () => {
     const clock = manualClock();
     const store = new MemoryStore(clock);
-    store.cleanupPlan = [10, 10, 10, 10, 10];
+    store.cleanupResults = [10, 10, 10, 10, 10];
     const worker = makeWorker(store, clock, { cleanupIntervalMs: 1000, cleanupChunk: 10, cleanupMaxPerRun: 30 });
     await worker._processBatch();
     assert.equal(store.ops("cleanup").length, 3);
@@ -419,7 +462,7 @@ describe("OutboxWorker 정리와 통계", () => {
   it("정리 묶음이 덜 차면 그 회차를 끝내고 간격이 지나기 전에는 다시 돌지 않는다", async () => {
     const clock = manualClock();
     const store = new MemoryStore(clock);
-    store.cleanupPlan = [4, 3];
+    store.cleanupResults = [4, 3];
     const worker = makeWorker(store, clock, { cleanupIntervalMs: 1000, cleanupChunk: 10, cleanupMaxPerRun: 100 });
     await worker._processBatch();
     await worker._processBatch();
@@ -427,6 +470,24 @@ describe("OutboxWorker 정리와 통계", () => {
     clock.advance(1000);
     await worker._processBatch();
     assert.equal(store.ops("cleanup").length, 2);
+  });
+
+  it("처리기 없는 topic의 오래된 대기 행은 등록 topic 목록과 일수로 묶음 단위 dead-letter로 옮긴다", async () => {
+    process.env.MEMENTO_OUTBOX_UNHANDLED_DAYS = "9";
+    try {
+      const clock = manualClock();
+      const store = new MemoryStore(clock);
+      store.unhandledResults = [10, 10, 4];
+      registerOutboxHandler("audit.write", async () => {});
+      const worker = makeWorker(store, clock, { cleanupIntervalMs: 1000, cleanupChunk: 10, cleanupMaxPerRun: 100 });
+      await worker._processBatch();
+      const calls = store.ops("unhandled");
+      assert.equal(calls.length, 3);
+      assert.deepEqual(calls[0], { op: "unhandled", topics: ["audit.write"], olderThanDays: 9, limit: 10 });
+      assert.equal(worker.snapshot().totals.unhandled, 24);
+    } finally {
+      delete process.env.MEMENTO_OUTBOX_UNHANDLED_DAYS;
+    }
   });
 
   it("보존 일수는 MEMENTO_OUTBOX_RETENTION_DAYS를 따른다", async () => {
@@ -453,6 +514,7 @@ describe("OutboxWorker 정리와 통계", () => {
 
     assert.equal((await outboxPending.get()).values[0].value, 7);
     assert.equal((await outboxLagSeconds.get()).values[0].value, 12.5);
+    assert.equal((await outboxStatsUpdated.get()).values[0].value, Math.floor(clock() / 1000));
     const snap = worker.snapshot();
     assert.equal(snap.pending, 7);
     assert.equal(snap.dead, 2);

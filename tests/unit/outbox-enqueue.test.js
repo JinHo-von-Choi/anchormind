@@ -96,6 +96,20 @@ describe("enqueue 스위치", () => {
     process.env.MEMENTO_OUTBOX = "off";
     await assert.rejects(enqueue({ query: async () => ({}) }, EVENT), OutboxTransactionRequiredError);
   });
+
+  it("off에서도 이벤트 계약 위반과 트랜잭션 밖 호출은 오류다", async () => {
+    process.env.MEMENTO_OUTBOX = "off";
+    await assert.rejects(enqueue(fakeClient(), { topic: "Bad Topic" }), OutboxValidationError);
+    await assert.rejects(enqueue(fakeClient({ status: "I" }), EVENT), OutboxTransactionRequiredError);
+  });
+
+  it("off에서도 enqueueStandalone은 이벤트 계약 위반을 연결을 빌리기 전에 알린다", async () => {
+    process.env.MEMENTO_OUTBOX = "off";
+    let borrowed = false;
+    const pool   = { connect: async () => { borrowed = true; return fakeClient(); } };
+    await assert.rejects(enqueueStandalone(pool, { topic: "a.b", payload: [1] }), OutboxValidationError);
+    assert.equal(borrowed, false);
+  });
 });
 
 describe("이벤트 검증", () => {

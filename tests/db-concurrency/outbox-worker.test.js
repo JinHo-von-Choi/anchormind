@@ -73,6 +73,37 @@ after(async () => {
   }
 });
 
+describe("지연과 전달 시간", () => {
+  it("지연은 전달 예정 시각이 지난 대기 행만 보고 그 예정 시각부터 잰다", async () => {
+    const topic = topicFor("lag");
+    const store = new OutboxStore(processPool());
+    const { rows: pendingBefore } = await directQuery(`SELECT count(*)::int AS n FROM ${TABLE} WHERE processed_at IS NULL AND dead_at IS NULL`);
+    assert.equal(pendingBefore[0].n, 0);
+
+    await directQuery(
+      `INSERT INTO ${TABLE} (topic, created_at, available_at) VALUES ($1, now() - interval '1 hour', now() + interval '7 days')`, [topic]);
+    assert.equal((await store.stats()).lagSeconds, 0);
+
+    await directQuery(
+      `INSERT INTO ${TABLE} (topic, created_at, available_at) VALUES ($1, now() - interval '30 seconds', now() - interval '30 seconds')`, [topic]);
+    const lag = (await store.stats()).lagSeconds;
+    assert.ok(lag >= 29 && lag < 60, `lag=${lag}`);
+    await directQuery(`DELETE FROM ${TABLE} WHERE topic = $1`, [topic]);
+  });
+
+  it("전달 시간은 생성 시각이 아니라 점유 전 전달 예정 시각부터 잰다", async () => {
+    const topic = topicFor("delivery");
+    await directQuery(
+      `INSERT INTO ${TABLE} (topic, created_at, available_at) VALUES ($1, now() - interval '1 hour', now() - interval '2 seconds')`, [topic]);
+    const store   = new OutboxStore(processPool());
+    const token   = crypto.randomUUID();
+    const [event] = await store.claim({ topics: [topic], limit: 1, leaseMs: 60_000, token });
+    const result  = await store.complete(event.id, token, event.dueAt);
+    assert.equal(result.applied, true);
+    assert.ok(result.deliverySeconds >= 2 && result.deliverySeconds < 60, `deliverySeconds=${result.deliverySeconds}`);
+  });
+});
+
 describe("outbox 기록", () => {
   it("커밋하면 남고 롤백하면 사라진다", async () => {
     const topic = topicFor("atomic");
@@ -226,5 +257,29 @@ describe("보존 정리", () => {
               count(*) FILTER (WHERE processed_at IS NULL AND dead_at IS NULL)::int AS pending
          FROM ${TABLE} WHERE topic = $1`, [topic]);
     assert.deepEqual(rows[0], { recent: 1, dead: 1, pending: 1 });
+  });
+});
+
+describe("처리기 없는 topic", () => {
+  it("처리기 없는 topic의 오래된 대기 행만 묶음 단위로 no_handler dead-letter가 된다", async () => {
+    const orphan  = topicFor("orphan");
+    const handled = topicFor("handled");
+    await directQuery(
+      `INSERT INTO ${TABLE} (topic, available_at) SELECT $1, now() - interval '8 days' FROM generate_series(1, 3)`, [orphan]);
+    await directQuery(`INSERT INTO ${TABLE} (topic, available_at) VALUES ($1, now() - interval '1 day')`, [orphan]);
+    await directQuery(`INSERT INTO ${TABLE} (topic, available_at) VALUES ($1, now() - interval '8 days')`, [handled]);
+
+    const store = new OutboxStore(processPool());
+    assert.equal(await store.deadLetterUnhandled({ topics: [handled], olderThanDays: 7, limit: 2 }), 2);
+    assert.equal(await store.deadLetterUnhandled({ topics: [handled], olderThanDays: 7, limit: 2 }), 1);
+    assert.equal(await store.deadLetterUnhandled({ topics: [handled], olderThanDays: 7, limit: 2 }), 0);
+
+    const { rows } = await directQuery(
+      `SELECT topic, count(*) FILTER (WHERE dead_at IS NOT NULL AND last_error = 'no_handler')::int AS dead,
+              count(*) FILTER (WHERE dead_at IS NULL)::int AS pending
+         FROM ${TABLE} WHERE topic = ANY($1::text[]) GROUP BY topic ORDER BY topic`, [[orphan, handled]]);
+    const byTopic = Object.fromEntries(rows.map(r => [r.topic, { dead: r.dead, pending: r.pending }]));
+    assert.deepEqual(byTopic[orphan], { dead: 3, pending: 1 });
+    assert.deepEqual(byTopic[handled], { dead: 0, pending: 1 });
   });
 });
