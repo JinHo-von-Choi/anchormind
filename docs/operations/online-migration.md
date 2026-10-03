@@ -450,7 +450,7 @@ migration-059는 `api_keys`에 수명 열(모두 NULL 허용)을 더하고 `api_
      node scripts/ops/backfill-key-secrets.mjs
    ```
 
-3. `--confirm`으로 옮긴다. 비밀 표에 행이 없는 키를 500건씩 insert-select로 옮기고(`ON CONFLICT DO NOTHING`), 끝나면 정합을 확인한다. 정합은 모든 키에 현재 해시와 같은 비밀 행이 있고 활성 키 수와 활성 현재 비밀 행 수가 같은 것이다. 맞지 않으면 종료 코드 1이다. 다시 실행해도 안전하다.
+3. `--confirm`으로 옮긴다. 비밀 표에 행이 없는 키를 500건씩 insert-select로 옮기고(`ON CONFLICT DO NOTHING`), 끝나면 정합을 확인한다. 정합은 모든 키에 현재 해시와 같은 비밀 행이 있고, 활성 키 수와 활성 현재 비밀 행 수가 같으며, 폐기한 키에 활성 비밀 행이 없는 것이다. 이관은 키 행을 `FOR SHARE`로 잠가 같은 시각의 폐기, 회전과 직렬화하므로 폐기 중인 키를 활성 행으로 옮기지 않는다. 맞지 않으면 종료 코드 1이다. 다시 실행해도 안전하다.
 
    ```sh
    PGHOST=<호스트> PGDATABASE=<DB> PGUSER=<사용자> PGPASSWORD=<비밀번호> \

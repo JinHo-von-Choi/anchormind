@@ -169,7 +169,7 @@
 | MEMENTO_WORKSPACE_DECAY | true | `false` 시 workspace 랭킹 감쇠를 비활성화한다. 활성 시 검색 scope에 workspace가 지정되면 불일치·전역(NULL) 파편의 랭킹 점수에 감쇠 배율을 적용한다(반환 자체는 유지). recall과 context 주입 경로 공통 적용 |
 | MEMENTO_WORKSPACE_DECAY_PENALTY | 0.7 | workspace 불일치·전역 파편 랭킹 점수에 곱하는 감쇠 배율(0~1) |
 | MEMENTO_SESSION_SEGMENT | true | `false` 시 세션 세그먼트 회전을 비활성화하고 전송계층 세션 ID를 그대로 사용한다 |
-| MEMENTO_SESSION_KEY_RECHECK_MS | 30000 | 세션 사용 시 API 키 상태를 다시 읽는 주기(ms). 비활성, 삭제, 폐기, 만료된 키의 세션과 키의 허용 대역(`allowed_cidrs`) 밖 주소에서 온 세션 요청은 세션을 닫고, 권한 변경은 열린 세션에 반영된다. `0`이면 재확인하지 않는다. 0 이상의 정수만 받고 그 밖은 기본값이다 |
+| MEMENTO_SESSION_KEY_RECHECK_MS | 30000 | 세션 사용 시 API 키 상태를 다시 읽는 주기(ms). 비활성, 삭제, 폐기, 만료된 키의 세션, 키의 허용 대역(`allowed_cidrs`) 밖 주소에서 온 세션 요청, 키 회전의 겹침 종료 시각보다 먼저 만든 세션은 닫고(legacy SSE 세션 포함), 권한 변경은 열린 세션에 반영된다. `0`이면 재확인하지 않는다. 0 이상의 정수만 받고 그 밖은 기본값이다 |
 | MEMENTO_KEY_ROTATION_GRACE_HOURS | 24 | 키 회전(`POST /keys/:id/rotate`)에서 요청 본문에 `graceHours`가 없을 때 이전 키가 계속 인증되는 시간. `0`이면 회전 즉시 이전 키를 거부한다. 호출 시점에 읽는다. 0 이상 720 이하의 정수, 그 밖의 값은 24 |
 | MEMENTO_KEY_LAST_USED_INTERVAL_SEC | 60 | API 키의 `last_used_at`과 `last_used_ip_hash`(요청 주소의 HMAC 지문, 마스터 키를 비밀값으로 쓴다)를 키마다 이 간격(초)에 한 번만 쓴다. 일일 사용량(`api_key_usage`)은 요청마다 더한다. `0`이면 요청마다 쓴다. 프로세스마다 따로 센다. 호출 시점에 읽는다. 0 이상 86400 이하의 정수, 그 밖의 값은 60 |
 | MEMENTO_SEGMENT_IDLE_MS | 2700000 | 세션 유휴 시간이 이 값(ms)을 초과하면 다음 도구 호출 시 세그먼트를 회전한다. 기본 45분 |

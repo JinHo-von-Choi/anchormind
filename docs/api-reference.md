@@ -484,25 +484,29 @@ API 키의 정책 열을 변경한다. 마스터 키 인증 필요. 전달한 �
 
 | 필드 | 값 | 설명 |
 |-|-|-|
-| `expires_at` | ISO 8601 시각 또는 `null` | 이 시각부터 키를 거부한다(`memento_auth_denied_total{reason="key_expired"}`). `null`은 무기한 |
+| `expires_at` | `Z` 또는 명시 오프셋(`+09:00`)이 있는 ISO 8601 시각 또는 `null` | 이 시각부터 키를 거부한다(`memento_auth_denied_total{reason="key_expired"}`). `null`은 무기한. 오프셋 없는 시각(`2027-01-01T00:00:00`), 날짜만, 숫자, 그 밖의 표기는 400이다 |
 | `description` | 500자 이하 문자열 또는 `null` | 관리 표시용 설명 |
 | `owner` | 128자 이하 문자열 또는 `null` | 소유자 표기 |
 | `kind` | `^[a-z][a-z0-9_-]{0,31}$` 또는 `null` | 키 종류 표기 |
-| `allowed_cidrs` | IPv4/IPv6 대역 배열(최대 64개) 또는 `null` | 요청 주소가 대역 하나에 들어야 인증된다. 단일 주소는 `/32`, `/128`로 저장한다. `null`은 제한 없음, 빈 배열은 모든 주소 거부. 요청 주소는 `TRUST_PROXY_HOPS`를 적용한 값이며 IPv4 매핑 IPv6 주소는 IPv4로 판정한다. 대역 밖 요청은 키 무효와 같은 401이고 `memento_auth_denied_total{reason="cidr_denied"}`로 센다. 열린 세션도 키 상태 재확인 때 대역 밖 주소면 닫힌다 |
+| `allowed_cidrs` | IPv4/IPv6 대역 배열(최대 64개) 또는 `null` | 요청 주소가 대역 하나에 들어야 인증된다. 단일 주소는 `/32`, `/128`로 저장한다. `null`은 제한 없음, 빈 배열은 모든 주소 거부. 요청 주소는 `TRUST_PROXY_HOPS`를 적용한 값이며 IPv4 매핑 IPv6 주소는 IPv4로 판정한다. 대역 밖 요청은 키 무효와 같은 401이고 `memento_auth_denied_total{reason="cidr_denied"}`로 센다. 열린 세션도 키 상태 재확인 때 대역 밖 주소면 닫힌다. 판정은 `TRUST_PROXY_HOPS`가 서버 앞의 신뢰 리버스 프록시 수와 정확히 같고 서버가 그 프록시를 거쳐서만 닿는다는 전제에 선다. hop 수가 실제보다 크거나, hop 수 1인데 프록시를 거치지 않고 직접 닿는 요청은 클라이언트가 `X-Forwarded-For`로 주소를 고를 수 있다. 그래서 `TRUST_PROXY_HOPS`가 설정되지 않은 서버는 목록 쓰기(빈 배열 포함)를 409 `trust_proxy_hops_unset`으로 거부한다(해제 `null`은 받는다) |
 
 응답 200은 `{ "success": true, ...수명 열 }`이다. 만료와 허용 대역 변경은 이 프로세스의 세션 재확인 캐시를 바로 비운다.
 
-`POST /keys/:id/rotate` 본문(선택)은 `{ "graceHours": 24 }`이다. `graceHours`는 0 이상 720 이하의 정수이며 생략하면 `MEMENTO_KEY_ROTATION_GRACE_HOURS`(기본 24)다. 새 원시 키를 만들어 응답 `raw_key`로 한 번만 돌려주고, 이전 키(이전 회전에서 아직 겹침 중인 키 포함)는 `previous_valid_until`까지만 인증된다. 겹침이 끝난 키는 `memento_auth_denied_total{reason="key_rotated"}`로 센다. 폐기한 키는 409 `key_revoked`다.
+`POST /keys/:id/rotate` 본문(선택)은 `{ "graceHours": 24 }`이다. `graceHours`는 0 이상 720 이하의 정수이며 생략하면 `MEMENTO_KEY_ROTATION_GRACE_HOURS`(기본 24)다. 새 원시 키를 만들어 응답 `raw_key`로 한 번만 돌려주고, 이전 키(이전 회전에서 아직 겹침 중인 키 포함)는 `previous_valid_until`까지만 새 요청을 인증한다. 겹침이 끝난 키는 `memento_auth_denied_total{reason="key_rotated"}`로 센다. 폐기한 키는 409 `key_revoked`다.
+
+이미 열린 접근의 종료: 겹침 종료 시각(`previous_valid_until`)이 지나면 그 시각보다 먼저 만든 이 키의 MCP 세션(streamable, legacy SSE)과 이 키에 묶인 OAuth access token, refresh token이 끝난다. 겹침 동안 새 키로 만든 것도 포함된다. 세션은 다음 키 상태 재확인 때(최대 `MEMENTO_SESSION_KEY_RECHECK_MS`, 기본 30초 늦게) 닫히고, 클라이언트는 새 키로 다시 인증해 같은 세션 id로 복구한다. access token은 다음 요청에서 401(`key_rotated`), refresh token은 갱신에서 `invalid_grant`이다. 다만 갱신 요청의 `client_secret`이 현재 키이면 다시 묶어 발급한다. `graceHours`가 0이면 이전 키는 바로 거부되고, 이 프로세스의 그 키 세션은 응답 전에 닫히며(`closed_sessions`), 그 시각 이전에 발급된 토큰도 다음 사용에서 끝난다. `MEMENTO_SESSION_KEY_RECHECK_MS=0`이면 세션 재확인이 없으므로 겹침 회전은 열린 세션을 끝내지 않는다(겹침 0의 즉시 닫기와 폐기는 그대로다). 세션 닫기가 실패하면 회전은 그대로 성공으로 응답하고 `warning: "session_close_failed"`를 붙인다.
 
 ```json
 { "id": "...", "name": "ci-runner", "key_prefix": "mmcp_cirunner_", "raw_key": "mmcp_cirunner_...", "previous_valid_until": "2026-10-04T12:00:00.000Z", "retired_secrets": 1 }
 ```
 
-`POST /keys/:id/revoke` 본문은 `{ "reason": "..." }`(1자 이상 500자 이하)다. `revoked_at`, `revoked_by`, `revoke_reason`을 남기고 상태를 `inactive`로 바꾸며 그 키의 모든 비밀을 폐기한다. 이 프로세스의 세션 재확인 캐시와 정책 캐시를 비우고 그 키의 세션을 즉시 닫는다. 폐기는 되돌리지 않으며 이미 폐기한 키는 409 `already_revoked`다.
+`POST /keys/:id/revoke` 본문은 `{ "reason": "..." }`(1자 이상 500자 이하)다. `revoked_at`, `revoked_by`, `revoke_reason`을 남기고 상태를 `inactive`로 바꾸며 그 키의 모든 비밀을 폐기한다. 이 프로세스의 세션 재확인 캐시와 정책 캐시를 비우고 그 키의 세션을 즉시 닫는다. 폐기는 되돌리지 않으며 이미 폐기한 키는 409 `already_revoked`다. 커밋 뒤 세션 닫기가 실패해도 폐기는 성공으로 응답하고 `warning: "session_close_failed"`와 감사 detail(`sessionCloseFailed: true`)을 남긴다. 남은 세션은 다음 키 상태 재확인 때 닫힌다.
 
 `POST /keys/:id/access-review`는 본문이 없다. `access_reviewed_at`과 `access_reviewed_by`(관리 행위자 표기, 예: `master:bearer`)를 남긴다.
 
-오류: 400 `{ "error": "...", "field": "..." }`(검증 실패), 404(키 없음), 409(폐기 상태 충돌), 413(본문 과대).
+오류: 400 `{ "error": "...", "field": "..." }`(검증 실패), 404(키 없음), 409 `{ "error": "...", "message": "..." }`(폐기 상태 충돌 `key_revoked`, `already_revoked`, hop 수 미설정 `trust_proxy_hops_unset`), 413(본문 과대).
+
+시계: 만료, 회전 겹침, 퇴역 판정은 모두 애플리케이션 서버의 시계로 한다(`valid_until`도 회전 요청을 받은 서버의 시계로 정한다). DB가 쓰는 시각(`revoked_at`, `access_reviewed_at`, `last_used_at`)과 목록의 `rotation_overlap_until`, 이관 스크립트의 정합 보고는 DB 시계이며 판정에는 쓰지 않는다.
 
 인증 조회 순서: 원시 키의 SHA-256 해시를 `api_key_secrets`에서 먼저 찾고, 그 해시가 없을 때만 `api_keys.key_hash`에서 찾는다. 찾은 행은 폐기, 비활성, 만료, 비밀 행 상태(폐기, 겹침 종료), 일일 한도 순으로 판정한다. 수명 열이 비어 있는 키는 비활성과 일일 한도만 판정한다. 찾은 출처는 `memento_api_key_lookup_total{source="secret"|"legacy"}`로 센다.
 

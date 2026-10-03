@@ -18,6 +18,24 @@ export const KEY_LIFECYCLE_LIMITS = { cidrs: 64, owner: 128, description: 500, r
 
 const INPUT_CLASS = "w-full bg-surface-container-highest border border-outline-variant/30 rounded-sm px-2 py-1 text-xs font-mono text-on-surface focus:border-primary focus:outline-none";
 
+/** 회전 결과 안내. 서버의 회전 동작과 같은 문구다(api-reference의 키 수명 절). */
+export const ROTATE_NOTE = "The previous key authenticates new requests until {until}. At that time every session and OAuth token "
+  + "of this key created before it ends at its next use (sessions at the next key state recheck); clients sign in again with the new key.";
+
+/** 만료 시각 입력 규칙: Z 또는 +hh:mm/-hh:mm 오프셋이 있는 ISO 8601 */
+export const EXPIRY_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * 회전 확인 단추 문구. 겹침 0은 이전 키와 열린 세션을 바로 끝낸다.
+ *
+ * @param {string} graceText 입력한 겹침 시간(빈 문자열은 서버 기본값)
+ * @returns {string}
+ */
+export function rotateConfirmLabel(graceText) {
+  if (graceText === "0") return "CONFIRM ROTATE: OLD KEY AND OPEN SESSIONS END NOW";
+  return `CONFIRM ROTATE: OLD KEY ENDS IN ${graceText === "" ? "THE DEFAULT" : graceText} HOURS`;
+}
+
 /** 빈 문자열은 null */
 function textOrNull(value) {
   const text = String(value ?? "").trim();
@@ -173,7 +191,7 @@ export function renderKeyLifecycleCard(key, rerender) {
   restrict.id = "key-lifecycle-restrict-addresses";
   restrict.className = "accent-primary";
   restrict.checked = Array.isArray(key.allowed_cidrs);
-  const cidrs = input("key-lifecycle-cidrs", Array.isArray(key.allowed_cidrs) ? key.allowed_cidrs.join("\n") : "", "one CIDR per line, e.g. 10.0.0.0/8", "textarea");
+  const cidrs = input("key-lifecycle-cidrs", Array.isArray(key.allowed_cidrs) ? key.allowed_cidrs.join("\n") : "", "one CIDR per line, e.g. 192.0.2.0/24", "textarea");
   cidrs.rows     = 3;
   cidrs.disabled = !restrict.checked;
   restrict.addEventListener("change", () => { cidrs.disabled = !restrict.checked; });
@@ -185,7 +203,7 @@ export function renderKeyLifecycleCard(key, rerender) {
   card.appendChild(field("RESTRICT ADDRESSES", restrict));
   card.appendChild(cidrs);
   card.appendChild(statusLine("Unchecked allows every address. An empty list refuses every address. Up to "
-    + KEY_LIFECYCLE_LIMITS.cidrs + " IPv4 or IPv6 blocks; the client address is taken after the trusted proxy hops."));
+    + KEY_LIFECYCLE_LIMITS.cidrs + " IPv4 or IPv6 blocks. The client address is taken after TRUST_PROXY_HOPS; the server refuses a list while TRUST_PROXY_HOPS is unset."));
 
   const save = button("key-lifecycle-save", "SAVE LIFECYCLE", "btn-primary");
   save.addEventListener("click", async () => {
@@ -194,9 +212,13 @@ export function renderKeyLifecycleCard(key, rerender) {
       restrictAddresses: restrict.checked, cidrsText: cidrs.value
     });
     if (Object.keys(patch).length === 0) { showToast("No lifecycle changes", "warning"); return; }
+    if (typeof patch.expires_at === "string" && !EXPIRY_PATTERN.test(patch.expires_at)) {
+      showToast("EXPIRES AT must be ISO 8601 with Z or an offset, e.g. 2027-01-01T00:00:00Z", "warning");
+      return;
+    }
     const r = await api("/keys/" + key.id, { method: "PATCH", body: patch });
     if (r.ok) { showToast("Lifecycle updated", "success"); rerender(); }
-    else showToast(r.data?.error ?? "Update failed", "error");
+    else showToast(r.data?.message ?? r.data?.error ?? "Update failed", "error");
   });
   card.appendChild(save);
 
@@ -204,14 +226,25 @@ export function renderKeyLifecycleCard(key, rerender) {
   grace.type   = "number";
   grace.min    = "0";
   grace.max    = "720";
-  const rotate = button("key-lifecycle-rotate", "ROTATE KEY", null);
+  const ROTATE_LABEL = "ROTATE KEY";
+  const rotate = button("key-lifecycle-rotate", ROTATE_LABEL, null);
+  let confirmingRotate = false;
+  grace.addEventListener("input", () => { confirmingRotate = false; rotate.textContent = ROTATE_LABEL; });
   rotate.addEventListener("click", async () => {
     const raw  = String(grace.value ?? "").trim();
     const body = raw === "" ? {} : { graceHours: Number(raw) };
+    if (!confirmingRotate) {
+      confirmingRotate   = true;
+      rotate.textContent = rotateConfirmLabel(raw);
+      return;
+    }
+    confirmingRotate   = false;
+    rotate.textContent = ROTATE_LABEL;
     const r    = await api("/keys/" + key.id + "/rotate", { method: "POST", body });
-    if (!r.ok || !r.data?.raw_key) { showToast(r.data?.error ?? "Rotation failed", "error"); return; }
+    if (!r.ok || !r.data?.raw_key) { showToast(r.data?.message ?? r.data?.error ?? "Rotation failed", "error"); return; }
     const content = secretOnceDisplay(r.data.raw_key);
-    content.appendChild(statusLine(`The previous key stays valid until ${fmtDate(r.data.previous_valid_until)}.`));
+    content.appendChild(statusLine(ROTATE_NOTE.replace("{until}", fmtDate(r.data.previous_valid_until))));
+    if (r.data.warning) content.appendChild(statusLine("Closing the open sessions failed; they end at the next key state recheck.", "text-error"));
     showModal("Key Rotated", content, [
       { id: "done", label: "DONE", cls: "btn-primary", handler: () => { closeModal(); rerender(); } }
     ]);

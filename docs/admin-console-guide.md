@@ -121,8 +121,8 @@ PERMISSIONS의 REVIEW_OFF와 REVIEW_ALL은 검토 대기열 방식 표지다(`ME
   - SYMBOLIC HARD GATE -- `symbolic_hard_gate`. 켜면 PolicyRules 위반 또는 고신뢰 민감 정보 탐지(`sensitive.*`) 파편의 `remember`가 거부된다(`-32003`).
   - hard gate와 workspace 허가 변경은 이 프로세스의 조회 캐시를 비우지만, 변경 시점에 이미 진행 중이던 조회가 이전 값을 캐시에 쓸 수 있다. 그 항목은 TTL 30초 안에 만료되므로 늦어도 약 30초 안에 적용된다. 다른 인스턴스도 같다.
 - LIFECYCLE -- 키 수명 카드. 변경은 모두 감사 이벤트로 남는다(`admin.key.lifecycle_update`, `admin.key.rotate`, `admin.key.revoke`, `admin.key.access_review`).
-  - EXPIRES AT, OWNER, KIND, DESCRIPTION, RESTRICT ADDRESSES -- SAVE LIFECYCLE로 바뀐 필드만 `PATCH /v1/internal/model/nothing/keys/:id`에 보낸다. 만료 시각은 ISO 8601(UTC)이며 비우면 무기한이다. RESTRICT ADDRESSES를 켜고 한 줄에 하나씩 IPv4/IPv6 대역을 넣으면 그 대역 밖 주소의 인증과 세션 요청을 거부한다. 체크를 끄면 제한 없음, 체크하고 비우면 모든 주소 거부다.
-  - ROTATE KEY -- 새 원시 키를 만들어 한 번만 보여 준다. ROTATION OVERLAP(시간)을 비우면 `MEMENTO_KEY_ROTATION_GRACE_HOURS`(기본 24) 동안 이전 키도 인증된다.
+  - EXPIRES AT, OWNER, KIND, DESCRIPTION, RESTRICT ADDRESSES -- SAVE LIFECYCLE로 바뀐 필드만 `PATCH /v1/internal/model/nothing/keys/:id`에 보낸다. 만료 시각은 `Z` 또는 오프셋이 있는 ISO 8601(예: `2027-01-01T00:00:00Z`)이며 비우면 무기한이다. 다른 표기는 보내지 않는다. 허용 대역 목록은 `TRUST_PROXY_HOPS`가 설정된 서버에서만 저장된다. RESTRICT ADDRESSES를 켜고 한 줄에 하나씩 IPv4/IPv6 대역을 넣으면 그 대역 밖 주소의 인증과 세션 요청을 거부한다. 체크를 끄면 제한 없음, 체크하고 비우면 모든 주소 거부다.
+  - ROTATE KEY -- 두 번 눌러 확정한다. 새 원시 키를 만들어 한 번만 보여 준다. ROTATION OVERLAP(시간)을 비우면 `MEMENTO_KEY_ROTATION_GRACE_HOURS`(기본 24) 동안 이전 키도 새 요청을 인증한다. 겹침이 끝나면 그보다 먼저 만든 이 키의 세션과 OAuth 토큰은 다음 사용 때 끝나고 클라이언트는 새 키로 다시 인증한다. 0을 넣으면 이전 키와 열린 세션이 바로 끝난다.
   - REVOKE PERMANENTLY -- 사유를 넣고 두 번 눌러 키와 모든 비밀을 폐기한다. 되돌릴 수 없고, 폐기한 키는 다시 활성화할 수 없다. 그 키의 세션은 바로 닫힌다.
   - SIGN ACCESS REVIEW -- 접근 검토 시각과 행위자를 남긴다.
 - 소속 그룹 관리:
