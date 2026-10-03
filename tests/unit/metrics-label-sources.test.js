@@ -46,7 +46,9 @@ const LABEL_PARAMS = new Map([
   ["recordCoreTrustExcluded",       [0]],
   ["recordReviewFlag",              [0, 1]],
   ["recordReviewDecision",          [0]],
-  ["recordWorkspaceReadAuthz",      [0, 1, 2]]
+  ["recordWorkspaceReadAuthz",      [0, 1, 2]],
+  ["recordLexicalChannelSkipped",   [0]],
+  ["recordLexicalTokenizeSkipped",  [0]]
 ]);
 
 /** 기록 함수 안에서 protocolVersionLabel로 값을 닫는 함수 */
@@ -67,7 +69,8 @@ const METRIC_MODULES = new Set([
   "lib/memory/read/provenance-metrics.js",
   "lib/memory/read/read-authz-metrics.js",
   "lib/outbox/outbox-metrics.js",
-  "lib/hooks/hook-metrics.js"
+  "lib/hooks/hook-metrics.js",
+  "lib/memory/lexical-metrics.js"
 ]);
 
 /** 검토를 마친 비리터럴 라벨 식. 키는 "파일|함수|식", 값은 값이 닫힌 집합인 근거다. */
@@ -119,6 +122,8 @@ const REVIEWED = new Map([
   ["lib/symbolic/ClaimConflictDetector.js|recordWarning|severity",                "판정 심각도 상수"],
   ["lib/outbox/Outbox.js|inc|topicLabel(row.topic)",                              "topicLabel이 처리기가 등록된 topic 또는 other로 닫는다"],
   ["lib/outbox/OutboxWorker.js|inc|label",                                        "label은 topicLabel(event.topic)이고 처리기가 등록된 topic 또는 other다"],
+  ["lib/memory/read/LexicalSearch.js|recordLexicalChannelSkipped|reason",          "57014이면 timeout, 그 밖은 error인 두 값"],
+  ["lib/memory/write/ContentTokens.js|recordLexicalTokenizeSkipped|skip",          "LexicalTokens.SKIP_REASONS 상수(long_run)"],
   ["lib/outbox/OutboxWorker.js|observe|label",                                    "label은 topicLabel(event.topic)이고 처리기가 등록된 topic 또는 other다"]
 ]);
 

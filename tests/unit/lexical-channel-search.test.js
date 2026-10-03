@@ -5,10 +5,10 @@
  * 작성일: 2026-10-03
  *
  * 저장소와 색인을 대역으로 둔 FragmentSearch로 다음을 본다.
- *   1. text 질의에서 어휘 후보가 RRF에 합류하고 검색 경로에 Lexical:N이 남는다
- *   2. 응답 파편에는 _lexicalScore가 없고, 결과의 _lexicalScores가 id별 점수를 담는다
- *   3. 저장소가 어휘 검색을 제공하지 않으면 결과가 그대로다
- *   4. recall 최종 점수가 _lexicalScore를 lexical 가산에 쓰고, 예산 선택 on과 off가 같은 순서를 낸다
+ *   1. recall 진입점이 켠 text 질의에서만 어휘 후보가 RRF에 합류하고 검색 경로에 Lexical:N이 남는다
+ *   2. 응답 파편에는 _lexicalScore가 없다
+ *   3. 플래그가 없는 내부 검색이나 저장소가 어휘 검색을 제공하지 않으면 결과가 그대로다
+ *   4. recall 최종 점수는 _lexicalScore를 쓰지 않으며, 어휘 후보가 더해져도 기존 후보의 상대 순서는 그대로다
  */
 
 import { describe, it, afterEach, mock } from "node:test";
@@ -53,10 +53,12 @@ mock.module("../../lib/memory/read/Reranker.js", {
 });
 
 const { FragmentSearch }                       = await import("../../lib/memory/read/FragmentSearch.js");
+const { ConflictResolver } = await import("../../lib/memory/write/ConflictResolver.js");
 const { MemoryRecaller, computeRecallScore }   = await import("../../lib/memory/processors/MemoryRecaller.js");
 const { MEMORY_CONFIG }                        = await import("../../config/memory.js");
 
 const NOW = new Date().toISOString();
+const DAY = 86400000;
 
 function frag(overrides) {
   return {
@@ -96,14 +98,16 @@ function makeSearch({ l3Rows = [], lexicalRows = null, lexicalCalls = [] }) {
 }
 
 describe("text 질의의 RRF 합류", () => {
-  it("어휘 후보가 결과에 들어오고 검색 경로에 남는다", async () => {
+  it("recall 플래그가 있으면 어휘 후보가 결과에 들어오고 검색 경로에 남는다", async () => {
     const calls  = [];
     const search = makeSearch({
-      l3Rows     : [frag({ id: "sem", similarity: 0.7 })],
-      lexicalRows: [frag({ id: "lex", _lexicalScore: 1 }), frag({ id: "sem", _lexicalScore: 0.5 })],
+      l3Rows      : [frag({ id: "sem", similarity: 0.7 })],
+      lexicalRows : [frag({ id: "lex", _lexicalScore: 1 }), frag({ id: "sem", _lexicalScore: 0.5 })],
       lexicalCalls: calls
     });
-    const result = await search.search({ text: "운영 서버 재시작", agentId: "default", keyId: "k1", workspace: "ws", tokenBudget: 5000 });
+    const result = await search.search({
+      text: "운영 서버 재시작", agentId: "default", keyId: "k1", workspace: "ws", tokenBudget: 5000, lexicalChannel: true
+    });
 
     const ids = result.fragments.map(f => f.id);
     assert.ok(ids.includes("lex"));
@@ -113,22 +117,28 @@ describe("text 질의의 RRF 합류", () => {
     assert.equal(calls[0].sq.keyId, "k1");
     assert.equal(calls[0].sq.workspace, "ws");
     assert.ok(result.fragments.every(f => !("_lexicalScore" in f)));
-    assert.equal(result._lexicalScores.get("lex"), 1);
-    assert.equal(result._lexicalScores.get("sem"), 0.5);
+    assert.equal(result._lexicalScores, undefined);
+  });
+
+  it("플래그가 없는 검색(충돌 탐지 등 내부 호출)은 어휘 검색을 부르지 않는다", async () => {
+    const calls  = [];
+    const search = makeSearch({ l3Rows: [frag({ id: "sem", similarity: 0.7 })], lexicalRows: [frag({ id: "lex" })], lexicalCalls: calls });
+    const result = await search.search({ text: "운영 서버 재시작 절차 본문 전체", topic: "ops", agentId: "default", tokenBudget: 500 });
+    assert.equal(calls.length, 0);
+    assert.doesNotMatch(result.searchPath, /Lexical/);
   });
 
   it("저장소가 어휘 검색을 제공하지 않으면 경로와 결과가 그대로다", async () => {
     const search = makeSearch({ l3Rows: [frag({ id: "sem", similarity: 0.7 })] });
-    const result = await search.search({ text: "운영 서버", agentId: "default", tokenBudget: 5000 });
+    const result = await search.search({ text: "운영 서버", agentId: "default", tokenBudget: 5000, lexicalChannel: true });
     assert.deepEqual(result.fragments.map(f => f.id), ["sem"]);
     assert.doesNotMatch(result.searchPath, /Lexical/);
-    assert.equal(result._lexicalScores.size, 0);
   });
 
-  it("예산 선택용 후보에도 어휘 후보와 점수가 남는다", async () => {
+  it("예산 선택용 후보에도 어휘 후보가 들어온다", async () => {
     const search = makeSearch({ lexicalRows: [frag({ id: "lex", _lexicalScore: 0.8 })] });
-    const { candidates } = await search.searchCandidates({ text: "서버", agentId: "default", tokenBudget: 5000 });
-    assert.equal(candidates.find(f => f.id === "lex")._lexicalScore, 0.8);
+    const { candidates } = await search.searchCandidates({ text: "서버", agentId: "default", tokenBudget: 5000, lexicalChannel: true });
+    assert.ok(candidates.some(f => f.id === "lex"));
   });
 });
 
@@ -141,39 +151,26 @@ describe("질의 프로파일의 어휘 계층 가중", () => {
   });
 });
 
-describe("recall 최종 점수", () => {
-  const ctx = {
-    lexicalQuery: { keywords: undefined, topic: undefined, _implicitKeywords: [] },
-    anchorTime  : Date.parse(NOW),
-    config      : MEMORY_CONFIG,
-    workspace   : null
-  };
-
-  it("_lexicalScore가 lexical 가산에 들어간다", () => {
-    const base = frag({ id: "a" });
-    const with1 = computeRecallScore({ ...base, _lexicalScore: 1 }, ctx);
-    const none  = computeRecallScore(base, ctx);
-    assert.ok(Math.abs(with1 - none - MEMORY_CONFIG.ranking.lexicalWeightFallback) < 1e-9);
-  });
-
-  it("keywords 일치 점수가 더 크면 그 값을 쓴다", () => {
-    const kwCtx = { ...ctx, lexicalQuery: { keywords: ["c"], topic: "t", _implicitKeywords: [] } };
-    const base  = frag({ id: "a" });
-    assert.equal(computeRecallScore({ ...base, _lexicalScore: 0.01 }, kwCtx), computeRecallScore(base, kwCtx));
-  });
-});
-
-describe("recall 순서와 예산 선택 스위치", () => {
+describe("recall 최종 점수와 순서", () => {
   afterEach(() => { delete process.env.MEMENTO_RANK_BEFORE_BUDGET; });
 
-  function recallerWith(combined) {
+  it("최종 점수는 _lexicalScore를 쓰지 않는다", () => {
+    const ctx  = { lexicalQuery: { keywords: ["k"], topic: undefined, _implicitKeywords: [] }, anchorTime: Date.parse(NOW), config: MEMORY_CONFIG, workspace: null };
+    const base = frag({ id: "a" });
+    assert.equal(computeRecallScore({ ...base, _lexicalScore: 1 }, ctx), computeRecallScore(base, ctx));
+  });
+
+  function recallerWith(combined, seen = []) {
     const search = new FragmentSearch();
-    search._executeSearch = async () => ({
-      combined    : combined.map(f => ({ ...f })),
-      searchPath  : ["Lexical:3", "RRF"],
-      l1IsFallback: false,
-      layerLatency: { l1Ms: 0, l2Ms: 0, l3Ms: 0, graphUsed: false }
-    });
+    search._executeSearch = async (sq) => {
+      seen.push(sq);
+      return {
+        combined    : combined.map(f => ({ ...f })),
+        searchPath  : ["L2:3", "RRF"],
+        l1IsFallback: false,
+        layerLatency: { l1Ms: 0, l2Ms: 0, l3Ms: 0, graphUsed: false }
+      };
+    };
     search.store = { incrementAccess: () => {}, touchLinked: async () => {} };
     search._cacheFragments = async () => {};
     return new MemoryRecaller({
@@ -184,19 +181,41 @@ describe("recall 순서와 예산 선택 스위치", () => {
     });
   }
 
-  const combined = [
-    frag({ id: "low",  _lexicalScore: 0.1, _rrfScore: 0.03 }),
-    frag({ id: "high", _lexicalScore: 1,   _rrfScore: 0.02 }),
-    frag({ id: "mid",  _lexicalScore: 0.5, _rrfScore: 0.01 })
+  const existing = [
+    frag({ id: "kw-1", keywords: ["배포"], importance: 0.6, created_at: new Date(Date.parse(NOW) - 2 * DAY).toISOString(), _rrfScore: 0.03 }),
+    frag({ id: "kw-2", keywords: ["배포"], importance: 0.4, created_at: NOW, _rrfScore: 0.02 }),
+    frag({ id: "kw-3", keywords: ["기타"], importance: 0.9, created_at: new Date(Date.parse(NOW) - 30 * DAY).toISOString(), _rrfScore: 0.01 })
+  ];
+  const added = [
+    frag({ id: "lex-1", keywords: [], importance: 0.7, _lexicalScore: 1, _rrfScore: 0.016 }),
+    frag({ id: "lex-2", keywords: [], importance: 0.2, _lexicalScore: 0.3, _rrfScore: 0.015 })
   ];
 
   for (const mode of ["on", "off"]) {
-    it(`${mode}: 다른 신호가 같으면 어휘 점수 순서로 돌려주고 내부 점수는 응답에 없다`, async () => {
+    it(`${mode}: 어휘 후보가 더해져도 기존 후보의 상대 순서와 점수는 그대로다`, async () => {
       process.env.MEMENTO_RANK_BEFORE_BUDGET = mode;
-      const result = await recallerWith(combined).recall({ text: "서버", tokenBudget: 5000, includeLinks: false, excludeSeen: false });
-      assert.deepEqual(result.fragments.map(f => f.id), ["high", "mid", "low"]);
-      assert.ok(result.fragments.every(f => !("_lexicalScore" in f)));
-      assert.equal(result._lexicalScores, undefined);
+      const params  = { text: "배포 절차", keywords: ["배포"], tokenBudget: 5000, includeLinks: false, excludeSeen: false };
+      const without = (await recallerWith(existing).recall({ ...params })).fragments.map(f => f.id);
+      const withLex = (await recallerWith([...existing, ...added]).recall({ ...params })).fragments.map(f => f.id);
+      assert.deepEqual(withLex.filter(id => !id.startsWith("lex-")), without);
+      assert.ok(withLex.includes("lex-1"));
     });
   }
+
+  it("recall은 검색 질의에 어휘 채널 플래그를 켠다", async () => {
+    const seen = [];
+    await recallerWith(existing, seen).recall({ text: "배포", tokenBudget: 5000, includeLinks: false, excludeSeen: false });
+    assert.equal(seen[0].lexicalChannel, true);
+  });
+});
+
+describe("저장 경로의 충돌 탐지(임베딩 켜짐)", () => {
+  it("detectConflicts는 본문을 질의로 검색하지만 어휘 검색을 부르지 않는다", async () => {
+    const calls  = [];
+    const search = makeSearch({ lexicalRows: [frag({ id: "lex" })], lexicalCalls: calls });
+    if (!search.store.searchByLexical) search.store.searchByLexical = async () => { calls.push(1); return []; };
+    const resolver = new ConflictResolver({}, search);
+    await resolver.detectConflicts("운영 서버 재시작 절차는 색인 점검 뒤에 진행한다 ".repeat(20), "ops", "new-id", "default", "k1", null);
+    assert.equal(calls.length, 0);
+  });
 });

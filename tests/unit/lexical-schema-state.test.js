@@ -21,7 +21,7 @@ mock.module("../../lib/logger.js", {
 });
 
 const {
-  evaluateLexicalSchema, lexicalParticipation, loadLexicalSchema, resetLexicalSchema, warnLexicalOnce,
+  evaluateLexicalSchema, lexicalParticipation, loadLexicalSchema, resetLexicalSchema, warnLexicalOnce, peekLexicalSchema,
   LEXICAL_SCHEMA_TTL_MS, LEXICAL_SCHEMA_SQL, LEXICAL_REASONS
 } = await import("../../lib/memory/LexicalSchema.js");
 
@@ -59,7 +59,7 @@ describe("lexicalParticipation", () => {
     [{ column: false, index: "absent" },  false, LEXICAL_REASONS.COLUMN_MISSING],
     [{ column: false, index: "valid" },   false, LEXICAL_REASONS.COLUMN_MISSING],
     [{ column: true,  index: "invalid" }, false, LEXICAL_REASONS.INDEX_INVALID],
-    [{ column: true,  index: "absent" },  true,  LEXICAL_REASONS.INDEX_ABSENT],
+    [{ column: true,  index: "absent" },  false, LEXICAL_REASONS.INDEX_ABSENT],
     [{ column: true,  index: "valid" },   true,  LEXICAL_REASONS.READY]
   ];
   for (const [schema, participates, reason] of table) {
@@ -128,5 +128,14 @@ describe("warnLexicalOnce", () => {
   it("준비 상태는 경고하지 않는다", () => {
     warnLexicalOnce(LEXICAL_REASONS.READY);
     assert.equal(warnings.length, 0);
+  });
+});
+
+describe("peekLexicalSchema", () => {
+  it("기억한 상태가 간격 안이면 돌려주고 아니면 null이며 질의하지 않는다", async () => {
+    assert.equal(peekLexicalSchema(1), null);
+    await loadLexicalSchema(async () => ({ rows: [{ column_present: true, indexes: [] }] }), 100);
+    assert.equal(peekLexicalSchema(100 + LEXICAL_SCHEMA_TTL_MS - 1).column, true);
+    assert.equal(peekLexicalSchema(100 + LEXICAL_SCHEMA_TTL_MS), null);
   });
 });

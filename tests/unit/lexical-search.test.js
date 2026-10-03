@@ -7,8 +7,8 @@
  * 질의 함수와 카탈로그 조회를 대역으로 바꿔 다음을 본다.
  *   1. buildLexicalSearchSql: tsquery와 범위 값은 모두 바인딩 값이고, 키, workspace, agent, 필터 조건이 붙는다
  *   2. attachLexicalScores: ts_rank_cd를 그 검색의 최고값 대비 0~1로 바꾸고 원시 열을 지운다
- *   3. LexicalSearch.search: 스위치, 열 없음, 색인 무효, 색인 없음, 빈 질의, 조회 오류
- *   4. RRF와 대체 경로 병합 도우미, 점수 전달
+ *   3. LexicalSearch.search: 스위치, 열 없음, 색인 무효, 색인 없음, 빈 질의, 조회 오류와 시간 상한
+ *   4. recall 진입점 플래그, RRF 계층과 대체 경로 병합 도우미
  */
 
 import { describe, it, beforeEach, afterEach, mock } from "node:test";
@@ -25,9 +25,15 @@ mock.module("../../lib/logger.js", {
 });
 
 const {
-  buildLexicalSearchSql, attachLexicalScores, LexicalSearch, LEXICAL_CANDIDATE_LIMIT,
-  searchLexicalCandidates, lexicalLayer, appendLexicalCandidates, collectLexicalScores, restoreLexicalScores
+  buildLexicalSearchSql, attachLexicalScores, LexicalSearch, LEXICAL_CANDIDATE_LIMIT, LEXICAL_MATCH_CAP,
+  searchLexicalCandidates, lexicalLayer, appendLexicalCandidates
 } = await import("../../lib/memory/read/LexicalSearch.js");
+const { lexicalChannelSkippedTotal } = await import("../../lib/memory/lexical-metrics.js");
+
+async function skipped(reason) {
+  const { values } = await lexicalChannelSkippedTotal.get();
+  return values.find(v => v.labels.reason === reason)?.value ?? 0;
+}
 const { resetLexicalSchema } = await import("../../lib/memory/LexicalSchema.js");
 const { mergeRRF }           = await import("../../lib/memory/read/RankFusion.js");
 
@@ -35,23 +41,29 @@ beforeEach(() => {
   resetLexicalSchema();
   warnings.length = 0;
   delete process.env.MEMENTO_LEXICAL_CHANNEL;
+  delete process.env.MEMENTO_LEXICAL_TIMEOUT_MS;
 });
 
 afterEach(() => {
   delete process.env.MEMENTO_LEXICAL_CHANNEL;
+  delete process.env.MEMENTO_LEXICAL_TIMEOUT_MS;
 });
 
 describe("buildLexicalSearchSql", () => {
-  it("tsquery는 첫 바인딩 값이고 일치, 순위, 상한이 붙는다", () => {
+  it("tsquery는 첫 바인딩 값이고 일치 집합을 상한까지 읽은 뒤 그 안에서 순위를 매긴다", () => {
     const { sql, params } = buildLexicalSearchSql("'배포' | 'x''y'", { agentId: "agent-1" });
     assert.equal(params[0], "'배포' | 'x''y'");
     assert.equal(params[1], "agent-1");
     assert.match(sql, /f\.content_tokens @@ to_tsquery\('simple', \$1\)/);
-    assert.match(sql, /ts_rank_cd\(f\.content_tokens, to_tsquery\('simple', \$1\)\) AS lexical_rank/);
-    assert.match(sql, /ORDER BY lexical_rank DESC, f\.created_at DESC, f\.id ASC/);
+    assert.match(sql, /ts_rank_cd\(m\.content_tokens, to_tsquery\('simple', \$1\)\) AS lexical_rank/);
+    assert.match(sql, new RegExp(`LIMIT \\$${params.length - 1}\\) m`));
+    assert.equal(params.at(-2), LEXICAL_MATCH_CAP);
+    assert.match(sql, /ORDER BY lexical_rank DESC, m\.created_at DESC, m\.id ASC/);
     assert.equal(params.at(-1), LEXICAL_CANDIDATE_LIMIT);
     assert.match(sql, new RegExp(`LIMIT \\$${params.length}$`));
     assert.doesNotMatch(sql, /배포/);
+    const inner = sql.slice(sql.indexOf("(SELECT"), sql.indexOf(") m"));
+    assert.doesNotMatch(inner, /ORDER BY|ts_rank/);
   });
 
   it("agent 범위와 superseded 제외가 기본으로 붙는다", () => {
@@ -131,9 +143,9 @@ function stubDb({ column = true, indexes = [{ name: "idx_fragments_content_token
     calls.schema++;
     return { rows: [{ column_present: column, indexes }] };
   };
-  const query = async (agentId, sql, params) => {
+  const query = async (agentId, sql, params, opts) => {
     if (fail) throw fail;
-    calls.search.push({ agentId, sql, params });
+    calls.search.push({ agentId, sql, params, opts });
     return { rows: rows.map(r => ({ ...r })) };
   };
   return { search: new LexicalSearch({ run, query }), calls };
@@ -174,12 +186,28 @@ describe("LexicalSearch.search", () => {
     assert.equal(warnings.length, 1);
   });
 
-  it("색인이 없으면 경고를 한 번 남기고 검색한다", async () => {
+  it("색인이 없으면 참여하지 않고 경고를 한 번 남긴다", async () => {
     const { search, calls } = stubDb({ indexes: [], rows: ROWS });
-    assert.equal((await search.search("서버", {})).length, 2);
-    await search.search("서버", {});
-    assert.equal(calls.search.length, 2);
+    assert.deepEqual(await search.search("서버", {}), []);
+    assert.deepEqual(await search.search("서버", {}), []);
+    assert.equal(calls.search.length, 0);
     assert.equal(warnings.length, 1);
+  });
+
+  it("질의 시간 상한을 질의 옵션으로 넘기고 환경 변수로 바꾼다", async () => {
+    const { search, calls } = stubDb({ rows: ROWS });
+    await search.search("서버", {});
+    assert.equal(calls.search[0].opts.statementTimeoutMs, 120);
+    process.env.MEMENTO_LEXICAL_TIMEOUT_MS = "45";
+    await search.search("서버", {});
+    assert.equal(calls.search[1].opts.statementTimeoutMs, 45);
+  });
+
+  it("시간 상한을 넘으면 그 검색에서 빼고 timeout으로 센다", async () => {
+    const before = await skipped("timeout");
+    const { search } = stubDb({ fail: Object.assign(new Error("canceling statement due to statement timeout"), { code: "57014" }) });
+    assert.deepEqual(await search.search("서버", {}), []);
+    assert.equal(await skipped("timeout"), before + 1);
   });
 
   it("쓸 토큰이 없는 질의는 조회하지 않는다", async () => {
@@ -189,28 +217,32 @@ describe("LexicalSearch.search", () => {
     assert.equal(calls.search.length, 0);
   });
 
-  it("조회 오류는 경고로 남기고 빈 결과를 돌려준다", async () => {
-    const { search } = stubDb({ fail: Object.assign(new Error("canceling statement"), { code: "57014" }) });
+  it("조회 오류는 경고로 남기고 빈 결과를 돌려주며 error로 센다", async () => {
+    const before = await skipped("error");
+    const { search } = stubDb({ fail: Object.assign(new Error("connection reset"), { code: "08006" }) });
     assert.deepEqual(await search.search("서버", {}), []);
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0], /57014|canceling/);
+    assert.match(warnings[0], /08006/);
+    assert.equal(await skipped("error"), before + 1);
   });
 });
 
 describe("검색 계층 연결 도우미", () => {
-  it("searchLexicalCandidates: text가 없거나 저장소에 메서드가 없으면 빈 배열", async () => {
-    assert.deepEqual(await searchLexicalCandidates({}, { text: "서버" }), []);
-    let called = false;
-    const store = { searchByLexical: async () => { called = true; return [{ id: "a" }]; } };
-    assert.deepEqual(await searchLexicalCandidates(store, { text: "" }), []);
-    assert.equal(called, false);
-    assert.deepEqual(await searchLexicalCandidates(store, { text: "서버", agentId: "x" }), [{ id: "a" }]);
+  it("searchLexicalCandidates: 플래그나 text가 없거나 저장소에 메서드가 없으면 빈 배열", async () => {
+    assert.deepEqual(await searchLexicalCandidates({}, { text: "서버", lexicalChannel: true }), []);
+    let called = 0;
+    const store = { searchByLexical: async () => { called++; return [{ id: "a" }]; } };
+    assert.deepEqual(await searchLexicalCandidates(store, { text: "", lexicalChannel: true }), []);
+    assert.deepEqual(await searchLexicalCandidates(store, { text: "서버" }), []);
+    assert.deepEqual(await searchLexicalCandidates(store, { text: "서버", lexicalChannel: "true" }), []);
+    assert.equal(called, 0);
+    assert.deepEqual(await searchLexicalCandidates(store, { text: "서버", agentId: "x", lexicalChannel: true }), [{ id: "a" }]);
   });
 
   it("searchLexicalCandidates: 저장소에 질의 text와 정규화된 질의를 넘긴다", async () => {
     const seen = [];
     const store = { searchByLexical: async (text, opts) => { seen.push({ text, opts }); return []; } };
-    const sq    = { text: "서버", keyId: "k1", workspace: "ws" };
+    const sq    = { text: "서버", keyId: "k1", workspace: "ws", lexicalChannel: true };
     await searchLexicalCandidates(store, sq);
     assert.equal(seen[0].text, "서버");
     assert.equal(seen[0].opts, sq);
@@ -226,33 +258,23 @@ describe("검색 계층 연결 도우미", () => {
     assert.deepEqual(none, []);
   });
 
-  it("mergeRRF는 어휘 점수를 다른 계층에서 먼저 온 객체로 옮긴다", () => {
+  it("mergeRRF: 다른 계층에 있는 후보는 그 객체를 그대로 두고 RRF 점수만 더한다", () => {
     const merged = mergeRRF([
       { name: "l3",      results: [{ id: "a", content: "x", similarity: 0.8 }], weightFactor: 1 },
       { name: "lexical", results: [{ id: "a", content: "x", _lexicalScore: 0.6 }, { id: "b", content: "y", _lexicalScore: 1 }], weightFactor: 1 }
     ]);
     const a = merged.find(f => f.id === "a");
     assert.equal(a.similarity, 0.8);
-    assert.equal(a._lexicalScore, 0.6);
+    assert.equal("_lexicalScore" in a, false);
     assert.equal(merged.find(f => f.id === "b")._lexicalScore, 1);
   });
 
-  it("appendLexicalCandidates: 없는 후보는 뒤에 더하고 있는 후보에는 점수를 옮긴다", () => {
+  it("appendLexicalCandidates: 없는 후보만 뒤에 더하고 있는 후보는 건드리지 않는다", () => {
     const combined = [{ id: "l2", content: "x" }];
     const path     = [];
     appendLexicalCandidates(combined, [{ id: "l2", content: "x", _lexicalScore: 0.5 }, { id: "lex", content: "y", _lexicalScore: 1 }], path);
     assert.deepEqual(combined.map(f => f.id), ["l2", "lex"]);
-    assert.equal(combined[0]._lexicalScore, 0.5);
+    assert.deepEqual(combined[0], { id: "l2", content: "x" });
     assert.deepEqual(path, ["Lexical:2"]);
-  });
-
-  it("collectLexicalScores와 restoreLexicalScores는 id로 점수를 옮긴다", () => {
-    const scores = collectLexicalScores([{ id: "a", _lexicalScore: 0.7 }, { id: "b" }]);
-    assert.deepEqual([...scores], [["a", 0.7]]);
-    const fragments = [{ id: "a" }, { id: "b" }];
-    restoreLexicalScores(fragments, scores);
-    assert.equal(fragments[0]._lexicalScore, 0.7);
-    assert.equal("_lexicalScore" in fragments[1], false);
-    restoreLexicalScores(fragments, undefined);
   });
 });
