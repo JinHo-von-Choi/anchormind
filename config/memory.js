@@ -98,7 +98,7 @@ export const MEMORY_CONFIG = {
   /**
    * 질의 의도별 검색 프로파일.
    *
-   * classifyQueryIntent가 판정한 의도에 따라 RRF 레이어 가중, 시맨틱 임계값,
+   * classifyQueryIntent가 판정한 의도에 따라 RRF 레이어 가중(l2, l3, 본문 어휘 lexical), 시맨틱 임계값,
    * 형태소 프로브 채택 조건, 랭킹 lexical 가중치를 한 번에 전환한다.
    * ranking의 importanceWeight/recencyWeight/semanticWeight는 합계 1.0 제약이
    * 걸려 있어 프로파일 조정 대상이 아니다.
@@ -110,6 +110,7 @@ export const MEMORY_CONFIG = {
     EXACT_SYMBOL: {
       l2WeightFactor           : 1.6,
       l3WeightFactor           : 0.9,
+      lexicalWeightFactor      : 1.4,
       minSimilarityDelta       : 0.0,
       morphemeFallbackThreshold: 5,
       exactKeywordBoost        : 0.45,
@@ -122,6 +123,7 @@ export const MEMORY_CONFIG = {
     CONCEPT_INTENT: {
       l2WeightFactor           : 0.9,
       l3WeightFactor           : 1.5,
+      lexicalWeightFactor      : 0.8,
       minSimilarityDelta       : -0.20,
       morphemeFallbackThreshold: 12,
       exactKeywordBoost        : 0.25,
@@ -132,6 +134,7 @@ export const MEMORY_CONFIG = {
     HYBRID: {
       l2WeightFactor           : 1.0,
       l3WeightFactor           : 1.1,
+      lexicalWeightFactor      : 1.0,
       minSimilarityDelta       : -0.06,
       morphemeFallbackThreshold: 8,
     },
