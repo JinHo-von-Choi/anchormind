@@ -53,7 +53,7 @@ describe("remember skipConflictDetection (비원자 경로)", () => {
   test("옵션 없으면 detectConflicts 정상 호출 (기존 동작 보존)", async () => {
     const calls = { detect: 0, autoLink: 0 };
     const r = makeRememberer(calls);
-    await r.remember({ content: "일반 파편", type: "fact", topic: "t" });
+    await r.remember({ content: "일반 파편 하나 기록", type: "fact", topic: "t" });
     assert.equal(calls.detect, 1);
   });
 });

@@ -148,7 +148,7 @@ describe("Atomic Remember + Policy Gate", () => {
 
   it("atomic + hard gate true + 정상 fragment → _rememberAtomic 정상 호출", async () => {
     const mm     = await makeManager({ symbolicHardGate: true });
-    const result = await mm.remember({ content: "ok fact", type: "fact", _keyId: "key-atomic-003" });
+    const result = await mm.remember({ content: "ok fact recorded here", type: "fact", _keyId: "key-atomic-003" });
 
     assert.strictEqual(result.id, "atomic-fragment-id");
     const state = mm._getAtomicState();

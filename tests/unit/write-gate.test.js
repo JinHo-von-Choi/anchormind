@@ -74,7 +74,7 @@ describe("sensitiveStep", () => {
     ["API 키",   `키 sk-${"a".repeat(40)} 를 쓴다`,           "[REDACTED_API_KEY]"]
   ];
   for (const [label, content, marker] of table) {
-    it(`${label}을 표식으로 바꾼다`, () => {
+    it(`${label} 원문을 표식으로 바꾼다`, () => {
       const next = sensitiveStep(stateOf({ fields: { content } }));
       assert.ok(next.fields.content.includes(marker), next.fields.content);
     });

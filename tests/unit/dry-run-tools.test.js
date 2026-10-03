@@ -76,7 +76,7 @@ describe("dryRun: remember", () => {
     const rememberer = new MemoryRememberer(deps);
 
     const result = await rememberer.remember({
-      content   : "테스트 내용",
+      content   : "테스트 내용 기록 하나",
       topic     : "test",
       type      : "fact",
       dryRun    : true,

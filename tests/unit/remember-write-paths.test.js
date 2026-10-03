@@ -336,7 +336,7 @@ describe("validation_warnings soft gate", async () => {
     const r = new MemoryRememberer(deps);
 
     const result = await r.remember({
-      content: "짧음",
+      content: "짧은 본문 하나 기록",
       topic  : "test",
       type   : "fact",
       _keyId : "key-soft"
