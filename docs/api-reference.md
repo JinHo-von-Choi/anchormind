@@ -198,6 +198,39 @@ Content-Type: application/json
 
 각 항목은 `name`, `title`, `annotations`, `description`, `inputSchema`를 담는다. `annotations`는 MCP 표준 힌트(`readOnlyHint`, `idempotentHint`, `destructiveHint`, `openWorldHint`)다. 서버 내부 레지스트리(`lib/tool-registry.js`)는 도구별 `riskLevel`(`safe`, `caution`, `destructive`)과 `requiresMaster`를 따로 관리하며 이 값은 tools/list 응답에 실리지 않는다.
 
+도구는 `recall`, `context`, `remember` 순으로 앞에 오고 나머지는 이름 오름차순이다. 세션이나 키가 달라도 노출되는 도구의 상대 순서는 같다. 모든 도구가 네 힌트를 boolean으로 선언한다.
+
+| 도구 | title | readOnlyHint | destructiveHint | idempotentHint | openWorldHint |
+|-|-|-|-|-|-|
+| `recall` | Recall: 저장 기억 회상(검색) | Y | N | Y | N |
+| `context` | Context: 세션 시작 기억 주입 | Y | N | Y | N |
+| `remember` | Remember: 기억 저장 | N | N | N | N |
+| `amend` | Amend: 기억 갱신 | N | N | N | N |
+| `apply_update` | Apply Update: 업데이트 적용 | N | Y | N | Y |
+| `batch_remember` | Batch Remember: 대량 기억 저장 | N | N | N | N |
+| `batch_status` | Batch Status: 일괄 저장 상태 조회 | Y | N | Y | N |
+| `check_update` | Check Update: 업데이트 확인 | Y | N | Y | Y |
+| `forget` | Forget: 기억 삭제 | N | Y | Y | N |
+| `fragment_history` | Fragment History: 파편 변경 이력 조회 | Y | N | Y | N |
+| `get_skill_guide` | Get Skill Guide: 활용 가이드 조회 | Y | N | Y | N |
+| `graph_explore` | Graph Explore: 인과 체인 추적 | Y | N | Y | N |
+| `link` | Link: 파편 관계 설정 | N | N | Y | N |
+| `memory_consolidate` | Memory Consolidate: 기억 유지보수 | N | Y | N | N |
+| `memory_stats` | Memory Stats: 기억 통계 조회 | Y | N | Y | N |
+| `reconstruct_history` | Reconstruct History: 작업 히스토리 재구성 | Y | N | Y | N |
+| `reflect` | Reflect: 세션 학습 영속화 | N | N | N | N |
+| `search_traces` | Search Traces: 정확 매칭 탐색 | Y | N | Y | N |
+| `session_rotate` | Session Rotate: 세션 교체 | N | N | N | N |
+| `tool_feedback` | Tool Feedback: 도구 유용성 피드백 | N | N | N | N |
+
+- `readOnlyHint`가 `Y`인 도구는 저장된 기억의 내용을 바꾸지 않는다. `recall`은 접근 횟수와 검색 이벤트 기록을 남기고 `check_update`는 로컬 확인 결과 캐시를 갱신한다. 이 기록은 도구가 돌려주는 기억 내용에 속하지 않는다.
+- `destructiveHint`가 `Y`인 도구는 `forget`(파편 삭제), `memory_consolidate`(만료 삭제와 병합), `apply_update`(설치본 갱신)다.
+- `openWorldHint`는 서버 밖 시스템에 접근하는 도구(`check_update`, `apply_update`)만 `Y`다.
+
+### ping
+
+`ping` 요청은 인증된 세션에서 빈 객체 `{}`를 결과로 돌려준다. 알림으로 보내면 응답 없이 수락된다.
+
 ### 도구 인자 점검과 오류 응답
 
 `tools/call`의 인자는 해당 도구의 `inputSchema`와 대조된다. 점검은 최상위 필드와 배열 항목에 대해 타입, `enum`, 범위, `maxLength`, `maxItems`, `pattern`, `oneOf`, 필수 필드, 스키마에 없는 필드를 본다. `MEMENTO_TOOL_ARGS_VALIDATION`(`off`, `warn`, `enforce`, 기본 `warn`)이 동작을 정한다. `warn`은 경고 로그만 남기고 호출을 진행하며, `enforce`는 위반 시 JSON-RPC `-32602`와 `Invalid arguments for <tool>: <사유>` 메시지로 거절한다. `MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN=true`이면 스키마에 없는 필드를 위반으로 보지 않는다.

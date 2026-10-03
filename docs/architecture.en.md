@@ -487,7 +487,7 @@ The store for all fragments. This is the core table of the system.
 | verified_at | TIMESTAMPTZ | DEFAULT NOW() | Last quality verification timestamp |
 | embedding | vector(1536) | | OpenAI text-embedding-3-small vector. L2-normalized (unit vector) before storage |
 | is_anchor | BOOLEAN | DEFAULT FALSE | When true, exempt from decay, TTL demotion, and expiration deletion |
-| valid_from | TIMESTAMPTZ | DEFAULT NOW() | Temporal validity start. Lower bound for `asOf` queries |
+| valid_from | TIMESTAMPTZ | DEFAULT NOW() | Temporal validity start |
 | valid_to | TIMESTAMPTZ | | Temporal validity end. NULL means currently valid |
 | last_decay_at | TIMESTAMPTZ | | Last decay application timestamp. When NULL, falls back to accessed_at/created_at |
 | key_id | TEXT | FK -> api_keys.id, ON DELETE SET NULL | API key-based memory isolation. NULL means stored via master key (MEMENTO_ACCESS_KEY). When set, only that API key can query the fragment |

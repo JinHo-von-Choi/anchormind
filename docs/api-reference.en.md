@@ -194,6 +194,39 @@ Policy:
 
 Each entry carries `name`, `title`, `annotations`, `description`, and `inputSchema`. `annotations` holds the MCP standard hints (`readOnlyHint`, `idempotentHint`, `destructiveHint`, `openWorldHint`). The server-side registry (`lib/tool-registry.js`) keeps per-tool `riskLevel` (`safe`, `caution`, `destructive`) and `requiresMaster`; these are not sent in tools/list.
 
+Tools appear in the order `recall`, `context`, `remember`, followed by the rest in ascending name order. The relative order of the exposed tools is the same for every session and key. Every tool declares all four hints as booleans.
+
+| Tool | title | readOnlyHint | destructiveHint | idempotentHint | openWorldHint |
+|-|-|-|-|-|-|
+| `recall` | Recall: 저장 기억 회상(검색) | Y | N | Y | N |
+| `context` | Context: 세션 시작 기억 주입 | Y | N | Y | N |
+| `remember` | Remember: 기억 저장 | N | N | N | N |
+| `amend` | Amend: 기억 갱신 | N | N | N | N |
+| `apply_update` | Apply Update: 업데이트 적용 | N | Y | N | Y |
+| `batch_remember` | Batch Remember: 대량 기억 저장 | N | N | N | N |
+| `batch_status` | Batch Status: 일괄 저장 상태 조회 | Y | N | Y | N |
+| `check_update` | Check Update: 업데이트 확인 | Y | N | Y | Y |
+| `forget` | Forget: 기억 삭제 | N | Y | Y | N |
+| `fragment_history` | Fragment History: 파편 변경 이력 조회 | Y | N | Y | N |
+| `get_skill_guide` | Get Skill Guide: 활용 가이드 조회 | Y | N | Y | N |
+| `graph_explore` | Graph Explore: 인과 체인 추적 | Y | N | Y | N |
+| `link` | Link: 파편 관계 설정 | N | N | Y | N |
+| `memory_consolidate` | Memory Consolidate: 기억 유지보수 | N | Y | N | N |
+| `memory_stats` | Memory Stats: 기억 통계 조회 | Y | N | Y | N |
+| `reconstruct_history` | Reconstruct History: 작업 히스토리 재구성 | Y | N | Y | N |
+| `reflect` | Reflect: 세션 학습 영속화 | N | N | N | N |
+| `search_traces` | Search Traces: 정확 매칭 탐색 | Y | N | Y | N |
+| `session_rotate` | Session Rotate: 세션 교체 | N | N | N | N |
+| `tool_feedback` | Tool Feedback: 도구 유용성 피드백 | N | N | N | N |
+
+- A tool with `readOnlyHint` `Y` does not change the content of stored memory. `recall` records access counts and a search event, and `check_update` refreshes the local check-result cache. These records are not part of the memory content the tool returns.
+- Tools with `destructiveHint` `Y` are `forget` (deletes fragments), `memory_consolidate` (expiry deletion and merging), and `apply_update` (updates the installation).
+- `openWorldHint` is `Y` only for tools that reach systems outside the server (`check_update`, `apply_update`).
+
+### ping
+
+A `ping` request on an authenticated session returns the empty object `{}` as its result. Sent as a notification, it is accepted without a response.
+
 ### Tool argument validation and error responses
 
 `tools/call` arguments are compared with the tool's `inputSchema`. The check covers top-level fields and array items for type, `enum`, range, `maxLength`, `maxItems`, `pattern`, `oneOf`, required fields and fields absent from the schema. `MEMENTO_TOOL_ARGS_VALIDATION` (`off`, `warn`, `enforce`, default `warn`) sets the behavior. `warn` only logs a warning and proceeds; `enforce` rejects a violation with JSON-RPC `-32602` and an `Invalid arguments for <tool>: <reason>` message. With `MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN=true`, fields absent from the schema are not violations.
