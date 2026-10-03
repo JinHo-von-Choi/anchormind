@@ -12,7 +12,7 @@ import assert                              from "node:assert/strict";
 
 /** 가짜 저장소 상태. 시험마다 reset 한다. */
 const db = {
-  ids: [], badIds: new Set(), batchError: null, errorOnCall: null, tablesExist: true,
+  ids: [], badIds: new Set(), batchError: null, errorOnCall: null, badErrors: new Map(), beforeSave: null, beforeComplete: null, tablesExist: true,
   watermarks: new Map(), failures: new Map(), batchCalls: [], queries: [], updated: []
 };
 
@@ -21,6 +21,9 @@ function reset(ids) {
   db.badIds      = new Set();
   db.batchError  = null;
   db.errorOnCall = null;
+  db.badErrors   = new Map();
+  db.beforeSave  = null;
+  db.beforeComplete = null;
   db.tablesExist = true;
   db.watermarks  = new Map();
   db.failures    = new Map();
@@ -30,7 +33,7 @@ function reset(ids) {
 }
 
 function dataError(id) {
-  return Object.assign(new Error(`invalid input for ${id}`), { code: "22P02" });
+  return Object.assign(new Error(`invalid input syntax for type integer: "value-of-${id}"`), { code: "22P02" });
 }
 
 /** 갱신 묶음 문을 흉내 낸다: 후보 id 중 badIds 가 있으면 오류, 아니면 갱신한 것으로 기록한다. */
@@ -46,7 +49,7 @@ function runBatchSql(sql, params) {
   const pool = onlyId === null ? db.ids.filter(id => id > afterId && !db.updated.includes(id)).slice(0, limit)
                                : db.ids.filter(id => id === onlyId && !db.updated.includes(id));
   const bad = pool.find(id => db.badIds.has(id));
-  if (bad !== undefined) throw dataError(bad);
+  if (bad !== undefined) throw db.badErrors.get(bad) ?? dataError(bad);
   db.updated.push(...pool);
   return { rows: [{ n: pool.length, last_id: pool.length ? pool[pool.length - 1] : null }] };
 }
@@ -73,11 +76,19 @@ function runStateSql(sql, params) {
     return { rows: [{ last_id: w.last_id, rows_done: String(w.rows_done), status: w.status }] };
   }
   if (/UPDATE agent_memory\.backfill_watermarks\s+SET last_id/.test(sql)) {
+    if (db.beforeSave) db.beforeSave();
     const w = db.watermarks.get(params[0]);
+    if (!w || w.last_id !== params[3] || w.status !== "running") return { rows: [], rowCount: 0 };
     w.last_id = params[1]; w.rows_done += params[2];
-    return { rows: [] };
+    return { rows: [], rowCount: 1 };
   }
-  if (/SET status = 'completed'/.test(sql)) { db.watermarks.get(params[0]).status = "completed"; return { rows: [] }; }
+  if (/SET status = 'completed'/.test(sql)) {
+    if (db.beforeComplete) db.beforeComplete();
+    const w = db.watermarks.get(params[0]);
+    if (!w || w.last_id !== params[1] || w.status !== "running") return { rows: [], rowCount: 0 };
+    w.status = "completed";
+    return { rows: [], rowCount: 1 };
+  }
   if (/DELETE FROM agent_memory\.backfill_watermarks/.test(sql)) { db.watermarks.delete(params[0]); return { rows: [] }; }
   if (/DELETE FROM agent_memory\.backfill_failures WHERE job = \$1 AND row_id/.test(sql)) { db.failures.delete(`${params[0]}/${params[1]}`); return { rows: [] }; }
   if (/DELETE FROM agent_memory\.backfill_failures WHERE job = \$1$/.test(sql.trim())) {
@@ -87,13 +98,16 @@ function runStateSql(sql, params) {
   if (/INSERT INTO agent_memory\.backfill_failures/.test(sql)) {
     const key = `${params[0]}/${params[1]}`;
     const old = db.failures.get(key);
-    db.failures.set(key, { row_id: params[1], error: params[2], sqlstate: params[3], attempts: old ? old.attempts + 1 : 1 });
+    db.failures.set(key, {
+      row_id: params[1], sqlstate: params[2], error_class: params[3], constraint_name: params[4],
+      attempts: old ? old.attempts + 1 : 1, stored: params.slice(2)
+    });
     return { rows: [] };
   }
   if (/SELECT row_id FROM agent_memory\.backfill_failures/.test(sql)) {
     return { rows: [...db.failures.values()].map(f => ({ row_id: f.row_id })).sort((a, b) => a.row_id.localeCompare(b.row_id)) };
   }
-  if (/SELECT row_id, error, sqlstate, attempts/.test(sql)) return { rows: [...db.failures.values()] };
+  if (/SELECT row_id, sqlstate, error_class, constraint_name, attempts/.test(sql)) return { rows: [...db.failures.values()] };
   throw new Error(`예상하지 못한 SQL: ${sql}`);
 }
 
@@ -103,7 +117,7 @@ mock.module("../../lib/tools/db.js", {
 
 const {
   runResumableBackfill, retryBackfillFailures, listBackfillFailures, ensureBackfillTables,
-  isRowLevelError, BackfillError, BackfillTableMissingError, BACKFILL_TABLES_DDL
+  isRowLevelError, BackfillError, BackfillTableMissingError, BackfillConcurrentRunError, BACKFILL_TABLES_DDL
 } = await import("../../lib/memory/consolidate/resumableBackfill.js");
 
 const { unreferencedParamGuard } = await import("../../lib/memory/consolidate/idOrderedUpdate.js");
@@ -207,6 +221,63 @@ describe("runResumableBackfill 실패 행 기록", () => {
     const select = db.queries.find(q => /^\s*SELECT id FROM/.test(q));
     assert.match(select, /\$3::text IS NOT NULL/);
     assert.match(select, /\$4::text IS NOT NULL/);
+  });
+});
+
+describe("실패 행 기록의 내용", () => {
+  it("SQLSTATE, 계열 이름, 제약 이름만 저장하고 오류 메시지의 값은 저장하지 않는다", async () => {
+    db.badIds = new Set(["f003"]);
+    await runResumableBackfill(SPEC);
+    const [failure] = await listBackfillFailures("job-a");
+    assert.deepEqual(
+      [failure.sqlstate, failure.error_class, failure.constraint_name],
+      ["22P02", "data_exception", null]
+    );
+    assert.ok(!JSON.stringify(db.failures.get("job-a/f003")).includes("value-of"));
+    assert.ok(!db.queries.some(q => q.includes("value-of")));
+  });
+
+  it("무결성 위반은 제약 이름과 계열 이름을 남긴다", async () => {
+    const err = Object.assign(new Error('duplicate key value violates unique constraint "uq_x"\nDETAIL: Key (content)=(secret) already exists.'),
+      { code: "23505", constraint: "uq_x" });
+    db.badIds = new Set(["f001"]);
+    db.badErrors.set("f001", err);
+    db.ids = ["f001"];
+    await runResumableBackfill(SPEC);
+    const stored = db.failures.get("job-a/f001");
+    assert.deepEqual(stored.stored, ["23505", "integrity_constraint_violation", "uq_x"]);
+    assert.ok(!JSON.stringify(stored).includes("secret"));
+  });
+});
+
+describe("watermark 비교 후 갱신", () => {
+  it("다른 실행이 watermark 를 진행했으면 BackfillConcurrentRunError 로 멈추고 뒤로 되돌리지 않는다", async () => {
+    let saves = 0;
+    db.beforeSave = () => { saves += 1; if (saves === 2) db.watermarks.get("job-a").last_id = "f005"; };
+    await assert.rejects(runResumableBackfill(SPEC), BackfillConcurrentRunError);
+    const w = db.watermarks.get("job-a");
+    assert.equal(w.last_id, "f005");
+    assert.equal(w.status, "running");
+    assert.equal(w.rows_done, 2);
+  });
+
+  it("뒤처진 실행은 완료로 표시하지 못한다", async () => {
+    db.ids = ["f001", "f002"];
+    db.beforeComplete = () => { db.watermarks.get("job-a").last_id = "f009"; };
+    await assert.rejects(runResumableBackfill(SPEC), err => err instanceof BackfillConcurrentRunError && err instanceof BackfillError);
+    assert.equal(db.watermarks.get("job-a").status, "running");
+    assert.equal(db.watermarks.get("job-a").last_id, "f009");
+  });
+
+  it("다른 실행이 이미 완료로 표시했으면 이 실행의 저장은 거부된다", async () => {
+    db.beforeSave = () => { db.watermarks.get("job-a").status = "completed"; };
+    await assert.rejects(runResumableBackfill(SPEC), BackfillConcurrentRunError);
+    assert.equal(db.watermarks.get("job-a").rows_done, 0);
+  });
+
+  it("겹치지 않는 정상 실행은 영향을 받지 않는다", async () => {
+    const result = await runResumableBackfill(SPEC);
+    assert.equal(result.rowsUpdated, 5);
   });
 });
 

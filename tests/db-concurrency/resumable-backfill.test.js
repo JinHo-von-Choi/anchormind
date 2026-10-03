@@ -19,7 +19,7 @@ await prepareLaneDatabase();
 
 const { shutdownPool } = await import("../../lib/tools/db.js");
 const {
-  ensureBackfillTables, runResumableBackfill, retryBackfillFailures, listBackfillFailures, BackfillTableMissingError
+  ensureBackfillTables, runResumableBackfill, retryBackfillFailures, listBackfillFailures, BackfillTableMissingError, BackfillConcurrentRunError
 } = await import("../../lib/memory/consolidate/resumableBackfill.js");
 
 const RUN = `rb-${crypto.randomBytes(4).toString("hex")}`;
@@ -133,7 +133,8 @@ describe("재개형 백필 실서버", () => {
     assert.equal(await countDone(topic), 88);
     const failures = await listBackfillFailures(job);
     assert.deepEqual(failures.map(f => f.row_id).sort(), [ids[10], ids[70]].sort());
-    assert.ok(failures.every(f => f.sqlstate === "22023" && f.attempts === 1));
+    assert.ok(failures.every(f => f.sqlstate === "22023" && f.error_class === "data_exception" && f.attempts === 1));
+    assert.ok(failures.every(f => !JSON.stringify(f).includes("poison")));
     assert.equal((await watermark(job)).status, "completed");
 
     const stillBad = await retryBackfillFailures(specFor(topic, job));
@@ -145,6 +146,34 @@ describe("재개형 백필 실서버", () => {
     assert.deepEqual(fixed, { resolved: 2, stillFailing: 0 });
     assert.deepEqual(await listBackfillFailures(job), []);
     assert.equal(await countDone(topic), 90);
+  });
+
+  it("다른 실행이 watermark 를 진행했으면 멈추고 watermark 를 되돌리지 않는다", async () => {
+    const topic = `${RUN}-cas`;
+    const job   = `${RUN}-cas`;
+    const ids   = (await seedFragments(topic, 100)).sort();
+    /** 두 번째 묶음의 행이 갱신될 때 다른 실행이 watermark 를 옮긴 것처럼 같은 트랜잭션에서 값을 바꾼다. */
+    await directQuery("DROP TRIGGER IF EXISTS rb_other_run ON agent_memory.fragments");
+    await directQuery("DROP FUNCTION IF EXISTS agent_memory.rb_other_run_fn()");
+    await directQuery(`
+      CREATE FUNCTION agent_memory.rb_other_run_fn() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        UPDATE agent_memory.backfill_watermarks SET last_id = 'zzzz' WHERE job = '${job}';
+        RETURN NEW;
+      END $$`);
+    await directQuery(`
+      CREATE TRIGGER rb_other_run AFTER UPDATE ON agent_memory.fragments
+        FOR EACH ROW WHEN (NEW.id = '${ids[50]}') EXECUTE FUNCTION agent_memory.rb_other_run_fn()`);
+    try {
+      await assert.rejects(runResumableBackfill(specFor(topic, job)), BackfillConcurrentRunError);
+    } finally {
+      await directQuery("DROP TRIGGER IF EXISTS rb_other_run ON agent_memory.fragments");
+      await directQuery("DROP FUNCTION IF EXISTS agent_memory.rb_other_run_fn()");
+    }
+    const w = await watermark(job);
+    assert.equal(w.last_id, "zzzz");
+    assert.equal(w.status, "running");
+    assert.equal(w.rows_done, 40);
   });
 
   it("restart 는 처음부터 다시 실행한다", async () => {
