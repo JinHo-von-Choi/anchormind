@@ -46,7 +46,7 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | PATCH | /v1/internal/model/nothing/keys/:id/policy | API 키 정책 열 변경. 본문은 `default_mode`, `allowed_workspaces`, `symbolic_hard_gate` 중 하나 이상. 아래 절 참조 |
 | DELETE | /v1/internal/model/nothing/keys/:id | API 키 삭제(성공 204). 저장된 파편이나 재통합 이력이 있는 키는 삭제하지 않고 409 `key_in_use`를 돌려준다(`MEMENTO_API_KEY_DELETE_GUARD=false`면 확인 생략). 비활성화나 삭제 시 이 프로세스의 그 키 세션이 즉시 닫힌다 |
 | GET | /v1/internal/model/nothing/review | 검토 대기 파편 목록(오래된 순). 질의 `key_id`(`master`는 마스터 키가 쓴 것), `limit`(1~200, 기본 50), `cursor`(앞 응답의 `nextCursor`). 항목은 `id`, `key_id`, `key_name`, `agent_id`, `workspace`, `type`, `topic`, `content_preview`(500자), `review_reasons`, `origin`, `trust_tier`, `is_anchor`, `created_at`, `auto_reject_at`(만든 지 30일). 잘못된 값은 400과 `field` |
-| POST | /v1/internal/model/nothing/review/:id/approve | 검토 대기 파편 승인. 본문 `note`(500자 이하, 민감 정보는 가려서 저장), `idempotencyKey`(또는 `Idempotency-Key` 헤더, 1~128자 `[A-Za-z0-9._:-]`). `review_state`를 `approved`로 바꾸고 보류한 앵커 지정 요청(`anchor_requested`)이 있으면 앵커로 지정한다. 응답 `decisionId`, `fragmentId`, `decision`, `reviewer`, `keyId`, `decidedAt`, `replayed`(같은 멱등 키의 재요청이면 true), `anchorApplied`. 없는 파편 404, 검토 대기가 아닌 파편 409(`state`), 다른 결정에 쓰인 멱등 키 409(`field: idempotencyKey`) |
+| POST | /v1/internal/model/nothing/review/:id/approve | 검토 대기 파편 승인. 본문 `note`(500자 이하, 민감 정보는 가려서 저장), `idempotencyKey`(또는 `Idempotency-Key` 헤더, 1~128자 `[A-Za-z0-9._:-]`), `applyAnchor`(불리언). `review_state`를 `approved`로 바꾼다. 보류한 앵커 지정 요청(`anchor_requested`)은 결정 시점 판정(키 권한 목록의 `anchor` 또는 `admin`, 마스터 키 허용)을 통과할 때만 적용하고, 무권한 앵커 요청(`anchor_unauthorized`)은 `applyAnchor: true`일 때만, `applyAnchor: false`이면 적용하지 않는다. 응답 `decisionId`, `fragmentId`, `decision`, `reviewer`, `keyId`, `decidedAt`, `replayed`(같은 멱등 키의 재요청이면 true, 동시 재요청 포함), `anchorApplied`, `anchorReason`(`not_requested`, `permitted`, `master`, `permission`, `explicit`, `explicit_required`, `declined`). 없는 파편 404, 검토 대기가 아닌 파편 409(`state`), 다른 결정에 쓰인 멱등 키 409(`field: idempotencyKey`) |
 | POST | /v1/internal/model/nothing/review/:id/reject | 검토 대기 파편 거절. 본문과 응답은 승인과 같다. `review_state`를 `rejected`로 바꾸고 `valid_to`를 설정해 만료 파편으로 만든다. 결정은 `memory_review_decisions`에 남고 감사 기록 `admin review_decision` 한 줄이 남는다 |
 | GET | /v1/internal/model/nothing/groups | 키 그룹 목록 |
 | POST | /v1/internal/model/nothing/groups | 키 그룹 생성 |
@@ -617,7 +617,7 @@ reason code 목록 (최대 3개):
 
 `MEMENTO_PROVENANCE=on`(기본)이면 기본 형식 응답의 파편에 `origin`(저장 시 주장된 출처)과 `trust_tier`(0 격리, 1 낮음, 2 보통, 3 높음)가 붙는다. 값이 NULL인 기존 파편에는 두 필드가 없으며 등급은 2로 해석한다. `fields`를 지정하면 거기 든 키만 싣는다. 두 값은 recall과 같은 agent, 키(그룹 포함), workspace 범위로 파편 id마다 한 번 따로 조회하며, 조회가 실패하면 두 필드 없이 응답한다. 등급은 remember의 `origin` 설명을 따른다. `off`이면 조회하지 않고 필드도 없다.
 
-`MEMENTO_REVIEW_QUEUE=on`(기본)이면 이 키가 쓴 검토 대기 파편(`review_state='pending'`)이 결과에 그대로 보이며 `pending_review: true`와 낮은 신뢰 표지 `low_trust: true`가 `fields` 지정과 무관하게 붙는다. 같은 키 그룹의 다른 키, 마스터 키, context 주입에는 보이지 않는다. 승인되면 표지 없이 모두에게 보이고, 거절되면 만료 파편이 된다.
+`MEMENTO_REVIEW_QUEUE=on`(기본)이면 이 키가 쓴 검토 대기 파편(`review_state='pending'`)이 결과에 그대로 보이며 `pending_review: true`와 낮은 신뢰 표지 `low_trust: true`가 `fields` 지정과 무관하게 붙는다. 같은 키 그룹의 다른 키, 마스터 키, context 주입에는 보이지 않는다. 승인되면 표지 없이 모두에게 보이고, 거절되면 만료 파편이 되어 쓴 키의 `includeSuperseded` 조회에만 `review_rejected` 표지와 함께 남는다.
 
 ### 답 꾸러미 (format: pack)
 

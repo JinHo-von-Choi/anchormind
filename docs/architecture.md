@@ -50,7 +50,7 @@ server.js  (HTTP 서버)
             │   ├── AnswerPackLoader.js   답 꾸러미 출처(source)와 대체 체인(superseded_by 링크) 조회. recall과 같은 agent, 키, workspace 술어. 기본 형식 recall 응답에 `origin`, `trust_tier`를 싣는다(`MEMENTO_PROVENANCE`)
             │   ├── ProvenanceLoader.js   파편 id의 출처 열(source, origin, trust_tier) 조회와 recall 범위 술어. 꾸러미, recall 응답, context core 거르기가 함께 쓴다. 풀은 호출자가 넘긴다
             │   ├── ContextTrust.js       context 주입 제외(신뢰 등급 1 이하, core는 등급을 확인하지 못한 파편 포함)의 앵커 SQL 조각, core 후보 거르기와 결과 메타, 주석 출처 필드(순수 함수)
-            │   ├── ReviewVisibility.js   검토 대기 파편 가시성 술어. recall 질의(쓴 키에게만 보임), id 조회(API 키 조회만), ANCHOR 주입과 앵커 승격(모두 제외)의 SQL 조각, 응답 표지(pending_review, low_trust), core 후보 거르기
+            │   ├── ReviewVisibility.js   검토 대기와 거절 파편 가시성 술어(스위치와 무관). recall 질의(쓴 키에게만 보임), id 조회(API 키 조회만), 주입 후보와 앵커 승격과 모순 해소(모두 제외)의 SQL 조각, 응답 표지(pending_review, low_trust, review_rejected), core 후보 거르기
             │   ├── SearchLayerScope.js   FragmentSearch가 계층 호출에 넘기는 공통 범위 옵션(workspace, agent, 앵커 필터, 검토 가시성의 보는 주체)
             │   ├── provenance-metrics.js core 신뢰 등급 제외 지표 `memento_context_core_trust_excluded_total{reason}`
             │   ├── GraphNeighborSearch.js L2.5 그래프 이웃 검색 (fragment_links 1-hop 양방향 UNION, tanh 포화 스코어링 + 관계 유형별 부스트)
