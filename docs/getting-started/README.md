@@ -27,6 +27,7 @@ Memento MCP 온보딩 문서 모음이다. 처음 설치하는 경우 아래 순
 ## 연동 가이드
 
 - Claude Code 사용 시: [Claude Code Configuration](claude-code.md)
+- Claude Code, Codex 훅(세션 시작 주입, 세션 종료 회고): [훅 설정](hooks.md) ([English](hooks.en.md))
 
 ## 문서 목적
 
@@ -36,3 +37,4 @@ Memento MCP 온보딩 문서 모음이다. 처음 설치하는 경우 아래 순
 - Windows WSL2 Setup: Windows에서 가장 안정적인 설치 경로
 - Windows PowerShell Setup: Bash 없이 수동으로 설치하는 제한 경로. 원격 CLI 환경변수 설정 포함
 - Claude Code Configuration: Claude Code에서 memento를 MCP 서버로 등록하는 방법. `_meta` 응답 구조 및 dryRun 예시 포함
+- 훅 설정: `POST /hooks/{client}/{event}`와 `anchormind hook`으로 Claude Code와 Codex의 SessionStart 주입과 SessionEnd 회고를 거는 방법

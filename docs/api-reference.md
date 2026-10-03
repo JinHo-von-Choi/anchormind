@@ -28,6 +28,7 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | POST | /authorize | OAuth 2.0 동의 화면 폼 제출 (allow/deny) |
 | POST | /register | RFC 7591 동적 클라이언트 등록. IP 기준 rate limit과 프로세스당 시간당 등록 상한(`MEMENTO_DCR_MAX_PER_HOUR`, 기본 100, 0은 상한 없음)을 적용한다. 키에 묶인 등록과 그 밖의 등록은 따로 센다. 상한 초과 시 429와 `Retry-After`(현재 창의 남은 초) |
 | POST | /session/rotate | 세션 ID 재발급. 아래 절 참조 |
+| POST | /hooks/{client}/{event} | 하네스 훅. `client`는 `claude-code`, `codex`, `event`는 `SessionStart`(context를 `hookSpecificOutput.additionalContext`로 200), `Stop`, `SessionEnd`(요약 후보를 outbox에 기록하고 202). Bearer API 키 인증, `MEMENTO_HOOK_ENDPOINTS=off`이면 404. 상한과 응답 코드는 [configuration.md](configuration.md#훅-엔드포인트), 설정 예시는 [getting-started/hooks.md](getting-started/hooks.md) |
 | GET | /v1/internal/model/nothing | Admin SPA. 마스터 키 인증 후 app shell HTML 제공. 미인증 요청은 401과 로그인 페이지를 반환. 데이터 API는 마스터 키 인증 필요 |
 | GET | /v1/internal/model/nothing/assets/* | Admin 정적 파일 (admin.css, admin.js). 인증 불필요 |
 | GET | /v1/internal/model/nothing/images/* | Admin 이미지 파일. 마스터 키 인증 필요 |

@@ -83,6 +83,8 @@ access key를 커밋하지 않도록 `.gitignore`에 추가하거나 환경 변�
 
 자동 로드는 선택 사항이다. 세션 시작마다 핵심 기억을 불러오고 싶을 때만 사용한다.
 
+서버의 훅 엔드포인트(`POST /hooks/claude-code/SessionStart`)와 `anchormind hook` 명령을 쓰면 세션 없이 한 번의 요청으로 주입하고, 세션 종료 회고까지 걸 수 있다. 설정은 [훅 설정](hooks.md)에 있다. 아래 curl 예시는 MCP 세션을 직접 여는 방식이다.
+
 ### curl 기반 예시
 
 ```json

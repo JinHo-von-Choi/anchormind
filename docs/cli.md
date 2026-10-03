@@ -55,6 +55,8 @@ node bin/memento.js stats
 
 `recall`, `remember`, `stats`, `inspect`, `session` 는 `--remote URL --key KEY`로 원격 MCP 서버를 경유하여 실행할 수 있다.
 
+`hook`은 원격 서버 전용이다. `--remote`(또는 `MEMENTO_CLI_REMOTE`)와 `--key`(또는 `MEMENTO_CLI_KEY`)가 반드시 있어야 한다.
+
 ---
 
 ## 명령어 목록
@@ -77,6 +79,7 @@ node bin/memento.js stats
 | `completion <shell>` | bash/zsh 보완 스크립트 출력 | 예 |
 | `benchmark [--goldset FILE]` | 골드셋 기반 회상 품질 계측 | 아니오 |
 | `anchor-scope [--execute]` | 승인된 공유 앵커 범위 점검·정규화, snapshot backfill (기본 dry-run) | 아니오 |
+| `hook <event> --client <name>` | Claude Code, Codex command 훅 실행체 (`SessionStart`, `Stop`, `SessionEnd`) | 원격 전용 |
 
 ---
 
@@ -454,6 +457,27 @@ source <(node bin/memento.js completion bash)
 ```bash
 node bin/memento.js completion --help
 ```
+
+### hook
+
+Claude Code와 Codex의 command 훅에서 실행한다. 하네스가 표준 입력으로 넘긴 훅 JSON을 읽어 서버의 `POST /hooks/<client>/<event>`로 보낸다. 서버 동작과 상한은 [configuration.md](configuration.md#훅-엔드포인트), 하네스 설정 예시는 [getting-started/hooks.md](getting-started/hooks.md)에 있다.
+
+```bash
+anchormind hook SessionStart --client claude-code
+anchormind hook SessionEnd   --client codex --timeout 3000
+```
+
+| 옵션 | 설명 |
+|-|-|
+| `<event>` | `SessionStart`, `Stop`, `SessionEnd` |
+| `--client` | `claude-code`, `codex` |
+| `--remote`, `--key` | 서버 MCP 주소와 API 키. 키는 명령줄 대신 `MEMENTO_CLI_KEY` 환경 변수로 준다(명령줄 인자는 프로세스 목록에 보인다) |
+| `--timeout` | 요청 제한 시간(ms). 기본 `SessionEnd` 1200(Claude Code의 SessionEnd 훅 예산 1.5초 안), 그 밖 5000 |
+
+- `SessionStart`: 서버 응답 `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}`를 표준 출력에 그대로 쓴다.
+- `Stop`, `SessionEnd`: 입력의 `transcript_path` 파일 끝 4 MiB에서 사용자와 응답 메시지(도구 호출과 결과 제외)를 꺼내 최근 메시지부터 65536바이트 안의 발췌를 만들어 보낸다. 파일을 읽지 못하면 `last_assistant_message`를 쓰고, 보낼 내용이 없으면 요청하지 않고 끝낸다. 표준 출력에는 쓰지 않는다.
+- 서버로 보내는 필드는 `hook_event_name`, `session_id`, `cwd`, `source`(SessionStart), `git_remote`, `excerpt`다. `git_remote`는 `cwd` 저장소의 `remote.origin.url`에서 자격 증명과 포트를 지운 값이고, `transcript_path`는 보내지 않는다.
+- 실패(인자 오류, 연결 실패, 2xx가 아닌 응답)는 표준 오류에 `[hook] server responded <상태> (<오류 코드>)` 형식으로 쓰고 종료 코드 1로 끝난다. 두 하네스 모두 1을 비차단 오류로 다룬다(차단을 뜻하는 2는 쓰지 않는다).
 
 ---
 

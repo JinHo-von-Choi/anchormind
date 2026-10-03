@@ -25,6 +25,7 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | POST | /authorize | OAuth 2.0 consent form submission (allow/deny) |
 | POST | /register | RFC 7591 dynamic client registration. A per-IP rate limit and a per-process hourly registration cap (`MEMENTO_DCR_MAX_PER_HOUR`, default 100, 0 means no cap) apply. Key-bound registrations and other registrations are counted separately. Above the cap the server answers 429 with `Retry-After` set to the seconds remaining in the current window |
 | POST | /session/rotate | Reissue the session ID. See the section below |
+| POST | /hooks/{client}/{event} | Harness hooks. `client` is `claude-code` or `codex`; `event` is `SessionStart` (200 with context as `hookSpecificOutput.additionalContext`), `Stop` or `SessionEnd` (records the summary candidate in the outbox and answers 202). Bearer API key authentication; 404 with `MEMENTO_HOOK_ENDPOINTS=off`. Limits and response codes are in [configuration.en.md](configuration.en.md#hook-endpoints), setup examples in [getting-started/hooks.en.md](getting-started/hooks.en.md) |
 | GET | /v1/internal/model/nothing | Admin SPA. Serves app shell HTML after master key authentication; unauthenticated requests receive 401 and the login page. Data APIs require master key authentication |
 | GET | /v1/internal/model/nothing/assets/* | Admin static files (admin.css, admin.js). No authentication required |
 | GET | /v1/internal/model/nothing/images/* | Admin image files. Master key authentication required |

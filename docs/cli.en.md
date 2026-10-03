@@ -54,6 +54,8 @@ Every command except `serve` sends server logs to stderr (the CLI sets `MEMENTO_
 
 `recall`, `remember`, `stats`, `inspect`, `session` can be executed through a remote MCP server via `--remote URL --key KEY`.
 
+`hook` works only against a remote server. `--remote` (or `MEMENTO_CLI_REMOTE`) and `--key` (or `MEMENTO_CLI_KEY`) are required.
+
 ---
 
 ## Command Reference
@@ -76,6 +78,7 @@ Every command except `serve` sends server logs to stderr (the CLI sets `MEMENTO_
 | `completion <shell>` | Print bash/zsh completion script | Yes |
 | `benchmark [--goldset FILE]` | Measure recall quality against a goldset | No |
 | `anchor-scope [--execute]` | Inventory and normalize approved shared anchors, snapshot backfill (dry-run by default) | No |
+| `hook <event> --client <name>` | Claude Code and Codex command hook runner (`SessionStart`, `Stop`, `SessionEnd`) | Remote only |
 
 ---
 
@@ -453,6 +456,27 @@ Help:
 ```bash
 node bin/memento.js completion --help
 ```
+
+### hook
+
+Runs from Claude Code and Codex command hooks. Reads the hook JSON that the harness passes on standard input and sends it to the server's `POST /hooks/<client>/<event>`. Server behavior and limits are in [configuration.en.md](configuration.en.md#hook-endpoints), harness setup examples in [getting-started/hooks.en.md](getting-started/hooks.en.md).
+
+```bash
+anchormind hook SessionStart --client claude-code
+anchormind hook SessionEnd   --client codex --timeout 3000
+```
+
+| Option | Description |
+|-|-|
+| `<event>` | `SessionStart`, `Stop`, `SessionEnd` |
+| `--client` | `claude-code`, `codex` |
+| `--remote`, `--key` | Server MCP URL and API key. Pass the key through the `MEMENTO_CLI_KEY` environment variable instead of the command line (command-line arguments are visible in the process list) |
+| `--timeout` | Request timeout (ms). Default 1200 for `SessionEnd` (inside the 1.5 second Claude Code SessionEnd hook budget), 5000 otherwise |
+
+- `SessionStart`: writes the server response `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}` to standard output unchanged.
+- `Stop`, `SessionEnd`: takes user and assistant messages (tool calls and results excluded) from the last 4 MiB of the input's `transcript_path` file and sends an excerpt of up to 65536 bytes, newest messages first. When the file cannot be read it uses `last_assistant_message`; when there is nothing to send it ends without a request. Nothing is written to standard output.
+- The fields sent to the server are `hook_event_name`, `session_id`, `cwd`, `source` (SessionStart), `git_remote` and `excerpt`. `git_remote` is `remote.origin.url` of the `cwd` repository with credentials and port removed; `transcript_path` is not sent.
+- Failures (argument errors, connection failures, non-2xx responses) are written to standard error as `[hook] server responded <status> (<error code>)` and exit with code 1. Both harnesses treat 1 as a non-blocking error (2, which means blocking, is never used).
 
 ---
 
