@@ -57,7 +57,7 @@ server.js  (HTTP 서버)
             ├── write/                    쓰기 레이어 모듈
             │   ├── WriteGate.js          의미 쓰기 단일 관문. normalize, sensitive, length, policy, workspace, anchor 단계를 순서대로 적용하고 위반을 경고로 남기거나 hard gate 키에서 거부한다. `MEMENTO_WRITE_GATE`
             │   ├── write-gate-metrics.js 관문 판정 지표 `memento_write_gate_total{entry,outcome}`
-            │   ├── FragmentImporter.js   가져오기 행을 관문에 통과시켜 FragmentWriter로 기록 (admin 가져오기와 CLI 가져오기 공용)
+            │   ├── FragmentImporter.js   가져오기 행을 관문에 통과시켜 FragmentWriter로 기록. 대상 키 프로필(owner, restore)을 적용한다 (admin 가져오기와 CLI 가져오기 공용)
             │   ├── FragmentWriter.js     파편 쓰기. 의미 메서드(insert, update)는 관문을 거친 값만 받고, 내부 메타데이터는 updateInternal로 쓰며 의미 열 9개는 쓸 수 없다 (delete, incrementAccess, touchLinked 포함)
             │   ├── FragmentFactory.js    파편 생성, 유효성 검증, PII 마스킹 진입점(`maskSensitiveText`, 규칙은 `lib/security`의 표)과 유형별 절삭(`limitContentLength`)
             │   ├── affect.js             정서 태그 허용값 집합과 `sanitizeAffect` 정규화 (FragmentFactory, FragmentWriter가 공유)
@@ -67,6 +67,14 @@ server.js  (HTTP 서버)
             │   ├── IdempotencyStore.js   파편을 만들지 않는 쓰기 도구(`amend`, `tool_feedback`)의 재시도 응답 기록 (`idempotency_records`)
             │   ├── BatchRememberProcessor.js batchRemember() 로직 전담. Phase A(검증과 항목별 관문)→B(INSERT)→C(후처리) 3단계. `async: true` 파라미터로 비동기 opt-in 가능: 선검증 후 Redis 큐(`memento:batch_remember_queue`)에 job을 적재하고 즉시 반환. Redis 미설정 시 동기 경로 폴백. 워커(BatchRememberWorker)가 기존 INSERT 경로로 소비
             │   └── BatchRememberWorker.js batch_remember 비동기 큐 워커. `memento:batch_remember_queue` Redis 큐 폴링 → BatchRememberProcessor 동기 경로로 실행. `getBatchRememberWorker()` 싱글톤 팩토리. `PollingWorker` 기반이므로 기동 시 워커 레지스트리에 등록되고 `gracefulShutdown`이 일괄 배수
+            ├── transfer/                 내보내기와 가져오기 모듈
+            │   ├── exportFormat.js       JSONL 형식 버전 2와 버전 1의 열 목록, 줄 분류, 버전 협상, 머리 줄과 끝 줄 (순수 함수)
+            │   ├── FragmentExporter.js   id 순 묶음으로 파편, 링크, 이력 줄을 만든다 (관리 API와 CLI 공용)
+            │   ├── importRecords.js      텍스트 줄과 JSON 본문을 같은 기록 스트림으로 맞춘다
+            │   ├── ImportRunner.js       기록 스트림 가져오기. 파일 id를 저장된 id로 바꿔 링크와 이력을 잇고, dryRun은 하나의 트랜잭션을 되돌린다
+            │   ├── ImportReport.js       imported, duplicates, rejected(유형별 사유), errors 집계
+            │   ├── importErrors.js       가져오기 옵션과 중단 오류 유형
+            │   └── importRuntime.js      관문, 쓰기 객체, 링크 저장소, 프로필 구성 (관리 API는 서버 관문, CLI는 기본 관문)
             ├── link/                     링크 레이어 모듈
             │   ├── ReconsolidationEngine.js fragment_links weight/confidence 동적 갱신 엔진 (reinforce/decay/quarantine/restore/soft_delete + 이력 기록)
             │   ├── GraphLinker.js        임베딩 완료 이벤트 구독 자동 관계 생성 + 소급 링킹 + Hebbian co-retrieval 링킹
@@ -1369,6 +1377,7 @@ migration-035(`lib/memory/migrations/migration-035-morpheme-indexed.sql`): `frag
 ```
 lib/memory/
 ├── read/          FragmentSearch, FragmentReader, ContextBuilder, GraphNeighborSearch, HistoryReconstructor, Reranker, CaseRecall, LinkedFragmentLoader, RecallSuggestionEngine, SearchScope, SearchSideEffects
+├── transfer/      exportFormat, FragmentExporter, ImportRunner, ImportReport, importRecords, importErrors, importRuntime
 ├── write/         WriteGate, FragmentImporter, FragmentWriter, FragmentFactory, FragmentStore, RememberPostProcessor, ConflictResolver, BatchRememberProcessor, BatchRememberWorker
 ├── link/          ReconsolidationEngine, GraphLinker, LinkStore, SessionLinker, TemporalLinker, ContradictionDetector
 ├── consolidate/   MemoryConsolidator, ConsolidatorGC, FragmentGC, decay, UtilityBaseline

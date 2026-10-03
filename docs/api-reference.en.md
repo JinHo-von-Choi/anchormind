@@ -69,8 +69,64 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | GET | /v1/internal/model/nothing/logs/read | Log content viewing (file, tail, level, search parameters) |
 | GET | /v1/internal/model/nothing/logs/stats | Log statistics (per-level counts, recent errors, disk usage) |
 | GET | /v1/internal/model/nothing/memory/graph?topic=&limit= | Knowledge graph data (nodes + edges) |
-| GET | /v1/internal/model/nothing/export?key_id=&topic= | Fragment JSON Lines stream export |
-| POST | /v1/internal/model/nothing/import | Fragment JSON array import |
+| GET | /v1/internal/model/nothing/export?key_id=&topic= | Fragment JSON Lines stream export (format version 2, with links and optional history). See "Export and import" below |
+| POST | /v1/internal/model/nothing/import | Fragment import (JSON body or an export file as is). See "Export and import" below |
+
+### Export and import
+
+Format versions and compatibility rules are defined in the [API and Export Format Version Policy](api-versioning.en.md).
+
+Export `GET /export`
+
+| Query parameter | Description |
+|-|-|
+| `key_id`, `key_ids`, `group_id` | Scope. One is required; everything is exported only with `confirm=full` |
+| `topic`, `type` | Topic (partial match) and type filters |
+| `format_version` | `2` (default) or `1`. Without it the `version` parameter of `Accept` is used, otherwise `2`. A value that cannot be produced gets 406 `unsupported_export_version` with the supported list |
+| `include_links` | `false` leaves out link lines (version 2) |
+| `include_versions` | `true` adds amendment history lines (version 2) |
+
+The response is `application/x-ndjson` with `X-Memento-Export-Format-Version` and `Vary: Accept` headers. In version 2 the first line is the header and the last line is the end line. An error after lines were sent closes the connection without the end line, and import reports a file without an end line with a `trailer_missing` warning. Fragments are read in id ordered batches.
+
+Import `POST /import`
+
+| Query parameter | Description |
+|-|-|
+| `key_id` | Target key. Without it the scope is master (`key_id` NULL). An unknown key gets 404. The `key_id` of a file row is never read |
+| `dryRun` | `true` processes through the same path and rolls back at the end. The counts equal those of a real run |
+| `restore` | `trusted` restores stored values (format version 2 files only, recorded in the audit log). Any other value gets 400 |
+
+The body is JSON `{"fragments": [...], "links": [...], "versions": [...]}` (`links` and `versions` are optional and make it a version 2 file) or an export file as is with `Content-Type` `application/x-ndjson` or `application/jsonl`. Line bodies are accepted up to 64 MiB and JSON bodies up to 2 MiB. A fragment line needs `content` and `topic`; `type` defaults to `fact`. Every line goes through the semantic write gate and is written by FragmentWriter, with one transaction per fragment line. Newly written fragments are queued for embedding.
+
+Response (field structure):
+
+```json
+{
+  "dryRun": false,
+  "restore": false,
+  "format": { "version": 2 },
+  "lines": 12,
+  "imported": 9, "duplicates": 2, "skipped": 2, "rejected": 1, "errors": 0,
+  "rejected_by_reason": { "input_invalid": 1 },
+  "fragments": { "imported": 9, "duplicates": 2, "rejected": 1, "errors": 0 },
+  "links": { "imported": 5, "duplicates": 0, "rejected": 0, "errors": 0 },
+  "versions": { "imported": 0, "duplicates": 0, "rejected": 0, "errors": 0 },
+  "transformed": 0,
+  "ignored": { "key_id": 0, "is_anchor": 0 },
+  "embedding_queued": 9,
+  "warnings": [],
+  "rejected_samples": [{ "entity": "fragments", "reason": "input_invalid", "line": 4, "detail": "..." }],
+  "error_samples": []
+}
+```
+
+- Top level `imported`, `duplicates`, `rejected` and `errors` are the fragment counts, and `skipped` equals `duplicates`. A row falls in exactly one of imported, duplicates, rejected and errors.
+- Reasons in `rejected_by_reason`: `invalid_json` (the line is not JSON), `invalid_record` (unknown record kind, or a link or version line in a version 1 file), `invalid_row` (no `content` or `topic`), `input_invalid` (gate rejection: below minimum quality, over 4000 characters, malformed keywords), `policy_violation` (policy violation on a hard-gate key), `id_conflict` (same id with different content), `database_rejected` (the database rejected the values), `link_invalid`, `link_endpoint_missing`, `version_fragment_missing`. Every rejection is counted and `rejected_samples` holds at most 20.
+- `duplicates` are rows whose content is already stored (within the key scope). Importing the same file again makes every row a duplicate.
+- `errors` are database failures that are not about the row. The request then gets 500 and the counts so far are in `partial`.
+- `transformed` is the number of rows the gate changed so that they no longer match the file's `content_hash`.
+- `ignored` counts the `key_id` values in the file that were not applied and the `is_anchor` values ignored when the path is not the owner path.
+- A format version that cannot be read gets 400 `unsupported_format_version`, a malformed JSON body gets 400, and an oversized body gets 413.
 
 ### /health Endpoint Policy
 

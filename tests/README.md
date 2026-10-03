@@ -8,7 +8,7 @@
 | `tests/structure/` | `node --test` | 구조 검사. 소스를 정적으로 읽어 경계 규칙을 확인한다(DB 불필요) |
 | `tests/integration/` | `node --test` | 통합 테스트 — 실제 DB/Redis 연결 필요 |
 | `tests/e2e/` | `node --test` | E2E — 서버 프로세스 기동 후 HTTP 요청 |
-| `tests/db-concurrency/` | `node --test` | 실제 PostgreSQL 동시성. 행 잠금 순서, linked_to 정합 (`npm run test:db`) |
+| `tests/db-concurrency/` | `node --test` | 실제 PostgreSQL 동시성과 왕복. 행 잠금 순서, linked_to 정합, 내보내기와 가져오기 왕복 (`npm run test:db`) |
 
 ## Commands
 

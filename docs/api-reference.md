@@ -72,8 +72,64 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | GET | /v1/internal/model/nothing/logs/read | 로그 내용 조회 (file, tail, level, search 파라미터) |
 | GET | /v1/internal/model/nothing/logs/stats | 로그 통계 (레벨별 카운트, 최근 에러, 디스크 사용량) |
 | GET | /v1/internal/model/nothing/memory/graph?topic=&limit= | 지식 그래프 데이터 (nodes + edges) |
-| GET | /v1/internal/model/nothing/export?key_id=&topic= | 파편 JSON Lines 스트림 내보내기 |
-| POST | /v1/internal/model/nothing/import | 파편 JSON 배열 가져오기 |
+| GET | /v1/internal/model/nothing/export?key_id=&topic= | 파편 JSON Lines 스트림 내보내기(형식 버전 2, 링크와 선택 이력 포함). 아래 「내보내기와 가져오기」 참조 |
+| POST | /v1/internal/model/nothing/import | 파편 가져오기(JSON 본문 또는 export 파일 그대로). 아래 「내보내기와 가져오기」 참조 |
+
+### 내보내기와 가져오기
+
+형식 버전과 호환 규칙은 [API와 export 형식 버전 정책](api-versioning.md)이 정한다.
+
+내보내기 `GET /export`
+
+| 질의 매개변수 | 설명 |
+|-|-|
+| `key_id`, `key_ids`, `group_id` | 범위. 하나는 필수이며 전체는 `confirm=full`일 때만 내보낸다 |
+| `topic`, `type` | 주제(부분 일치), 유형 필터 |
+| `format_version` | `2`(기본) 또는 `1`. 없으면 `Accept`의 `version` 매개변수, 그것도 없으면 `2`. 읽을 수 없는 값은 406 `unsupported_export_version`과 지원 목록 |
+| `include_links` | `false`이면 링크 줄을 싣지 않는다(버전 2) |
+| `include_versions` | `true`이면 수정 이력 줄을 싣는다(버전 2) |
+
+응답은 `application/x-ndjson`이며 `X-Memento-Export-Format-Version`과 `Vary: Accept` 헤더가 실린다. 버전 2의 첫 줄은 머리 줄, 마지막 줄은 끝 줄이다. 줄을 보낸 뒤 오류가 나면 끝 줄 없이 연결을 닫으며, 가져오기는 끝 줄이 없는 파일에 `trailer_missing` 경고를 낸다. 파편은 id 순 묶음으로 읽는다.
+
+가져오기 `POST /import`
+
+| 질의 매개변수 | 설명 |
+|-|-|
+| `key_id` | 기록 대상 키. 없으면 마스터 범위(`key_id` NULL). 없는 키는 404. 파일 행의 `key_id`는 읽지 않는다 |
+| `dryRun` | `true`이면 같은 경로로 처리하고 끝에 되돌린다. 집계는 실제 실행과 같다 |
+| `restore` | `trusted`이면 저장된 값을 되살리는 가져오기(형식 버전 2 파일만, 감사 로그에 기록). 다른 값은 400 |
+
+본문은 JSON `{"fragments": [...], "links": [...], "versions": [...]}`(`links`와 `versions`는 선택, 있으면 버전 2 파일로 본다) 이거나, `Content-Type`이 `application/x-ndjson` 또는 `application/jsonl`인 export 파일 그대로다. 줄 단위 본문은 64 MiB, JSON 본문은 2 MiB까지 받는다. 파편 줄은 `content`와 `topic`이 필요하고 `type`은 생략하면 `fact`다. 줄마다 의미 쓰기 관문을 거쳐 FragmentWriter로 기록하며 파편 줄마다 트랜잭션을 연다. 새로 기록한 파편은 임베딩 큐에 올린다.
+
+응답 예(필드 구조):
+
+```json
+{
+  "dryRun": false,
+  "restore": false,
+  "format": { "version": 2 },
+  "lines": 12,
+  "imported": 9, "duplicates": 2, "skipped": 2, "rejected": 1, "errors": 0,
+  "rejected_by_reason": { "input_invalid": 1 },
+  "fragments": { "imported": 9, "duplicates": 2, "rejected": 1, "errors": 0 },
+  "links": { "imported": 5, "duplicates": 0, "rejected": 0, "errors": 0 },
+  "versions": { "imported": 0, "duplicates": 0, "rejected": 0, "errors": 0 },
+  "transformed": 0,
+  "ignored": { "key_id": 0, "is_anchor": 0 },
+  "embedding_queued": 9,
+  "warnings": [],
+  "rejected_samples": [{ "entity": "fragments", "reason": "input_invalid", "line": 4, "detail": "..." }],
+  "error_samples": []
+}
+```
+
+- 최상위 `imported`, `duplicates`, `rejected`, `errors`는 파편 집계이고 `skipped`는 `duplicates`와 같은 값이다. 한 행은 imported, duplicates, rejected, errors 중 하나에만 들어간다.
+- `rejected_by_reason`의 사유: `invalid_json`(줄이 JSON이 아님), `invalid_record`(알 수 없는 줄 종류나 버전 1 파일의 링크, 이력 줄), `invalid_row`(`content`나 `topic` 없음), `input_invalid`(관문 거부: 최소 품질 미달, 4000자 초과, 형식이 잘못된 키워드), `policy_violation`(hard gate 키의 정책 위반), `id_conflict`(같은 id에 다른 본문), `database_rejected`(값 때문에 DB가 거부), `link_invalid`, `link_endpoint_missing`, `version_fragment_missing`. 거부 건수는 모두 세고 `rejected_samples`에는 최대 20건만 싣는다.
+- `duplicates`는 같은 본문이 이미 있는 행(키 범위)이다. 같은 파일을 다시 가져오면 모든 행이 `duplicates`다.
+- `errors`는 행 문제가 아닌 DB 실패다. 이 경우 요청은 500이며 그때까지의 집계가 `partial`에 담긴다.
+- `transformed`는 관문이 본문을 바꿔 파일의 `content_hash`와 달라진 행 수다.
+- `ignored`는 파일에 있었지만 반영하지 않은 `key_id`와 `is_anchor`(소유자 경로가 아닌 경우) 행 수다.
+- 읽을 수 없는 형식 버전은 400 `unsupported_format_version`, 깨진 JSON 본문은 400, 크기 초과는 413이다.
 
 ### /health 엔드포인트 정책
 

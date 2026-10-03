@@ -346,6 +346,7 @@ docs/
 | [Configuration](docs/configuration.md) | 환경 변수, MEMORY_CONFIG, 임베딩 Provider |
 | [API Reference](docs/api-reference.md) | HTTP 엔드포인트, 프롬프트, 리소스 |
 | [CLI](docs/cli.md) | 터미널 명령어 |
+| [API와 export 버전 정책](docs/api-versioning.md) | 프로토콜, 도구 스키마, 관리 API, 스키마, export 형식의 호환 규칙 |
 | [Internals](docs/internals.md) | 평가기, 통합기, 모순 탐지 |
 | [Benchmark](docs/benchmark.md) | LongMemEval-S 벤치마크 상세 분석 |
 | [Features](docs/features.md) | 모듈 ledger, 실험 플래그, ENV 매핑 |

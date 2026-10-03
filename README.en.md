@@ -323,6 +323,7 @@ AnchorMind is optimized for fact caching. When narrative context matters:
 | [Configuration](docs/configuration.en.md) | Environment variables, MEMORY_CONFIG, embedding providers |
 | [API Reference](docs/api-reference.en.md) | HTTP endpoints, prompts, resources |
 | [CLI](docs/cli.en.md) | Terminal commands |
+| [API and Export Version Policy](docs/api-versioning.en.md) | Compatibility rules for the protocol, tool schemas, admin API, schema and export format |
 | [Internals](docs/internals.en.md) | Evaluator, consolidator, contradiction detection |
 | [Benchmark](docs/benchmark.en.md) | Full LongMemEval-S benchmark analysis |
 | [Features](docs/features.md) | Module ledger, experimental flags, ENV mapping (Korean) |

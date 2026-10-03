@@ -196,6 +196,7 @@ MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test \
 | `score-update-lock-order.test.js` | `decayImportance`, `_updateUtilityScores`, `FragmentWriter.delete`의 `linked_to` 정리가 id 순 거래와 교착하지 않고, 묶음 감쇠의 행별 결과가 같은 기준 시각의 단일 계산과 같음 |
 | `score-update-noop.test.js` | 값이 바뀌지 않는 행을 두 번째 실행에서 다시 쓰지 않음(xmin 불변) |
 | `score-update-min-delta.test.js` | `MEMENTO_DECAY_MIN_DELTA`, `MEMENTO_UTILITY_MIN_DELTA` 적용 |
+| `import-export-roundtrip.test.js` | 시드한 데이터베이스에서 내보낸 JSONL을 두 번째 빈 데이터베이스로 가져와 행 수, `content_hash` 집합, 열 값, 링크, 이력, 집계가 시험이 계산한 값과 같음. 보통 가져오기의 변환과 거부, 되살리기, 재가져오기의 duplicates, 대상 키, dryRun, 관리 API 경로 |
 
 `_guard.js`와 `_harness.js`는 시험이 아니라 허용 조건 검사와 전용 데이터베이스 준비·삭제를 맡는 도우미다.
 

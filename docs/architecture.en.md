@@ -54,7 +54,7 @@ server.js  (HTTP server)
             +-- write/                    Write layer modules
             |   +-- WriteGate.js          Single semantic write gate. Applies the normalize, sensitive, length, policy, workspace and anchor steps in order and records violations as warnings or rejects them on hard-gate keys. `MEMENTO_WRITE_GATE`
             |   +-- write-gate-metrics.js Gate verdict metric `memento_write_gate_total{entry,outcome}`
-            |   +-- FragmentImporter.js   Passes import rows through the gate and writes them with FragmentWriter (shared by admin import and CLI import)
+            |   +-- FragmentImporter.js   Passes import rows through the gate and writes them with FragmentWriter. Applies the target key profile (owner, restore) (shared by admin import and CLI import)
             |   +-- FragmentWriter.js     Fragment writes. The semantic methods (insert, update) accept only gated values; internal metadata goes through updateInternal, which cannot write the 9 semantic columns (also delete, incrementAccess, touchLinked)
             |   +-- FragmentFactory.js    Fragment creation, validation, PII masking entry point (`maskSensitiveText`, rules come from the `lib/security` table) and per-type truncation (`limitContentLength`)
             |   +-- affect.js             Allowed affect tag values and `sanitizeAffect` normalization (shared by FragmentFactory and FragmentWriter)
@@ -64,6 +64,14 @@ server.js  (HTTP server)
             |   +-- IdempotencyStore.js   Retry response records for write tools that create no fragment (`amend`, `tool_feedback`) (`idempotency_records`)
             |   +-- BatchRememberProcessor.js Dedicated batchRemember() logic. Phase A (validation and per-item gate) -> B (INSERT) -> C (post-processing) 3-stage. Supports async opt-in via `async: true` parameter: after pre-validation, enqueues job to Redis (`memento:batch_remember_queue`) and returns immediately. Falls back to synchronous path when Redis is unavailable. Worker (BatchRememberWorker) consumes the queue via the existing INSERT path
             |   +-- BatchRememberWorker.js Async queue worker for batch_remember. Polls `memento:batch_remember_queue` Redis queue and processes jobs via the BatchRememberProcessor synchronous path. `getBatchRememberWorker()` singleton factory. Because it is `PollingWorker`-based it registers in the worker registry at startup and `gracefulShutdown` drains it together with the other workers
+            +-- transfer/                 Export and import modules
+            |   +-- exportFormat.js       Column lists of JSONL format versions 2 and 1, line classification, version negotiation, header and end lines (pure functions)
+            |   +-- FragmentExporter.js   Builds fragment, link and history lines in id ordered batches (shared by the admin API and the CLI)
+            |   +-- importRecords.js      Adapts text lines and JSON bodies to one record stream
+            |   +-- ImportRunner.js       Imports a record stream. Maps file ids to stored ids to connect links and history; dryRun rolls one transaction back
+            |   +-- ImportReport.js       Counts: imported, duplicates, rejected (typed reasons), errors
+            |   +-- importErrors.js       Import option and abort error types
+            |   +-- importRuntime.js      Builds the gate, writer, link store and profile (server gate for the admin API, default gate for the CLI)
             +-- link/                     Link layer modules
             |   +-- ReconsolidationEngine.js Dynamic fragment_links weight/confidence update engine (reinforce/decay/quarantine/restore/soft_delete + history recording)
             |   +-- GraphLinker.js        Embedding-ready event subscriber for auto-linking + retroactive linking + Hebbian co-retrieval linking
@@ -1275,6 +1283,7 @@ Files under `lib/memory/` are split into subdirectories by functional domain.
 ```
 lib/memory/
 +-- read/          FragmentSearch, FragmentReader, ContextBuilder, GraphNeighborSearch, HistoryReconstructor, Reranker, CaseRecall, LinkedFragmentLoader, RecallSuggestionEngine, SearchScope, SearchSideEffects
++-- transfer/      exportFormat, FragmentExporter, ImportRunner, ImportReport, importRecords, importErrors, importRuntime
 +-- write/         WriteGate, FragmentImporter, FragmentWriter, FragmentFactory, FragmentStore, RememberPostProcessor, ConflictResolver, BatchRememberProcessor, BatchRememberWorker
 +-- link/          ReconsolidationEngine, GraphLinker, LinkStore, SessionLinker, TemporalLinker, ContradictionDetector
 +-- consolidate/   MemoryConsolidator, ConsolidatorGC, FragmentGC, decay, UtilityBaseline

@@ -72,8 +72,8 @@ node bin/memento.js stats
 | `inspect <id>` | 파편 상세 + 1-hop 링크 | 예 |
 | `session <sub>` | 세션 list / show / delete / rotate (master key 필요) | 예 |
 | `update [--execute] [--redetect]` | 업데이트 확인 및 적용 (기본 dry-run) | 아니오 |
-| `export [--topic x] [--type t]` | 파편 JSONL 덤프 | 아니오 |
-| `import [--input FILE]` | JSONL 흡수 (파일 또는 stdin) | 아니오 |
+| `export [--topic x] [--type t] [--format-version n]` | 파편 JSONL 덤프(형식 버전 2 기본) | 아니오 |
+| `import [--input FILE] [--key id] [--restore]` | JSONL 흡수 (파일 또는 stdin) | 아니오 |
 | `completion <shell>` | bash/zsh 보완 스크립트 출력 | 예 |
 | `benchmark [--goldset FILE]` | 골드셋 기반 회상 품질 계측 | 아니오 |
 | `anchor-scope [--execute]` | 승인된 공유 앵커 범위 점검·정규화, snapshot backfill (기본 dry-run) | 아니오 |
@@ -381,15 +381,21 @@ node bin/memento.js update --help
 
 ### export
 
-파편을 JSONL(한 줄당 한 파편) 형식으로 덤프한다. 백업·이관용.
+파편을 JSONL 형식으로 덤프한다. 백업·이관용. 기본은 형식 버전 2(머리 줄, 파편 줄 전 열, 링크 줄, 끝 줄)이며 [API와 export 형식 버전 정책](api-versioning.md)이 구조를 정한다.
 
 ```bash
 node bin/memento.js export --topic memento-mcp --type fact > out.jsonl
 node bin/memento.js export --since 2026-04-01 --output backup.jsonl
-node bin/memento.js export --key mmcp_xxx --limit 500
+node bin/memento.js export --key <key_id> --limit 500
+node bin/memento.js export --include-versions --output full.jsonl
+node bin/memento.js export --format-version 1 --output legacy.jsonl
 ```
 
-주요 옵션: `--topic`, `--type`, `--since <ISO>`, `--limit <n>`, `--output <FILE>`, `--json` (배열 출력).
+주요 옵션: `--topic`, `--type`, `--since <ISO>`, `--limit <n>`, `--output <FILE>`, `--format-version <1|2>`, `--no-links`(링크 줄 제외), `--include-versions`(수정 이력 줄 추가), `--json` (배열 출력).
+
+- 파편은 id 순 묶음으로 읽어 줄 단위로 쓴다.
+- 링크는 양 끝이 모두 내보낸 파편이고 삭제되지 않은 것만 싣는다. `--topic`, `--type`, `--since`, `--limit`으로 범위를 좁히면 범위 밖 파편과 이어진 링크는 빠진다.
+- 형식 버전 1은 파편 17열만 싣는다.
 
 도움말:
 
@@ -399,22 +405,29 @@ node bin/memento.js export --help
 
 ### import
 
-JSONL 파일 또는 stdin에서 파편을 읽어 `fragments` 테이블에 적재한다.
+JSONL 파일 또는 stdin에서 파편(과 링크, 수정 이력)을 읽어 적재한다. 형식 버전 2 파일(export 결과)과 버전 1 파일(머리 줄 없는 파편 줄, 2027-10-03까지 수용)을 읽는다.
 
 ```bash
 node bin/memento.js import --input out.jsonl
 cat out.jsonl | node bin/memento.js import
 node bin/memento.js import --input out.jsonl --idempotent --dry-run
+node bin/memento.js import --input out.jsonl --key <key_id>
+node bin/memento.js import --input full.jsonl --restore
 ```
 
-행마다 의미 쓰기 관문을 거쳐(트랜잭션 밖) FragmentWriter로 기록하며 행마다 트랜잭션을 연다.
+주요 옵션: `--input <FILE>`, `--key <key_id>`(기록 대상 키, 없으면 마스터 범위), `--idempotent`, `--dry-run`, `--restore`, `--json`.
+
+파편 줄은 줄마다 의미 쓰기 관문을 거쳐(트랜잭션 밖) FragmentWriter로 기록하며 줄마다 트랜잭션을 연다.
 
 - 이메일, 비밀번호 필드, 휴대전화 번호, API 키와 토큰, 개인 키, 주민등록번호, 카드 번호 형태를 마스킹하고, 300자(episode는 1000자)를 넘는 본문은 잘라 저장한다. 키워드는 소문자로 정규화한다.
-- 관문이 받아들이지 않은 행(본문 누락이나 품질 미달, 4000자 초과, 형식이 잘못된 키워드, hard gate 키의 정책 위반)은 errors로 세고 다음 행을 계속 가져온다.
-- 같은 본문이 이미 있는 행은 기존 파편을 가리키므로 새로 만들지 않고 skipped로 센다.
-- 같은 id가 이미 있는 행은 `--idempotent`이면 skipped, 아니면 errors로 센다.
-- 행의 값 때문에 DB가 거부한 행(type, assertion_status CHECK 제약 등)은 errors로 세고 다음 행을 계속 가져온다.
-- `--dry-run`은 관문 검증만 수행하고 기록하지 않는다.
+- 기록 키는 `--key`가 정하며 파일 행의 `key_id`는 읽지 않는다(`ignored.key_id`로 센다). CLI는 서버 호스트의 DB 계정으로 실행하는 소유자 경로이므로 `is_anchor`는 파일 값을 따른다.
+- 집계는 imported(새로 기록), duplicates(같은 본문이 이미 있음), rejected(유형이 있는 사유), errors(행 문제가 아닌 실패)이고 한 행은 하나에만 들어간다. `--json`의 `skipped`는 `duplicates`와 같은 값이다.
+- 관문이 받아들이지 않은 행(본문 누락이나 품질 미달, 4000자 초과, 형식이 잘못된 키워드, hard gate 키의 정책 위반)과 행의 값 때문에 DB가 거부한 행(type, assertion_status CHECK 제약 등)은 `rejected_by_reason`의 사유별로 세고 다음 줄을 계속 가져온다.
+- 같은 id가 이미 있고 본문이 다른 행은 `--idempotent`이면 duplicates, 아니면 `id_conflict`로 거부한다.
+- 링크 줄은 양 끝 파편이 같은 실행에서 처리된 경우에만 기록한다. 본문이 같아 기존 파편으로 대응된 끝점은 기존 파편의 id로 건다. 수정 이력 줄은 이 실행에서 새로 만든 파편에만 붙인다.
+- `--dry-run`은 같은 경로로 처리하고 끝에 트랜잭션을 되돌린다. 집계는 실제 실행과 같고 DB에 연결한다(관문에서 모두 거부되는 입력은 연결하지 않는다).
+- `--restore`는 저장된 값을 되살린다. 형식 버전 2 파일에만 쓸 수 있으며 최소 품질 검사와 저장 길이 절삭을 건너뛰고 `importance`, `ttl_tier`, `workspace_source`를 파일 값 그대로 기록한다. 민감 정보 마스킹은 그대로 적용하고 감사 로그에 요약 한 줄을 남긴다. 보통 가져오기가 바꾸거나 거부하는 기존 행까지 같은 `content_hash`로 되살릴 때 쓴다.
+- `created_at`과 `valid_from`은 파일 값을 쓰고, 접근 수와 검증 시각은 가져온 시점 값이 된다. 임베딩은 서버의 임베딩 백필이 만든다.
 
 도움말:
 

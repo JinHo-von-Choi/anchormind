@@ -71,8 +71,8 @@ Every command except `serve` sends server logs to stderr (the CLI sets `MEMENTO_
 | `inspect <id>` | Fragment detail + 1-hop links | Yes |
 | `session <sub>` | Session list / show / delete / rotate (master key required) | Yes |
 | `update [--execute] [--redetect]` | Check and apply updates (dry-run by default) | No |
-| `export [--topic x] [--type t]` | Dump fragments as JSONL | No |
-| `import [--input FILE]` | Ingest JSONL (file or stdin) | No |
+| `export [--topic x] [--type t] [--format-version n]` | Dump fragments as JSONL (format version 2 by default) | No |
+| `import [--input FILE] [--key id] [--restore]` | Ingest JSONL (file or stdin) | No |
 | `completion <shell>` | Print bash/zsh completion script | Yes |
 | `benchmark [--goldset FILE]` | Measure recall quality against a goldset | No |
 | `anchor-scope [--execute]` | Inventory and normalize approved shared anchors, snapshot backfill (dry-run by default) | No |
@@ -380,15 +380,21 @@ node bin/memento.js update --help
 
 ### export
 
-Dump fragments as JSONL (one fragment per line) for backup or migration.
+Dump fragments as JSONL for backup or migration. The default is format version 2 (header line, fragment lines with all columns, link lines, end line); the structure is defined in the [API and Export Format Version Policy](api-versioning.en.md).
 
 ```bash
 node bin/memento.js export --topic memento-mcp --type fact > out.jsonl
 node bin/memento.js export --since 2026-04-01 --output backup.jsonl
-node bin/memento.js export --key mmcp_xxx --limit 500
+node bin/memento.js export --key <key_id> --limit 500
+node bin/memento.js export --include-versions --output full.jsonl
+node bin/memento.js export --format-version 1 --output legacy.jsonl
 ```
 
-Main options: `--topic`, `--type`, `--since <ISO>`, `--limit <n>`, `--output <FILE>`, `--json` (emit array).
+Main options: `--topic`, `--type`, `--since <ISO>`, `--limit <n>`, `--output <FILE>`, `--format-version <1|2>`, `--no-links` (leave out link lines), `--include-versions` (add amendment history lines), `--json` (emit array).
+
+- Fragments are read in id ordered batches and written line by line.
+- Only links that are not deleted and whose two ends are both exported are written. Narrowing the scope with `--topic`, `--type`, `--since` or `--limit` drops links to fragments outside it.
+- Format version 1 carries the 17 fragment columns only.
 
 Help:
 
@@ -398,22 +404,29 @@ node bin/memento.js export --help
 
 ### import
 
-Read fragments from a JSONL file or stdin and insert them into the `fragments` table.
+Read fragments (with links and amendment history) from a JSONL file or stdin and load them. Reads format version 2 files (export output) and version 1 files (fragment lines without a header, accepted until 2027-10-03).
 
 ```bash
 node bin/memento.js import --input out.jsonl
 cat out.jsonl | node bin/memento.js import
 node bin/memento.js import --input out.jsonl --idempotent --dry-run
+node bin/memento.js import --input out.jsonl --key <key_id>
+node bin/memento.js import --input full.jsonl --restore
 ```
 
-Each row passes the semantic write gate (outside the transaction) and is written through FragmentWriter in its own transaction.
+Main options: `--input <FILE>`, `--key <key_id>` (target key, master scope when omitted), `--idempotent`, `--dry-run`, `--restore`, `--json`.
+
+Each fragment line passes the semantic write gate (outside the transaction) and is written through FragmentWriter in its own transaction.
 
 - Email addresses, password fields, mobile phone numbers, API keys and tokens, private keys, resident registration numbers and card numbers are masked, and content longer than 300 characters (1000 for episode) is truncated when stored. Keywords are lowercased.
-- Rows the gate does not accept (missing or too short content, more than 4000 characters, malformed keywords, policy violations on a hard-gate key) are counted as errors and the import continues with the next row.
-- A row whose content already exists points to the existing fragment, creates nothing and is counted as skipped.
-- A row whose id already exists is counted as skipped with `--idempotent`, otherwise as an error.
-- A row the database rejects because of its values (CHECK constraints on type, assertion_status and so on) is counted as an error and the import continues.
-- `--dry-run` runs only the gate checks and writes nothing.
+- The key written is chosen by `--key`; the `key_id` of a file row is never read (it is counted in `ignored.key_id`). The CLI runs with the DB account of the server host, which is the owner path, so `is_anchor` follows the file.
+- Counts are imported (newly written), duplicates (same content already stored), rejected (typed reason) and errors (failures that are not about the row); a row falls in exactly one. `skipped` in `--json` equals `duplicates`.
+- Rows the gate does not accept (missing or too short content, more than 4000 characters, malformed keywords, policy violations on a hard-gate key) and rows the database rejects because of their values (CHECK constraints on type, assertion_status and so on) are counted per reason in `rejected_by_reason`, and the import continues with the next line.
+- A row whose id exists with different content is counted as a duplicate with `--idempotent`, otherwise rejected as `id_conflict`.
+- A link line is written only when both end fragments were handled in the same run. An end that maps to an existing fragment because the content matches links to the existing fragment's id. Amendment history lines attach only to fragments created in this run.
+- `--dry-run` processes through the same path and rolls the transaction back at the end. The counts equal those of a real run and the DB is contacted (input the gate rejects entirely does not connect).
+- `--restore` restores stored values. It works only on format version 2 files, skips the minimum quality check and the storage length cut, and writes `importance`, `ttl_tier` and `workspace_source` as in the file. Secret masking still applies and one summary line goes to the audit log. Use it to restore existing rows that a normal import would change or reject under the same `content_hash`.
+- `created_at` and `valid_from` use the file value; access counts and the verification time take the values at import time. Embeddings are created by the server's embedding backfill.
 
 Help:
 
