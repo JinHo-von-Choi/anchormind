@@ -11,7 +11,9 @@
 import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
-import { AuditStore, AuditQueryError, parseAuditFilters, auditWhereClause, AUDIT_LIST_LIMIT_MAX } from "../../lib/logging/AuditStore.js";
+import {
+  AuditStore, AuditQueryError, parseAuditFilters, auditWhereClause, AUDIT_LIST_LIMIT_MAX, AUDIT_RETENTION_ACTION
+} from "../../lib/logging/AuditStore.js";
 import { GENESIS_HASH, computeRowHash } from "../../lib/logging/audit-chain.js";
 
 const RECORD = Object.freeze({
@@ -172,6 +174,11 @@ describe("목록과 검증", () => {
   function chainPool(rows) {
     return fakePool((sql, p) => {
       if (/min\(seq\)/i.test(sql)) return { rows: [{ min: rows[0]?.seq ?? null }] };
+      if (/boundaryHash/.test(sql)) {
+        const first = rows.find(r => Number(r.seq) === p[2]);
+        const cp    = rows.filter(r => r.action === p[0] && String(r.detail?.boundarySeq) === p[1]).at(-1);
+        return { rows: cp && first ? [{ boundary_hash: cp.detail.boundaryHash, prev_hash: first.prev_hash }] : [] };
+      }
       if (/WHERE seq = \$1/.test(sql)) return { rows: rows.filter(r => Number(r.seq) === p[0]) };
       if (/seq > \$1/.test(sql)) return { rows: rows.filter(r => Number(r.seq) > p[0]).slice(0, p[1]) };
       return undefined;
@@ -213,14 +220,62 @@ describe("목록과 검증", () => {
     assert.deepEqual(result.broken, { seq: 1, reason: "prev_hash_mismatch" });
   });
 
-  it("앞부분이 정리된 체인은 남은 첫 행을 기준점으로 삼는다", async () => {
+  /** dbChain 끝에 보존 기준점 행을 이어 붙인다(경계 boundarySeq). */
+  function withCheckpoint(rows, boundarySeq, boundaryHash) {
+    const last   = rows.at(-1);
+    const seq    = Number(last.seq) + 1;
+    const record = {
+      seq, sourceEvent: `audit.retention:${boundarySeq}`, occurredAt: "2026-10-04T00:00:00.000Z", recordedAt: "2026-10-04T00:00:01.000Z",
+      action: AUDIT_RETENTION_ACTION, outcome: "success", actorKind: "system", targetType: "audit_chain", targetId: String(boundarySeq),
+      detail: { boundarySeq, boundaryHash, deleted: boundarySeq, retentionDays: 400 }
+    };
+    const hash = computeRowHash(last.row_hash, record);
+    return [...rows, {
+      seq: String(seq), source_event: record.sourceEvent, occurred_at: new Date(record.occurredAt), recorded_at: new Date(record.recordedAt),
+      action: record.action, outcome: "success", actor_kind: "system", actor_key_id: null, actor_session: null, actor_ip: null,
+      target_type: "audit_chain", target_id: record.targetId, workspace: null, detail: record.detail, prev_hash: last.row_hash, row_hash: hash
+    }];
+  }
+
+  it("보존 기준점 없이 앞부분이 사라진 체인은 prefix_mismatch다", async () => {
+    const { pool } = chainPool(dbChain(6).slice(2));
+    const result = await new AuditStore(pool).verify({});
+    assert.equal(result.ok, false);
+    assert.equal(result.anchor, "checkpoint");
+    assert.deepEqual(result.broken, { seq: 3, reason: "prefix_mismatch" });
+    assert.equal(result.checked, 0);
+  });
+
+  it("보존 기준점이 경계를 가리키면 그 해시부터 검증하고 기준점 행도 체인에서 확인한다", async () => {
     const full = dbChain(6);
-    const { pool } = chainPool(full.slice(2));
+    const { pool } = chainPool(withCheckpoint(full, 2, full[1].row_hash).slice(2));
     const result = await new AuditStore(pool).verify({});
     assert.equal(result.ok, true);
-    assert.equal(result.anchor, "retained");
+    assert.equal(result.anchor, "checkpoint");
     assert.equal(result.firstSeq, 3);
+    assert.equal(result.checked, 5);
     assert.equal(result.anchorHash, full[1].row_hash);
+  });
+
+  it("기준점 경계 뒤의 행까지 사라지면 prefix_mismatch다", async () => {
+    const full = dbChain(6);
+    const { pool } = chainPool(withCheckpoint(full, 2, full[1].row_hash).slice(3));
+    assert.deepEqual((await new AuditStore(pool).verify({})).broken, { seq: 4, reason: "prefix_mismatch" });
+  });
+
+  it("기준점의 해시가 남은 첫 행의 prev_hash와 다르면 prefix_mismatch다", async () => {
+    const full = dbChain(6);
+    const { pool } = chainPool(withCheckpoint(full, 2, "7".repeat(64)).slice(2));
+    assert.deepEqual((await new AuditStore(pool).verify({})).broken, { seq: 3, reason: "prefix_mismatch" });
+  });
+
+  it("fromSeq 바로 앞 행이 없으면 seq_gap이다", async () => {
+    const full = dbChain(6);
+    full.splice(2, 1);
+    const { pool } = chainPool(full);
+    const result = await new AuditStore(pool).verify({ fromSeq: 4 });
+    assert.deepEqual(result.broken, { seq: 4, reason: "seq_gap" });
+    assert.equal(result.anchor, "previous_row");
   });
 
   it("fromSeq를 주면 바로 앞 행의 row_hash에 이어지는지 본다", async () => {
@@ -259,12 +314,34 @@ describe("목록과 검증", () => {
 });
 
 describe("보존 정리", () => {
-  it("보존 일수와 묶음 상한을 넘기고 지운 행 수를 돌려준다", async () => {
-    const { calls, pool } = fakePool((sql) => (/^\s*WITH|DELETE/.test(sql) ? { rows: [], rowCount: 7 } : undefined));
+  it("잠금 아래에서 경계까지 지우고 같은 트랜잭션에서 경계의 seq와 해시를 담은 기준점 행을 기록한다", async () => {
+    const boundaryHash = "c".repeat(64);
+    const { calls, pool } = fakePool((sql) => {
+      if (/SELECT b\.seq, b\.row_hash/.test(sql)) return { rows: [{ seq: "7", row_hash: boundaryHash }] };
+      if (/^DELETE/.test(sql.trim())) return { rows: [], rowCount: 7 };
+      if (/ORDER BY seq DESC LIMIT 1/.test(sql)) return { rows: [{ seq: "9", row_hash: "d".repeat(64), recorded_at: new Date(0) }] };
+      return undefined;
+    });
     const deleted = await new AuditStore(pool).cleanup({ retentionDays: 400, limit: 500 });
     assert.equal(deleted, 7);
-    const del = calls.find(c => /DELETE FROM/.test(c.sql));
-    assert.deepEqual(del.params, [400, 500]);
-    assert.match(del.sql, /seq < \(SELECT max\(seq\)/);
+    const sqls = calls.map(c => c.sql);
+    assert.equal(sqls[0], "BEGIN");
+    assert.match(sqls[2], /LOCK TABLE \S+admin_audit_events IN SHARE ROW EXCLUSIVE MODE/);
+    const pick = calls.find(c => /SELECT b\.seq/.test(c.sql));
+    assert.deepEqual(pick.params, [400, 500]);
+    assert.match(pick.sql, /seq < \(SELECT max\(seq\)/);
+    assert.deepEqual(calls.find(c => /^DELETE/.test(c.sql)).params, [7]);
+    const insert = calls.find(c => c.sql.startsWith("INSERT")).params;
+    assert.equal(insert[0], 10);
+    assert.equal(insert[1], "audit.retention:7");
+    assert.equal(insert[4], AUDIT_RETENTION_ACTION);
+    assert.deepEqual(JSON.parse(insert[13]), { boundarySeq: 7, boundaryHash, deleted: 7, retentionDays: 400 });
+    assert.equal(sqls.at(-2), "COMMIT");
+  });
+
+  it("지울 행이 없으면 기준점을 쓰지 않는다", async () => {
+    const { calls, pool } = fakePool(() => undefined);
+    assert.equal(await new AuditStore(pool).cleanup({ retentionDays: 400, limit: 500 }), 0);
+    assert.equal(calls.some(c => /^(DELETE|INSERT)/.test(c.sql)), false);
   });
 });

@@ -188,27 +188,68 @@ describe("변조 검출과 보존 정리", () => {
     assert.deepEqual((await store.verify()).broken, { seq: 4, reason: "seq_gap" });
   });
 
-  it("보존 정리는 오래된 앞부분만 지우고 남은 체인은 기준점부터 검증된다", async () => {
-    const store = await seed(6);
-    await directQuery(`UPDATE ${AUDIT} SET recorded_at = recorded_at - interval '500 days' WHERE seq <= 2`);
+  const OLD_MS = Date.now() - 500 * 86_400_000;
+
+  /** 500일 전 시각으로 n행, 지금 시각으로 m행을 기록한다(기록 시각도 해시에 들어가므로 시계로 정한다). */
+  async function seedAged(n, m) {
+    const old = new AuditStore(getPrimaryPool(), { clock: () => OLD_MS });
+    for (let i = 1; i <= n; i++) await old.append(readAuditPayload(buildAuditPayload(event(i))), `audit.record:o${i}`);
+    const now = new AuditStore(getPrimaryPool());
+    for (let i = 1; i <= m; i++) await now.append(readAuditPayload(buildAuditPayload(event(100 + i))), `audit.record:n${i}`);
+    return now;
+  }
+
+  it("보존 정리는 오래된 앞부분만 지우고 기준점 행을 남기며 남은 체인은 기준점부터 검증된다", async () => {
+    const store = await seedAged(2, 4);
     assert.equal(await runAuditRetention({ store, retentionDays: 400, chunk: 1 }), 2);
+    const rows = await auditRows();
+    assert.deepEqual(rows.map(r => r.seq), [3, 4, 5, 6, 7, 8]);
+    const checkpoints = rows.filter(r => r.action === "audit.retention.prune");
+    assert.deepEqual(checkpoints.map(r => r.detail.boundarySeq), [1, 2]);
     const result = await store.verify();
-    assert.equal(result.ok, true);
-    assert.equal(result.anchor, "retained");
+    assert.equal(result.ok, true, JSON.stringify(result.broken));
+    assert.equal(result.anchor, "checkpoint");
     assert.equal(result.firstSeq, 3);
+    assert.equal(result.checked, 6);
   });
 
-  it("모든 행이 오래되어도 마지막 행은 남기고 다음 기록이 그 뒤에 이어진다", async () => {
-    const store = await seed(4);
-    await directQuery(`UPDATE ${AUDIT} SET recorded_at = recorded_at - interval '500 days'`);
+  it("정리 없이 보존 기간 안의 앞부분 행을 지우면 prefix_mismatch다", async () => {
+    const store = await seed(5);
+    await directQuery(`DELETE FROM ${AUDIT} WHERE seq <= 2`);
+    assert.deepEqual((await store.verify()).broken, { seq: 3, reason: "prefix_mismatch" });
+  });
+
+  it("정리 뒤 기준점 경계 다음 행을 지우면 prefix_mismatch다", async () => {
+    const store = await seedAged(2, 3);
+    await runAuditRetention({ store, retentionDays: 400 });
+    assert.equal((await store.verify()).ok, true);
+    await directQuery(`DELETE FROM ${AUDIT} WHERE seq = 3`);
+    assert.deepEqual((await store.verify()).broken, { seq: 4, reason: "prefix_mismatch" });
+  });
+
+  it("기준점 행의 경계 해시를 바꾸면 검증이 끊긴다", async () => {
+    const store = await seedAged(2, 2);
+    await runAuditRetention({ store, retentionDays: 400 });
+    await directQuery(`UPDATE ${AUDIT} SET detail = jsonb_set(detail, '{boundaryHash}', to_jsonb(repeat('7', 64))) WHERE action = 'audit.retention.prune'`);
+    assert.equal((await store.verify()).broken.reason, "prefix_mismatch");
+  });
+
+  it("fromSeq 바로 앞 행이 지워졌으면 seq_gap이다", async () => {
+    const store = await seed(5);
+    await directQuery(`DELETE FROM ${AUDIT} WHERE seq = 3`);
+    assert.deepEqual((await store.verify({ fromSeq: 4 })).broken, { seq: 4, reason: "seq_gap" });
+  });
+
+  it("모든 행이 오래되어도 마지막 행은 남기고 기준점과 다음 기록이 그 뒤에 이어진다", async () => {
+    const store = await seedAged(4, 0);
     assert.equal(await runAuditRetention({ store, retentionDays: 400 }), 3);
-    assert.deepEqual((await auditRows()).map(r => r.seq), [4]);
+    assert.deepEqual((await auditRows()).map(r => r.seq), [4, 5]);
     const next = await store.append(readAuditPayload(buildAuditPayload(event(9))), "audit.record:s9");
-    assert.equal(next.seq, 5);
-    const result = await store.verify({ fromSeq: 5 });
-    assert.equal(result.ok, true);
-    assert.equal(result.anchor, "previous_row");
-    assert.equal(result.checked, 1);
+    assert.equal(next.seq, 6);
+    const result = await store.verify();
+    assert.equal(result.ok, true, JSON.stringify(result.broken));
+    assert.equal(result.anchor, "checkpoint");
+    assert.equal(result.checked, 3);
   });
 });
 
