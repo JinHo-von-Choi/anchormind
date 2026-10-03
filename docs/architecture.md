@@ -269,7 +269,7 @@ scripts/
 ├── check-coverage.js                            단위 시험 커버리지 합계를 `coverage-baseline.json`과 비교 (`npm run test:coverage`)
 ├── switch-report.mjs                            기능 스위치의 적용 값, 기본값, 상태를 표로 출력 (`npm run switches`, `--strict`)
 ├── measure/recall-metrics.mjs                   평가 세트로 검색 지표를 측정하고 두 실행을 비교 (`--compare`)
-├── measure/protocol-era-probe.mjs              임시 서버에 현대식 MCP 요청을 보내 era 판정과 initialize 폴백을 관찰
+├── measure/protocol-era-probe.mjs               임시 서버에 현대식 MCP 요청을 보내 era 판정과 initialize 폴백을 관찰
 ├── ops/backup.sh                                agent_memory 스키마 백업과 매니페스트 (기본 14일 보관)
 ├── ops/restore-verify.mjs                       덤프를 일회용 시험 서버에 복원해 매니페스트와 대조
 ├── ops/online-index.mjs                         대형 표 색인을 작업 목록(`ops/index-manifest.json`)에 따라 `CONCURRENTLY`로 생성
