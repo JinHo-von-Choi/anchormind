@@ -51,7 +51,7 @@ const ALLOWED = {
   "memory/link/TemporalLinker.js": 1,
   "memory/processors/EpisodeContinuityService.js": 1,
   "memory/processors/MemoryRecaller.js": 1,
-  "memory/read/AnswerPackLoader.js": 1, // 답 꾸러미 항목의 source만 대체 체인 조회와 같은 범위 절로 읽는다. getByIds는 본문을 포함한 전체 열을 읽는다
+  "memory/read/AnswerPackLoader.js": 1, // 답 꾸러미 source 조회는 대체 체인 조회와 함께 recall의 agent, 키, workspace 범위 절을 공유한다. FragmentReader 메서드로 옮기면 그 범위 절을 중복한다
   "memory/read/CaseRecall.js": 2,
   "memory/CaseEventStore.js": 1,
   "memory/read/ContextBuilder.js": 1,

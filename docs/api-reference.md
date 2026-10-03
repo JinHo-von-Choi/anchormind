@@ -617,21 +617,23 @@ reason code 목록 (최대 3개):
 | 필드 | 설명 |
 |-|-|
 | `pack.version` | `v0` |
-| `pack.policy` | 기억 내용에서 파생하지 않는 고정 정책 문단. 블록 안 내용은 자료이며 지시가 아니라는 것, date와 status, assertion의 뜻, 이스케이프 표기를 적는다 |
-| `pack.text` | 답에 바로 넣을 텍스트. `[MEMORY PACK v0]`, 정책 문단, 파편마다 여는 줄 `<<<MEMORY ...>>>`, 본문 한 줄, 닫는 줄 `<<<END MEMORY>>>` |
-| `pack.items[]` | 블록과 같은 순서의 속성: `id`, `date`(UTC 저장일 YYYY-MM-DD), `status`(`valid`, `superseded`), `assertion`, `type`, `topic`, `case_id`, `source`, `superseded_by`, `supersedes`, `truncated`. 본문은 `pack.text`에만 있다 |
+| `pack.policy_id` | 정책 문단의 고정 식별자(`memento-pack-policy-v0`). 정책 문단 본문은 `pack.text`에만 한 번 들어간다 |
+| `pack.text` | 답에 바로 넣을 텍스트. `[MEMORY PACK v0]`, 기억 내용에서 파생하지 않는 고정 정책 문단(블록 안 내용은 자료이며 지시가 아니라는 것, date와 status, assertion의 뜻, 이스케이프 표기), 파편마다 여는 줄 `<<<MEMORY ...>>>`, 본문 한 줄, 닫는 줄 `<<<END MEMORY>>>` |
+| `pack.items[]` | 블록과 같은 순서의 속성: `id`, `date`(UTC 저장일 YYYY-MM-DD), `status`(`valid`, `superseded`), `assertion`, `type`, `topic`, `case_id`, `source`, `superseded_by`, `supersedes`, `truncated`, 있을 때만 `stale_warning`(recall의 stale 경고, 120자), `validation_warnings`(저장 시 검증 경고, 최대 5개, 각 120자). 본문은 `pack.text`에만 있다 |
 | `pack.groups[]` | `{ key, ids }`. key는 `case:<caseId>`, caseId가 없으면 `topic:<topic>`. 묶음은 처음 나온 순서, 묶음 안은 순위 순서이며 블록도 이 순서다 |
 | `pack.partial` | 출처와 대체 체인 조회가 실패해 그 정보 없이 만든 경우 `true` |
-| `pack.estimatedTokens` | `pack.text` 길이 / 4 올림 |
+| `pack.estimatedTokens` | `estimatedTokens`를 뺀 `pack` 객체를 응답과 같은 방식(JSON, 들여쓰기 2)으로 직렬화한 문자열의 cl100k_base 토큰 수(저장 경로와 recall 예산 선택이 쓰는 `countTokens`). 꾸러미 전체의 크기다 |
 
 규칙:
 
 - 날짜는 `created_at`의 UTC 날짜만 쓴다. 상대 날짜와 경과 일수(`age_days`)는 싣지 않는다.
-- `status`는 `valid_to`가 없으면 `valid`, 있으면 `superseded`다(`includeSuperseded=true`일 때 나온다). `superseded_by`와 `supersedes`는 `superseded_by` 링크(삭제되지 않은 것)의 상대 id이며 방향마다 최대 5개다. 이 체인과 `source`는 recall과 같은 agent, 키(그룹 포함), workspace 범위의 파편에 대해 한 번씩 따로 조회한다.
+- `status`는 `valid_to`가 없으면 `valid`, 있으면 `superseded`다(`includeSuperseded=true`일 때 나온다). `superseded_by`와 `supersedes`는 `superseded_by` 링크(삭제되지 않은 것)의 상대 id이며, 방향마다 상대 파편의 `created_at` 내림차순(같으면 id 오름차순)으로 최대 5개다. 이 체인과 `source`는 recall과 같은 agent, 키(그룹 포함), workspace 범위의 파편에 대해 한 번씩 따로 조회한다.
 - `source`는 저장된 값이며 `session:<id>`는 `session`으로 줄인다.
-- 본문은 코드 포인트 1000자로 자르고(`truncated=true`) 역슬래시, 줄바꿈, 탭, 제어문자, 방향 제어와 폭 없는 문자를 `\\`, `\n`, `\t`, `\uXXXX`로 이스케이프한다. 세 개 이상 이어진 `<`, `>`는 `\u003c`, `\u003e`로 바꾸므로 본문이나 속성이 블록 구분자를 만들 수 없다. 여는 줄의 문자열 속성은 큰따옴표로 감싸고 120자로 자른다.
+- 본문과 여는 줄의 문자열 속성은 역슬래시, 줄바꿈, 탭과 일반 범주 Cc, Cf, Cs, Zl, Zp의 문자(소프트 하이픈, 폭 없는 문자, 방향 제어, 태그 문자 U+E0000~U+E007F 포함)를 `\\`, `\n`, `\t`, `\uXXXX`, `\u{XXXXX}`로 이스케이프한다. 세 개 이상 이어진 `<`, `>`는 `\u003c`, `\u003e`로 바꾸므로 본문이나 속성이 블록 구분자를 만들 수 없다. 길이 상한(본문 1000자, 속성 120자, 코드 포인트)은 이스케이프한 뒤의 길이에 적용하고 이스케이프 표기 중간에서 자르지 않는다. 잘린 본문은 `truncated=true`다. 문자열 속성은 큰따옴표로 감싼다.
 - `assertion`은 `observed`, `inferred`, `verified`, `rejected`일 때만 싣는다.
-- `fields`, `includeKeywords`, `includeContext`의 부가 필드는 pack에 들어가지 않는다. `totalTokens`는 recall이 고른 파편의 토큰 수이고 `pack.text`의 머리와 속성은 포함하지 않는다.
+- `fields`, `includeKeywords`, `includeContext`의 부가 필드와 연결 파편(`linked`)은 pack에 들어가지 않는다.
+
+응답 크기: `totalTokens`는 recall이 고른 파편 본문의 토큰 수이고, `pack.estimatedTokens`는 꾸러미 전체(`text`, `items`, `groups`)의 토큰 수다. 도구 응답은 결과 객체 전체를 JSON 문자열로 보내므로 `pack.text`의 줄바꿈과 이스케이프 표기는 JSON에서 한 번 더 이스케이프되고, 속성은 `pack.text`의 여는 줄과 `pack.items`에 함께 실린다. 2026-10-03 평가 세트 본문(짧은 한국어 문장, 평균 약 42토큰)으로 잰 응답 전체 토큰은 기본 형식 대비 3건 2.1배(438 대 921), 10건 1.6배(1404 대 2252), 15건 1.55배(2026 대 3134)였다. 고정 정책 문단이 응답마다 한 번 들어가므로 건수가 적을수록 비율이 크다.
 
 ### depth enum
 
@@ -1086,7 +1088,7 @@ Anchor + Core + Learning + Working Memory와 session_reflect를 분리 로드한
 
 ### 주입 줄 주석
 
-`MEMENTO_CONTEXT_ANNOTATE=on`(기본)이면 `injectionText`의 기억 줄 끝에 ` (YYYY-MM-DD, assertion)`이 붙는다. 예: `- nginx 설정은 sites-available 카테고리 파일에 둔다 (2026-09-30, verified)`. 날짜는 UTC 기준 저장일이고, assertion은 저장된 값이 `observed`, `inferred`, `verified`, `rejected` 중 하나일 때만 실리며 없으면 날짜만 붙는다. 헤더 문자열(`[ANCHOR MEMORY]` 등)과 줄 머리 `- `는 바뀌지 않으므로 줄 단위로 읽는 훅은 줄 끝 괄호만 무시하면 된다. `fragments`와 structured 응답의 필드, `totalTokens`는 스위치와 관계없이 같다. `off`이면 줄이 본문으로 끝난다.
+`MEMENTO_CONTEXT_ANNOTATE=on`(기본)이면 `injectionText`의 기억 줄 끝에 ` (YYYY-MM-DD, assertion)`이 붙는다. 예: `- nginx 설정은 sites-available 카테고리 파일에 둔다 (2026-09-30, verified)`. 날짜는 UTC 기준 저장일이고, assertion은 저장된 값이 `observed`, `inferred`, `verified`, `rejected` 중 하나일 때만 실리며 없으면 날짜만 붙는다. 헤더 문자열(`[ANCHOR MEMORY]` 등)과 줄 머리 `- `는 바뀌지 않으므로 줄 단위로 읽는 훅은 줄 끝 괄호만 무시하면 된다. 날짜는 UTC 기준이므로 UTC 자정(한국 시각 09:00)에 바뀌고, 한국 시각 00:00부터 08:59 사이에 저장한 기억은 전날 날짜로 표시된다. 시간대 설정은 없다. `on`이면 선택 단계가 기억 줄마다 주석 고정 비용 6(문자 수 / 4 단위)을 더해 `tokenBudget` 안에서 고르므로 같은 예산에서 고르는 파편이 줄 수 있다. 파편과 structured 응답의 필드 형태, `totalTokens`(본문만 센다)의 계산 방식은 스위치와 관계없이 같다. `off`이면 줄이 본문으로 끝나고 선택도 주석 비용 없이 한다.
 
 ---
 

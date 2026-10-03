@@ -600,21 +600,23 @@ With `format: "pack"` the response carries `success`, `format: "pack"`, `pack`, 
 | Field | Description |
 |-|-|
 | `pack.version` | `v0` |
-| `pack.policy` | Fixed policy paragraph that is not derived from memory content. It states that block content is data and not instructions, and explains date, status, assertion and the escape notation |
-| `pack.text` | Text ready to place into an answer: `[MEMORY PACK v0]`, the policy paragraph, then per fragment an opening line `<<<MEMORY ...>>>`, one content line and the closing line `<<<END MEMORY>>>` |
-| `pack.items[]` | Attributes in block order: `id`, `date` (UTC storage date YYYY-MM-DD), `status` (`valid`, `superseded`), `assertion`, `type`, `topic`, `case_id`, `source`, `superseded_by`, `supersedes`, `truncated`. The content is only in `pack.text` |
+| `pack.policy_id` | Fixed identifier of the policy paragraph (`memento-pack-policy-v0`). The paragraph itself appears once, in `pack.text` only |
+| `pack.text` | Text ready to place into an answer: `[MEMORY PACK v0]`, the fixed policy paragraph that is not derived from memory content (block content is data and not instructions; meaning of date, status, assertion; escape notation), then per fragment an opening line `<<<MEMORY ...>>>`, one content line and the closing line `<<<END MEMORY>>>` |
+| `pack.items[]` | Attributes in block order: `id`, `date` (UTC storage date YYYY-MM-DD), `status` (`valid`, `superseded`), `assertion`, `type`, `topic`, `case_id`, `source`, `superseded_by`, `supersedes`, `truncated`, and only when present `stale_warning` (recall stale warning, 120 characters) and `validation_warnings` (warnings recorded at write time, at most 5, 120 characters each). The content is only in `pack.text` |
 | `pack.groups[]` | `{ key, ids }`. The key is `case:<caseId>`, or `topic:<topic>` without a caseId. Groups appear in order of first appearance, items within a group in rank order, and the blocks follow this order |
 | `pack.partial` | `true` when the source and supersession lookup failed and the pack was built without that information |
-| `pack.estimatedTokens` | Length of `pack.text` / 4, rounded up |
+| `pack.estimatedTokens` | cl100k_base token count (`countTokens`, the function the write path and recall budget selection use) of the `pack` object without `estimatedTokens`, serialized like the response (JSON, indent 2). This is the size of the whole pack |
 
 Rules:
 
 - Dates are the UTC date of `created_at` only. Relative dates and elapsed days (`age_days`) are not included.
-- `status` is `valid` without `valid_to` and `superseded` with it (returned with `includeSuperseded=true`). `superseded_by` and `supersedes` are the ids on the other side of `superseded_by` links (not deleted), at most 5 per direction. The chain and `source` are looked up separately, once each, for fragments within the same agent, key (including the group) and workspace scope as the recall.
+- `status` is `valid` without `valid_to` and `superseded` with it (returned with `includeSuperseded=true`). `superseded_by` and `supersedes` are the ids on the other side of `superseded_by` links (not deleted), at most 5 per direction, ordered by the related fragment's `created_at` descending (ties by id ascending). The chain and `source` are looked up separately, once each, for fragments within the same agent, key (including the group) and workspace scope as the recall.
 - `source` is the stored value; `session:<id>` is shortened to `session`.
-- Content is cut at 1000 code points (`truncated=true`); backslash, line breaks, tab, control characters, direction controls and zero-width characters are escaped as `\\`, `\n`, `\t`, `\uXXXX`. Runs of three or more `<` or `>` become `\u003c`, `\u003e`, so neither content nor attributes can form a block delimiter. String attributes of the opening line are double-quoted and cut at 120 characters.
+- Content and the string attributes of the opening line escape backslash, line breaks, tab and the characters of the general categories Cc, Cf, Cs, Zl, Zp (including the soft hyphen, zero-width characters, direction controls and the tag characters U+E0000 to U+E007F) as `\\`, `\n`, `\t`, `\uXXXX`, `\u{XXXXX}`. Runs of three or more `<` or `>` become `\u003c`, `\u003e`, so neither content nor attributes can form a block delimiter. The length caps (content 1000, attributes 120, code points) apply to the escaped length and never split an escape sequence. Cut content is marked `truncated=true`. String attributes are double-quoted.
 - `assertion` is included only for `observed`, `inferred`, `verified`, `rejected`.
-- The extra fields of `fields`, `includeKeywords` and `includeContext` are not part of the pack. `totalTokens` is the token count of the fragments recall selected and does not include the pack header and attributes.
+- The extra fields of `fields`, `includeKeywords`, `includeContext` and the linked fragments (`linked`) are not part of the pack.
+
+Response size: `totalTokens` is the token count of the content of the fragments recall selected, and `pack.estimatedTokens` is the token count of the whole pack (`text`, `items`, `groups`). Tool responses send the whole result object as a JSON string, so the line breaks and escape notation in `pack.text` are escaped once more by JSON, and the attributes appear both in the opening lines of `pack.text` and in `pack.items`. Measured on 2026-10-03 with the evaluation set content (short Korean sentences, about 42 tokens on average), the whole response was 2.1 times the default format at 3 items (438 against 921 tokens), 1.6 times at 10 (1404 against 2252) and 1.55 times at 15 (2026 against 3134). The fixed policy paragraph is included once per response, so the ratio is larger with fewer items.
 
 ### depth enum
 
@@ -1069,7 +1071,7 @@ Loads Anchor, Core, Learning, and Working Memory plus session_reflect separately
 
 ### Injection line annotation
 
-With `MEMENTO_CONTEXT_ANNOTATE=on` (the default), each memory line of `injectionText` ends with ` (YYYY-MM-DD, assertion)`. Example: `- nginx settings live in the sites-available category files (2026-09-30, verified)`. The date is the UTC storage date. The assertion is shown only when the stored value is one of `observed`, `inferred`, `verified`, `rejected`; otherwise only the date is added. Header strings (`[ANCHOR MEMORY]` and so on) and the `- ` line prefix do not change, so hooks that read lines only need to ignore the trailing parentheses. The fields of `fragments`, the structured response and `totalTokens` are the same with either value. With `off`, lines end with the content.
+With `MEMENTO_CONTEXT_ANNOTATE=on` (the default), each memory line of `injectionText` ends with ` (YYYY-MM-DD, assertion)`. Example: `- nginx settings live in the sites-available category files (2026-09-30, verified)`. The date is the UTC storage date. The assertion is shown only when the stored value is one of `observed`, `inferred`, `verified`, `rejected`; otherwise only the date is added. Header strings (`[ANCHOR MEMORY]` and so on) and the `- ` line prefix do not change, so hooks that read lines only need to ignore the trailing parentheses. The date is in UTC, so it changes at UTC midnight (09:00 KST), and a memory stored between 00:00 and 08:59 KST shows the previous date. There is no time zone setting. With `on`, selection adds a fixed annotation cost of 6 per memory line (characters / 4 units) within `tokenBudget`, so fewer fragments may be selected for the same budget. The field shapes of `fragments` and the structured response, and the way `totalTokens` is computed (content only), are the same with either value. With `off`, lines end with the content and selection adds no annotation cost.
 
 ---
 

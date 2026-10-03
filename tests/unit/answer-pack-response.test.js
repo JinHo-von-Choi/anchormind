@@ -53,6 +53,7 @@ mock.module("../../lib/tools/db.js", {
 
 const { tool_recall }         = await import("../../lib/tools/memory.js");
 const { loadPackProvenance }  = await import("../../lib/memory/read/AnswerPackLoader.js");
+const { countTokens }         = await import("../../lib/memory/write/FragmentFactory.js");
 
 const fragment = (id, extra = {}) => ({
   id, content: `${id} body`, topic: "ops", type: "fact", importance: 0.5, created_at: "2026-09-30T10:00:00Z",
@@ -100,6 +101,26 @@ describe("recall format", () => {
     assert.deepEqual(byId.get("new").supersedes, ["old"]);
     assert.equal(byId.get("new").source, "session");
     assert.doesNotMatch(response.pack.text, /abc-123/);
+  });
+
+  it("pack.estimatedTokens는 직렬화한 꾸러미를 countTokens로 센 값이고 정책 문단은 text에만 있다", async () => {
+    const response = await tool_recall({ keywords: ["k"], format: "pack" });
+    const { estimatedTokens, ...rest } = response.pack;
+
+    assert.equal(estimatedTokens, countTokens(JSON.stringify(rest, null, 2)));
+    assert.ok(!("policy" in response.pack));
+    assert.equal(typeof response.pack.policy_id, "string");
+  });
+
+  it("stale 경고와 검증 경고를 항목에 싣고 연결과 스티칭 맥락은 싣지 않는다", async () => {
+    state.result.fragments[0].metadata            = { stale: true, warning: "검증 후 40일 지남" };
+    state.result.fragments[0].validation_warnings = ["sensitive.email"];
+    const response = await tool_recall({ keywords: ["k"], format: "pack" });
+    const item     = response.pack.items.find(i => i.id === "new");
+
+    assert.equal(item.stale_warning, "검증 후 40일 지남");
+    assert.deepEqual(item.validation_warnings, ["sensitive.email"]);
+    for (const key of ["linked", "stitched_context", "nearby_context", "content"]) assert.ok(!(key in item), key);
   });
 
   it("caseMode 결과에는 pack을 적용하지 않는다", async () => {
@@ -160,8 +181,35 @@ describe("loadPackProvenance", () => {
     };
     const provenance = await loadPackProvenance(["a", "b"], {}, () => pool);
 
-    assert.deepEqual(provenance.get("a"), { source: "tool:remember", supersededBy: [], supersedes: ["z", "y"] });
+    assert.deepEqual(provenance.get("a"), { source: "tool:remember", supersededBy: [], supersedes: ["y", "z"] });
     assert.deepEqual(provenance.get("b"), { source: null, supersededBy: ["a"], supersedes: [] });
+  });
+
+  it("체인은 상대 파편의 created_at 내림차순, 같으면 id 오름차순으로 다섯 개까지 싣는다", async () => {
+    const row = (other, at) => ({ item_id: "a", other_id: other, other_created_at: at, direction: "superseded_by" });
+    const pool = {
+      query: async sql => (/superseded_by/.test(sql)
+        ? { rows: [
+          row("old-1", "2026-01-01T00:00:00Z"),
+          row("new-b", "2026-09-01T00:00:00Z"),
+          row("none", null),
+          row("new-a", "2026-09-01T00:00:00Z"),
+          row("mid", "2026-05-01T00:00:00Z"),
+          row("newest", "2026-10-01T00:00:00Z"),
+          row("old-2", "2025-12-01T00:00:00Z")
+        ] }
+        : { rows: [] })
+    };
+    const provenance = await loadPackProvenance(["a"], {}, () => pool);
+    assert.deepEqual(provenance.get("a").supersededBy, ["newest", "new-a", "new-b", "mid", "old-1"]);
+  });
+
+  it("체인 조회 SQL이 상대 파편의 created_at 내림차순으로 정렬한다", async () => {
+    const calls = [];
+    const pool  = { query: async sql => { calls.push(sql); return { rows: [] }; } };
+    await loadPackProvenance(["a"], {}, () => pool);
+    const chain = calls.find(sql => /superseded_by/.test(sql));
+    assert.match(chain, /ORDER BY item_id, direction, other_created_at DESC NULLS LAST, other_id/);
   });
 
   it("id가 없거나 풀이 없으면 조회하지 않는다", async () => {
