@@ -377,7 +377,7 @@ POSTGRES_* 접두어가 DB_* 접두어보다 우선한다. 두 형식을 혼용�
 | MEMENTO_OUTBOX_WORKER | on | 이 프로세스에서 작업자를 돌릴지 정하는 프로세스별 스위치. `off`여도 이 프로세스의 기록은 계속된다. 여러 인스턴스가 같은 DB를 쓰면 작업자를 돌릴 인스턴스만 `on`으로 두고 나머지는 `off`로 둘 수 있고, 모두 `on`이어도 같은 이벤트를 동시에 처리하지 않는다. 모든 인스턴스가 `off`이면 대기 행은 어느 인스턴스가 다시 켜질 때까지 쌓인다. 대기, dead-letter, 지연 게이지는 작업자를 돌리는 프로세스만 갱신한다 |
 | MEMENTO_OUTBOX_MAX_ATTEMPTS | 12 | 이벤트 하나의 점유 횟수 상한. 1 이상 100 이하의 정수, 그 밖의 값은 12. 처리기 등록의 `maxAttempts`가 있으면 그 값이 우선한다 |
 | MEMENTO_OUTBOX_RETENTION_DAYS | 7 | 완료한 행의 보존 일수. 1 이상 3650 이하의 정수, 그 밖의 값은 7 |
-| MEMENTO_OUTBOX_UNHANDLED_DAYS | 7 | 작업자 프로세스에 처리기가 없는 topic의 대기 행을 dead-letter(`last_error = 'no_handler'`)로 옮기기까지의 일수. 전달 예정 시각(`available_at`)부터 센다. 1 이상 3650 이하의 정수, 그 밖의 값은 7 |
+| MEMENTO_OUTBOX_UNHANDLED_DAYS | 7 | 작업자 프로세스에 처리기가 등록되지 않은 topic의 대기 행 중 한 번도 점유되지 않은 행을 dead-letter(`last_error = 'no_handler'`)로 옮기기까지의 일수. 전달 예정 시각(`available_at`)부터 센다. 판정은 작업자 프로세스마다 그 프로세스의 등록 목록으로 한다. 1 이상 3650 이하의 정수, 그 밖의 값은 7 |
 
 동작
 
@@ -387,11 +387,11 @@ POSTGRES_* 접두어가 DB_* 접두어보다 우선한다. 두 형식을 혼용�
 - 묶음 중단: 남은 임대가 20초(처리기 상한 15초와 여유 5초)보다 짧거나 종료 요청을 받으면 다음 이벤트를 시작하지 않고 나머지 점유를 반납한다. 완료나 실패 기록이 오류로 끝나도 아직 시작하지 않은 점유를 반납하고 회차를 실패로 마친다. 기록 중 오류가 난 이벤트는 결과를 알 수 없어 반납하지 않으며 임대가 끝난 뒤 다시 점유된다(그 점유는 `attempts`에 이미 세었다).
 - 순서: 한 묶음은 점유 순서대로 하나씩 처리한다. 묶음 사이, 작업자 사이, 같은 aggregate의 이벤트 사이의 순서는 보장하지 않으며 실패한 이벤트는 나중 이벤트보다 늦게 전달될 수 있다.
 - 재시도와 dead-letter: 실패는 1초에서 시작해 실패마다 두 배(상한 30분)인 간격의 절반에서 전체 사이 시각에 다시 점유한다. 점유 횟수가 상한에 이른 실패와 처리기가 던진 `OutboxPermanentError`는 dead-letter(`dead_at`)로 남고 다시 점유하지 않으며 자동으로 지우지 않는다.
-- 처리기 없는 topic: 작업자는 자기 프로세스에 처리기가 있는 topic만 점유하므로 어느 프로세스에도 처리기가 없는 topic의 행은 점유되지 않고 매 점유 질의가 훑는다. 5분마다 그런 대기 행 중 전달 예정 시각이 `MEMENTO_OUTBOX_UNHANDLED_DAYS`일 넘게 지난 행을 500건 묶음으로, 한 번에 최대 5000건까지 dead-letter(`last_error = 'no_handler'`)로 옮기고 `memento_outbox_unhandled_total`로 센다.
+- 처리기 없는 topic: 작업자는 자기 프로세스에 처리기가 있는 topic만 점유하므로, 그 밖의 topic 행은 점유되지 않고 매 점유 질의가 훑는다. 5분마다 작업자 프로세스는 자기 등록 목록에 없는 topic의 대기 행 중 한 번도 점유되지 않았고(`attempts = 0`) 전달 예정 시각이 `MEMENTO_OUTBOX_UNHANDLED_DAYS`일 넘게 지난 행을 500건 묶음으로, 한 번에 최대 5000건까지 dead-letter(`last_error = 'no_handler'`)로 옮기고 `memento_outbox_unhandled_total`로 센다. 판정은 작업자 프로세스별이다. 작업자를 돌리는 모든 인스턴스는 모든 소비자의 처리기를 등록해야 하며, 어느 인스턴스에서 빠진 topic의 행은 다른 인스턴스에 처리기가 있어도 그 인스턴스가 먼저 처리하지 않았다면 이 기간이 지나 `no_handler`로 옮겨질 수 있다. 처리기가 하나도 등록되지 않은 프로세스는 이 판정을 하지 않는다. `no_handler` 행은 아래 SQL로 다시 대기로 돌린다.
 - 보존: 5분마다 보존 기간이 지난 완료 행을 500건 묶음으로, 한 번에 최대 5000건까지 지운다.
 - 상태: 15초마다 대기와 dead-letter 건수, 전달 예정 시각이 지난 대기 행 중 가장 오래된 행의 지연 초(재시도 대기와 `delayMs`로 미룬 행처럼 예정 시각이 오지 않은 행과 점유 중인 행은 넣지 않는다)를 게이지(`memento_outbox_pending`, `memento_outbox_dead_letter`, `memento_outbox_lag_seconds`)와 관리 `/stats` 응답의 `schedulerJobs.outbox`에 반영하고, 갱신 시각을 `memento_outbox_stats_updated_seconds`(유닉스 초)에 남긴다. 계수기는 `memento_outbox_{enqueued,processed,failed,dead_letter}_total{topic}`, `memento_outbox_lease_lost_total`, `memento_outbox_cleaned_total`, `memento_outbox_unhandled_total`, 분포는 `memento_outbox_delivery_seconds{topic}`(점유 전 전달 예정 시각부터 완료 기록까지)이다. topic 라벨은 처리기가 등록된 topic이고 그 밖은 `other`다.
 
-dead-letter 행은 원인을 고친 뒤 다시 대기로 돌린다.
+dead-letter 행(`no_handler` 포함)은 원인을 고친 뒤 다시 대기로 돌린다.
 
 ```sql
 UPDATE agent_memory.outbox_events

@@ -85,7 +85,7 @@ groups:
 | MementoSplitStepFailures | 장문 파편 분할의 커밋 단계가 실패한다(`step` 라벨로 구분) |
 | MementoProtocolVersionOther | 지원 목록에 없는 프로토콜 버전을 요청한 협상이 있다 |
 | MementoOutboxDeadLetter | 재시도 한도를 넘었거나 재시도 불가로 판정된 outbox 이벤트가 있다. 원인을 고친 뒤 되돌리는 절차는 [configuration.md](../configuration.md#outbox) |
-| MementoOutboxLag | 전달 예정 시각이 지난 outbox 대기 행 중 가장 오래된 행이 5분 넘게 전달되지 않았다(처리기 반복 실패, 처리량 부족). 재시도 간격이나 `delayMs`로 아직 예정 시각이 오지 않은 행은 넣지 않는다 |
+| MementoOutboxLag | 전달 예정 시각이 지난 outbox 대기 행 중 가장 오래된 행이 5분 넘게 전달되지 않았다(작업자 처리량 부족, 점유되지 않는 topic). 재시도하는 행은 다음 예정 시각이 미래라 지연에 들어가지 않으므로, 처리기 반복 실패는 `memento_outbox_failed_total`과 dead-letter 건수(`memento_outbox_dead_letter`, MementoOutboxDeadLetter)로 본다 |
 | MementoOutboxStatsStale | 어느 프로세스도 5분 넘게 outbox 게이지를 갱신하지 않았다(모든 인스턴스의 작업자 정지, `MEMENTO_OUTBOX_WORKER=off`, 작업자 회차 실패). `MEMENTO_OUTBOX=off`로 기능을 끈 배치에서는 이 규칙을 두지 않는다 |
 
 outbox 게이지는 작업자를 돌리는 프로세스만 갱신한다. 작업자를 돌리지 않는 프로세스도 지표 모듈을 불러오므로 `memento_outbox_lag_seconds`를 0으로 내보내고, 따라서 `absent(memento_outbox_lag_seconds)`는 스크레이프 대상이 사라졌을 때만 참이 되어 작업자 정지를 잡지 못한다. 작업자 정지는 갱신 시각 게이지 `memento_outbox_stats_updated_seconds`(유닉스 초, 갱신 전에는 0)로 본다. 인스턴스가 여럿이면 `max`가 가장 최근 갱신을 고르므로 하나라도 작업자를 돌리면 경보가 나지 않는다.
