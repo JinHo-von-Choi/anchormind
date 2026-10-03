@@ -47,6 +47,8 @@
     { "name": "uq_frag_hash_ws_master", "table": "fragments", "unique": true,
       "definition": "ON agent_memory.fragments (content_hash, (COALESCE(workspace, ''))) WHERE key_id IS NULL" },
     { "name": "idx_ce_source_fragment_id", "table": "case_events", "unique": false,
-      "definition": "ON agent_memory.case_events (source_fragment_id) WHERE source_fragment_id IS NOT NULL" }
+      "definition": "ON agent_memory.case_events (source_fragment_id) WHERE source_fragment_id IS NOT NULL" },
+    { "name": "idx_fragments_content_tokens", "table": "fragments",
+      "definition": "ON agent_memory.fragments USING gin (content_tokens)" }
   ]
 }
