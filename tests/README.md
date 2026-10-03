@@ -5,6 +5,7 @@
 | Directory | Runner | Purpose |
 |-----------|--------|---------|
 | `tests/unit/` | `node --test` | 단위 테스트 — mock/stub 기반, DB 불필요 |
+| `tests/structure/` | `node --test` | 구조 검사. 소스를 정적으로 읽어 경계 규칙을 확인한다(DB 불필요) |
 | `tests/integration/` | `node --test` | 통합 테스트 — 실제 DB/Redis 연결 필요 |
 | `tests/e2e/` | `node --test` | E2E — 서버 프로세스 기동 후 HTTP 요청 |
 | `tests/db-concurrency/` | `node --test` | 실제 PostgreSQL 동시성. 행 잠금 순서, linked_to 정합 (`npm run test:db`) |
@@ -13,7 +14,7 @@
 
 | Command | Scope |
 |---------|-------|
-| `npm test` | unit 전체 (`tests/unit/*.test.js`, `tests/unit/**/*.test.js`) |
+| `npm test` | unit 전체 (`tests/unit/*.test.js`, `tests/unit/**/*.test.js`)와 구조 검사(`tests/structure/*.test.js`) |
 | `npm run test:integration` | 통합 + e2e (DB/Redis 필요) |
 | `npm run test:e2e` | e2e만 |
 | `npm run test:db` | DB 동시성 시험만 (로컬 시험 PostgreSQL 서버 필요, 실행마다 전용 DB 생성과 삭제) |
@@ -23,7 +24,7 @@
 ## Conventions
 
 - 파일명: `<module-name>.test.js`
-- 새 테스트는 반드시 `tests/unit/`에 Node test runner로 작성
+- 새 테스트는 반드시 `tests/unit/`에 Node test runner로 작성. 소스 정적 분석만 하는 구조 검사는 `tests/structure/`에 둔다
 - Given-When-Then 또는 Arrange-Act-Assert 패턴 사용
 - describe 블록으로 모듈/기능 단위 그룹화
 - mock은 `node:test`의 `mock.fn()` 사용 (Jest의 `jest.fn()` 아님)
