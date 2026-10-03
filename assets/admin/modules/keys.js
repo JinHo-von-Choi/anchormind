@@ -72,10 +72,10 @@ export function keyInUseMessage(data) {
 export const KEY_MODE_OPTIONS = ["recall-only", "write-only", "onboarding"];
 
 /**
- * 키 상세의 권한 토글. 서버가 받는 권한 값과 같다(trusted_origin은 출처 신뢰 등급 상한,
- * review_off와 review_all은 검토 대기열 방식이며 하나만 둘 수 있다).
+ * 키 상세의 권한 토글. 서버 lib/admin/key-policy.js의 KEY_PERMISSION_VALUES와 같다(trusted_origin은 출처
+ * 신뢰 등급 상한, anchor는 앵커 지정 권한, review_off와 review_all은 검토 대기열 방식이며 하나만 둘 수 있다).
  */
-export const KEY_PERMISSION_TOGGLES = ["read", "write", "trusted_origin", "review_off", "review_all"];
+export const KEY_PERMISSION_TOGGLES = ["read", "write", "trusted_origin", "anchor", "review_off", "review_all"];
 
 /** 함께 둘 수 없는 검토 방식 표지 */
 const REVIEW_TOGGLES = ["review_off", "review_all"];
