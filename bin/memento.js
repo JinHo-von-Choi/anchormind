@@ -13,8 +13,15 @@
  * 지원 커맨드: serve, migrate, cleanup, backfill, stats, health, recall, remember,
  * inspect, update, export, import, completion, session, benchmark, anchor-scope, hook.
  */
-import "dotenv/config";
 import { parseArgs } from '../lib/cli/parseArgs.js';
+
+/**
+ * hook은 하네스가 작업 중인 저장소를 cwd로 두고 실행하므로 cwd의 .env를 읽지 않는다. 저장소의 .env가 서버 주소나
+ * 키를 바꾸면 API 키와 대화 발췌가 그 주소로 간다. hook의 서버 주소와 키는 명령 인자나 프로세스 환경 변수
+ * (MEMENTO_CLI_REMOTE, MEMENTO_CLI_KEY)에서만 읽는다. 그 밖의 명령은 이전처럼 .env를 읽는다.
+ */
+const IS_HOOK = process.argv[2] === "hook";
+if (!IS_HOOK) await import("dotenv/config");
 
 /** 서브커맨드 → lazy import 매핑. 각 모듈은 `default(args)`와 선택적 `usage` 문자열을 export한다. */
 const COMMANDS = {
@@ -39,6 +46,15 @@ const COMMANDS = {
 
 /** 원격 모드를 지원하지 않는 로컬 전용 명령 목록 */
 const LOCAL_ONLY_COMMANDS = new Set(["serve", "migrate", "cleanup", "backfill", "health", "update", "export", "import", "benchmark", "anchor-scope"]);
+
+/**
+ * hook 명령의 서버 주소와 키. 프로세스 환경 변수만 읽는다(.env 파일은 읽지 않는다).
+ *
+ * @returns {{ remote: string|null, key: string|null }}
+ */
+function hookRemoteSettings() {
+  return { remote: process.env.MEMENTO_CLI_REMOTE || null, key: process.env.MEMENTO_CLI_KEY || null };
+}
 
 /**
  * `memento-mcp --help` 출력 텍스트를 stdout으로 송출한다.
@@ -127,7 +143,7 @@ async function main() {
 
   try {
     const mod = await COMMANDS[cmd]();
-    await mod.default(args);
+    await mod.default(args, IS_HOOK ? { remoteSettings: hookRemoteSettings } : undefined);
   } catch (err) {
     console.error(`[${cmd}] ${err.message}`);
     if (args.verbose) {
@@ -136,8 +152,8 @@ async function main() {
     process.exit(1);
   }
 
-  // Non-blocking update check
-  if (cmd !== "update" && process.env.UPDATE_CHECK_DISABLED !== "true") {
+  // Non-blocking update check (hook은 하네스 훅 안에서 네트워크 확인을 하지 않는다)
+  if (cmd !== "update" && !IS_HOOK && process.env.UPDATE_CHECK_DISABLED !== "true") {
     import("../lib/updater/cache.js").then(async ({ UpdateCache }) => {
       const c = new UpdateCache();
       if (!c.isExpired(Number(process.env.UPDATE_CHECK_INTERVAL_HOURS || 24))) return;
