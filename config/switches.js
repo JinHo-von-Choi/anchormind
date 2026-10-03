@@ -141,6 +141,7 @@ export const SWITCHES = Object.freeze([
   enumOf("MEMENTO_OUTBOX", ["on", "off"], "on", "운영", "변경 트랜잭션 안에서 outbox 이벤트를 기록하고 작업자가 처리기로 전달한다", { off: ["off"] }),
   enumOf("MEMENTO_OUTBOX_WORKER", ["on", "off"], "on", "운영", "이 프로세스에서 outbox 작업자를 돌린다(off여도 기록은 계속된다)", { off: ["off"] }),
   enumOf("MEMENTO_HOOK_ENDPOINTS", ["on", "off"], "on", "운영", "하네스 훅 엔드포인트 POST /hooks/{client}/{event}를 연다", { off: ["off"] }),
+  enumOf("MEMENTO_AUDIT_DB", ["on", "off"], "on", "운영", "감사 이벤트를 outbox를 거쳐 admin_audit_events 해시 체인에 기록한다(파일 감사 로그는 계속된다)", { off: ["off"] }),
   boolOff("MEMENTO_CONFIG_STRICT", "운영", "환경 변수 값 문제가 있으면 기동을 멈춘다"),
   boolOff("MEMENTO_LOG_STDERR", "운영", "콘솔 로그를 표준 오류로 보낸다(CLI는 serve를 뺀 명령에서 자동으로 켠다)"),
   boolOff("UPDATE_CHECK_DISABLED", "운영", "신규 버전 확인을 끈다"),
