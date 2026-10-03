@@ -1,5 +1,5 @@
 /**
- * Memento MCP Admin Console — 관리자 계정 화면
+ * Memento MCP Admin Console: 관리자 계정 화면
  *
  * 작성자: 최진호
  * 작성일: 2026-10-03

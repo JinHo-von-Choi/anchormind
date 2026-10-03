@@ -203,6 +203,14 @@ lib/admin/
 +-- ScopeFilter.js     Workspace range predicate generator for admin SQL (`scopePredicate`, `scopedQuery`, `linkScopePredicate`, FALSE without a range)
 +-- admin-redact.js    Response masking for metadata-only decisions (auditor): values outside the allow-list (identifiers, enum values, times, numbers) become hash and length (`redactForPrincipal`)
 +-- admin-me.js        `GET /me`, `GET /me/explain`
++-- admin-users.js     Admin account management routes (`/admin-users`, capability `admin_user.manage`)
++-- admin-user-auth.js Admin account login, TOTP enrollment, database session principal, CSRF decision, logout
++-- AdminUserStore.js  Store for admin accounts, role bindings, sessions, recovery codes (advisory lock, last owner protection)
++-- admin-user-rules.js Account name, role binding, TOTP-required role and recovery code rules
++-- admin-session-policy.js Session expiry and rotation, cookies, CSRF decision, last owner decision (pure functions)
++-- admin-password.js  Password policy, scrypt hash strings, concurrent hash limit
++-- admin-totp.js      TOTP (RFC 6238) and base32
++-- admin-seal.js      TOTP secret sealing (AES-256-GCM, key version rotation)
 +-- admin-audit.js     Audit query, JSONL export and chain verification routes (`/audit`, `/audit/export`, `/audit/verify`)
 +-- admin-memory.js    Memory operations routes (overview, fragments, anomalies, graph)
 +-- admin-sessions.js  Session management routes

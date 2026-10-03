@@ -177,6 +177,7 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-055-api-keys-egress-policy
 psql $DATABASE_URL -f lib/memory/migrations/migration-056-admin-audit-events.sql                    # admin_audit_events 감사 해시 체인 표 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-057-fragment-provenance.sql                    # 파편 출처, 신뢰 등급, 검토 상태 열
 psql $DATABASE_URL -f lib/memory/migrations/migration-058-review-decisions.sql                       # 검토 결정 기록 표, review_state 값 제약
+psql $DATABASE_URL -f lib/memory/migrations/migration-060-admin-users.sql                           # 관리자 계정, 역할 바인딩, DB 세션, 복구 코드, 외부 신원 표 추가
 ```
 
 migration-046은 결번이다. 수동 적용보다 `npm run migrate`를 권장한다(적용 이력과 opclass 치환을 자동 처리).

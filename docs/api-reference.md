@@ -32,7 +32,7 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | GET | /v1/internal/model/nothing | Admin SPA. 마스터 키 인증 후 app shell HTML 제공. 미인증 요청은 401과 로그인 페이지를 반환. 데이터 API는 마스터 키 인증 필요 |
 | GET | /v1/internal/model/nothing/assets/* | Admin 정적 파일 (admin.css, admin.js). 인증 불필요 |
 | GET | /v1/internal/model/nothing/images/* | Admin 이미지 파일. 마스터 키 인증 필요 |
-| POST | /v1/internal/model/nothing/auth | 마스터 키 검증 엔드포인트. IP 기준 rate limit 적용(`/keys` POST, `/import` POST, `/me` GET, `/me/explain` GET도 같다). `MEMENTO_ADMIN_AUTH_BACKOFF=on`이면 연속 5회 실패 뒤 다음 시도를 1, 2, 4초 순으로 최대 60초까지 늦추고 지연 중에는 올바른 키도 429와 `Retry-After`를 받는다 |
+| POST | /v1/internal/model/nothing/auth | 마스터 키 검증 엔드포인트(관리자 계정 로그인은 아래 「관리자 계정」). IP 기준 rate limit 적용(`/keys` POST, `/import` POST, `/me` GET, `/me/explain` GET도 같다). `MEMENTO_ADMIN_AUTH_BACKOFF=on`이면 연속 5회 실패 뒤 다음 시도를 1, 2, 4초 순으로 최대 60초까지 늦추고 지연 중에는 올바른 키도 429와 `Retry-After`를 받는다 |
 | GET | /v1/internal/model/nothing/stats | 대시보드 통계 (파편 수, API 호출량, 시스템 메트릭, searchMetrics, observability, queues, healthFlags, switches) |
 | GET | /v1/internal/model/nothing/activity | 최근 파편 활동 로그 (10건) |
 | GET | /v1/internal/model/nothing/metrics-summary | 대시보드 메트릭 요약 |
@@ -87,6 +87,16 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | POST | /v1/internal/model/nothing/audit/verify | 감사 해시 체인 검증 |
 | GET | /v1/internal/model/nothing/me | 요청 주체의 종류, 역할, 가진 능력과 범위. 아래 「관리 권한」 참조 |
 | GET | /v1/internal/model/nothing/me/explain?cap=&workspace= | 능력 하나의 판정과 단계별 근거. 아래 「관리 권한」 참조 |
+| POST | /v1/internal/model/nothing/auth/totp | 관리자 계정 TOTP 등록 완료 `{ enrollToken, code }`. 성공하면 복구 코드 10개(한 번만)와 세션 쿠키. 아래 「관리자 계정」 참조 |
+| POST | /v1/internal/model/nothing/auth/logout | 관리자 계정 세션 계열 폐기와 쿠키 삭제. 마스터 키 주체는 바꾸는 것 없이 200 |
+| GET | /v1/internal/model/nothing/admin-users | 관리자 계정 목록(능력 `admin_user.manage`) |
+| POST | /v1/internal/model/nothing/admin-users/bootstrap | 첫 owner 생성(마스터 키 주체, 계정 0개일 때만) |
+| POST | /v1/internal/model/nothing/admin-users | 계정 생성 `{ username, password, roles }` |
+| PATCH | /v1/internal/model/nothing/admin-users/:id | 상태(`active`, `disabled`)와 비밀번호 변경 |
+| DELETE | /v1/internal/model/nothing/admin-users/:id | 계정 삭제 |
+| PUT | /v1/internal/model/nothing/admin-users/:id/roles | 역할 바인딩 교체 `{ roles: [{ role, workspace? }] }` |
+| POST | /v1/internal/model/nothing/admin-users/:id/totp-reset | TOTP와 복구 코드 초기화, 세션 폐기 |
+| DELETE | /v1/internal/model/nothing/admin-users/:id/sessions | 계정의 모든 세션 폐기 |
 
 ### 내보내기와 가져오기
 
@@ -216,6 +226,16 @@ GET이 아닌 관리 요청, 관리 로그인, 기억 쓰기(remember, amend, fo
 ```
 
 `GET /me/explain?cap=<능력>&workspace=<이름>`은 결정 표의 판정을 돌려준다. 필드는 `allowed`, `cap`, `workspace`, `principal`, `mode`, `redact`, `range`, `deniedAt`, `reason`, `steps`(단계별 `ok`와 근거, API 키는 `permissions` 포함)다. `cap`이 없거나 모르는 능력이면 400 `field: "cap"`, `workspace`가 128자를 넘거나 제어 문자를 담으면 400 `field: "workspace"`다. 두 라우트는 마스터 키와 API 키 Bearer 모두 부를 수 있고 요청 주체 자신의 판정만 담는다. API 키 Bearer는 이 두 라우트에서만 관리 API 주체가 되며, 다른 관리 라우트에서는 401이다. 두 라우트는 관리 인증 지연(`MEMENTO_ADMIN_AUTH_BACKOFF`) 중이면 키 조회 없이 429이고, 토큰이 마스터 키든 아니든 API 키 조회를 한 번 하며, 틀린 Bearer는 다른 관리 라우트와 같이 관리 인증 실패로 센다. 활성 API 키 인증은 지연 집계를 지우지 않는다.
+
+### 관리자 계정
+
+`MEMENTO_ADMIN_USERS=on`(기본)이고 계정이 하나 이상 있으면 관리자 계정으로 로그인할 수 있다. 계정이 없거나 `off`이면 마스터 키만 받는다.
+
+- 로그인: `POST /auth`, Authorization 헤더 없이 `Content-Type: application/json`과 `{ "username", "password", "totp" }`(또는 `"recoveryCode"`). 성공하면 200 `{ ok, user: { id, username }, csrf }`와 쿠키 `mmcp_admin`(HttpOnly, SameSite=Strict), `mmcp_csrf`. 실패는 원인과 관계없이 401 `{ "error": "Invalid credentials" }`, 지연 중이면 429와 `Retry-After`. owner나 admin 역할이 TOTP 등록 전이면 200 `{ enrollRequired: true, enrollToken, secret, otpauthUri, expiresInSec }`이고 `POST /auth/totp`로 마친다. 봉인 키가 없으면 503 `totp_seal_key_missing`. `Origin`이 있으면 허용 출처여야 한다(403 `csrf_origin_mismatch`).
+- 세션 요청: 쿠키로 인증한다. GET, HEAD, OPTIONS 밖의 요청은 `Origin`(자기 출처 또는 `ADMIN_ALLOWED_ORIGINS`)과 `X-CSRF-Token: <mmcp_csrf 값>`이 필요하고, 어긋나면 403 `csrf_origin_missing`, `csrf_origin_mismatch`, `csrf_token_missing`, `csrf_token_mismatch`다.
+- 주체: 계정 세션은 `GET /me`에서 `principal.kind = "admin_session"`, `roles`(바인딩의 역할), `username`이다. 능력과 범위는 역할 바인딩으로 「관리 권한」의 결정 표가 정한다(전역 바인딩은 전체, workspace 바인딩은 그 workspace).
+- 계정 관리 오류: 입력 오류 400 `{ field, reason }`(`password`: `too_short`, `too_long`, `blank`, `control_char`; `username`: `format`; `roles`: `unknown_role`, `owner_must_be_global`, `workspace_format`), 409 `last_owner`, `username_taken`, `bootstrap_required`, `already_bootstrapped`, 404 없는 계정, 해시 대기열이 차면 503.
+- 응답의 계정 값에는 비밀번호 해시와 TOTP 비밀이 없다(`id`, `username`, `status`, `roles`, `totpEnabled`, `createdAt`, `updatedAt`, `lastLoginAt`, `createdBy`). 설정과 운영 규칙은 [configuration.md](configuration.md#관리자-계정)에 있다.
 
 ### /health 엔드포인트 정책
 

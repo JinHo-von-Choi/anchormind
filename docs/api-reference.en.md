@@ -29,7 +29,7 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | GET | /v1/internal/model/nothing | Admin SPA. Serves app shell HTML after master key authentication; unauthenticated requests receive 401 and the login page. Data APIs require master key authentication |
 | GET | /v1/internal/model/nothing/assets/* | Admin static files (admin.css, admin.js). No authentication required |
 | GET | /v1/internal/model/nothing/images/* | Admin image files. Master key authentication required |
-| POST | /v1/internal/model/nothing/auth | Master key verification endpoint. Per-IP rate limit applies (as for `/keys` POST, `/import` POST, `/me` GET and `/me/explain` GET). With `MEMENTO_ADMIN_AUTH_BACKOFF=on`, after 5 consecutive failures the next attempt is delayed 1, 2, 4 seconds and so on up to 60 seconds, and during the delay even the correct key receives 429 with `Retry-After` |
+| POST | /v1/internal/model/nothing/auth | Master key verification endpoint (admin account login: see "Admin Accounts" below). Per-IP rate limit applies (as for `/keys` POST, `/import` POST, `/me` GET and `/me/explain` GET). With `MEMENTO_ADMIN_AUTH_BACKOFF=on`, after 5 consecutive failures the next attempt is delayed 1, 2, 4 seconds and so on up to 60 seconds, and during the delay even the correct key receives 429 with `Retry-After` |
 | GET | /v1/internal/model/nothing/stats | Dashboard statistics (fragment count, API call volume, system metrics, searchMetrics, observability, queues, healthFlags, switches) |
 | GET | /v1/internal/model/nothing/activity | Recent fragment activity log (10 entries) |
 | GET | /v1/internal/model/nothing/metrics-summary | Dashboard metrics summary |
@@ -84,6 +84,16 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | POST | /v1/internal/model/nothing/audit/verify | Audit hash chain verification |
 | GET | /v1/internal/model/nothing/me | Kind, roles, capabilities and ranges of the requesting principal. See "Admin Authorization" below |
 | GET | /v1/internal/model/nothing/me/explain?cap=&workspace= | Decision and per-step reasons for one capability. See "Admin Authorization" below |
+| POST | /v1/internal/model/nothing/auth/totp | Completes admin account TOTP enrollment `{ enrollToken, code }`. On success returns 10 recovery codes (once) and session cookies. See "Admin Accounts" below |
+| POST | /v1/internal/model/nothing/auth/logout | Revokes the admin account session family and clears the cookies. For the master key principal it changes nothing and returns 200 |
+| GET | /v1/internal/model/nothing/admin-users | Admin account list (capability `admin_user.manage`) |
+| POST | /v1/internal/model/nothing/admin-users/bootstrap | Creates the first owner (master key principal, only with zero accounts) |
+| POST | /v1/internal/model/nothing/admin-users | Creates an account `{ username, password, roles }` |
+| PATCH | /v1/internal/model/nothing/admin-users/:id | Changes status (`active`, `disabled`) and password |
+| DELETE | /v1/internal/model/nothing/admin-users/:id | Deletes an account |
+| PUT | /v1/internal/model/nothing/admin-users/:id/roles | Replaces role bindings `{ roles: [{ role, workspace? }] }` |
+| POST | /v1/internal/model/nothing/admin-users/:id/totp-reset | Resets TOTP and recovery codes, revokes sessions |
+| DELETE | /v1/internal/model/nothing/admin-users/:id/sessions | Revokes every session of the account |
 
 ### Export and import
 
@@ -213,6 +223,16 @@ Queries in admin handlers that read memory tables (fragments, fragment_links, se
 ```
 
 `GET /me/explain?cap=<capability>&workspace=<name>` returns the decision-table result. Fields are `allowed`, `cap`, `workspace`, `principal`, `mode`, `redact`, `range`, `deniedAt`, `reason`, `steps` (per-step `ok` and reasons; for API keys including `permissions`). A missing or unknown `cap` is 400 `field: "cap"`; a `workspace` longer than 128 characters or containing control characters is 400 `field: "workspace"`. Both routes accept the master key and an API key Bearer and only carry the requesting principal's own decision. An API key Bearer is an admin API principal only on these two routes; other admin routes return 401. During the admin auth delay (`MEMENTO_ADMIN_AUTH_BACKOFF`) both routes return 429 without a key lookup; otherwise they perform one API key lookup whether or not the token is the master key, and a wrong Bearer counts as an admin auth failure as on the other admin routes. An active API key authentication does not clear the delay counter.
+
+### Admin Accounts
+
+With `MEMENTO_ADMIN_USERS=on` (default) and at least one account, admins can log in with an account. Without accounts, or with `off`, only the master key is accepted.
+
+- Login: `POST /auth` without an Authorization header, with `Content-Type: application/json` and `{ "username", "password", "totp" }` (or `"recoveryCode"`). Success is 200 `{ ok, user: { id, username }, csrf }` with the cookies `mmcp_admin` (HttpOnly, SameSite=Strict) and `mmcp_csrf`. Any failure is 401 `{ "error": "Invalid credentials" }`; during a delay 429 with `Retry-After`. When an owner or admin account has not enrolled TOTP yet the answer is 200 `{ enrollRequired: true, enrollToken, secret, otpauthUri, expiresInSec }`, completed with `POST /auth/totp`. Without a sealing key the answer is 503 `totp_seal_key_missing`. A present `Origin` must be an allowed origin (403 `csrf_origin_mismatch`).
+- Session requests authenticate with the cookie. Requests other than GET, HEAD and OPTIONS need `Origin` (own origin or `ADMIN_ALLOWED_ORIGINS`) and `X-CSRF-Token: <mmcp_csrf value>`; otherwise 403 `csrf_origin_missing`, `csrf_origin_mismatch`, `csrf_token_missing` or `csrf_token_mismatch`.
+- Principal: an account session shows `principal.kind = "admin_session"`, `roles` (binding roles) and `username` in `GET /me`. Capabilities and ranges come from the role bindings through the decision table in "Admin Authorization" (a global binding covers everything, a workspace binding that workspace).
+- Account management errors: input errors 400 `{ field, reason }` (`password`: `too_short`, `too_long`, `blank`, `control_char`; `username`: `format`; `roles`: `unknown_role`, `owner_must_be_global`, `workspace_format`), 409 `last_owner`, `username_taken`, `bootstrap_required`, `already_bootstrapped`, 404 for an unknown account, 503 when the hash queue is full.
+- Account values in responses carry no password hash and no TOTP secret (`id`, `username`, `status`, `roles`, `totpEnabled`, `createdAt`, `updatedAt`, `lastLoginAt`, `createdBy`). Settings and operating rules are in [configuration.en.md](configuration.en.md#admin-accounts).
 
 ### /health Endpoint Policy
 

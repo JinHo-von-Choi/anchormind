@@ -51,7 +51,7 @@ Every command except `serve` sends server logs to stderr (the CLI sets `MEMENTO_
 
 ### Local-only (remote access not supported)
 
-`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`, and `audit` access the DB or process directly and return an error when used with `--remote`.
+`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`, `audit`, and `admin` access the DB or process directly and return an error when used with `--remote`.
 
 ### Remote-capable
 
@@ -86,6 +86,7 @@ Every command except `serve` sends server logs to stderr (the CLI sets `MEMENTO_
 | `hook <event> --client <name>` | Claude Code and Codex command hook runner (`SessionStart`, `Stop`, `SessionEnd`) | Remote only |
 | `init --target <claude\|codex>` | Create the Claude Code or Codex plugin as a local marketplace (dry-run by default, `--write` to write) | Not applicable |
 | `audit verify [--from-seq N] [--max-rows N]` | Verify the audit hash chain (exit code 1 when broken) | No |
+| `admin recover [--user NAME] [--confirm]` | Emergency recovery for admin accounts (revoke all sessions, reset TOTP, explicit target) | No |
 
 ---
 
@@ -527,6 +528,25 @@ node bin/memento.js audit verify --json
 | `--json` | Print the result object as JSON |
 
 An intact chain prints the number of checked rows, the anchor (`genesis`, or `checkpoint` after retention cleanup) and the last `row_hash` (`head`) and exits with code 0. A broken chain prints the first broken seq and the reason (`row_hash_mismatch`, `prev_hash_mismatch`, `seq_gap`, `prefix_mismatch`) and exits with code 1. The chain structure is in [configuration.en.md](configuration.en.md#audit-table).
+
+### admin
+
+Emergency recovery for admin accounts. Revokes every admin account session and, with `--user`, resets that account's TOTP and recovery codes (the account enrolls TOTP again at its next login). In the same transaction it writes the audit event `admin.recover` (detail `priority: high`) to the outbox; the server's outbox worker moves it into the audit chain. The master key login works regardless of this command.
+
+The target comes only from `--url` or `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`. This command does not read the `.env` file of the current directory or the `DOTENV_CONFIG_PATH` file, and without a target it ends without connecting (exit code 1). Without `--confirm` it prints the plan and does not connect.
+
+```bash
+PGHOST=db.internal PGDATABASE=memento PGUSER=memento PGPASSWORD=... anchormind admin recover --user ops-owner
+PGHOST=db.internal PGDATABASE=memento PGUSER=memento PGPASSWORD=... anchormind admin recover --user ops-owner --confirm
+anchormind admin recover --url postgres://memento@db.internal:5432/memento --confirm --json
+```
+
+| Option | Description |
+|-|-|
+| `--url <postgres://...>` | Target. Without it, the PG environment variables |
+| `--user <username>` | Account whose TOTP and recovery codes are reset. An unknown account changes nothing and exits with code 1 |
+| `--confirm` | Apply the changes |
+| `--json` | Print the result (`revokedSessions`, `userId`, `outboxId`) as JSON |
 
 ---
 

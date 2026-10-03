@@ -42,7 +42,8 @@
 | true, false (그 밖의 값은 false) | MEMENTO_CONFIG_STRICT |
 | true, false (그 밖의 값은 `MEMORY_CONFIG` 검증에서 기동 실패) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (그 밖의 값은 off) | MEMENTO_ADMIN_AUTH_BACKOFF |
-| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE, MEMENTO_PROVENANCE, MEMENTO_REVIEW_QUEUE, MEMENTO_HOOK_ENDPOINTS, MEMENTO_FORGET_CASCADE, MEMENTO_EGRESS_POLICY, MEMENTO_AUDIT_DB |
+| 쉼표로 나눈 `id:32바이트 키`(base64 또는 64자 hex), 그 밖은 미설정으로 동작 | MEMENTO_ADMIN_SEAL_KEY |
+| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE, MEMENTO_PROVENANCE, MEMENTO_REVIEW_QUEUE, MEMENTO_HOOK_ENDPOINTS, MEMENTO_FORGET_CASCADE, MEMENTO_EGRESS_POLICY, MEMENTO_AUDIT_DB, MEMENTO_ADMIN_USERS |
 | mask, reject, off (그 밖의 값은 mask) | MEMENTO_SENSITIVE_SCAN |
 | workspace, key (그 밖의 값은 workspace) | MEMENTO_DEDUP_SCOPE |
 | true, false (false가 아닌 값은 true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
@@ -540,6 +541,27 @@ detail 규칙: 키 이름이 본문이나 비밀을 가리키면(`content`, `bod
 - 콘솔: 사이드바의 감사 로그 화면이 조건 조회, 이어 보기, JSONL 내보내기, 체인 검증을 부른다.
 - CLI: `memento-mcp audit verify [--from-seq N] [--max-rows N] [--json]`. 체인이 끊겼으면 종료 코드 1이다.
 - 지표: `memento_audit_enqueue_failed_total`, `memento_audit_recorded_total`(새로 기록한 행), `memento_audit_cleaned_total`. 승격 지연과 실패는 `memento_outbox_*{topic="audit.record"}`로 본다.
+
+### 관리자 계정
+
+관리자 계정(로컬 계정, 비밀번호와 TOTP, DB 세션)은 `MEMENTO_ADMIN_USERS=on`(기본)이고 계정이 하나 이상 있을 때 동작한다. 계정이 없거나 `off`이면 관리면은 마스터 키(`MEMENTO_ACCESS_KEY`)만 받고 동작은 그대로다. 마스터 키 로그인은 계정이 있어도 계속 owner로 동작한다(비상 경로).
+
+| 변수 | 기본값 | 설명 |
+|-|-|-|
+| MEMENTO_ADMIN_USERS | on | `on`이면 계정 로그인(`POST /auth`의 `{ username, password, totp \| recoveryCode }`), TOTP 등록(`POST /auth/totp`), 로그아웃, 계정 관리 API(`/admin-users`)를 연다. `off`이면 계정 관리 라우트는 404이고 계정 세션 쿠키를 받지 않는다. 호출 시점에 읽는다 |
+| MEMENTO_ADMIN_SEAL_KEY | (없음) | TOTP 비밀 봉인 키 목록. 쉼표로 나눈 `id:키`이고 키는 32바이트(base64 또는 64자 hex), 첫 항목이 현재 키다. id 없이 키 하나만 주면 id는 `v1`이다. 봉인은 AES-256-GCM(12바이트 난수 nonce, 계정 id를 담은 AAD)이고 저장 값에 키 id가 붙는다. 미설정이면 TOTP 등록을 시작하지 않고(503 `totp_seal_key_missing`) 등록된 계정의 TOTP도 확인하지 못한다. 형식이 틀리면 값 없이 설정 문제 목록에 오르고 미설정으로 동작한다. 로그에 남기지 않는다 |
+
+- 비밀번호: 12자 이상 256자 이하(코드 포인트), 공백만 있거나 제어 문자가 있으면 거부한다. scrypt(N=2^15, r=8, p=1, salt 16바이트, 출력 32바이트) 해시 문자열에 매개변수를 행마다 담는다. 기본값이 바뀌면 로그인 성공 때 다시 해시한다. 해시는 비동기로 돌고 프로세스 전체 동시 실행은 2, 대기열은 32이며 넘치면 503이다.
+- TOTP: RFC 6238, HMAC-SHA1, 30초, 6자리, 앞뒤 한 단계까지 받는다. 받은 단계보다 큰 단계만 받아 같은 코드의 재사용을 막는다. owner와 admin 역할은 TOTP가 필수이고, 등록 전에는 로그인 응답이 등록 토큰(10분)과 비밀, otpauth URI다. 등록을 마치면 복구 코드 10개를 한 번만 보여 주고 해시만 저장한다. 복구 코드는 한 번씩만 쓴다.
+- 키 회전: 새 키를 앞에 두고 옛 키를 뒤에 남긴다(`MEMENTO_ADMIN_SEAL_KEY=v2:<새 키>,v1:<옛 키>`). 옛 키로 봉인된 값은 그 계정의 다음 TOTP 로그인에서 현재 키로 다시 봉인된다. 모든 계정이 다시 로그인한 뒤 옛 키를 뺀다. 봉인 키는 서버 환경 변수와 오프라인 사본에 둔다.
+- 세션: 쿠키 `mmcp_admin`(HttpOnly, SameSite=Strict, Path=관리 경로, TLS 뒤에서 Secure)과 `mmcp_csrf`. 저장소에는 토큰 해시만 둔다. 절대 만료 12시간(계열 기준), 유휴 만료 30분. 로그인은 새 계열을 만들고 요청에 있던 이전 계열을 폐기한다. 역할 변경, 비활성화, 비밀번호 변경, TOTP 초기화는 그 계정의 세션을 폐기하고, 자기 계정의 역할이나 비밀번호를 바꾸면 자기 세션은 같은 계열로 회전한다. 회전으로 폐기된 토큰이 다시 오면 그 계열 전체를 폐기한다.
+- CSRF: 계정 세션의 GET, HEAD, OPTIONS 밖 요청은 `Origin`이 반드시 있어야 하고 자기 출처(Host와 프로토콜) 또는 `ADMIN_ALLOWED_ORIGINS`여야 한다. 그리고 `X-CSRF-Token` 헤더가 `mmcp_csrf` 쿠키와 같고 세션에 묶인 값이어야 한다. 마스터 키 Bearer 요청은 대상이 아니다.
+- 실패 지연: 계정(이름 해시)별 연속 5회, 클라이언트 주소별 연속 20회 실패 뒤 1, 2, 4초...(최대 60초) 지연하고 그동안 429다. 없는 계정도 같은 계수와 같은 비용의 scrypt를 쓰고 같은 401 본문을 받는다. 이 지연은 `MEMENTO_ADMIN_AUTH_BACKOFF`와 관계없이 동작하며 상태는 프로세스 메모리에 있다.
+- 마지막 owner: 활성 owner(전역 owner 바인딩)가 하나뿐이면 그 계정의 삭제, 비활성화, owner 제거는 409 `last_owner`다. 계정 변경은 advisory 잠금과 행 잠금 아래에서 판정한다.
+- 부트스트랩: 계정이 0개일 때 마스터 키로 `POST /admin-users/bootstrap`을 불러 첫 owner를 만든다. 동시에 여러 번 불러도 하나만 성공한다(409 `already_bootstrapped`).
+- 비상 복구: `anchormind admin recover [--user NAME] --confirm`이 모든 계정 세션을 폐기하고 지정한 계정의 TOTP와 복구 코드를 초기화한다. 접속 대상은 `--url` 또는 `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`로만 받고 `.env`는 읽지 않는다. 감사 이벤트 `admin.recover`(detail `priority: high`)를 같은 트랜잭션에서 outbox에 남긴다. 자세한 사용법은 [cli.md](cli.md)에 있다.
+- 감사: 계정 로그인과 등록(`admin.auth`, `admin.auth.totp_enroll`), 로그아웃, 계정 관리 라우트가 감사 이벤트를 남긴다. 계정 행위자는 `actor_kind = admin`, `actor_key_id = 계정 id`이고 파일 감사 로그는 `key=admin:<계정 id>`다.
+- OIDC: `admin_identities` 표(issuer, subject, user_id)가 확장 지점이며 로그인 경로는 아직 쓰지 않는다.
 
 ### Redis
 
@@ -1320,6 +1342,7 @@ EMBEDDING_DIMENSIONS=768
 | 056 | migration-056-admin-audit-events.sql | `admin_audit_events` 표(감사 해시 체인: seq, source_event, occurred_at, recorded_at, action, outcome, 행위자, 대상, workspace, detail, prev_hash, row_hash)와 기간, 행위, 행위자, 대상 색인 |
 | 057 | migration-057-fragment-provenance.sql | `fragments.origin`, `observed_client`, `trust_tier`(smallint), `review_state`, `review_reason`(모두 기본값 없는 nullable, 표 재작성 없음)과 `origin`, `trust_tier` CHECK 제약(NOT VALID, 새로 쓰는 행에만 적용). 기존 행은 백필하지 않으며 NULL `trust_tier`는 코드에서 2로 해석한다(`MEMENTO_PROVENANCE`). `origin`은 클라이언트 주장 출처로 `source`(라벨), `assertion_status`(검증 상태)와 역할이 다르다 |
 | 058 | migration-058-review-decisions.sql | `memory_review_decisions` 표(검토 결정 기록: `fragment_id`, `decision`(approve, reject, auto_reject), `reviewer`, `note`, `idempotency_key`(부분 고유 색인), `key_id`, `review_reason`, `decided_at`. 파편 본문 없음)와 `fragments_review_state_check` 제약(`review_state`는 NULL, pending, approved, rejected. NOT VALID, 새로 쓰는 행에만 적용). 키의 검토 방식은 api_keys 열이 아니라 권한 목록 표지(`review_off`, `review_all`)다(`MEMENTO_REVIEW_QUEUE`) |
+| 060 | migration-060-admin-users.sql | `admin_users`, `admin_role_bindings`, `admin_sessions`, `admin_recovery_codes`, `admin_identities` 표(관리자 계정, 역할 바인딩, DB 세션, 복구 코드 해시, OIDC 확장 지점)와 `admin_audit_events.actor_kind`에 `admin` 추가 |
 
 ---
 

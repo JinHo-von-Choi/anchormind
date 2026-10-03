@@ -206,6 +206,14 @@ lib/admin/
 ├── ScopeFilter.js     관리 SQL의 workspace 범위 술어 생성기(`scopePredicate`, `scopedQuery`, `linkScopePredicate`, 범위 없으면 FALSE)
 ├── admin-redact.js    메타만 판정(auditor)의 응답 마스킹. 허용 목록(식별자, 열거 값, 시각, 수치) 밖의 값은 해시와 길이(`redactForPrincipal`)
 ├── admin-me.js        `GET /me`, `GET /me/explain`
+├── admin-users.js     관리자 계정 관리 라우트(`/admin-users`, 능력 `admin_user.manage`)
+├── admin-user-auth.js 관리자 계정 로그인, TOTP 등록, DB 세션 주체, CSRF 판정, 로그아웃
+├── AdminUserStore.js  관리자 계정, 역할 바인딩, 세션, 복구 코드 저장소(advisory 잠금, 마지막 owner 보호)
+├── admin-user-rules.js 계정 이름, 역할 바인딩, TOTP 필수 역할, 복구 코드 규칙
+├── admin-session-policy.js 세션 만료와 회전, 쿠키, CSRF 판정, 마지막 owner 판정(순수 함수)
+├── admin-password.js  비밀번호 정책과 scrypt 해시 문자열, 동시 해시 제한
+├── admin-totp.js      TOTP(RFC 6238)와 base32
+├── admin-seal.js      TOTP 비밀 봉인(AES-256-GCM, 키 버전 회전)
 ├── admin-audit.js     감사 조회, JSONL 내보내기, 체인 검증 라우트 (`/audit`, `/audit/export`, `/audit/verify`)
 ├── admin-memory.js    메모리 운영 라우트 (overview, fragments, anomalies, graph)
 ├── admin-sessions.js  세션 관리 라우트

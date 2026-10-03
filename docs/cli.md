@@ -52,7 +52,7 @@ node bin/memento.js stats
 
 ### local-only (원격 접속 불가)
 
-`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`, `audit` 는 직접 DB / 프로세스에 접근하는 명령이므로 `--remote` 플래그와 함께 사용하면 에러를 반환한다.
+`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`, `audit`, `admin` 는 직접 DB / 프로세스에 접근하는 명령이므로 `--remote` 플래그와 함께 사용하면 에러를 반환한다.
 
 ### 원격 지원
 
@@ -87,6 +87,7 @@ node bin/memento.js stats
 | `hook <event> --client <name>` | Claude Code, Codex command 훅 실행체 (`SessionStart`, `Stop`, `SessionEnd`) | 원격 전용 |
 | `init --target <claude\|codex>` | Claude Code, Codex 플러그인을 로컬 마켓플레이스로 생성 (기본 dry-run, `--write`로 쓰기) | 해당 없음 |
 | `audit verify [--from-seq N] [--max-rows N]` | 감사 해시 체인 검증 (끊기면 종료 코드 1) | 아니오 |
+| `admin recover [--user NAME] [--confirm]` | 관리자 계정 비상 복구(전체 세션 폐기, TOTP 초기화, 명시 접속 대상) | 아니오 |
 
 ---
 
@@ -528,6 +529,25 @@ node bin/memento.js audit verify --json
 | `--json` | 결과 객체를 JSON으로 출력한다 |
 
 체인이 온전하면 확인한 행 수, 기준점(`genesis` 또는 보존 정리 뒤의 `checkpoint`), 마지막 `row_hash`(`head`)를 출력하고 종료 코드 0으로 끝난다. 끊겼으면 첫 끊긴 seq와 사유(`row_hash_mismatch`, `prev_hash_mismatch`, `seq_gap`, `prefix_mismatch`)를 출력하고 종료 코드 1로 끝난다. 체인 구조는 [configuration.md](configuration.md#감사-표)에 있다.
+
+### admin
+
+관리자 계정 비상 복구. 모든 관리자 계정 세션을 폐기하고, `--user`를 주면 그 계정의 TOTP와 복구 코드를 초기화한다(그 계정은 다음 로그인에서 TOTP를 다시 등록한다). 같은 트랜잭션에서 감사 이벤트 `admin.recover`(detail `priority: high`)를 outbox에 남기고, 서버의 outbox 작업자가 감사 체인에 옮긴다. 마스터 키 로그인은 이 명령과 관계없이 동작한다.
+
+접속 대상은 `--url` 또는 `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`로만 받는다. 이 명령은 현재 디렉터리의 `.env`와 `DOTENV_CONFIG_PATH` 파일을 읽지 않고, 대상이 없으면 연결하지 않고 끝난다(종료 코드 1). `--confirm`이 없으면 연결 없이 할 일만 출력한다.
+
+```bash
+PGHOST=db.internal PGDATABASE=memento PGUSER=memento PGPASSWORD=... anchormind admin recover --user ops-owner
+PGHOST=db.internal PGDATABASE=memento PGUSER=memento PGPASSWORD=... anchormind admin recover --user ops-owner --confirm
+anchormind admin recover --url postgres://memento@db.internal:5432/memento --confirm --json
+```
+
+| 옵션 | 설명 |
+|-|-|
+| `--url <postgres://...>` | 접속 대상. 없으면 PG 환경 변수 |
+| `--user <username>` | TOTP와 복구 코드를 초기화할 계정. 없는 계정이면 아무것도 바꾸지 않고 종료 코드 1 |
+| `--confirm` | 실제로 적용한다 |
+| `--json` | 결과(`revokedSessions`, `userId`, `outboxId`)를 JSON으로 출력한다 |
 
 ---
 

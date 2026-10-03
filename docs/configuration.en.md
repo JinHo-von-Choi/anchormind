@@ -42,7 +42,8 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | true, false (any other value is false) | MEMENTO_CONFIG_STRICT |
 | true, false (any other value fails startup in `MEMORY_CONFIG` validation) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (any other value is off) | MEMENTO_ADMIN_AUTH_BACKOFF |
-| on, off (any other value is on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE, MEMENTO_PROVENANCE, MEMENTO_REVIEW_QUEUE, MEMENTO_HOOK_ENDPOINTS, MEMENTO_FORGET_CASCADE, MEMENTO_EGRESS_POLICY, MEMENTO_AUDIT_DB |
+| comma separated `id:32-byte key` (base64 or 64 hex characters), anything else behaves as unset | MEMENTO_ADMIN_SEAL_KEY |
+| on, off (any other value is on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE, MEMENTO_PROVENANCE, MEMENTO_REVIEW_QUEUE, MEMENTO_HOOK_ENDPOINTS, MEMENTO_FORGET_CASCADE, MEMENTO_EGRESS_POLICY, MEMENTO_AUDIT_DB, MEMENTO_ADMIN_USERS |
 | mask, reject, off (any other value is mask) | MEMENTO_SENSITIVE_SCAN |
 | workspace, key (any other value is workspace) | MEMENTO_DEDUP_SCOPE |
 | true, false (any value other than false is true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
@@ -545,6 +546,27 @@ Query and verification
 - Console: the Audit Log screen in the sidebar runs filtered queries, loads more, exports JSONL and verifies the chain.
 - CLI: `memento-mcp audit verify [--from-seq N] [--max-rows N] [--json]`. Exit code 1 when the chain is broken.
 - Metrics: `memento_audit_enqueue_failed_total`, `memento_audit_recorded_total` (newly written rows), `memento_audit_cleaned_total`. Promotion lag and failures are visible as `memento_outbox_*{topic="audit.record"}`.
+
+### Admin accounts
+
+Admin accounts (local accounts with password and TOTP, database sessions) work when `MEMENTO_ADMIN_USERS=on` (default) and at least one account exists. Without accounts, or with `off`, the admin surface accepts only the master key (`MEMENTO_ACCESS_KEY`) and behaves as before. The master key login keeps working as owner even when accounts exist (emergency path).
+
+| Variable | Default | Description |
+|-|-|-|
+| MEMENTO_ADMIN_USERS | on | When `on`, opens account login (`POST /auth` with `{ username, password, totp \| recoveryCode }`), TOTP enrollment (`POST /auth/totp`), logout and the account management API (`/admin-users`). When `off`, the account routes return 404 and account session cookies are not accepted. Read at call time |
+| MEMENTO_ADMIN_SEAL_KEY | (none) | TOTP secret sealing key list: comma separated `id:key`, each key 32 bytes (base64 or 64 hex characters), the first entry is the current key. A single key without an id gets the id `v1`. Sealing is AES-256-GCM (12 byte random nonce, AAD containing the account id) and the stored value carries the key id. When unset, TOTP enrollment does not start (503 `totp_seal_key_missing`) and the TOTP of enrolled accounts cannot be checked. A malformed value is listed in the configuration issues without its value and behaves as unset. Never logged |
+
+- Password: 12 to 256 characters (code points); blank values and control characters are rejected. The scrypt hash string (N=2^15, r=8, p=1, 16 byte salt, 32 byte output) stores its parameters per row; when the defaults change the hash is renewed at the next successful login. Hashing runs asynchronously with at most 2 concurrent runs per process and a queue of 32; beyond that the answer is 503.
+- TOTP: RFC 6238, HMAC-SHA1, 30 seconds, 6 digits, one step of drift either way. Only a step greater than the last accepted step is accepted, so a code cannot be reused. TOTP is mandatory for the owner and admin roles; before enrollment the login answer is an enrollment token (10 minutes), the secret and an otpauth URI. Completing enrollment shows 10 recovery codes once and stores only their hashes. Each recovery code works once.
+- Key rotation: put the new key first and keep the old one after it (`MEMENTO_ADMIN_SEAL_KEY=v2:<new>,v1:<old>`). Values sealed with the old key are resealed with the current key at that account's next TOTP login. Remove the old key after every account has logged in again. Keep the sealing key in the server environment and in an offline copy.
+- Sessions: cookies `mmcp_admin` (HttpOnly, SameSite=Strict, Path=admin path, Secure behind TLS) and `mmcp_csrf`. Only token hashes are stored. Absolute expiry 12 hours (per family), idle expiry 30 minutes. A login creates a new family and revokes the family present in the request. Role changes, disabling, password changes and TOTP reset revoke that account's sessions; changing your own roles or password rotates your own session within the same family. A token revoked by rotation that comes back revokes the whole family.
+- CSRF: for account sessions, every request other than GET, HEAD and OPTIONS must carry `Origin`, equal to the server's own origin (Host and protocol) or listed in `ADMIN_ALLOWED_ORIGINS`, and an `X-CSRF-Token` header equal to the `mmcp_csrf` cookie and bound to the session. Master key Bearer requests are not subject to this check.
+- Failure delay: after 5 consecutive failures per account (name hash) or 20 per client address, each further attempt waits 1, 2, 4 seconds and so on (at most 60 seconds) and receives 429 meanwhile. Unknown accounts use the same counters, the same scrypt cost and the same 401 body. This delay works regardless of `MEMENTO_ADMIN_AUTH_BACKOFF`; the state lives in process memory.
+- Last owner: when only one active owner (global owner binding) remains, deleting, disabling or removing the owner role of that account is 409 `last_owner`. Account changes are decided under an advisory lock and row locks.
+- Bootstrap: with zero accounts, call `POST /admin-users/bootstrap` with the master key to create the first owner. Concurrent calls let only one succeed (409 `already_bootstrapped`).
+- Emergency recovery: `anchormind admin recover [--user NAME] --confirm` revokes every account session and resets the TOTP and recovery codes of the named account. The target comes only from `--url` or `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`; `.env` is never read. The audit event `admin.recover` (detail `priority: high`) is written to the outbox in the same transaction. See [cli.en.md](cli.en.md).
+- Audit: account login and enrollment (`admin.auth`, `admin.auth.totp_enroll`), logout and the account management routes record audit events. Account actors are `actor_kind = admin` with `actor_key_id = account id`; the file audit log shows `key=admin:<account id>`.
+- OIDC: the `admin_identities` table (issuer, subject, user_id) is the extension point; no login path uses it yet.
 
 ### Redis
 
@@ -1245,6 +1267,7 @@ Run `npm run migrate` to execute unapplied migrations in order. History is manag
 | 056 | migration-056-admin-audit-events.sql | `admin_audit_events` table (audit hash chain: seq, source_event, occurred_at, recorded_at, action, outcome, actor, target, workspace, detail, prev_hash, row_hash) with time, action, actor and target indexes |
 | 057 | migration-057-fragment-provenance.sql | `fragments.origin`, `observed_client`, `trust_tier` (smallint), `review_state`, `review_reason` (all nullable without defaults, no table rewrite) and CHECK constraints on `origin` and `trust_tier` (NOT VALID, applied to newly written rows only). Existing rows are not backfilled and a NULL `trust_tier` is read as 2 in code (`MEMENTO_PROVENANCE`). `origin` is the origin claimed by the client and differs in role from `source` (label) and `assertion_status` (verification state) |
 | 058 | migration-058-review-decisions.sql | `memory_review_decisions` table (review decision records: `fragment_id`, `decision` (approve, reject, auto_reject), `reviewer`, `note`, `idempotency_key` (partial unique index), `key_id`, `review_reason`, `decided_at`; no fragment content) and the `fragments_review_state_check` constraint (`review_state` is NULL, pending, approved or rejected; NOT VALID, applied to newly written rows only). A key's review mode is not an api_keys column but a permission list marker (`review_off`, `review_all`) (`MEMENTO_REVIEW_QUEUE`) |
+| 060 | migration-060-admin-users.sql | `admin_users`, `admin_role_bindings`, `admin_sessions`, `admin_recovery_codes`, `admin_identities` tables (admin accounts, role bindings, database sessions, recovery code hashes, OIDC extension point) and `admin` added to `admin_audit_events.actor_kind` |
 
 ---
 
