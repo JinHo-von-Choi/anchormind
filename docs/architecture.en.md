@@ -29,7 +29,7 @@ server.js  (HTTP server)
     +-- lib/memory/
             +-- MemoryManager.js          Business logic orchestration facade (singleton). Routes public methods to 4 processors via delegation. Shared properties synchronized via _installSharedSync
             +-- processors/               remember/recall/reflect/link domain processors
-            |   +-- MemoryRememberer.js   Dedicated remember(). _runPolicyGate helper evaluates dryRun/atomic/non-atomic branches at the same point, declaring related variables before use to avoid TDZ (Temporal Dead Zone) reference errors
+            |   +-- MemoryRememberer.js   Dedicated remember(). The dryRun, atomic and non-atomic branches all pass the semantic write gate (WriteGate) at the same point, declaring related variables before use to avoid TDZ (Temporal Dead Zone) reference errors
             |   +-- MemoryRecaller.js     Dedicated recall(). fields pick step, depth filter, CBR path
             |   +-- MemoryReflector.js    Dedicated reflect(). session summary->fragment conversion
             |   +-- MemoryLinker.js       Dedicated link()/forget()/amend()
@@ -52,14 +52,17 @@ server.js  (HTTP server)
             |   +-- SearchScope.js        Search coherence filter contract. Encapsulates workspace/caseId/resolutionStatus/phase/affect/type/topic/isAnchor/keyId. applyTo(fragment) -> boolean. L1 HotCache, L2, L3, and Graph prefilters are backed by a final common filter in search()
             |   +-- SearchSideEffects.js  Search side-effect isolation module. commitSearchSideEffects() synchronously returns searchEventId; fire-and-forgets SearchParamAdaptor.recordOutcome()
             +-- write/                    Write layer modules
-            |   +-- FragmentWriter.js     Fragment writes (insert, update, delete, incrementAccess, touchLinked)
-            |   +-- FragmentFactory.js    Fragment creation, validation, PII masking
+            |   +-- WriteGate.js          Single semantic write gate. Applies the normalize, sensitive, length, policy, workspace and anchor steps in order and records violations as warnings or rejects them on hard-gate keys. `MEMENTO_WRITE_GATE`
+            |   +-- write-gate-metrics.js Gate verdict metric `memento_write_gate_total{entry,outcome}`
+            |   +-- FragmentImporter.js   Passes import rows through the gate and writes them with FragmentWriter (shared by admin import and CLI import)
+            |   +-- FragmentWriter.js     Fragment writes. The semantic methods (insert, update) accept only gated values; internal metadata goes through updateInternal, which cannot write the 9 semantic columns (also delete, incrementAccess, touchLinked)
+            |   +-- FragmentFactory.js    Fragment creation, validation, PII masking rules (`maskSensitiveText`) and per-type truncation (`limitContentLength`)
             |   +-- affect.js             Allowed affect tag values and `sanitizeAffect` normalization (shared by FragmentFactory and FragmentWriter)
             |   +-- FragmentStore.js      PostgreSQL CRUD facade (delegates to FragmentReader + FragmentWriter)
             |   +-- RememberPostProcessor.js remember() post-processing pipeline (embedding/morpheme/linking/assertion/temporal linking/evaluation queue/ProactiveRecall)
             |   +-- ConflictResolver.js   Conflict detection, supersede, autoLinkOnRemember (topic-based structural linking)
             |   +-- IdempotencyStore.js   Retry response records for write tools that create no fragment (`amend`, `tool_feedback`) (`idempotency_records`)
-            |   +-- BatchRememberProcessor.js Dedicated batchRemember() logic. Phase A (validation) -> B (INSERT) -> C (post-processing) 3-stage. Supports async opt-in via `async: true` parameter: after pre-validation, enqueues job to Redis (`memento:batch_remember_queue`) and returns immediately. Falls back to synchronous path when Redis is unavailable. Worker (BatchRememberWorker) consumes the queue via the existing INSERT path
+            |   +-- BatchRememberProcessor.js Dedicated batchRemember() logic. Phase A (validation and per-item gate) -> B (INSERT) -> C (post-processing) 3-stage. Supports async opt-in via `async: true` parameter: after pre-validation, enqueues job to Redis (`memento:batch_remember_queue`) and returns immediately. Falls back to synchronous path when Redis is unavailable. Worker (BatchRememberWorker) consumes the queue via the existing INSERT path
             |   +-- BatchRememberWorker.js Async queue worker for batch_remember. Polls `memento:batch_remember_queue` Redis queue and processes jobs via the BatchRememberProcessor synchronous path. `getBatchRememberWorker()` singleton factory. Because it is `PollingWorker`-based it registers in the worker registry at startup and `gracefulShutdown` drains it together with the other workers
             +-- link/                     Link layer modules
             |   +-- ReconsolidationEngine.js Dynamic fragment_links weight/confidence update engine (reinforce/decay/quarantine/restore/soft_delete + history recording)
@@ -1269,7 +1272,7 @@ Files under `lib/memory/` are split into subdirectories by functional domain.
 ```
 lib/memory/
 +-- read/          FragmentSearch, FragmentReader, ContextBuilder, GraphNeighborSearch, HistoryReconstructor, Reranker, CaseRecall, LinkedFragmentLoader, RecallSuggestionEngine, SearchScope, SearchSideEffects
-+-- write/         FragmentWriter, FragmentFactory, FragmentStore, RememberPostProcessor, ConflictResolver, BatchRememberProcessor, BatchRememberWorker
++-- write/         WriteGate, FragmentImporter, FragmentWriter, FragmentFactory, FragmentStore, RememberPostProcessor, ConflictResolver, BatchRememberProcessor, BatchRememberWorker
 +-- link/          ReconsolidationEngine, GraphLinker, LinkStore, SessionLinker, TemporalLinker, ContradictionDetector
 +-- consolidate/   MemoryConsolidator, ConsolidatorGC, FragmentGC, decay, UtilityBaseline
 +-- embedding/     EmbeddingWorker, EmbeddingCache, MorphemeIndex, MorphemeTokenizer
@@ -1463,9 +1466,9 @@ Call sites: `FragmentReader.getById` / `findCaseIdBySessionTopic` / `findErrorFr
 
 `_mergeDuplicates()` detects duplicates grouped by `GROUP BY key_id, workspace, content_hash`. Fragments belonging to the master key (key_id IS NULL) are excluded from automatic merging. Groups with scope mismatches are skipped with a warning log.
 
-## _runPolicyGate Unification
+## Single Semantic Write Gate
 
-`MemoryRememberer._runPolicyGate(fragment, { keyId, mode })`. Mode values are `"dryRun"` or `"production"`. PolicyRules evaluation is performed at the same point across all three branches: dryRun, atomic, and non-atomic. In dryRun mode, only validation_warnings are returned without actual storage.
+`WriteGate.check({ entry, op, fields, base, build, mode, ctx })`. The three remember branches (dryRun, atomic, non-atomic), amend, batch_remember, reflect-derived writes, AutoReflect, imports and the CLI remember local mode all pass the same gate. Mode values are `"dryRun"` or `"production"`, and the gate runs outside any transaction. In dryRun mode, only validation_warnings are returned without actual storage. `tests/structure/write-entrypoints.test.js` statically checks the entry point list and the gate calls, and `tests/structure/semantic-columns.test.js` checks where semantic columns are written.
 
 ## CaseRewardBackprop ENV Gate
 

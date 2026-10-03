@@ -47,11 +47,11 @@ Search-related modules live under `lib/memory/read/`; import paths follow the ac
 
 ```
 remember(params)
-  ├── dryRun branch — calls _runPolicyGate(dryFragment, {mode:"dryRun"}), then early return
+  ├── dryRun branch: calls WriteGate.check({mode:"dryRun"}), then early return
   │     params.dryRun === true → computes validationResult without storing
   │     returns { dryRun: true, wouldStore: true/false, reason, params }
-  ├── _runPolicyGate(fragment, {mode:"production"}) — PolicyRules hard gate, evaluated on all paths
-  │     dryRun, atomic, and non-atomic paths all pass through the same helper
+  ├── WriteGate.check({mode:"production"}): semantic write gate (normalize, mask, truncate, PolicyRules, workspace permission, anchor permission)
+  │     dryRun, atomic, and non-atomic paths all pass through the same gate
   │     SymbolicPolicyViolationError is thrown before any transaction begins
   ├── atomic branch — MEMENTO_REMEMBER_ATOMIC=true && keyId condition
   │     delegates to _rememberAtomic()
@@ -71,7 +71,7 @@ remember(params)
   └── RememberPostProcessor.run() — embedding/morpheme/link/eval post-processing
 ```
 
-The `dryRun` branch includes a `_runPolicyGate` call and is positioned before the atomic guard declaration. `_runPolicyGate` accepts a mode parameter (`"dryRun"` / `"production"`) and evaluates the same PolicyRules, ensuring that the policy applied to dryRun responses and actual storage paths is always consistent.
+The `dryRun` branch includes the gate call and is positioned before the atomic guard declaration. `WriteGate.check` accepts a mode parameter (`"dryRun"` / `"production"`) and applies the same steps, ensuring that the policy applied to dryRun responses and actual storage paths is always consistent. amend, batch_remember (per item), reflect-derived writes, AutoReflect, admin import, CLI import and the CLI remember local mode pass the same gate. The gate runs outside any transaction, and verdicts are counted in `memento_write_gate_total{entry,outcome}` (outcome: pass, warn, reject).
 
 A call whose stored id differs from the new fragment id, meaning it hit an existing fragment, is counted in the `mcp_remember_duplicate_total{kind}` counter. `kind` is one of `same_scope`, `other_workspace`, `closed` and `unknown`, and it is recorded regardless of `MEMENTO_REMEMBER_DUPLICATE_GUARD`. It is a labeled counter, so no value is exposed until the first hit.
 

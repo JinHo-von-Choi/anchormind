@@ -32,7 +32,7 @@ server.js  (HTTP 서버)
     └── lib/memory/
             ├── MemoryManager.js          비즈니스 로직 조율 facade (싱글턴). 공개 메서드를 4개 processor에 위임하여 라우팅. 공유 프로퍼티는 _installSharedSync로 동기화
             ├── processors/               remember/recall/reflect/link 도메인 처리기 모듈
-            │   ├── MemoryRememberer.js   remember() 전담. _runPolicyGate 헬퍼로 dryRun·atomic·non-atomic 분기를 동일 시점에 평가하며, 관련 변수를 사용 전에 선언하여 TDZ(Temporal Dead Zone) 참조 오류를 방지한다
+            │   ├── MemoryRememberer.js   remember() 전담. dryRun·atomic·non-atomic 분기가 모두 같은 시점에 의미 쓰기 관문(WriteGate)을 거치며, 관련 변수를 사용 전에 선언하여 TDZ(Temporal Dead Zone) 참조 오류를 방지한다
             │   ├── MemoryRecaller.js     recall() 전담. fields pick 단계, depth 필터, CBR 경로
             │   ├── MemoryReflector.js    reflect() 전담. session 요약→파편 변환
             │   ├── MemoryLinker.js       link()/forget()/amend() 전담
@@ -55,14 +55,17 @@ server.js  (HTTP 서버)
             │   ├── SearchScope.js        검색 정합 필터 계약. workspace/caseId/resolutionStatus/phase/affect/type/topic/isAnchor/keyId 캡슐화. applyTo(fragment) → boolean. L1 HotCache·L2·L3·Graph 사전 필터와 search() 최종 공통 필터에서 fragment 단위 정합성을 보장한다
             │   └── SearchSideEffects.js  검색 부작용 격리 모듈. commitSearchSideEffects()가 searchEventId를 동기 반환하고 SearchParamAdaptor.recordOutcome()을 fire-and-forget으로 호출. FragmentSearch는 검색 파이프라인에만 집중
             ├── write/                    쓰기 레이어 모듈
-            │   ├── FragmentWriter.js     파편 쓰기 (insert, update, delete, incrementAccess, touchLinked)
-            │   ├── FragmentFactory.js    파편 생성, 유효성 검증, PII 마스킹
+            │   ├── WriteGate.js          의미 쓰기 단일 관문. normalize, sensitive, length, policy, workspace, anchor 단계를 순서대로 적용하고 위반을 경고로 남기거나 hard gate 키에서 거부한다. `MEMENTO_WRITE_GATE`
+            │   ├── write-gate-metrics.js 관문 판정 지표 `memento_write_gate_total{entry,outcome}`
+            │   ├── FragmentImporter.js   가져오기 행을 관문에 통과시켜 FragmentWriter로 기록 (admin 가져오기와 CLI 가져오기 공용)
+            │   ├── FragmentWriter.js     파편 쓰기. 의미 메서드(insert, update)는 관문을 거친 값만 받고, 내부 메타데이터는 updateInternal로 쓰며 의미 열 9개는 쓸 수 없다 (delete, incrementAccess, touchLinked 포함)
+            │   ├── FragmentFactory.js    파편 생성, 유효성 검증, PII 마스킹 규칙(`maskSensitiveText`)과 유형별 절삭(`limitContentLength`)
             │   ├── affect.js             정서 태그 허용값 집합과 `sanitizeAffect` 정규화 (FragmentFactory, FragmentWriter가 공유)
             │   ├── FragmentStore.js      PostgreSQL CRUD 파사드 (FragmentReader + FragmentWriter 위임)
             │   ├── RememberPostProcessor.js remember() 후처리 파이프라인 (임베딩/형태소/링크/assertion/시간링크/평가큐/ProactiveRecall 포함)
             │   ├── ConflictResolver.js   충돌 감지, supersede, autoLinkOnRemember(topic 기반 구조적 링킹)
             │   ├── IdempotencyStore.js   파편을 만들지 않는 쓰기 도구(`amend`, `tool_feedback`)의 재시도 응답 기록 (`idempotency_records`)
-            │   ├── BatchRememberProcessor.js batchRemember() 로직 전담. Phase A(검증)→B(INSERT)→C(후처리) 3단계. `async: true` 파라미터로 비동기 opt-in 가능: 선검증 후 Redis 큐(`memento:batch_remember_queue`)에 job을 적재하고 즉시 반환. Redis 미설정 시 동기 경로 폴백. 워커(BatchRememberWorker)가 기존 INSERT 경로로 소비
+            │   ├── BatchRememberProcessor.js batchRemember() 로직 전담. Phase A(검증과 항목별 관문)→B(INSERT)→C(후처리) 3단계. `async: true` 파라미터로 비동기 opt-in 가능: 선검증 후 Redis 큐(`memento:batch_remember_queue`)에 job을 적재하고 즉시 반환. Redis 미설정 시 동기 경로 폴백. 워커(BatchRememberWorker)가 기존 INSERT 경로로 소비
             │   └── BatchRememberWorker.js batch_remember 비동기 큐 워커. `memento:batch_remember_queue` Redis 큐 폴링 → BatchRememberProcessor 동기 경로로 실행. `getBatchRememberWorker()` 싱글톤 팩토리. `PollingWorker` 기반이므로 기동 시 워커 레지스트리에 등록되고 `gracefulShutdown`이 일괄 배수
             ├── link/                     링크 레이어 모듈
             │   ├── ReconsolidationEngine.js fragment_links weight/confidence 동적 갱신 엔진 (reinforce/decay/quarantine/restore/soft_delete + 이력 기록)
@@ -1363,7 +1366,7 @@ migration-035(`lib/memory/migrations/migration-035-morpheme-indexed.sql`): `frag
 ```
 lib/memory/
 ├── read/          FragmentSearch, FragmentReader, ContextBuilder, GraphNeighborSearch, HistoryReconstructor, Reranker, CaseRecall, LinkedFragmentLoader, RecallSuggestionEngine, SearchScope, SearchSideEffects
-├── write/         FragmentWriter, FragmentFactory, FragmentStore, RememberPostProcessor, ConflictResolver, BatchRememberProcessor, BatchRememberWorker
+├── write/         WriteGate, FragmentImporter, FragmentWriter, FragmentFactory, FragmentStore, RememberPostProcessor, ConflictResolver, BatchRememberProcessor, BatchRememberWorker
 ├── link/          ReconsolidationEngine, GraphLinker, LinkStore, SessionLinker, TemporalLinker, ContradictionDetector
 ├── consolidate/   MemoryConsolidator, ConsolidatorGC, FragmentGC, decay, UtilityBaseline
 ├── embedding/     EmbeddingWorker, EmbeddingCache, MorphemeIndex, MorphemeTokenizer
@@ -1477,7 +1480,7 @@ migration SQL: `lib/memory/migrations/migration-035-morpheme-indexed.sql`.
 본문에서 다루지 않은 세부 동작 요약.
 
 - `_mergeDuplicates`: `GROUP BY key_id, workspace, content_hash`. master 키 파편은 자동 병합 제외, scope 불일치 그룹은 경고 후 건너뜀.
-- `MemoryRememberer._runPolicyGate(fragment, { keyId, mode })`: dryRun·atomic·non-atomic 세 분기에서 PolicyRules 평가를 동일 시점에 수행. mode는 `"dryRun"` 또는 `"production"`.
+- `WriteGate.check({ entry, op, fields, base, build, mode, ctx })`: remember의 dryRun·atomic·non-atomic 세 분기와 amend, batch_remember, reflect 파생 쓰기, AutoReflect, 가져오기, CLI remember 로컬 모드가 같은 관문을 거친다. mode는 `"dryRun"` 또는 `"production"`이며 트랜잭션 밖에서 실행된다. 진입점 목록과 관문 호출은 `tests/structure/write-entrypoints.test.js`, 의미 열 쓰기 위치는 `tests/structure/semantic-columns.test.js`가 정적으로 검사한다.
 - `CaseRewardBackprop`: `MEMENTO_CASE_BACKPROP_ENABLED=true`일 때만 `backprop()`이 fragment_evidence 조회 및 importance 역전파를 수행.
 - migration body-only 규약: `scripts/migrate.js`가 파일마다 트랜잭션과 schema_migrations 기록을 처리하므로 파일 본문에 BEGIN/COMMIT과 schema_migrations INSERT를 쓰지 않는다. 본문 치환은 `vector_cosine_ops`를 실제 opclass로 바꾸는 것 하나뿐이다. `lint:migrations`가 CI에서 검사한다. 상세는 `docs/migration-conventions.md`.
 

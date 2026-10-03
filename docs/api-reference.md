@@ -683,7 +683,7 @@ violations 있는 경우 (soft gate — 저장됨):
 }
 ```
 
-`validation_warnings`: PolicyRules soft gating violations rule 이름 string[]. violations 없으면 필드 자체 생략. `MEMENTO_SYMBOLIC_POLICY_RULES=false` (기본값) 시 항상 생략. atomic 경로(`MEMENTO_REMEMBER_ATOMIC=true`)와 non-atomic 경로 모두 동일한 `_runPolicyGate` 호출 경로를 거치므로 포맷이 동일하다. 활성화 시 다음 6가지 predicate 중 실패한 것이 누적된다:
+`validation_warnings`: PolicyRules soft gating violations rule 이름 string[]. violations 없으면 필드 자체 생략. `MEMENTO_SYMBOLIC_POLICY_RULES=false` (기본값) 시 항상 생략. atomic 경로(`MEMENTO_REMEMBER_ATOMIC=true`)와 non-atomic 경로 모두 같은 의미 쓰기 관문(`WriteGate.check`)을 거치므로 포맷이 동일하다. 활성화 시 다음 6가지 predicate 중 실패한 것이 누적된다:
 
 - `decisionHasRationale` — decision 타입이 linked_to 2건 이상 또는 근거 키워드 미포함
 - `errorHasResolutionPath` — error 타입이 cause/fix 키워드 또는 resolution_status 미포함
@@ -786,6 +786,9 @@ violations 있는 경우 (soft gate — 저장됨):
 | `type is required` | `type` 필드 누락 |
 | `Content too short: length < 10 and word count < 3` | `FragmentFactory.validateContent` 판정 실패 — 내용이 너무 짧음 |
 | `fragment_limit_exceeded` | API 키 파편 할당량 초과 |
+| `policy_violation: <rule>, ...` | `api_keys.symbolic_hard_gate=true` 키에서 의미 쓰기 관문의 정책 위반 |
+
+각 항목은 remember와 같은 의미 쓰기 관문(정규화, 민감 정보 마스킹, 유형별 절삭, PolicyRules, workspace 허가)을 트랜잭션 밖에서 거친다. 경고로 남는 위반은 성공한 항목의 `results[i].validation_warnings`(rule 이름 string[])로 알리며, 위반이 없으면 필드를 생략한다.
 
 ---
 
@@ -884,7 +887,7 @@ violations 있는 경우 (soft gate — 저장됨):
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | id | string | O | 갱신 대상 파편 ID |
-| content | string | - | 새 내용. remember와 같은 상한(4000자)을 적용하며 초과 시 `-32602`로 거부된다. 300자 절삭은 적용되지 않으므로 클라이언트가 300자 이내로 맞춘다. remember의 자기완결성 기준을 따른다 |
+| content | string | - | 새 내용. remember와 같은 상한(4000자)을 적용하며 초과 시 `-32602`로 거부된다. remember와 같이 민감 정보를 마스킹하고 300자(episode는 1000자)를 넘으면 잘라 저장한다. remember의 자기완결성 기준을 따른다 |
 | topic | string | - | 새 주제 |
 | keywords | string[] | - | 새 키워드 목록 |
 | type | string | - | 새 유형 (fact, decision, error, preference, procedure, relation) |
@@ -898,6 +901,8 @@ violations 있는 경우 (soft gate — 저장됨):
 | agentId | string | - | 에이전트 ID |
 | dryRun | boolean | - | true 설정 시 실제 변경 없이 패치 적용 후의 예상 파편 상태를 반환. |
 | idempotencyKey | string | - | 재시도 안전 식별자 (최대 128자). 같은 key_id 범위에서 같은 값으로 반복 호출하면 첫 호출의 응답을 그대로 반환하고 이력을 다시 쌓지 않는다 |
+
+바뀐 필드는 remember와 같은 의미 쓰기 관문을 거친다. 이번 변경으로 새로 생긴 PolicyRules 위반은 응답의 `validation_warnings`(rule 이름 string[])로 알리고, 파편에 이미 있던 위반은 다시 알리지 않는다. `api_keys.symbolic_hard_gate=true` 키에서는 새 위반이 있으면 갱신하지 않고 `SymbolicPolicyViolationError`로 거부한다. dryRun 응답은 관문을 거친 예상 상태를 `simulated.would_be_fragment`에, 위반을 `simulated.validation_warnings`에 싣는다.
 
 ---
 
@@ -1301,10 +1306,11 @@ curl -si -X POST https://anchormind.example.com/mcp \
 
 | 변수 | 기본값 | 영향 범위 |
 |-|-|-|
-| `MEMENTO_REMEMBER_ATOMIC` | `false` | `true` 시 remember 경로가 `_rememberAtomic`으로 전환. `SELECT api_keys FOR UPDATE` + 단일 BEGIN/COMMIT 트랜잭션으로 quota 재검증과 INSERT를 원자적으로 처리. `_runPolicyGate`는 양 경로 모두 동일하게 실행되므로 `validation_warnings` 포맷에 차이 없음. |
+| `MEMENTO_REMEMBER_ATOMIC` | `false` | `true` 시 remember 경로가 `_rememberAtomic`으로 전환. `SELECT api_keys FOR UPDATE` + 단일 BEGIN/COMMIT 트랜잭션으로 quota 재검증과 INSERT를 원자적으로 처리. 의미 쓰기 관문은 양 경로 모두 트랜잭션 전에 동일하게 실행되므로 `validation_warnings` 포맷에 차이 없음. |
+| `MEMENTO_WRITE_GATE` | `on` | 의미 쓰기 관문 스위치. `on`이면 remember, amend, batch_remember, reflect 파생 쓰기, AutoReflect, 가져오기, CLI remember 로컬 모드가 같은 관문을 거친다. `off`이면 진입점별 기본 단계만 적용한다(remember는 전체, amend는 수신 상한과 키워드 정규화, batch_remember와 reflect와 CLI remember는 정규화, 마스킹, 절삭, 가져오기는 없음). |
 | `MEMENTO_CASE_BACKPROP_ENABLED` | `false` | `true` 시 case_id를 가진 파편의 amend(resolutionStatus 변경) 시점에 동일 caseId 파편들의 importance를 역전파 조정. `lib/config.js`의 `CASE_BACKPROP_ENABLED` 상수로 export. case 해결 완료 시 관련 파편의 활성화 점수가 상향되어 이후 recall 정밀도를 높인다. |
 | `MEMENTO_STORAGE` | `pgvector` | 저장소 백엔드 이름. 현재 `pgvector` 하나이며 이 값은 동작에 영향을 주지 않는다. |
-| `MEMENTO_SYMBOLIC_POLICY_RULES` | `false` | `true` 시 `_runPolicyGate`가 PolicyRules soft gate를 평가하여 위반 rule 이름을 `validation_warnings`에 누적. |
+| `MEMENTO_SYMBOLIC_POLICY_RULES` | `false` | `true` 시 의미 쓰기 관문의 policy 단계가 PolicyRules soft gate를 평가하여 위반 rule 이름을 `validation_warnings`에 누적. |
 | `MEMENTO_TOOL_ARGS_VALIDATION` | `warn` | 도구 호출 인자의 `inputSchema` 점검 모드(`off`, `warn`, `enforce`). |
 | `MEMENTO_REMEMBER_DUPLICATE_GUARD` | `false` | `true` 시 같은 키 범위의 기존 파편과 같은 본문을 받은 `remember`가 기존 파편에 후처리 없이 `existing`, `duplicate`로 상태만 알린다. |
 | `MEMENTO_FEEDBACK_SAMPLING` | `true` | remember·amend·forget 성공 응답에 `feedback_sampled` 힌트를 확률적으로 동봉. `false` 시 힌트를 전혀 붙이지 않으며 응답 형태는 이전과 동일하다. |

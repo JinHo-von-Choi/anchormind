@@ -47,11 +47,11 @@ MemoryManager는 thin facade다. 비즈니스 로직은 `lib/memory/processors/`
 
 ```
 remember(params)
-  ├── dryRun 분기 — _runPolicyGate(dryFragment, {mode:"dryRun"}) 호출 후 early return
+  ├── dryRun 분기: WriteGate.check({mode:"dryRun"}) 호출 후 early return
   │     params.dryRun === true → validationResult 계산 후 실제 저장 없이
   │     { dryRun: true, wouldStore: true/false, reason, params } 반환
-  ├── _runPolicyGate(fragment, {mode:"production"}) — PolicyRules hard gate 공통 평가
-  │     dryRun·atomic·non-atomic 세 경로 모두 동일 헬퍼를 거친다
+  ├── WriteGate.check({mode:"production"}): 의미 쓰기 관문(정규화, 마스킹, 절삭, PolicyRules, workspace 허가, 앵커 권한)
+  │     dryRun·atomic·non-atomic 세 경로 모두 같은 관문을 거친다
   │     SymbolicPolicyViolationError throw 시 트랜잭션 시작 이전에 즉시 중단
   ├── atomic 분기 — MEMENTO_REMEMBER_ATOMIC=true && keyId 조건
   │     _rememberAtomic() 위임
@@ -71,7 +71,7 @@ remember(params)
   └── RememberPostProcessor.run() — 임베딩/형태소/링크/평가 후처리
 ```
 
-`dryRun` 분기는 `_runPolicyGate` 호출을 포함하여 atomic 가드 선언 직전에 위치한다. `_runPolicyGate`는 mode 파라미터(`"dryRun"` / `"production"`)를 받아 동일 PolicyRules를 평가하므로, dryRun 응답과 실제 저장 경로의 정책 적용이 항상 일치한다.
+`dryRun` 분기는 관문 호출을 포함하여 atomic 가드 선언 직전에 위치한다. `WriteGate.check`는 mode 파라미터(`"dryRun"` / `"production"`)를 받아 같은 단계를 적용하므로, dryRun 응답과 실제 저장 경로의 정책 적용이 항상 일치한다. amend, batch_remember(항목별), reflect 파생 쓰기, AutoReflect, admin 가져오기, CLI 가져오기, CLI remember 로컬 모드도 같은 관문을 거친다. 관문은 트랜잭션 밖에서 실행되고, 판정은 `memento_write_gate_total{entry,outcome}`(outcome: pass, warn, reject)으로 센다.
 
 저장 결과 id가 새 파편 id와 달라 기존 파편에 적중한 호출은 `mcp_remember_duplicate_total{kind}` 카운터로 집계한다. `kind`는 `same_scope`, `other_workspace`, `closed`, `unknown` 네 값이며 `MEMENTO_REMEMBER_DUPLICATE_GUARD` 설정과 무관하게 기록한다. 라벨이 붙은 카운터라 첫 적중이 발생하기 전에는 값이 출력되지 않는다.
 

@@ -32,6 +32,7 @@
 | true, false (그 밖의 값은 false) | MEMENTO_CONFIG_STRICT |
 | true, false (그 밖의 값은 `MEMORY_CONFIG` 검증에서 기동 실패) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (그 밖의 값은 off) | MEMENTO_ADMIN_AUTH_BACKOFF |
+| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE |
 | true, false (false가 아닌 값은 true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
 | true, false (true가 아닌 값은 false) | MEMENTO_REMEMBER_DUPLICATE_GUARD, MEMENTO_REMEMBER_ATOMIC, MEMENTO_WORKSPACE_GATE, MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN, ENABLE_RECONSOLIDATION, ENABLE_SPREADING_ACTIVATION, UPDATE_REQUIRE_SIGNED_TAG, MEMENTO_AUTH_DISABLED, REDIS_ENABLED, REDIS_SENTINEL_ENABLED, MEMENTO_REDIS_SESSION_FAIL_CLOSED, EMBEDDING_SUPPORTS_DIMS_PARAM, MEMENTO_RERANKER_ENABLED, MEMENTO_CASE_BACKPROP_ENABLED, UPDATE_CHECK_DISABLED, ENABLE_OPENAPI, MCP_ALLOW_AUTO_DCR_REGISTER, MCP_STRICT_ORIGIN |
 | true, false (true가 아닌 값은 REDIS_ENABLED 값) | CACHE_ENABLED |
@@ -155,6 +156,7 @@
 | MEMENTO_SEGMENT_MAX_AGE_MS | 43200000 | 세그먼트 시작 후 이 값(ms)을 초과하면 유휴 여부와 무관하게 세그먼트를 회전한다. 기본 12시간 |
 | MEMENTO_SEGMENT_MIN_ACTIVITY | 3 | 세그먼트 회전 시 직전 세그먼트에 대한 AutoReflect 발동에 필요한 세그먼트당 최소 활동(파편+도구 호출) 수 |
 | MEMENTO_WORKSPACE_GATE | false | `true` 시 `fragmentHasWorkspace` 위반(workspace가 명시값·키 default 어느 쪽으로도 해석되지 않음)을 hard gate 대상에 포함한다. 기본은 경고만 남기고 저장을 차단하지 않는다. `MEMENTO_SYMBOLIC_POLICY_RULES` 활성화 및 `api_keys.symbolic_hard_gate=true`인 키에서만 실제 차단으로 이어진다 |
+| MEMENTO_WRITE_GATE | on | 의미 쓰기 관문 스위치. `on`이면 remember, amend, batch_remember, reflect 파생 쓰기, AutoReflect, admin 가져오기, CLI 가져오기, CLI remember 로컬 모드가 모두 같은 관문(정규화, 민감 정보 마스킹, 유형별 길이 상한, PolicyRules, workspace 허가, 앵커 권한)을 트랜잭션 밖에서 거친다. 위반은 `validation_warnings` 경고로 남고 `api_keys.symbolic_hard_gate=true` 키에서만 거부한다. `off`이면 진입점별 기본 단계만 적용한다(remember는 전체, amend는 수신 상한과 키워드 정규화, batch_remember와 reflect와 CLI remember는 정규화, 마스킹, 절삭, 가져오기는 없음). 호출 시점에 읽는다 |
 | EPISODE_CONTINUITY_CACHE_TTL_MS | 5000 | EpisodeContinuityService가 스코프(`agentId:keyId:scopeType:scopeValue`)별 최근 milestone 이벤트 ID를 보관하는 in-memory 캐시의 TTL(ms). 삽입 순서 기반 LRU이며 최대 1000개 스코프까지 추적한다 |
 
 #### CLI 원격 접속

@@ -32,6 +32,7 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | true, false (any other value is false) | MEMENTO_CONFIG_STRICT |
 | true, false (any other value fails startup in `MEMORY_CONFIG` validation) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (any other value is off) | MEMENTO_ADMIN_AUTH_BACKOFF |
+| on, off (any other value is on) | MEMENTO_WRITE_GATE |
 | true, false (any value other than false is true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
 | true, false (any value other than true is false) | MEMENTO_REMEMBER_DUPLICATE_GUARD, MEMENTO_REMEMBER_ATOMIC, MEMENTO_WORKSPACE_GATE, MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN, ENABLE_RECONSOLIDATION, ENABLE_SPREADING_ACTIVATION, UPDATE_REQUIRE_SIGNED_TAG, MEMENTO_AUTH_DISABLED, REDIS_ENABLED, REDIS_SENTINEL_ENABLED, MEMENTO_REDIS_SESSION_FAIL_CLOSED, EMBEDDING_SUPPORTS_DIMS_PARAM, MEMENTO_RERANKER_ENABLED, MEMENTO_CASE_BACKPROP_ENABLED, UPDATE_CHECK_DISABLED, ENABLE_OPENAPI, MCP_ALLOW_AUTO_DCR_REGISTER, MCP_STRICT_ORIGIN |
 | true, false (any value other than true takes the value of REDIS_ENABLED) | CACHE_ENABLED |
@@ -154,6 +155,7 @@ The name, documented default, purpose and category of each feature switch are in
 | MEMENTO_SEGMENT_MAX_AGE_MS | 43200000 | When a segment's age exceeds this value (ms), it rotates regardless of idle state. Default 12 hours |
 | MEMENTO_SEGMENT_MIN_ACTIVITY | 3 | Minimum activity (fragments + tool calls) required in the previous segment for AutoReflect to fire on segment rotation |
 | MEMENTO_WORKSPACE_GATE | false | When `true`, includes `fragmentHasWorkspace` violations (workspace could not be resolved from an explicit value or the key default) in the hard-gate-eligible set. By default only a warning is recorded and storage is not blocked. Actual blocking still requires `MEMENTO_SYMBOLIC_POLICY_RULES` to be enabled and the key to have `api_keys.symbolic_hard_gate=true` |
+| MEMENTO_WRITE_GATE | on | Semantic write gate switch. With `on`, remember, amend, batch_remember, reflect-derived writes, AutoReflect, admin import, CLI import and the CLI remember local mode all pass the same gate (normalization, sensitive data masking, per-type length limit, PolicyRules, workspace permission, anchor permission) outside any transaction. Violations are kept as `validation_warnings` and only keys with `api_keys.symbolic_hard_gate=true` are rejected. With `off`, each entry point applies only its base steps (remember: all, amend: input size limit and keyword normalization, batch_remember, reflect and CLI remember: normalization, masking and truncation, imports: none). Read at call time |
 | EPISODE_CONTINUITY_CACHE_TTL_MS | 5000 | TTL (ms) of the in-memory cache EpisodeContinuityService keeps per scope (`agentId:keyId:scopeType:scopeValue`) for the most recent milestone event ID. Insertion-order LRU, tracking up to 1000 scopes |
 
 #### Migration Linting

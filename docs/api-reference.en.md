@@ -666,7 +666,7 @@ With violations (soft gate, stored):
 }
 ```
 
-`validation_warnings`: Array of PolicyRules soft gating violation rule names (string[]). The field is omitted when there are no violations. When `MEMENTO_SYMBOLIC_POLICY_RULES=false` (default), always omitted. Both the atomic path (`MEMENTO_REMEMBER_ATOMIC=true`) and the non-atomic path share the same `_runPolicyGate` call, so the format is identical on both paths. When enabled, failed predicates accumulate from the following 5:
+`validation_warnings`: Array of PolicyRules soft gating violation rule names (string[]). The field is omitted when there are no violations. When `MEMENTO_SYMBOLIC_POLICY_RULES=false` (default), always omitted. Both the atomic path (`MEMENTO_REMEMBER_ATOMIC=true`) and the non-atomic path pass the same semantic write gate (`WriteGate.check`), so the format is identical on both paths. When enabled, failed predicates accumulate from the following 5:
 
 - `decisionHasRationale` — decision type lacks 2+ linked_to references or rationale keywords
 - `errorHasResolutionPath` — error type lacks cause/fix keywords or resolution_status
@@ -769,6 +769,9 @@ Each fragment is checked before INSERT against the conditions below. A failing f
 | `type is required` | `type` is missing |
 | `Content too short: length < 10 and word count < 3` | `FragmentFactory.validateContent` rejected the content as too short |
 | `fragment_limit_exceeded` | API key fragment quota exceeded |
+| `policy_violation: <rule>, ...` | Semantic write gate policy violation on a key with `api_keys.symbolic_hard_gate=true` |
+
+Each item passes the same semantic write gate as remember (normalization, sensitive data masking, per-type truncation, PolicyRules, workspace permission) outside the transaction. Violations kept as warnings are reported in `results[i].validation_warnings` (string[] of rule names) of the successful item; the field is omitted when there is none.
 
 ---
 
@@ -867,7 +870,7 @@ Update the content or metadata of an existing fragment. Selectively modifies whi
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | id | string | Y | Target fragment ID to update |
-| content | string | - | New content. The same 4000-character limit as remember applies; exceeding it is rejected with `-32602`. The 300-character truncation is not applied, so clients should keep it within 300 characters. The remember self-containment rules apply |
+| content | string | - | New content. The same 4000-character limit as remember applies; exceeding it is rejected with `-32602`. Like remember, sensitive data is masked and content longer than 300 characters (1000 for episode) is truncated when stored. The remember self-containment rules apply |
 | topic | string | - | New topic |
 | keywords | string[] | - | New keyword list |
 | type | string | - | New type (fact, decision, error, preference, procedure, relation) |
@@ -881,6 +884,8 @@ Update the content or metadata of an existing fragment. Selectively modifies whi
 | agentId | string | - | Agent ID |
 | dryRun | boolean | - | When true, returns the expected fragment state after applying the patch without making actual changes. |
 | idempotencyKey | string | - | Retry-safe identifier (max 128 characters). Repeating a call with the same value in the same key_id scope returns the first response without recording history again |
+
+The changed fields pass the same semantic write gate as remember. PolicyRules violations introduced by this change are reported in the response `validation_warnings` (string[] of rule names); violations the fragment already had are not reported again. On a key with `api_keys.symbolic_hard_gate=true`, a new violation rejects the update with `SymbolicPolicyViolationError`. A dryRun response carries the gated expected state in `simulated.would_be_fragment` and the violations in `simulated.validation_warnings`.
 
 ---
 
@@ -1267,10 +1272,11 @@ curl -si -X POST https://anchormind.example.com/mcp \
 
 | Variable | Default | Scope of Impact |
 |-|-|-|
-| `MEMENTO_REMEMBER_ATOMIC` | `false` | When `true`, the remember path switches to `_rememberAtomic`. Quota re-validation and INSERT are handled atomically within a single BEGIN/COMMIT transaction using `SELECT api_keys FOR UPDATE`. `_runPolicyGate` runs identically on both paths, so the `validation_warnings` format is unchanged. |
+| `MEMENTO_REMEMBER_ATOMIC` | `false` | When `true`, the remember path switches to `_rememberAtomic`. Quota re-validation and INSERT are handled atomically within a single BEGIN/COMMIT transaction using `SELECT api_keys FOR UPDATE`. The semantic write gate runs identically before the transaction on both paths, so the `validation_warnings` format is unchanged. |
+| `MEMENTO_WRITE_GATE` | `on` | Semantic write gate switch. With `on`, remember, amend, batch_remember, reflect-derived writes, AutoReflect, imports and the CLI remember local mode pass the same gate. With `off`, each entry point applies only its base steps (remember: all, amend: input size limit and keyword normalization, batch_remember, reflect and CLI remember: normalization, masking and truncation, imports: none). |
 | `MEMENTO_CASE_BACKPROP_ENABLED` | `false` | When `true`, amending a fragment with a case_id (specifically changing resolutionStatus) triggers importance backpropagation to all fragments sharing the same caseId. Exported as the `CASE_BACKPROP_ENABLED` constant in `lib/config.js`. Boosts activation scores of related fragments after case resolution, improving subsequent recall precision. |
 | `MEMENTO_STORAGE` | `pgvector` | Storage backend name. Currently `pgvector` only; this value does not affect behavior. |
-| `MEMENTO_SYMBOLIC_POLICY_RULES` | `false` | When `true`, `_runPolicyGate` evaluates PolicyRules soft gates and accumulates failed rule names into `validation_warnings`. |
+| `MEMENTO_SYMBOLIC_POLICY_RULES` | `false` | When `true`, the policy step of the semantic write gate evaluates PolicyRules soft gates and accumulates failed rule names into `validation_warnings`. |
 | `MEMENTO_TOOL_ARGS_VALIDATION` | `warn` | Check mode of tool call arguments against `inputSchema` (`off`, `warn`, `enforce`). |
 | `MEMENTO_REMEMBER_DUPLICATE_GUARD` | `false` | When `true`, a `remember` that receives the same body as an existing fragment in the same key scope reports the state through `existing` and `duplicate` without post-processing the existing fragment. |
 | `MEMENTO_FEEDBACK_SAMPLING` | `true` | Attaches the `feedback_sampled` hint to successful remember/amend/forget responses with a fixed probability. When `false`, no hint is attached and response shapes are unchanged. |
