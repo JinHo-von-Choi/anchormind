@@ -243,12 +243,12 @@ bge-m3는 값이 높은 대역에 몰려 있어 선형 가중 합에서 변별�
 |-|-|
 | 부분집합 | 사람 작성 한국어(`human_ko`, 목표 150건 이상), 식별자 정확 일치, 시간 holdout, 원문 비열람 paraphrase, hard negative, 합성(보조, 전체 수치에서 제외하고 따로 보고) |
 | 층화 | 띄어쓰기, 조사 변형, 영문 식별자, 한영 혼용 태그와 영역(research, coding, ops, schedule)별 집계 |
-| 지표 | R@1/5/10, MRR, 토큰 예산 내 nDCG, 오답 후보 선행 비율(hard negative) |
-| nDCG | 이득은 2^등급 - 1, 위치 할인은 앞선 항목이 쓴 토큰 수를 단위 100토큰으로 나눈 값으로 1/log2(2 + x), 예산을 넘는 항목은 지급하지 않는다. 항목마다 100토큰이면 통상의 nDCG와 같다 |
+| 지표 | R@1/5/10, MRR, 토큰 예산 내 nDCG, 오답 후보 선행 비율(hard negative). R@k는 적중률이다: 상위 k개에 정답이 하나라도 있는 질의의 비율. 정답이 여럿인 질의를 위해 상위 k개에 든 정답 수 / 전체 정답 수의 평균인 `recall_fraction_at_k`를 따로 낸다. 필드 이름 `recall_at_k`는 적중률을 뜻하며 바뀌지 않는다 |
+| nDCG | 이득은 2^등급 - 1, 위치 할인은 앞선 항목이 쓴 토큰 수를 단위 100토큰으로 나눈 값으로 1/log2(2 + x), 예산을 넘는 항목은 지급하지 않는다. 항목마다 100토큰이면 통상의 nDCG와 같다. 이상적 순서는 이득 내림차순, 같으면 토큰이 작은 순서로 예산에 채운 탐욕 순서이며 항상 최적은 아니다. 그래서 보고값은 1로 제한한 `ndcg_at_budget`이고, 제한 전 값 `ndcg_uncapped_at_budget`이 함께 출력된다. 제한은 값을 줄일 뿐 두 실행의 짝지은 차이의 방향을 뒤집지 않는다(0이 될 수는 있다). 같은 id가 반복되면 처음 나온 항목만 순위와 nDCG에 센다. 파편의 토큰 수는 DB 본문의 `countTokens` 한 곳에서 오며, 정답은 반환 목록과 이상적 순서에 같은 값을 쓴다 |
 | 지연 | cold, warm 동시성 1, warm 동시성 8 세 단계의 p50, p95, 최대. cold는 프로세스 시작 뒤 첫 실행이며 캐시를 비우지 않는다 |
 | 임베딩 | `--embeddings off`(기본)는 질의 임베딩 채널을 끈다. `on`은 환경 설정의 provider를 쓴다 |
 
-파일 형식과 사람 작성 질의를 추가하는 절차는 `tests/fixtures/recall-eval-v2/README.md`에 있다. 세트의 구조는 `node --test tests/unit/recall-eval-set.test.js`로 검사한다.
+파일 형식과 사람 작성 질의를 추가하는 절차는 `tests/fixtures/recall-eval-v2/README.md`에 있다. 실제 질의와 라벨은 git이 무시하는 `tests/fixtures/recall-eval-v2/private/`에 두며 스크립트가 그 디렉터리도 읽는다. 라벨은 평가 대상 검색 시스템으로 찾지 않는다. 세트의 구조는 `node --test tests/unit/recall-eval-set.test.js`로 검사한다.
 
 ### 실행
 
@@ -264,6 +264,8 @@ node scripts/measure/recall-metrics.mjs --target localhost:35433/<복구본_DB> 
 
 - 고정 문자열이나 고정 기대값과 대조하지 않는다. 스크립트는 합격 여부를 판정하지 않는다.
 - 두 실행의 비교는 질의별 짝지은 부트스트랩 95% 구간으로 한다. 묶음(전체, 부분집합, 태그, 영역)과 지표마다 후보 - 기준의 평균 차이와 구간을 낸다. 구간이 0을 제외할 때만 차이가 있다고 본다.
+- 짝지은 질의 수가 `--min-n`(기본 10) 미만인 묶음은 `insufficient_n: true`로 표시하고 `excludes_zero`를 판단하지 않는다(false). 이런 묶음의 구간은 결론으로 인용하지 않는다.
+- `--compare`는 두 파일의 `token_budget` 또는 `query_keywords`가 다르면 출력 JSON의 `warnings`와 표준 오류에 알린다. 같은 조건의 실행끼리 비교한다.
 - 난수는 시드를 받으므로 같은 입력과 시드는 같은 구간을 낸다. 기본 시드 20261003, 재표집 2000회.
 - 같은 DB에서 두 번 실행한 `volatile` 밖의 값이 같은지는 재현성 확인일 뿐 품질 기준이 아니다.
 

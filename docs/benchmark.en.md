@@ -340,12 +340,12 @@ Before key-scope isolation and the post-seed settle step, two consecutive runs o
 |-|-|
 | Subsets | human-written Korean (`human_ko`, target 150 or more), exact identifier, time holdout, blind paraphrase, hard negative, synthetic (auxiliary, left out of the overall figures and reported separately) |
 | Stratification | tags for spacing, particle variants, English identifier, Korean-English mixture, and per-domain figures (research, coding, ops, schedule) |
-| Metrics | R@1/5/10, MRR, nDCG within the token budget, share of queries where a distractor outranks the answer (hard negative) |
-| nDCG | gain 2^grade - 1, position discount 1/log2(2 + x) where x is the tokens used by earlier items divided by a 100-token unit, items past the budget earn nothing. With 100 tokens per item it equals the usual nDCG |
+| Metrics | R@1/5/10, MRR, nDCG within the token budget, share of queries where a distractor outranks the answer (hard negative). R@k is a hit rate: the share of queries with at least one relevant fragment in the top k. For queries with several answers, `recall_fraction_at_k` reports the mean of (relevant fragments in the top k) / (relevant fragments of the query) separately. The field name `recall_at_k` means hit rate and does not change |
+| nDCG | gain 2^grade - 1, position discount 1/log2(2 + x) where x is the tokens used by earlier items divided by a 100-token unit, items past the budget earn nothing. With 100 tokens per item it equals the usual nDCG. The ideal order is greedy (gain descending, fewer tokens first on ties, packed into the budget) and is not always optimal. The reported value `ndcg_at_budget` is therefore capped at 1, and the value before the cap, `ndcg_uncapped_at_budget`, is printed next to it. The cap only lowers a value and keeps the direction of paired differences between two runs (a difference can shrink to zero). A repeated id counts once, at its first occurrence, for rank and nDCG alike. Fragment tokens come from one source, `countTokens` over the stored content, and a relevant fragment uses the same value in the returned list and in the ideal order |
 | Latency | p50, p95 and max for three passes: cold, warm at concurrency 1, warm at concurrency 8. Cold is the first pass after process start and no cache is flushed |
 | Embeddings | `--embeddings off` (default) disables the query embedding channel. `on` uses the provider from the environment |
 
-The file format and the procedure for adding human-written queries are in `tests/fixtures/recall-eval-v2/README.md`. The structure of the set is checked with `node --test tests/unit/recall-eval-set.test.js`.
+The file format and the procedure for adding human-written queries are in `tests/fixtures/recall-eval-v2/README.md`. Real queries and labels go in `tests/fixtures/recall-eval-v2/private/`, which git ignores and the script also reads. Labels are not found with the retrieval system under test. The structure of the set is checked with `node --test tests/unit/recall-eval-set.test.js`.
 
 ### Running
 
@@ -361,6 +361,8 @@ In the output JSON, `metrics`, `rows`, `coverage` and `labels` hold the same val
 
 - Nothing is compared against fixed strings or fixed expected values. The script does not judge pass or fail.
 - Two runs are compared with a paired bootstrap 95% interval over queries. For each group (overall, subset, tag, domain) and metric it reports the mean difference candidate - baseline and the interval. A difference counts only when the interval excludes zero.
+- A group with fewer paired queries than `--min-n` (default 10) is marked `insufficient_n: true` and `excludes_zero` is not judged (false). Do not cite the interval of such a group as a finding.
+- `--compare` reports a difference in `token_budget` or `query_keywords` between the two files in `warnings` of the output JSON and on standard error. Compare runs made under the same conditions.
 - The random generator takes a seed, so the same input and seed give the same interval. Default seed 20261003, 2000 resamples.
 - Identical values outside `volatile` across two runs on the same database confirm reproducibility and are not a quality criterion.
 
