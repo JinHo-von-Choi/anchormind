@@ -261,9 +261,11 @@ describe("recall 순위 후 예산 선택", () => {
     assert.ok(linkedCases > 20, `연결 파편이 합류한 시드가 적다: ${linkedCases}`);
   });
 
-  it("예산이 묶이면 토큰 합은 예산 이하이고, 모든 후보에 토큰 수가 있으면 on의 최종 점수 합은 off 이상이다(시드 400개)", async () => {
+  it("예산이 묶이면 토큰 합은 예산 이하이고, 태그 없는 검색이나 모든 후보에 토큰 수가 있으면 on의 최종 점수 합은 off 이상이다(시드 400개)", async () => {
     let bindingCases = 0;
     let strictGains  = 0;
+    let taggedMixed  = 0;
+    let taggedBelow  = 0;
     for (let seed = 1001; seed <= 1400; seed++) {
       const mixed    = randomScenario(seed);
       /** 짝수 시드: 모든 후보에 estimated_tokens(추정값 = 정확한 수), 홀수 시드: 일부만(추정값이 틀릴 수 있다) */
@@ -279,12 +281,17 @@ describe("recall 순위 후 예산 선택", () => {
 
       const onScore  = scoreSum(on.result.fragments, scoreOf);
       const offScore = scoreSum(off.result.fragments, scoreOf);
-      if (exact) assert.ok(onScore >= offScore - 1e-9, `seed ${seed}: on ${onScore} < off ${offScore}`);
+      if (exact || scenario.mode !== "tagged") assert.ok(onScore >= offScore - 1e-9, `seed ${seed}: on ${onScore} < off ${offScore}`);
+      if (!exact && scenario.mode === "tagged") {
+        taggedMixed++;
+        if (onScore < offScore - 1e-9) taggedBelow++;
+      }
       assert.ok(tokenSum(on.result.fragments) <= params.tokenBudget, `seed ${seed}: 예산 초과`);
       assert.equal(on.result.totalTokens, tokenSum(on.result.fragments));
       if (params.tokenBudget < scenario.rowTokens) bindingCases++;
       if (onScore > offScore + 1e-9) strictGains++;
     }
+    assert.ok(taggedBelow <= Math.ceil(taggedMixed * 0.25), `태그 검색의 off 미달 ${taggedBelow}/${taggedMixed}`);
     assert.ok(bindingCases > 350, `예산이 묶인 시드가 적다: ${bindingCases}`);
     assert.ok(strictGains > 0, "점수 합이 커진 시드가 하나도 없다");
   });

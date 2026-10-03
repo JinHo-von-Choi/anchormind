@@ -354,3 +354,88 @@ describe("추정값 선택과 정확한 확인", () => {
     await attachStoredTokens(frags, null);
   });
 });
+
+describe("확인된 기준 집합 보호", () => {
+  it("추정값이 작은 채움 파편이 예산을 넘기면 기준 집합보다 그 파편을 먼저 뺀다", () => {
+    /** b는 기준 집합이고 밀도가 가장 낮지만, 예산을 넘긴 것은 추정값 1로 들어온 f다 */
+    const b = { id: "b", score: 0.1, estimated_tokens: 50 };
+    const g = { id: "g", score: 0.9, estimated_tokens: 30 };
+    const f = { id: "f", score: 0.5, content: "x".repeat(200), _storedTokens: 1 };
+    const verified = verifyExactBudget([b, g, f], { budget: 100, scoreOf, protectedItems: new Set([b]) });
+    assert.deepEqual(verified.kept.map(x => x.id), ["b", "g"]);
+    assert.deepEqual(verified.dropped.map(x => x.id), ["f"]);
+  });
+
+  it("고른 해의 정확한 점수 합이 확인된 기준 집합보다 작으면 기준 집합을 고른다", () => {
+    /** 기준 a(정확히 60). c, d는 추정값 30이라 탐욕해(c, d)가 기준해(a + 하나)보다 커 보이지만 정확히는 각각 예산을 넘는다 */
+    const body = "budget token ".repeat(80);
+    assert.ok(countTokens(`c ${body}`) > 100);
+    const a = { id: "a", score: 0.40, estimated_tokens: 60 };
+    /** e까지 세면 정확한 합이 예산을 넘으므로 c, d는 정확히 세지 않은 채 추정값으로 고른다 */
+    const e = { id: "e", score: 0.01, estimated_tokens: 41 };
+    const c = { id: "c", score: 0.45, content: `c ${body}`, _storedTokens: 30 };
+    const d = { id: "d", score: 0.44, content: `d ${body}`, _storedTokens: 30 };
+    const result = selectForRecall([a, e, c, d], { budget: 100, scoreOf, baselineIds: new Set(["a"]) });
+    assert.equal(result.strategy, "baseline-fallback");
+    assert.deepEqual(idsOf(result), ["a"]);
+    assert.equal(result.tokens, 60);
+  });
+
+  it("성질: 태그 없는 검색은 정확한 off 절단 이상이고, 태그 검색은 확인된 기준 집합 이상이다(superseded 포함, 시드 300개)", () => {
+    let tagged = 0;
+    let taggedBelowOff = 0;
+    for (let seed = 1; seed <= 300; seed++) {
+      const rng    = createRng(seed + 5000);
+      const isTag  = seed % 2 === 0;
+      const n      = 2 + Math.floor(rng() * 50);
+      const ordered = Array.from({ length: n }, (_, i) => {
+        const content = `${seed}-${i} ${"budget token ".repeat(1 + Math.floor(rng() * 30))}`;
+        const exact   = countTokens(content);
+        const f       = { id: `f${String(i).padStart(3, "0")}`, score: rng(), content };
+        const roll    = rng();
+        if (roll < 0.3) f.estimated_tokens = exact;
+        else if (roll < 0.7) f._storedTokens = Math.max(1, Math.round(exact * (0.7 + rng() * 0.6)));
+        if (rng() < 0.25) f.valid_to = "2026-01-01T00:00:00Z";
+        if (isTag) {
+          const t = rng();
+          if (t < 0.3) f._kwExact = true;
+          else if (t < 0.5) f._kwSupplement = true;
+        }
+        return f;
+      });
+      const total  = ordered.reduce((sum, f) => sum + countTokens(f.content), 0);
+      const budget = 1 + Math.floor(total * (0.2 + rng() * 0.5));
+
+      const includeSuperseded = rng() < 0.3;
+      const isCurrent   = f => includeSuperseded || !f.valid_to;
+      const exactCounts = new Map();
+      const { candidates, baselineIds } = partitionCandidates(ordered, { budget, includeSuperseded, exactCounts });
+      const result = selectForRecall(candidates, { budget, scoreOf, baselineIds, exactCounts });
+      const chosen = ordered.filter(f => result.selectedIds.has(f.id));
+      const onSum  = chosen.reduce((sum, f) => sum + f.score, 0);
+      assert.ok(chosen.reduce((sum, f) => sum + countTokens(f.content), 0) <= budget, `seed ${seed}: 예산 초과`);
+
+      const offCut = trimInSearchOrder(ordered.map(f => ({ ...f, estimated_tokens: countTokens(f.content) })), budget).filter(isCurrent);
+      const offSum = offCut.reduce((sum, f) => sum + f.score, 0);
+      if (!isTag) {
+        /** 현재 후보가 예산을 넘으면 기준 집합은 정확한 off 절단과 같다(넘지 않으면 on은 현재 후보 전체로 off 이상이다) */
+        const currentTokens = ordered.filter(isCurrent).reduce((sum, f) => sum + countTokens(f.content), 0);
+        if (currentTokens > budget) {
+          assert.deepEqual([...baselineIds].sort(), offCut.map(f => f.id).sort(), `seed ${seed}: 태그 없는 기준 집합이 off 절단과 다르다`);
+        }
+        assert.ok(onSum >= offSum - 1e-9, `seed ${seed}: 태그 없음 on ${onSum} < off ${offSum}`);
+        continue;
+      }
+      const baseItems = ordered.filter(f => baselineIds.has(f.id));
+      const verified  = verifyExactBudget(baseItems, { budget, scoreOf }).kept;
+      const baseSum   = verified.reduce((sum, f) => sum + f.score, 0);
+      assert.ok(onSum >= baseSum - 1e-9, `seed ${seed}: 태그 on ${onSum} < 확인된 기준 ${baseSum}`);
+      tagged++;
+      if (onSum < offSum - 1e-9) taggedBelowOff++;
+    }
+    assert.ok(tagged > 100);
+    /** 태그 검색이 정확한 off 절단보다 작은 비율(참고값). 보고서에 싣는다 */
+    assert.ok(taggedBelowOff / tagged < 0.25, `태그 검색의 off 미달 비율 ${taggedBelowOff}/${tagged}`);
+  });
+});
+
