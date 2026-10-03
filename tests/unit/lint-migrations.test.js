@@ -126,11 +126,55 @@ describe("extractIndexStatements 이름 없는 문", () => {
 });
 
 describe("stripSqlComments", () => {
-  it("줄 수를 유지하며 주석만 지운다", () => {
+  it("줄 수를 유지하며 주석과 문자열 내용을 지운다", () => {
     const out = stripSqlComments("a -- x\nb /* y\nz */ c\n'--keep' d");
     assert.equal(out.split("\n").length, 4);
-    assert.ok(!out.includes("x") && !out.includes("y"));
-    assert.ok(out.includes("'--keep'"));
+    assert.ok(!out.includes("x") && !out.includes("y") && !out.includes("keep"));
+    assert.ok(out.includes("d"));
+  });
+
+  it("여러 줄 문자열과 달러 인용의 줄바꿈을 유지한다", () => {
+    const out = stripSqlComments("SELECT 'a\nb';\nDO $body$\nSELECT 1;\n$body$;\nSELECT 2;");
+    assert.equal(out.split("\n").length, 6);
+    assert.ok(out.endsWith("SELECT 2;"));
+  });
+
+  it("블록 주석의 중첩을 센다", () => {
+    const out = stripSqlComments("/* a /* b */ CONCURRENTLY */ SELECT 1;");
+    assert.ok(!out.includes("CONCURRENTLY"));
+    assert.ok(out.includes("SELECT 1;"));
+  });
+
+  it("'' 로 이스케이프한 따옴표를 문자열 안으로 본다", () => {
+    const out = stripSqlComments("SELECT 'it''s CONCURRENTLY'; DROP INDEX x;");
+    assert.ok(!out.includes("CONCURRENTLY"));
+    assert.ok(out.includes("DROP INDEX x;"));
+  });
+
+  it("$1 같은 매개변수는 달러 인용으로 보지 않는다", () => {
+    const out = stripSqlComments("SELECT $1, $2; CREATE INDEX CONCURRENTLY a ON t (b);");
+    assert.ok(out.includes("CONCURRENTLY"));
+  });
+});
+
+describe("문자열 안의 단어는 위반이 아니다", () => {
+  const cases = [
+    ["COMMENT ON 의 문자열",   "COMMENT ON TABLE agent_memory.api_keys IS 'use CREATE INDEX CONCURRENTLY later';"],
+    ["COMMENT 의 큰 표 색인 문구", "COMMENT ON TABLE agent_memory.api_keys IS 'CREATE INDEX idx_x ON agent_memory.fragments (a)';"],
+    ["달러 인용 문자열",       "COMMENT ON TABLE agent_memory.api_keys IS $$CREATE INDEX CONCURRENTLY idx_x ON agent_memory.fragments (a)$$;"],
+    ["태그 있는 달러 인용",    "COMMENT ON TABLE agent_memory.api_keys IS $c$CONCURRENTLY$c$;"],
+    ["중첩 블록 주석",         "/* outer /* inner */ CONCURRENTLY */\nSELECT 1;"],
+    ["이스케이프된 따옴표",    "SELECT 'it''s CONCURRENTLY';"]
+  ];
+  for (const [name, sql] of cases) {
+    it(name, () => assert.deepEqual(ruleIds("migration-050-x.sql", sql), []));
+  }
+
+  it("문자열 뒤의 실제 문장은 계속 검사한다", () => {
+    const sql = "COMMENT ON TABLE agent_memory.api_keys IS 'note';\nDROP INDEX CONCURRENTLY IF EXISTS agent_memory.idx_old;";
+    const [v] = lintMigrationContent("migration-050-x.sql", sql, KNOWN);
+    assert.equal(v.rule, "no-concurrently");
+    assert.equal(v.line, 2);
   });
 });
 

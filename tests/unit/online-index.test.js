@@ -85,6 +85,130 @@ describe("parseArgs", () => {
   }
 });
 
+const SECRET = "Zx9PASSWORDq7";
+const SECRET_URL = `postgres://ops:${SECRET}@db.example.test:5432/work`;
+
+describe("인자 값은 오류에 나오지 않는다", () => {
+  /** 예외 메시지와 cause 를 모두 모은다. */
+  function errorText(fn) {
+    try {
+      fn();
+    } catch (err) {
+      return `${err.message}|${err.cause?.message ?? err.cause ?? ""}|${err.stack}`;
+    }
+    return null;
+  }
+
+  const bad = [
+    ["알 수 없는 인자의 = 형식",    [`--bogus=${SECRET_URL}`]],
+    ["위치 인자 주소",              [SECRET_URL]],
+    ["위치 인자 앞의 정상 옵션",    ["--dry-run", SECRET_URL]],
+    ["불리언 옵션에 붙은 값",       [`--confirm=${SECRET_URL}`]],
+    ["정수 옵션의 잘못된 값",       [`--retries=${SECRET}`]],
+    ["정수 옵션의 범위 밖 값",      ["--retries", "99999"]],
+    ["잠금 제한의 잘못된 값",       [`--lock-timeout=${SECRET}`]],
+    ["--url 빈 값",                 ["--url="]]
+  ];
+  for (const [name, argv] of bad) {
+    it(`${name}`, () => {
+      const text = errorText(() => parseArgs(argv));
+      assert.ok(text !== null, "거부해야 한다");
+      assert.ok(!text.includes(SECRET), text);
+    });
+  }
+
+  const badTargets = [
+    ["주소 형식 오류, = 형식",      `not a url ${SECRET}`],
+    ["주소 형식 오류, 공백 포함",   `postgres://ops:${SECRET}@ho st/db`],
+    ["postgres 가 아닌 프로토콜",   `http://ops:${SECRET}@db.example.test/work`],
+    ["쿼리 매개변수",               `${SECRET_URL}?sslmode=require`],
+    ["데이터베이스 없음",           `postgres://ops:${SECRET}@db.example.test:5432/`]
+  ];
+  for (const [name, url] of badTargets) {
+    it(`${name}`, () => {
+      const text = errorText(() => resolveTarget({ url }, {}));
+      assert.ok(text !== null, "거부해야 한다");
+      assert.ok(!text.includes(SECRET), text);
+    });
+  }
+
+  it("--url=값 형식을 --url 값 형식과 같게 읽는다", () => {
+    assert.equal(parseArgs([`--url=${SECRET_URL}`]).url, SECRET_URL);
+    assert.equal(parseArgs(["--url", SECRET_URL]).url, SECRET_URL);
+    assert.equal(parseArgs(["--index=idx_a", "--retries=1"]).indexes[0], "idx_a");
+    assert.equal(parseArgs(["--retries=1"]).retries, 1);
+    assert.equal(parseArgs(["--url=postgres://u:p@h/d?x=a=b"]).url, "postgres://u:p@h/d?x=a=b");
+  });
+
+  it("label 과 접속 설정 밖에는 비밀번호가 없다", () => {
+    const t = resolveTarget({ url: SECRET_URL }, {});
+    assert.ok(!t.label.includes(SECRET));
+    assert.equal(t.config.password, SECRET);
+  });
+
+  /** main 의 모든 출력(stdout, stderr)에 비밀번호가 없어야 한다. */
+  const mainCases = [
+    ["--url=형식, --index 없음",        [`--url=${SECRET_URL}`, "--dry-run"]],
+    ["--url=형식 정상 dry-run",       [`--url=${SECRET_URL}`, "--dry-run", "--index", "idx_example_workspace"]],
+    ["--url=형식 --confirm 없음",     [`--url=${SECRET_URL}`, "--index", "idx_example_workspace", "--free-bytes", "1"]],
+    ["위치 인자 주소",                [SECRET_URL, "--index", "idx_example_workspace"]],
+    ["알 수 없는 = 인자",             [`--nope=${SECRET_URL}`, "--index", "idx_example_workspace"]],
+    ["--index 에 주소를 잘못 줌",     ["--dry-run", `--index=${SECRET_URL}`]],
+    ["잘못된 프로토콜 실행",          ["--confirm", `--url=http://ops:${SECRET}@h/d`, "--index", "idx_example_workspace", "--free-bytes", "1"]],
+    ["쿼리가 붙은 주소 실행",         ["--confirm", `--url=${SECRET_URL}?sslmode=require`, "--index", "idx_example_workspace", "--free-bytes", "1"]]
+  ];
+  for (const [name, argv] of mainCases) {
+    it(`main 출력: ${name}`, async () => {
+      const manifest = writeManifest([{ name: "idx_example_workspace", table: "fragments", definition: "ON agent_memory.fragments (workspace)" }]);
+      const out = [];
+      const err = [];
+      await main([...argv, "--manifest", manifest], {}, {
+        out: l => out.push(l), err: l => err.push(l),
+        connect: async () => { throw new Error("연결하면 안 된다"); },
+        statfs: async () => ({ bsize: 1, bavail: 1 })
+      });
+      assert.ok(!out.join("\n").includes(SECRET), out.join("\n"));
+      assert.ok(!err.join("\n").includes(SECRET), err.join("\n"));
+    });
+  }
+});
+
+describe("SSL 설정은 PGSSLMODE 에서 온다", () => {
+  const saved = process.env.PGSSLMODE;
+  const restore = () => { if (saved === undefined) delete process.env.PGSSLMODE; else process.env.PGSSLMODE = saved; };
+
+  it("접속 설정에 ssl 이 없어 pg 가 환경변수를 읽는다", () => {
+    for (const config of [resolveTarget({ url: SECRET_URL }, {}).config, resolveTarget({}, { PGHOST: "h", PGDATABASE: "d" }).config]) {
+      assert.ok(!("ssl" in config));
+    }
+  });
+
+  const modes = [["disable", false], ["require", true], ["verify-ca", true], ["verify-full", true], ["no-verify", { rejectUnauthorized: false }]];
+  for (const [mode, expected] of modes) {
+    it(`PGSSLMODE=${mode} 는 pg 클라이언트의 ssl 설정이 된다`, async () => {
+      process.env.PGSSLMODE = mode;
+      try {
+        const { default: pg } = await import("pg");
+        const client = new pg.Client(resolveTarget({ url: SECRET_URL }, {}).config);
+        assert.deepEqual(client.connectionParameters.ssl, expected);
+      } finally {
+        restore();
+      }
+    });
+  }
+
+  it("PGSSLMODE 가 없으면 ssl 을 쓰지 않는다", async () => {
+    delete process.env.PGSSLMODE;
+    try {
+      const { default: pg } = await import("pg");
+      const client = new pg.Client(resolveTarget({ url: SECRET_URL }, {}).config);
+      assert.equal(client.connectionParameters.ssl, false);
+    } finally {
+      restore();
+    }
+  });
+});
+
 describe("resolveTarget", () => {
   it("--url 을 우선하고 비밀번호는 label 에 담지 않는다", () => {
     const t = resolveTarget({ url: "postgresql://ops:s3cr%40t@db.example.test:35433/work" }, { PGHOST: "other", PGDATABASE: "other" });
@@ -282,6 +406,24 @@ describe("buildIndexOnline", () => {
     assert.equal(sleeps.length, 2);
     assert.equal(c.state, "absent");
     assert.equal(c.log.filter(x => x === "create").length, 3);
+  });
+
+  it("소진 오류는 마지막 오류를 cause 로 담고 SQLSTATE 를 메시지에 넣는다", async () => {
+    const c = fakeClient({ creates: [{ code: "55P03", message: "첫 오류" }, { code: "40P01", message: "마지막 오류" }] });
+    const { promise } = runBuild(c, { retries: 1 });
+    await assert.rejects(promise, err => {
+      assert.ok(err instanceof OnlineIndexBuildError);
+      assert.equal(err.cause.code, "40P01");
+      assert.match(err.message, /SQLSTATE 40P01/);
+      assert.match(err.message, /마지막 오류/);
+      return true;
+    });
+  });
+
+  it("무효 결과로 소진되면 cause 는 생성 뒤 무효 오류이고 SQLSTATE 는 없음이다", async () => {
+    const c = fakeClient({ creates: ["invalid", "invalid"] });
+    const { promise } = runBuild(c, { retries: 1 });
+    await assert.rejects(promise, err => err.cause instanceof OnlineIndexBuildError && /SQLSTATE 없음/.test(err.message));
   });
 
   it("retries 가 0 이면 한 번만 시도하고 대기하지 않는다", async () => {

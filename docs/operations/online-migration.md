@@ -33,7 +33,7 @@
 
 `NOT NULL` 추가와 제약의 `VALIDATE`는 대형 표를 훑으므로 파일에 두지 않는다. 값이 필요한 열은 nullable로 추가한 뒤 규칙 3의 백필로 채운다. 제약을 바꿀 때는 새 제약을 `NOT VALID`로 추가하고 규칙 4로 검증한 뒤 옛 제약을 지운다.
 
-열 추가와 `ADD CONSTRAINT ... NOT VALID`도 짧게나마 표 전체 잠금(`ACCESS EXCLUSIVE`)을 잡는다. 오래 열린 트랜잭션 뒤에서 이 잠금을 기다리는 동안 그 표의 모든 읽기와 쓰기가 줄을 선다. 파일 본문 맨 위에 `SET LOCAL lock_timeout = '3s';`를 두어 대기를 3초로 제한한다. 파일은 러너가 연 트랜잭션 안에서 실행되므로 `SET LOCAL`은 그 파일에만 적용되고 커밋 뒤 사라진다. 잠금을 얻지 못하면 파일 전체가 롤백되고 같은 배포를 다시 실행한다. lint 는 이 구문을 허용한다.
+열 추가와 `CHECK` 제약의 `ADD CONSTRAINT ... NOT VALID`는 짧게나마 표 전체 잠금(`ACCESS EXCLUSIVE`)을 잡고, 외래 키의 `ADD CONSTRAINT ... NOT VALID`는 두 표 모두에 `SHARE ROW EXCLUSIVE` 잠금을 잡는다. 오래 열린 트랜잭션 뒤에서 이 잠금을 기다리는 동안 그 표의 읽기와 쓰기가 줄을 선다. 파일 본문 맨 위에 `SET LOCAL lock_timeout = '3s';`를 두어 대기를 3초로 제한한다. 파일은 러너가 연 트랜잭션 안에서 실행되므로 `SET LOCAL`은 그 파일에만 적용되고 커밋 뒤 사라진다. 잠금을 얻지 못하면 파일 전체가 롤백되고 같은 배포를 다시 실행한다. lint 는 이 구문을 허용한다.
 
 ```sql
 SET LOCAL lock_timeout = '3s';
@@ -101,7 +101,17 @@ lint 규칙은 번호 `050` 이상 파일에 적용한다(`scripts/lint-migratio
 
 스크립트는 `.env` 파일을 읽지 않는다. 대상은 `--url postgresql://...` 또는 표준 PG 환경변수(`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`)로만 받고, `DATABASE_URL`과 `POSTGRES_*`는 쓰지 않는다. 호스트와 데이터베이스 이름이 명시되지 않으면 실행하지 않는다. 출력에는 비밀번호를 담지 않는다.
 
-`--url`은 호스트, 포트, 데이터베이스, 사용자, 비밀번호만 읽고 쿼리 매개변수(`sslmode` 등)는 적용하지 않는다. 쿼리 매개변수가 붙은 주소는 거부한다. SSL이 필요한 대상은 PG 환경변수(`PGSSLMODE`, `PGSSLROOTCERT` 등)로 지정한다.
+`--url`은 호스트, 포트, 데이터베이스, 사용자, 비밀번호만 읽고 쿼리 매개변수(`sslmode` 등)는 적용하지 않는다. 쿼리 매개변수가 붙은 주소는 거부한다. `--url 주소`와 `--url=주소` 형식을 모두 받으며, 오류 메시지는 옵션 이름만 출력하고 인자의 값(주소와 비밀번호)은 출력하지 않는다.
+
+SSL이 필요한 대상은 PG 환경변수 `PGSSLMODE`로 지정한다. 설치된 `pg`(8.23)는 환경변수 중 `PGSSLMODE`만 읽는다(`PGSSLROOTCERT`, `PGSSLCERT`, `PGSSLKEY`는 읽지 않는다). 값은 다음과 같이 해석한다.
+
+|PGSSLMODE|동작|
+|-|-|
+|`disable`|SSL을 쓰지 않는다|
+|`require`, `verify-ca`, `verify-full`|SSL을 쓰고 서버 인증서를 Node의 신뢰 저장소로 검증한다(세 값의 동작이 같다)|
+|`no-verify`|SSL을 쓰고 서버 인증서를 검증하지 않는다|
+
+서버 인증서가 사설 인증 기관에서 발급되었다면 `NODE_EXTRA_CA_CERTS=<CA 번들 경로>`로 신뢰 저장소에 그 인증 기관을 더한다. Node는 이 변수의 인증서를 기본 신뢰 저장소에 추가한다(`tls.getCACertificates("default")`의 개수가 1 늘어나는 것으로 확인했다).
 
 ### 옵션
 

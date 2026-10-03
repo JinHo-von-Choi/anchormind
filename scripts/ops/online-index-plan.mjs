@@ -80,9 +80,9 @@ const BOOLEAN_FLAGS = Object.freeze({
 });
 
 function parseIntegerOption(name, text, { min, max }) {
-  if (!/^\d+$/.test(String(text))) throw new OnlineIndexUsageError(`${name} 은 0 이상의 정수여야 한다: ${text}`);
+  if (!/^\d+$/.test(String(text))) throw new OnlineIndexUsageError(`${name} 은 0 이상의 정수여야 한다`);
   const value = Number(text);
-  if (value < min || value > max) throw new OnlineIndexUsageError(`${name} 은 ${min} 이상 ${max} 이하여야 한다: ${text}`);
+  if (value < min || value > max) throw new OnlineIndexUsageError(`${name} 은 ${min} 이상 ${max} 이하여야 한다`);
   return value;
 }
 
@@ -93,13 +93,38 @@ function coerceOption(key, text) {
   if (key === "retryMaxWaitMs") return parseIntegerOption("--retry-max-wait-ms", text, { min: 0, max: 3600000 });
   if (key === "freeBytes")   return parseIntegerOption("--free-bytes",    text, { min: 0, max: Number.MAX_SAFE_INTEGER });
   if (key === "lockTimeout" && !/^\d+(ms|s|min)$/.test(text)) {
-    throw new OnlineIndexUsageError(`--lock-timeout 은 3s, 500ms, 1min 같은 형식이어야 한다: ${text}`);
+    throw new OnlineIndexUsageError("--lock-timeout 은 3s, 500ms, 1min 같은 형식이어야 한다");
   }
   return text;
 }
 
 /**
- * 명령행 인자를 읽는다. 알 수 없는 인자와 값 없는 옵션은 거부한다.
+ * 인자 하나를 이름과 인라인 값으로 나눈다. `--name=value` 형식이면 value 가 인라인 값이다.
+ * 오류 메시지는 이름만 담는다. 값에는 비밀번호가 있는 주소가 올 수 있다.
+ *
+ * @param {string} arg
+ * @returns {{name: string, inline: string|undefined}}
+ */
+function splitArg(arg) {
+  const eq = arg.indexOf("=");
+  if (arg.startsWith("--") && eq > 2) return { name: arg.slice(0, eq), inline: arg.slice(eq + 1) };
+  return { name: arg, inline: undefined };
+}
+
+/** 값을 받는 옵션의 값을 꺼낸다. 다음 인자를 쓰면 index 를 한 칸 옮긴 값을 함께 돌려준다. */
+function takeValue(name, inline, argv, i) {
+  if (inline !== undefined) {
+    if (inline === "") throw new OnlineIndexUsageError(`${name} 에 값이 필요하다`);
+    return { value: inline, next: i };
+  }
+  const value = argv[i + 1];
+  if (value === undefined || value.startsWith("--")) throw new OnlineIndexUsageError(`${name} 에 값이 필요하다`);
+  return { value, next: i + 1 };
+}
+
+/**
+ * 명령행 인자를 읽는다. 알 수 없는 인자와 값 없는 옵션은 거부한다. 오류 메시지는 옵션 이름만
+ * 담고 인자의 값은 담지 않는다. `--name value` 와 `--name=value` 형식을 모두 받는다.
  *
  * @param {string[]} argv process.argv.slice(2)
  * @returns {{dryRun: boolean, confirm: boolean, help: boolean, indexes: string[], url?: string,
@@ -114,16 +139,20 @@ export function parseArgs(argv) {
   };
 
   for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg in BOOLEAN_FLAGS) { opts[BOOLEAN_FLAGS[arg]] = true; continue; }
-    if (arg === "--index" || arg in VALUE_FLAGS) {
-      const value = argv[++i];
-      if (value === undefined || value.startsWith("--")) throw new OnlineIndexUsageError(`${arg} 에 값이 필요하다`);
-      if (arg === "--index") opts.indexes.push(value);
-      else opts[VALUE_FLAGS[arg]] = coerceOption(VALUE_FLAGS[arg], value);
-      continue;
+    const { name, inline } = splitArg(argv[i]);
+    if (!name.startsWith("--")) throw new OnlineIndexUsageError("알 수 없는 인자: (위치 인자)");
+
+    if (name in BOOLEAN_FLAGS) {
+      if (inline !== undefined) throw new OnlineIndexUsageError(`${name} 은 값을 받지 않는다`);
+      opts[BOOLEAN_FLAGS[name]] = true;
+    } else if (name === "--index" || name in VALUE_FLAGS) {
+      const taken = takeValue(name, inline, argv, i);
+      i = taken.next;
+      if (name === "--index") opts.indexes.push(taken.value);
+      else opts[VALUE_FLAGS[name]] = coerceOption(VALUE_FLAGS[name], taken.value);
+    } else {
+      throw new OnlineIndexUsageError(`알 수 없는 인자: ${name}`);
     }
-    throw new OnlineIndexUsageError(`알 수 없는 인자: ${arg}`);
   }
 
   return opts;
@@ -157,8 +186,9 @@ function targetFromUrl(text) {
   let url;
   try {
     url = new URL(text);
-  } catch (err) {
-    throw new OnlineIndexUsageError(`--url 이 올바른 주소가 아니다: ${err.message}`);
+  } catch (_err) {
+    /** 원인 메시지는 입력 주소를 담을 수 있어 옮기지 않는다. */
+    throw new OnlineIndexUsageError("--url 이 올바른 주소가 아니다");
   }
   if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") {
     throw new OnlineIndexUsageError("--url 은 postgres:// 또는 postgresql:// 주소여야 한다");

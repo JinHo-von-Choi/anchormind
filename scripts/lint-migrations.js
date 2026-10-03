@@ -95,39 +95,95 @@ const RULES = [
   },
 ];
 
+const DOLLAR_TAG = /\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/y;
+
+/** 줄바꿈은 두고 나머지 문자를 공백으로 바꾼다. */
+function blank(text) {
+  return text.replace(/[^\n]/g, " ");
+}
+
 /**
- * SQL 주석(-- 줄 주석, 블록 주석)을 공백으로 바꾼다. 줄바꿈은 유지하므로 줄 번호가 같다.
- * 작은따옴표 문자열 안의 주석 표지는 문자열의 일부로 둔다.
+ * 시작 위치 i 가 달러 인용의 여는 표지면 그 표지를, 아니면 null 을 돌려준다.
+ */
+function dollarTagAt(sql, i) {
+  if (sql[i] !== "$") return null;
+  DOLLAR_TAG.lastIndex = i;
+  const m = DOLLAR_TAG.exec(sql);
+  return m ? m[0] : null;
+}
+
+/**
+ * SQL 에서 주석과 문자열의 내용을 공백으로 바꾼다. 줄바꿈은 유지하므로 줄 번호가 같다.
+ * -- 줄 주석, 중첩되는 블록 주석, 작은따옴표 문자열, 달러 인용 문자열의 내용을 지우고
+ * 따옴표와 달러 표지는 남긴다. 문자열 안의 단어는 문장이 아니므로 검사에서 빠진다.
  *
  * @param {string} sql
  * @returns {string}
  */
 export function stripSqlComments(sql) {
-  let out   = "";
-  let state = "code";
+  let out = "";
+  let i   = 0;
 
-  for (let i = 0; i < sql.length; i++) {
-    const ch   = sql[i];
+  while (i < sql.length) {
     const pair = sql.slice(i, i + 2);
+    const tag  = dollarTagAt(sql, i);
 
-    if (state === "line") {
-      if (ch === "\n") { state = "code"; out += ch; }
-      else out += " ";
-    } else if (state === "block") {
-      if (pair === "*/") { state = "code"; out += "  "; i++; }
-      else out += ch === "\n" ? ch : " ";
-    } else if (state === "string") {
-      if (ch === "'") state = "code";
-      out += ch;
-    } else if (pair === "--") { state = "line";  out += "  "; i++; }
-    else if (pair === "/*")   { state = "block"; out += "  "; i++; }
-    else {
-      if (ch === "'") state = "string";
-      out += ch;
+    if (pair === "--") {
+      const end = sql.indexOf("\n", i);
+      const stop = end === -1 ? sql.length : end;
+      out += blank(sql.slice(i, stop));
+      i    = stop;
+    } else if (pair === "/*") {
+      const stop = blockCommentEnd(sql, i);
+      out += blank(sql.slice(i, stop));
+      i    = stop;
+    } else if (sql[i] === "'") {
+      const stop = quotedEnd(sql, i);
+      out += `'${blank(sql.slice(i + 1, stop - 1))}'`;
+      i    = stop;
+    } else if (tag !== null) {
+      const close = sql.indexOf(tag, i + tag.length);
+      const stop  = close === -1 ? sql.length : close + tag.length;
+      const inner = close === -1 ? sql.slice(i + tag.length) : sql.slice(i + tag.length, close);
+      out += close === -1 ? tag + blank(inner) : tag + blank(inner) + tag;
+      i    = stop;
+    } else {
+      out += sql[i];
+      i++;
     }
   }
 
   return out;
+}
+
+/** i 에서 시작하는 블록 주석의 끝 다음 위치. 중첩을 센다. 닫히지 않으면 문자열 끝. */
+function blockCommentEnd(sql, i) {
+  let depth = 0;
+  let j     = i;
+
+  while (j < sql.length) {
+    const pair = sql.slice(j, j + 2);
+    if (pair === "/*")      { depth++; j += 2; }
+    else if (pair === "*/") { depth--; j += 2; if (depth === 0) return j; }
+    else j++;
+  }
+
+  return sql.length;
+}
+
+/** i 에서 시작하는 작은따옴표 문자열의 끝 다음 위치. '' 는 따옴표 문자다. 닫히지 않으면 문자열 끝. */
+function quotedEnd(sql, i) {
+  let j = i + 1;
+
+  while (j < sql.length) {
+    if (sql[j] === "'") {
+      if (sql[j + 1] === "'") { j += 2; continue; }
+      return j + 1;
+    }
+    j++;
+  }
+
+  return sql.length;
 }
 
 const IDENT           = String.raw`(?:"[^"]+"|\w+)(?:\.(?:"[^"]+"|\w+))*`;

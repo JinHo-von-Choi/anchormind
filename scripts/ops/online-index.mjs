@@ -25,7 +25,7 @@
 
 import path             from "node:path";
 import { statfs }       from "node:fs/promises";
-import { loadManifest, findBuildableEntry, IndexManifestError, INDEX_SCHEMA } from "./index-manifest.mjs";
+import { loadManifest, findBuildableEntry, isValidIndexName, IndexManifestError, INDEX_SCHEMA } from "./index-manifest.mjs";
 import {
   OnlineIndexError, OnlineIndexUsageError, OnlineIndexPreconditionError, OnlineIndexBuildError,
   parseArgs, resolveTarget, resolveFreeBytes, requiredDiskBytes, createSql, dropSql,
@@ -124,14 +124,14 @@ async function assertDiskRoom(client, entry, freeBytes, log) {
 }
 
 /**
- * 생성 문이 실패한 뒤의 처리. 무효 색인을 정리하고, 재시도할 수 있는 오류면 false 를 돌려준다.
+ * 생성 문이 실패한 뒤의 처리. 무효 색인을 정리하고, 재시도할 수 있는 오류면 그 오류를 돌려준다.
  * 그 밖의 오류는 던진다. 정리까지 실패했으면 원 오류를 cause 로 담아 던진다.
  */
 async function afterCreateFailure(client, entry, log, createError) {
   const cleanupError = await cleanupQuietly(client, entry, log);
   if (isRetriable(createError)) {
     log(`재시도 가능한 오류 ${createError.code}: ${createError.message}`);
-    return false;
+    return createError;
   }
   if (cleanupError) {
     throw new OnlineIndexBuildError(
@@ -143,14 +143,14 @@ async function afterCreateFailure(client, entry, log, createError) {
 }
 
 /**
- * 한 번의 생성 시도. 성공하면 true, 재시도 가능한 실패면 false 를 돌려준다.
- * dirty 이면 시작 전에 무효 색인을 정리하며, 그 정리가 재시도 가능한 오류로 실패해도 false 다.
+ * 한 번의 생성 시도. 성공하면 null, 재시도 가능한 실패면 그 오류를 돌려준다.
+ * dirty 이면 시작 전에 무효 색인을 정리하며, 그 정리가 재시도 가능한 오류로 실패해도 그 오류를 돌려준다.
  */
 async function attemptCreate(client, entry, log, dirty) {
   if (dirty) {
     const cleanupError = await cleanupQuietly(client, entry, log);
     if (cleanupError) {
-      if (isRetriable(cleanupError)) return false;
+      if (isRetriable(cleanupError)) return cleanupError;
       throw cleanupError;
     }
   }
@@ -161,13 +161,13 @@ async function attemptCreate(client, entry, log, dirty) {
     return afterCreateFailure(client, entry, log, err);
   }
 
-  if (await inspectIndex(client, entry) === "valid") return true;
+  if (await inspectIndex(client, entry) === "valid") return null;
   log(`색인 ${entry.name} 이 유효하지 않다`);
   const cleanupError = await cleanupQuietly(client, entry, log);
   if (cleanupError && !isRetriable(cleanupError)) {
     throw new OnlineIndexBuildError(`색인 ${entry.name} 이 유효하지 않고 정리에도 실패했다: ${cleanupError.message}`, { cause: cleanupError });
   }
-  return false;
+  return new OnlineIndexBuildError(`색인 ${entry.name} 이 생성 뒤 유효하지 않다`);
 }
 
 /**
@@ -178,7 +178,7 @@ async function attemptCreate(client, entry, log, dirty) {
  * @param {{freeBytes: number, retries: number, retryWaitMs: number, retryMaxWaitMs?: number,
  *          log: (line: string) => void, sleep: (ms: number) => Promise<void>}} opts
  * @returns {Promise<{status: "exists"|"created", attempts: number}>}
- * @throws {OnlineIndexPreconditionError|OnlineIndexBuildError}
+ * @throws {OnlineIndexPreconditionError|OnlineIndexBuildError} 소진 시 마지막 오류가 cause 이고 메시지에 SQLSTATE 가 있다
  */
 export async function buildIndexOnline(client, entry, opts) {
   const { freeBytes, retries, retryWaitMs, log, sleep } = opts;
@@ -193,9 +193,11 @@ export async function buildIndexOnline(client, entry, opts) {
     return { status: "exists", attempts: 0 };
   }
 
+  let lastError = null;
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     log(`색인 ${entry.name} 생성 시도 ${attempt}/${retries + 1}`);
-    if (await attemptCreate(client, entry, log, attempt > 1 || state === "invalid")) {
+    lastError = await attemptCreate(client, entry, log, attempt > 1 || state === "invalid");
+    if (lastError === null) {
       log(`색인 ${entry.name} 이 유효하다`);
       return { status: "created", attempts: attempt };
     }
@@ -208,8 +210,9 @@ export async function buildIndexOnline(client, entry, opts) {
 
   const leftover = await cleanupQuietly(client, entry, log);
   throw new OnlineIndexBuildError(
-    `색인 ${entry.name} 을 ${retries + 1}번 시도했으나 유효하게 만들지 못했다`
-    + (leftover ? `. 무효 색인이 남아 있을 수 있으니 직접 확인한다: ${leftover.message}` : "")
+    `색인 ${entry.name} 을 ${retries + 1}번 시도했으나 유효하게 만들지 못했다. 마지막 오류 SQLSTATE ${lastError.code ?? "없음"}: ${lastError.message}`
+    + (leftover ? `. 무효 색인이 남아 있을 수 있으니 직접 확인한다: ${leftover.message}` : ""),
+    { cause: lastError }
   );
 }
 
@@ -226,6 +229,7 @@ const defaultSleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 /** 선택한 색인의 작업 항목을 모은다. */
 function selectEntries(opts) {
   if (opts.indexes.length === 0) throw new OnlineIndexUsageError("--index 를 하나 이상 준다");
+  if (!opts.indexes.every(isValidIndexName)) throw new OnlineIndexUsageError("--index 의 이름 형식이 맞지 않는다");
   const manifest = loadManifest(opts.manifest);
   return opts.indexes.map(name => findBuildableEntry(manifest, name));
 }
