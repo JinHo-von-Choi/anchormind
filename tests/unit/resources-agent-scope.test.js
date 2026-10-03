@@ -42,7 +42,7 @@ describe("resources/read trusted agent scope", () => {
       assert.match(call.sql, /f\.key_id/);
       assert.match(call.sql, /f\.workspace/);
       assert.deepEqual(call.params, [
-        "default", "synthetic-key", ["synthetic-key"], "workspace-a"
+        "default", "synthetic-key", ["synthetic-key"], "workspace-a", "synthetic-key"
       ]);
     }
   });
@@ -54,7 +54,7 @@ describe("resources/read trusted agent scope", () => {
     );
     assert.match(calls[0].sql, /f\.workspace IS NULL/);
     assert.deepEqual(calls[0].params, [
-      "default", "synthetic-key", ["synthetic-key"]
+      "default", "synthetic-key", ["synthetic-key"], "synthetic-key"
     ]);
   });
 

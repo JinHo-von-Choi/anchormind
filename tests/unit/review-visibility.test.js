@@ -44,6 +44,12 @@ const { ContextBuilder }     = await import("../../lib/memory/read/ContextBuilde
 const { MemoryConsolidator } = await import("../../lib/memory/consolidate/MemoryConsolidator.js");
 const { buildAnswerPack }    = await import("../../lib/memory/read/AnswerPack.js");
 const { layerScope }         = await import("../../lib/memory/read/SearchLayerScope.js");
+const { fetchLinkedFragments } = await import("../../lib/memory/read/LinkedFragmentLoader.js");
+const { fetchCausalLinks, fetchSessionNeighbors } = await import("../../lib/memory/read/StitchSourceLoader.js");
+const { LinkStore }            = await import("../../lib/memory/link/LinkStore.js");
+const { CaseRecall }           = await import("../../lib/memory/read/CaseRecall.js");
+const { HistoryReconstructor } = await import("../../lib/memory/read/HistoryReconstructor.js");
+const { fetchGraphNeighbors }  = await import("../../lib/memory/read/GraphNeighborSearch.js");
 
 const PREDICATE = /review_state IS DISTINCT FROM 'pending' OR (?:f\.)?key_id (?:IS NOT DISTINCT FROM \$(\d+)|IS NULL)/;
 
@@ -186,6 +192,39 @@ describe("recall 질의의 술어", () => {
     assert.deepEqual(layerScope({ workspace: "w", allWorkspaces: true, _isMaster: true, includePeerAgents: true, isAnchor: false }), {
       workspace: "w", allWorkspaces: true, _isMaster: true, includePeerAgents: true, isAnchor: false, viewerKeyId: undefined
     });
+  });
+});
+
+describe("recall 부속 경로의 술어", () => {
+  const group = ["own", "peer"];
+  const viewerOf = ({ sql, params }) => {
+    const matches = [...sql.matchAll(new RegExp(PREDICATE.source, "g"))];
+    assert.ok(matches.length > 0, sql);
+    return [...new Set(matches.map(m => (m[1] ? params[Number(m[1]) - 1] : null)))];
+  };
+
+  it("연결 미리보기, 인과 이웃, 세션 이웃, 그래프 이웃, 연결 확장, RCA 체인, 사례, 이력 재구성에 호출 키 기준 술어가 붙는다", async () => {
+    await fetchLinkedFragments(["a"], { keyId: "own", groupKeyIds: group });
+    assert.deepEqual(viewerOf(captured.at(-1)), ["own"]);
+    await fetchCausalLinks(["a"], { keyId: "own", groupKeyIds: group });
+    assert.deepEqual(viewerOf(captured.at(-1)), ["own"]);
+    await fetchSessionNeighbors([{ id: "a", session_id: "s", created_at: new Date() }], { keyId: "own", groupKeyIds: group });
+    assert.deepEqual(viewerOf(captured.at(-1)), ["own"]);
+    await fetchGraphNeighbors(["a"], 10, "default", group, { viewerKeyId: "own" });
+    assert.deepEqual(viewerOf(captured.at(-1)), ["own"]);
+    await new LinkStore().getLinkedFragments(["a"], null, "default", group, { viewerKeyId: "own" });
+    assert.deepEqual(viewerOf(captured.at(-1)), ["own"]);
+    await new LinkStore().getRCAChain("a", "default", "own", group);
+    assert.deepEqual(viewerOf(captured.at(-1)), ["own"]);
+    await new CaseRecall().buildCaseTriples([{ id: "a", case_id: "c1" }], { keyId: "own", groupKeyIds: group });
+    assert.deepEqual(viewerOf(captured.find(q => /case_id = ANY\(\$1\)/.test(q.sql))), ["own"]);
+    await new HistoryReconstructor()._fetchTimelineParameterized({ caseId: "c1", keyId: "own", groupKeyIds: group, limit: 10 });
+    assert.deepEqual(viewerOf(captured.at(-1)), ["own"]);
+  });
+
+  it("마스터 호출은 마스터가 쓴 검토 대기 파편만 본다(key_id IS NULL)", async () => {
+    await fetchLinkedFragments(["a"], {});
+    assert.deepEqual(viewerOf(captured.at(-1)), [null]);
   });
 });
 
