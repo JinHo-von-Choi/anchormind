@@ -25,6 +25,7 @@ const { WriteGate, WRITE_ENTRIES }     = await import("../../lib/memory/write/Wr
 const { BatchRememberProcessor }       = await import("../../lib/memory/write/BatchRememberProcessor.js");
 const { ContextBuilder }               = await import("../../lib/memory/read/ContextBuilder.js");
 const { loadFragmentProvenance }       = await import("../../lib/memory/read/ProvenanceLoader.js");
+const { FragmentReader }               = await import("../../lib/memory/read/FragmentReader.js");
 
 const TAG     = `prv${Date.now().toString(36)}`;
 const writer  = new FragmentWriter();
@@ -198,6 +199,13 @@ describe("context 주입 제외", () => {
       assert.ok(injectionText.includes(`${TAG}-${suffix} body`), suffix);
     }
     assert.doesNotMatch(injectionText, /user_stated|external_content/);
+  });
+
+  it("모순 감사용 등급 조회는 저장값(NULL 포함)을 돌려주고 없는 id는 빠진다", async () => {
+    const tiers = await new FragmentReader().getTrustTiers([`${TAG}-anchor-low`, `${TAG}-anchor-null`, "missing-id"]);
+    assert.equal(tiers.get(`${TAG}-anchor-low`), 1);
+    assert.equal(tiers.get(`${TAG}-anchor-null`), null);
+    assert.equal(tiers.has("missing-id"), false);
   });
 
   it("출처 열 조회는 범위 안의 id만 돌려준다", async () => {

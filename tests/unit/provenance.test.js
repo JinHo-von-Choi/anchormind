@@ -173,6 +173,10 @@ describe("관측 클라이언트", () => {
     assert.equal(sanitizeClientName("claude-code"), "claude-code");
     assert.equal(sanitizeClientName("  Claude Desktop "), "Claude Desktop");
     assert.equal(sanitizeClientName("a/b\n<c>"), "a_b_c_");
+    assert.equal(sanitizeClientName("user@example.com"), "user_example.com");
+    assert.equal(sanitizeClientName("cli\u0000\u001b[31m"), "cli_31m");
+    assert.equal(sanitizeClientName("클라이언트-x"), "_-x");
+    assert.match(sanitizeClientName("a@b\tc\u202ed"), /^[A-Za-z0-9 ._:+-]+$/);
     assert.equal(sanitizeClientName("x".repeat(200)).length, 64);
     for (const value of [null, undefined, "", "   ", 42, {}]) assert.equal(sanitizeClientName(value), null, String(value));
   });
