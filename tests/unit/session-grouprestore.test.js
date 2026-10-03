@@ -33,6 +33,8 @@ mock.module("../../lib/config.js", {
     DEFAULT_DAILY_LIMIT:    1000,
     DEFAULT_FRAGMENT_LIMIT: 5000,
     DEFAULT_PERMISSIONS:    ["read", "write"],
+    /** 키 수명 판정(key-lifecycle)이 호출 시점에 읽는 값 */
+    envInt:                 (_name, fallback) => fallback,
   }
 });
 
