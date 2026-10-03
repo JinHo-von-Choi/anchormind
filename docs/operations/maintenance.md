@@ -257,6 +257,7 @@ MCP `memory_consolidate` 도구는 master 키 세션 전용이다. 일반 키 �
 | `scripts/ops/backup.sh` | agent_memory 스키마 `pg_dump -Fc`, 체크섬, 행 수 매니페스트, 역할 정의 덤프 (`--dir`, `--keep`, `--dry-run`). 절차는 `docs/operations/backup-restore.md` | 일일 백업, 마이그레이션 반영 직전 | 하루 1회와 마이그레이션 전 |
 | `scripts/ops/restore-verify.mjs` | 덤프를 일회용 시험 서버(35433)에 복원해 행 수, `schema_migrations` 최댓값, HNSW 색인을 매니페스트와 대조하고 JSON으로 출력 | 복구 훈련 | 분기 1회 이상 |
 | `scripts/ops/online-index.mjs` | 작업 목록(`scripts/ops/index-manifest.json`)의 대형 표 색인을 `CONCURRENTLY`로 생성 (`--dry-run`, `--confirm`, `--index`, `--data-dir` 또는 `--free-bytes`). 절차는 `docs/operations/online-migration.md` | 대형 표 색인이 있는 마이그레이션 반영 전 | 조건부 |
+| `scripts/grant-anchor-permission.js` | 최근 90일 동안 앵커를 만든 키를 찾아 활성이고 `anchor` 권한이 없는 키에 부여(기본 dry-run으로 대상 키와 처리를 JSON 출력, `--apply`로 한 트랜잭션 부여). `--url` 또는 PG 환경변수로 대상을 명시하며 환경 파일은 읽지 않는다. 절차는 `docs/configuration.md`의 앵커 권한 이관 | `MEMENTO_ANCHOR_PERMISSION` 도입 배포 직후 | 1회, 이후 필요 시 |
 | `scripts/ops/finish-dedup-scope.mjs` | 새 판정 색인 두 개가 유효한지 확인한 뒤 키 범위 content_hash 색인을 `DROP INDEX CONCURRENTLY`로 지워 중복 판정 범위 전환을 마침 (옵션 없으면 단계만 출력, `--confirm`으로 실행) | migration-050 반영 뒤 「중복 판정 범위 전환」 6단계 | 일회성 |
 | `scripts/ops/backfill-key-secrets.mjs` | 비밀 표에 행이 없는 키의 현재 해시를 `api_key_secrets`로 일괄 insert-select로 옮기고 정합(활성 키 수 = 활성 현재 비밀 행 수)을 확인 (옵션 없으면 읽기 전용 점검, `--confirm`으로 실행, 다시 실행해도 안전) | migration-059 반영 뒤 「키 비밀 이관」 | 일회성, 롤링 재시작 뒤 재실행 |
 | `scripts/measure/recall-metrics.mjs` | 평가 세트로 R@k, MRR, 토큰 예산 내 nDCG, 지연을 일회용 시험 서버의 DB에서 측정하고 `--compare`로 두 실행을 비교. 절차는 `docs/benchmark.md` | 검색 경로나 스위치 변경 전후 비교 | 조건부 |

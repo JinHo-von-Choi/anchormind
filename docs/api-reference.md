@@ -37,7 +37,7 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | GET | /v1/internal/model/nothing/activity | 최근 파편 활동 로그 (10건) |
 | GET | /v1/internal/model/nothing/metrics-summary | 대시보드 메트릭 요약 |
 | GET | /v1/internal/model/nothing/keys | API 키 목록 조회. 정책 열(`default_mode`, `allowed_workspaces`, `symbolic_hard_gate`)과 수명 열(`expires_at`, `description`, `owner`, `kind`, `allowed_cidrs`, `revoked_at`, `revoked_by`, `revoke_reason`, `access_reviewed_at`, `access_reviewed_by`, 회전 겹침 종료 시각 `rotation_overlap_until`)을 포함한다 |
-| POST | /v1/internal/model/nothing/keys | API 키 생성. 원시 키는 응답에서 단 1회 반환. `permissions`는 `read`, `write` 중 하나 이상을 담은 배열이며 출처 신뢰 표지 `trusted_origin`을 함께 둘 수 있다. 생략하면 `DEFAULT_PERMISSIONS`. 빈 배열, `null`, `trusted_origin`만 있는 배열, 그 밖의 값은 400. 검토 대기열 방식 표지 `review_off`(그 키의 검토 표지 끔) 또는 `review_all`(그 키의 모든 쓰기를 검토 대기로 둠) 중 하나도 함께 둘 수 있다. 수명 열(`expires_at`, `description`, `owner`, `kind`, `allowed_cidrs`)을 함께 줄 수 있다(아래 키 수명 절의 규칙) |
+| POST | /v1/internal/model/nothing/keys | API 키 생성. 원시 키는 응답에서 단 1회 반환. `permissions`는 `read`, `write` 중 하나 이상을 담은 배열이며 표지 권한(출처 신뢰 표지 `trusted_origin`, 앵커 지정 권한 `anchor`)을 함께 둘 수 있다. 생략하면 `DEFAULT_PERMISSIONS`. 빈 배열, `null`, 표지 권한만 있는 배열, 그 밖의 값은 400. 검토 대기열 방식 표지 `review_off`(그 키의 검토 표지 끔) 또는 `review_all`(그 키의 모든 쓰기를 검토 대기로 둠) 중 하나도 함께 둘 수 있다. 수명 열(`expires_at`, `description`, `owner`, `kind`, `allowed_cidrs`)을 함께 줄 수 있다(아래 키 수명 절의 규칙) |
 | PUT | /v1/internal/model/nothing/keys/:id | API 키 상태 변경 (active ↔ inactive). 폐기한 키의 활성화는 409 `key_revoked` |
 | PATCH | /v1/internal/model/nothing/keys/:id | API 키 수명 열 변경(`expires_at`, `description`, `owner`, `kind`, `allowed_cidrs`). 아래 키 수명 절 참조 |
 | POST | /v1/internal/model/nothing/keys/:id/rotate | 새 원시 키 발급(응답에서 단 1회). 이전 키는 `graceHours` 동안 유효. 아래 키 수명 절 참조 |
@@ -45,7 +45,7 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | POST | /v1/internal/model/nothing/keys/:id/access-review | 접근 검토 서명(검토 시각과 행위자) 기록 |
 | GET | /v1/internal/model/nothing/keys/:id/stats | API 키별 사용 통계 |
 | PUT | /v1/internal/model/nothing/keys/:id/daily-limit | API 키 일일 호출 제한 변경. 마스터 키 인증 필요 |
-| PUT | /v1/internal/model/nothing/keys/:id/permissions | API 키 권한 변경. 허용 값은 POST와 같다(`read`, `write` 중 하나 이상, 선택 `trusted_origin`). 빈 배열과 `trusted_origin`만 있는 배열은 400이다. `trusted_origin`이 있는 키는 remember의 `origin` 주장으로 신뢰 등급 3까지 쓸 수 있고, 없는 키는 2가 상한이다(`MEMENTO_PROVENANCE`). 검토 방식 표지 `review_off`, `review_all`은 둘 중 하나만 둘 수 있고 둘 다 있으면 400이다(`MEMENTO_REVIEW_QUEUE`) |
+| PUT | /v1/internal/model/nothing/keys/:id/permissions | API 키 권한 변경. 허용 값은 POST와 같다(`read`, `write` 중 하나 이상, 선택 표지 권한 `trusted_origin`, `anchor`, `review_off`, `review_all`). 빈 배열과 표지 권한만 있는 배열은 400이다. `anchor`가 있는 키만 앵커를 지정할 수 있다(`MEMENTO_ANCHOR_PERMISSION`). `trusted_origin`이 있는 키는 remember의 `origin` 주장으로 신뢰 등급 3까지 쓸 수 있고, 없는 키는 2가 상한이다(`MEMENTO_PROVENANCE`). 검토 방식 표지 `review_off`, `review_all`은 둘 중 하나만 둘 수 있고 둘 다 있으면 400이다(`MEMENTO_REVIEW_QUEUE`). 변경 전후 권한을 감사 로그에 남긴다 |
 | PUT | /v1/internal/model/nothing/keys/:id/fragment-limit | API 키 파편 할당량 변경 |
 | PATCH | /v1/internal/model/nothing/keys/:id/workspace | API 키의 default_workspace 변경. `{ workspace: "name" }` 또는 `{ workspace: null }` (null=해제) |
 | PATCH | /v1/internal/model/nothing/keys/:id/policy | API 키 정책 열 변경. 본문은 `default_mode`, `allowed_workspaces`, `symbolic_hard_gate`, `egress_policy` 중 하나 이상. 아래 절 참조 |
@@ -966,7 +966,7 @@ violations 있는 경우 (soft gate — 저장됨):
 
 ### 에러 코드
 
-- `-32003` (SYMBOLIC_POLICY_VIOLATION): Symbolic hard gate가 활성화된 키에서 PolicyRules violations 또는 고신뢰 `sensitive.*` 탐지가 발생했거나, `MEMENTO_SENSITIVE_SCAN=reject`에서 고신뢰 `sensitive.*` 탐지가 발생(마스터 키 포함). 저장이 거부됨. `sensitive.*`는 비밀과 개인 식별 번호를 제거해 재시도한다. MCP 도구 에러(isError: true)가 아닌 JSON-RPC **프로토콜 레벨** 에러다.
+- `-32003` (SYMBOLIC_POLICY_VIOLATION): Symbolic hard gate가 활성화된 키에서 PolicyRules violations 또는 고신뢰 `sensitive.*` 탐지가 발생했거나, `MEMENTO_SENSITIVE_SCAN=reject`에서 고신뢰 `sensitive.*` 탐지가 발생(마스터 키 포함)했거나, `MEMENTO_ANCHOR_PERMISSION=enforce`에서 anchor 권한이 없거나 앵커 상한에 이른 키가 앵커를 지정(`anchorPermissionRequired`, `anchorLimitExceeded`, `anchorLookupFailed`). 저장이 거부됨. `sensitive.*`는 비밀과 개인 식별 번호를 제거해 재시도한다. MCP 도구 에러(isError: true)가 아닌 JSON-RPC **프로토콜 레벨** 에러다.
 - `-32602`: `content` 길이가 4000자를 초과. JSON-RPC 오류가 아니라 도구 결과 `{ "success": false, "error": "content length N exceeds max 4000", "code": -32602 }`로 반환된다.
 
 ```json
@@ -1555,6 +1555,7 @@ curl -si -X POST https://anchormind.example.com/mcp \
 |-|-|-|
 | `MEMENTO_REMEMBER_ATOMIC` | `false` | `true` 시 remember 경로가 `_rememberAtomic`으로 전환. `SELECT api_keys FOR UPDATE` + 단일 BEGIN/COMMIT 트랜잭션으로 quota 재검증과 INSERT를 원자적으로 처리. 의미 쓰기 관문은 양 경로 모두 트랜잭션 전에 동일하게 실행되므로 `validation_warnings` 포맷에 차이 없음. |
 | `MEMENTO_WRITE_GATE` | `on` | 의미 쓰기 관문 스위치. `on`이면 remember, amend, batch_remember, reflect 파생 쓰기, AutoReflect, 가져오기, CLI remember 로컬 모드가 같은 관문을 거친다. `off`이면 진입점별 기본 단계만 적용한다(remember는 전체, amend는 수신 상한과 키워드 정규화, batch_remember와 reflect와 CLI remember는 정규화, 마스킹, 절삭, 가져오기는 없음). |
+| `MEMENTO_ANCHOR_PERMISSION` | `warn` | 앵커 지정 권한 집행(`off`, `warn`, `enforce`). master 키와 `anchor`(또는 `admin`) 권한 키만 앵커를 지정하고 키별 살아 있는 앵커 수는 `MEMENTO_ANCHOR_LIMIT_PER_KEY`(기본 1000)까지다. `warn`은 그 밖의 요청을 일반 파편으로 저장하고 `validation_warnings`에 `anchorPermissionRequired` 등을 남기며, `enforce`는 거부한다. context 앵커 줄에 비식별 주체 표지(`[k:xxxx]`, `[master]`)를 붙인다. |
 | `MEMENTO_SENSITIVE_SCAN` | `mask` | 쓰기 값의 비밀과 개인정보 탐지 방식(`mask`, `reject`, `off`). `mask`는 일치한 값을 표식으로 바꿔 저장하고, 이메일과 전화번호를 뺀 탐지는 `validation_warnings`에 `sensitive.<규칙>` 이름만 남긴다(알림이며 재시도 불필요). hard gate 키는 고신뢰 규칙(비밀번호 필드, API 키 패턴, 토큰, 개인 키, 주민등록번호, 카드 번호) 탐지에서 `-32003`으로 거부하고, `reject`는 모든 키가 거부한다. `off`는 레거시 규칙만 content에 적용한다. |
 | `MEMENTO_CASE_BACKPROP_ENABLED` | `false` | `true` 시 case_id를 가진 파편의 amend(resolutionStatus 변경) 시점에 동일 caseId 파편들의 importance를 역전파 조정. `lib/config.js`의 `CASE_BACKPROP_ENABLED` 상수로 export. case 해결 완료 시 관련 파편의 활성화 점수가 상향되어 이후 recall 정밀도를 높인다. |
 | `MEMENTO_STORAGE` | `pgvector` | 저장소 백엔드 이름. 현재 `pgvector` 하나이며 이 값은 동작에 영향을 주지 않는다. |

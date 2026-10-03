@@ -64,11 +64,13 @@ server.js  (HTTP server)
             |   +-- read-authz-metrics.js Metric for decisions outside the allowed set `memento_workspace_read_authz_total{surface,reason,outcome}`
             |   +-- SearchSideEffects.js  Search side-effect isolation module. commitSearchSideEffects() synchronously returns searchEventId; fire-and-forgets SearchParamAdaptor.recordOutcome()
             +-- write/                    Write layer modules
-            |   +-- WriteGate.js          Single semantic write gate. Applies the normalize, sensitive, length, policy, workspace and anchor steps in order and records violations as warnings or rejects them on hard-gate keys. `MEMENTO_WRITE_GATE`
+            |   +-- WriteGate.js          Single semantic write gate. Applies the normalize, sensitive, length, policy, workspace and anchor steps in order and records violations as warnings or rejects them on hard-gate keys. The anchor step judges anchor designation by remember and amend against the key's anchor permission and anchor limit. `MEMENTO_WRITE_GATE`, `MEMENTO_ANCHOR_PERMISSION`
             |   +-- ReviewQueue.js        Synchronous review queue decisions (pure functions). Collects instruction override phrases, anchors, preferences and procedures with trust tier 1 or lower and unauthorized anchor warnings as reasons, and stores review_state='pending' according to the key's review mode (off, flagged, all). Holds anchor requests until approval. INSERT column fragment and update SET fragment. `MEMENTO_REVIEW_QUEUE`
             |   +-- reviewRules.js        Instruction override phrase rule table (Korean, English). The table of ordinary procedural sentences that must not match is in the tests
-            |   +-- write-gate-metrics.js Gate verdict metric `memento_write_gate_total{entry,outcome}`
+            |   +-- write-gate-metrics.js Gate verdict metric `memento_write_gate_total{entry,outcome}`, anchor decision metric `memento_anchor_decision_total{outcome,reason}`
             |   +-- gateApproval.js       Gate approval marks. FragmentWriter semantic methods accept only write values registered by WriteGate
+            |   +-- serverAnchorDeps.js   Server dependencies of the anchor step: key permissions and live anchor count lookup (ApiKeyStore.getAnchorState), decision audit
+            |   +-- anchorAudit.js        Writes anchor decisions (granted, downgraded, rejected, cleared) as `anchor` audit log lines
             |   +-- serverWriteGate.js    Builds the gate for server write paths, injecting the key's allowed workspace set and hard gate setting from ApiKeyStore
             |   +-- FragmentImporter.js   Passes import rows through the gate and writes them with FragmentWriter. Applies the target key profile (owner, restore) (shared by admin import and CLI import)
             |   +-- DedupScope.js         content_hash duplicate detection scope (`MEMENTO_DEDUP_SCOPE`). Reads the valid detection indexes to choose the detection scope, ON CONFLICT target, pre-insert lookup and batch fold key
@@ -137,6 +139,7 @@ server.js  (HTTP server)
             +-- provenance.js             Fragment provenance and trust tier decisions (pure functions). Accepted origins, per-origin tiers, key cap (3 with the `trusted_origin` permission or the master key, otherwise 2), the injection exclusion predicate that reads NULL as 2 and the SQL fragment with the same threshold, observed client notation, INSERT column fragment
             +-- reviewState.js            Review states (pending, approved, rejected), review modes (off, flagged, all) and the review mode markers of key permission lists (review_off, review_all)
             +-- keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` shared helper. Generates key_id-scoped WHERE clauses. Used by FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js
+            +-- anchorPolicy.js           Pure anchor decision functions: change kind (set, clear), permission and per-key limit decision, non-identifying principal label of context lines (`k:` + first 4 characters of the key id sha256)
             +-- CaseEventStore.js         Semantic milestone log (case_events CRUD, DAG edges, evidence join)
             +-- memory-schema.sql         PostgreSQL schema definition
             +-- migrations/               52 DB migration SQL files (migration-001 through migration-054; 046 and 053 are unused), applied sequentially against the schema_migrations table. Used by `scripts/migrate.js` and `scripts/lint-migrations.js`
@@ -162,7 +165,7 @@ lib/
 +-- logger.js          Winston logger (daily rotate). REDACT_PATTERNS-based redactor format: auto-masking with the log entries of the `lib/security/sensitivePatterns.js` table (Authorization Bearer tokens, mmcp_ API keys, mmcp_session cookies, OAuth code/refresh_token/access_token, shared token rules). content field trimmed to head 50 + tail 50 when exceeding 200 chars
 +-- openapi.js         OpenAPI 3.1.0 spec generator. Enabled when `ENABLE_OPENAPI=true` via `GET /openapi.json`. Auth-level-based tool list filtering: master key -> all paths (including Admin REST API), API key -> permissions-based tool list
 +-- rate-limiter.js    IP-based sliding window rate limiter
-+-- rbac.js            RBAC authorization (read/write/admin tool-level permissions)
++-- rbac.js            RBAC authorization (read/write/admin tool-level permissions, anchor designation permission)
 +-- env-parse.js       Raw value classification of boolean and enum environment variables. Leaf module that lets config.js and the switch ledger (`config/switches.js`) share one rule
 +-- security/          Sensitive data detection. `sensitivePatterns.js` (the rule table shared by the storage path and the logger, a leaf module with no imports) and `SensitiveScanner.js` (pure functions that mask content fields and keywords and report rule names)
 +-- http-handlers.js   HTTP handler re-export hub. Actual implementations in lib/handlers/ submodules
@@ -326,6 +329,7 @@ scripts/
 +-- ops/backup.sh                                agent_memory schema backup with manifest (14 days kept by default)
 +-- ops/restore-verify.mjs                       Restores a dump into a disposable test server and compares it with the manifest
 +-- ops/online-index.mjs                         Builds large table indexes from the work list (`ops/index-manifest.json`) with `CONCURRENTLY`
++-- grant-anchor-permission.js                   Grants the anchor permission to active keys that created anchors in the last 90 days (dry run by default, `--apply`)
 +-- ops/finish-dedup-scope.mjs                   Drops the per-key content_hash indexes to finish the duplicate detection scope switch
 +-- ops/backfill-key-secrets.mjs                 Moves the current api_keys hashes into api_key_secrets in batches and checks consistency
 +-- release.js                                   Release procedure (`npm run release -- X.Y.Z`)

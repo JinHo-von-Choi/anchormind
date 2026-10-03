@@ -67,11 +67,13 @@ server.js  (HTTP 서버)
             │   ├── read-authz-metrics.js 허가 밖 판정 지표 `memento_workspace_read_authz_total{surface,reason,outcome}`
             │   └── SearchSideEffects.js  검색 부작용 격리 모듈. commitSearchSideEffects()가 searchEventId를 동기 반환하고 SearchParamAdaptor.recordOutcome()을 fire-and-forget으로 호출. FragmentSearch는 검색 파이프라인에만 집중
             ├── write/                    쓰기 레이어 모듈
-            │   ├── WriteGate.js          의미 쓰기 단일 관문. normalize, sensitive, length, policy, workspace, anchor 단계를 순서대로 적용하고 위반을 경고로 남기거나 hard gate 키에서 거부한다. `MEMENTO_WRITE_GATE`
+            │   ├── WriteGate.js          의미 쓰기 단일 관문. normalize, sensitive, length, policy, workspace, anchor 단계를 순서대로 적용하고 위반을 경고로 남기거나 hard gate 키에서 거부한다. anchor 단계는 remember와 amend의 앵커 지정을 키의 anchor 권한과 앵커 상한으로 판정한다. `MEMENTO_WRITE_GATE`, `MEMENTO_ANCHOR_PERMISSION`
             │   ├── ReviewQueue.js        검토 대기열 동기 판정(순수 함수). 지시 덮어쓰기 문구, 신뢰 등급 1 이하의 앵커와 preference와 procedure, 무권한 앵커 경고를 사유로 모으고 키의 검토 방식(off, flagged, all)으로 review_state='pending'을 싣는다. 앵커 요청은 승인까지 보류한다. INSERT 열 조각과 갱신 SET 조각. `MEMENTO_REVIEW_QUEUE`
             │   ├── reviewRules.js        지시 덮어쓰기 문구 규칙 표(한국어, 영어). 걸리지 않아야 하는 일반 절차문 표는 시험에 있다
-            │   ├── write-gate-metrics.js 관문 판정 지표 `memento_write_gate_total{entry,outcome}`
+            │   ├── write-gate-metrics.js 관문 판정 지표 `memento_write_gate_total{entry,outcome}`, 앵커 판정 지표 `memento_anchor_decision_total{outcome,reason}`
             │   ├── gateApproval.js       관문 통과 표식. WriteGate가 등록한 쓰기 값만 FragmentWriter 의미 메서드가 받는다
+            │   ├── serverAnchorDeps.js   anchor 단계의 서버 의존성. 키 권한과 살아 있는 앵커 수 조회(ApiKeyStore.getAnchorState), 판정 감사 기록
+            │   ├── anchorAudit.js        앵커 판정(granted, downgraded, rejected, cleared)을 감사 로그 `anchor` 줄로 남긴다
             │   ├── serverWriteGate.js    서버 쓰기 경로의 관문 생성. 키의 workspace 허가 집합과 hard gate 설정을 ApiKeyStore에서 읽어 주입한다
             │   ├── FragmentImporter.js   가져오기 행을 관문에 통과시켜 FragmentWriter로 기록. 대상 키 프로필(owner, restore)을 적용한다 (admin 가져오기와 CLI 가져오기 공용)
             │   ├── DedupScope.js         content_hash 중복 판정 범위(`MEMENTO_DEDUP_SCOPE`). 유효 판정 색인을 읽어 판정 범위, ON CONFLICT 대상, 사전 조회, batch 접기 키를 정한다
@@ -140,6 +142,7 @@ server.js  (HTTP 서버)
             ├── provenance.js             파편 출처와 신뢰 등급 판정(순수 함수). 허용 origin, 출처별 등급, 키 상한(`trusted_origin` 권한 또는 마스터 키 3, 그 밖 2), NULL을 2로 보는 주입 제외 술어와 같은 문턱의 SQL 조각, 관측 클라이언트 표기, INSERT 열 조각
             ├── reviewState.js            검토 상태(pending, approved, rejected), 검토 방식(off, flagged, all), 키 권한 목록의 검토 방식 표지(review_off, review_all)
             ├── keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` 공유 헬퍼. key_id 범위 WHERE 절 생성. FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js에서 공유 사용
+            ├── anchorPolicy.js           앵커 판정 순수 함수. 앵커 변경 종류(set, clear), 권한과 키별 상한 판정, context 주입 줄의 비식별 주체 표지(`k:` + 키 id sha256 앞 4자)
             ├── CaseEventStore.js         semantic milestone 로그 (case_events CRUD, DAG 엣지, 증거 조인)
             ├── memory-schema.sql         PostgreSQL 스키마 정의
             └── migrations/               DB 마이그레이션 SQL 52개 (migration-001 ~ migration-054, 046, 053 결번, schema_migrations 테이블 기준 순차 적용). `scripts/migrate.js`·`scripts/lint-migrations.js`가 이 경로를 사용
@@ -165,7 +168,7 @@ lib/
 ├── logger.js          Winston 로거 (daily rotate). REDACT_PATTERNS 기반 redactor format: `lib/security/sensitivePatterns.js` 표의 로그용 항목(Authorization Bearer 토큰, mmcp_ API 키, mmcp_session 쿠키, OAuth code/refresh_token/access_token, 공용 토큰 규칙) 자동 마스킹. content 필드 200자 초과 시 head 50 + tail 50 트리밍
 ├── openapi.js         OpenAPI 3.1.0 스펙 생성기. `ENABLE_OPENAPI=true` 시 `GET /openapi.json` 활성화. 인증 레벨 기반 도구 목록 필터: master key → 전체 경로(Admin REST API 포함), API key → permissions 기반 도구 목록
 ├── rate-limiter.js    IP 기반 sliding window rate limiter
-├── rbac.js            RBAC 권한 검사 (read/write/admin 도구 레벨 권한 적용)
+├── rbac.js            RBAC 권한 검사 (read/write/admin 도구 레벨 권한 적용, 앵커 지정 권한 anchor 판정)
 ├── env-parse.js       불리언과 열거 환경 변수 원시값 판독. config.js와 스위치 대장(`config/switches.js`)이 같은 규칙을 쓰는 말단 모듈
 ├── security/          민감 정보 탐지. `sensitivePatterns.js`(저장 경로와 로그가 같이 쓰는 규칙 표, 다른 모듈을 가져오지 않는 잎 모듈)와 `SensitiveScanner.js`(본문 필드와 keywords를 가리고 규칙 이름을 보고하는 순수 함수)
 ├── http-handlers.js   HTTP 핸들러 re-export 허브. 실제 구현은 lib/handlers/ 하위 모듈
@@ -329,6 +332,7 @@ scripts/
 ├── ops/backup.sh                                agent_memory 스키마 백업과 매니페스트 (기본 14일 보관)
 ├── ops/restore-verify.mjs                       덤프를 일회용 시험 서버에 복원해 매니페스트와 대조
 ├── ops/online-index.mjs                         대형 표 색인을 작업 목록(`ops/index-manifest.json`)에 따라 `CONCURRENTLY`로 생성
+├── grant-anchor-permission.js                   최근 90일 앵커를 만든 활성 키에 anchor 권한 부여 (기본 dry-run, `--apply`)
 ├── ops/finish-dedup-scope.mjs                   키 범위 content_hash 색인을 지워 중복 판정 범위 전환을 마무리
 ├── ops/backfill-key-secrets.mjs                 api_keys의 현재 해시를 api_key_secrets로 일괄 이관하고 정합 확인
 └── release.js                                   릴리스 절차 (`npm run release -- X.Y.Z`)
