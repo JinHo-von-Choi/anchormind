@@ -95,6 +95,7 @@ function describeArg(arg) {
  * - strings: { text, scope, line }. 템플릿과 + 연결은 보간 자리를 "${}"로 두되, 같은 파일의
  *   문자열 상수(const X = "..." 또는 템플릿 상수)를 가리키면 그 값으로 채운다. 연결식은 가장 바깥 식
  *   하나로 남긴다.
+ * - importSpecs: { source, kind, imported, local }. kind는 named, namespace, default, reexport, dynamic
  * - bindings: { name, source, scope }. `x = new C()`는 source "new C", `x = a.b`는 source "a.b"
  * - objectVars: { name, keys, scope }. 객체 리터럴로 초기화한 변수
  * - memberAssigns: { object, property, scope }. `x.p = ...`
@@ -105,6 +106,7 @@ export function scanSource(source) {
   const calls         = [];
   const rawStrings    = [];
   const imports       = [];
+  const importSpecs   = [];
   const constStrings  = new Map();
   const constParts    = new Map();
   const bindings      = [];
@@ -132,8 +134,27 @@ export function scanSource(source) {
         return null;
       };
       return {
-        ImportDeclaration(node) { imports.push(node.source.value); },
-        ImportExpression(node)  { if (node.source.type === "Literal") imports.push(node.source.value); },
+        ImportDeclaration(node) {
+          imports.push(node.source.value);
+          for (const sp of node.specifiers) {
+            const kind     = sp.type === "ImportSpecifier" ? "named" : (sp.type === "ImportNamespaceSpecifier" ? "namespace" : "default");
+            const imported = sp.type === "ImportSpecifier" ? (sp.imported.name ?? sp.imported.value) : null;
+            importSpecs.push({ source: node.source.value, kind, imported, local: sp.local.name });
+          }
+        },
+        ExportNamedDeclaration(node) {
+          if (!node.source) return;
+          for (const sp of node.specifiers) {
+            importSpecs.push({ source: node.source.value, kind: "reexport", imported: sp.local.name ?? sp.local.value, local: null });
+          }
+        },
+        ExportAllDeclaration(node) {
+          importSpecs.push({ source: node.source.value, kind: "namespace", imported: null, local: null });
+        },
+        ImportExpression(node)  {
+          if (node.source.type === "Literal") imports.push(node.source.value);
+          importSpecs.push({ source: node.source.type === "Literal" ? node.source.value : null, kind: "dynamic", imported: null, local: null });
+        },
         CallExpression(node) {
           const callee = node.callee;
           calls.push({
@@ -196,7 +217,7 @@ export function scanSource(source) {
     return "${}";
   }).join("");
   const strings = rawStrings.map(({ parts, scope, line }) => ({ text: resolve(parts, 2), scope, line }));
-  return { calls, strings, imports, bindings, objectVars, memberAssigns };
+  return { calls, strings, imports, importSpecs, bindings, objectVars, memberAssigns };
 }
 
 /** 저장소 기준 상대 경로 파일을 읽어 스캔한다. */

@@ -23,7 +23,7 @@ import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
 import { listSourceFiles, scanFile, scanSource } from "./_source-scan.js";
-import { reachesGateCheck, semanticCallViolations, findSemanticCalls } from "./_write-rules.js";
+import { reachesGateCheck, semanticCallViolations, findSemanticCalls, gateApprovalImportViolations } from "./_write-rules.js";
 
 const MR  = "lib/memory/processors/MemoryRememberer.js";
 const MM  = "lib/memory/MemoryManager.js";
@@ -198,10 +198,12 @@ describe("의미 쓰기 진입점 관문", () => {
     assert.deepEqual(offenders, [], `관문 밖 의미 메서드 호출:\n${offenders.join("\n")}`);
   });
 
-  it("관문 통과 표식은 WriteGate만 등록한다", () => {
-    const files   = [...listSourceFiles("lib"), ...listSourceFiles("scripts"), ...listSourceFiles("bin")];
-    const callers = files.filter(file => scan(file).calls.some(c => /(?:^|\.)approveGateValue$/.test(c.callee)));
-    assert.deepEqual(callers, ["lib/memory/write/WriteGate.js"]);
+  it("관문 통과 표식 등록 함수는 WriteGate만 가져온다", () => {
+    const files      = [...listSourceFiles("lib"), ...listSourceFiles("scripts"), ...listSourceFiles("bin")];
+    const violations = files.flatMap(file => gateApprovalImportViolations(file, scan(file)));
+    assert.deepEqual(violations, []);
+    const writeGate = scan("lib/memory/write/WriteGate.js").importSpecs;
+    assert.ok(writeGate.some(sp => /gateApproval\.js$/.test(sp.source) && sp.imported === "approveGateValue"), "WriteGate가 등록 함수를 가져오지 않는다");
   });
 
   it("허용 항목마다 사유가 있고 더는 쓰지 않는 항목이 남아 있지 않다", () => {
@@ -254,5 +256,25 @@ describe("의미 메서드 호출 탐지 규칙", () => {
       "  await store.insert(draft);",
       "}"
     ].join("\n"), { gatedFns: ["save"] }), []);
+  });
+});
+
+describe("관문 통과 표식 가져오기 탐지 규칙", () => {
+  const violations = (source, file = "lib/synthetic.js") => gateApprovalImportViolations(file, scanSource(source));
+
+  it("별칭으로 가져온 등록 함수를 찾는다", () => {
+    const found = violations('import { approveGateValue as ok } from "./memory/write/gateApproval.js";\nexport const forge = (x) => ok(x);');
+    assert.equal(found.length, 1);
+  });
+
+  it("이름공간 가져오기와 동적 가져오기를 찾는다", () => {
+    assert.equal(violations('import * as g from "./write/gateApproval.js";\nexport const forge = (x) => g.approveGateValue(x);').length, 1);
+    assert.equal(violations('export async function forge(x) { const g = await import("./write/gateApproval.js"); return g.approveGateValue(x); }').length, 1);
+    assert.equal(violations('export { approveGateValue } from "./write/gateApproval.js";').length, 1);
+  });
+
+  it("확인 함수만 가져오는 것과 WriteGate.js의 등록 함수 가져오기는 통과한다", () => {
+    assert.deepEqual(violations('import { isGateApproved } from "./gateApproval.js";\nexport const ok = (x) => isGateApproved(x);'), []);
+    assert.deepEqual(violations('import { approveGateValue } from "./gateApproval.js";', "lib/memory/write/WriteGate.js"), []);
   });
 });

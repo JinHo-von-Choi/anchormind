@@ -190,3 +190,21 @@ export function semanticCallViolations(file, scan, { gatedFns, allowed }) {
   }
   return violations;
 }
+
+/**
+ * 관문 통과 표식 모듈(gateApproval.js)을 쓰는 방식의 위반. 등록 함수(approveGateValue)는 WriteGate.js만
+ * 가져올 수 있다. 그 밖의 파일은 이름 있는 isGateApproved 가져오기만 허용하고, 별칭 여부와 관계없이
+ * approveGateValue 가져오기, 이름공간 가져오기, 다시 내보내기, 동적 가져오기는 위반이다.
+ * 동적 가져오기는 지정자를 알 수 없어도 위반으로 본다.
+ *
+ * @param {string} file
+ * @param {Object} scan
+ * @returns {string[]}
+ */
+export function gateApprovalImportViolations(file, scan) {
+  if (file === "lib/memory/write/WriteGate.js") return [];
+  return scan.importSpecs
+    .filter(sp => sp.source === null || /(^|\/)gateApproval\.js$/.test(sp.source))
+    .filter(sp => !(sp.kind === "named" && sp.imported === "isGateApproved"))
+    .map(sp => `${file}: gateApproval.js ${sp.kind}${sp.imported ? ` ${sp.imported}` : ""}`);
+}
