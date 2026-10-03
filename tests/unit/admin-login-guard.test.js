@@ -71,3 +71,63 @@ describe("관리 인증 지연 계산", () => {
     assert.equal(recordAdminAuthFailure(T0), 1);
   });
 });
+
+const { loginDelayMs, createKeyedLoginGuard } = await import("../../lib/admin/admin-login-guard.js");
+
+describe("로그인 실패 지연 함수", () => {
+  it("문턱(5회)까지는 0이고 그 뒤 1, 2, 4초로 늘며 60초를 넘지 않는다", () => {
+    assert.deepEqual([0, 1, 5].map((n) => loginDelayMs(n)), [0, 0, 0]);
+    assert.deepEqual([6, 7, 8, 9].map((n) => loginDelayMs(n)), [1000, 2000, 4000, 8000]);
+    assert.equal(loginDelayMs(12), 60_000);
+    assert.equal(loginDelayMs(1000), 60_000);
+  });
+
+  it("문턱과 상한을 바꿀 수 있다", () => {
+    assert.equal(loginDelayMs(20, { threshold: 20 }), 0);
+    assert.equal(loginDelayMs(21, { threshold: 20 }), 1000);
+    assert.equal(loginDelayMs(30, { threshold: 20, maxMs: 5000 }), 5000);
+  });
+
+  it("음수, 정수 아님은 0이다", () => {
+    assert.equal(loginDelayMs(-1), 0);
+    assert.equal(loginDelayMs(Number.NaN), 0);
+  });
+});
+
+describe("키별 로그인 실패 지연(계정, 클라이언트 주소)", () => {
+  it("스위치와 관계없이 키마다 따로 세고 문턱 뒤 지연한다", () => {
+    const guard = createKeyedLoginGuard({ threshold: 5 });
+    for (let i = 0; i < 6; i++) guard.recordFailure("alice", T0);
+    assert.deepEqual(guard.check("alice", T0), { allowed: false, retryAfterSec: 1 });
+    assert.deepEqual(guard.check("bob", T0), { allowed: true, retryAfterSec: 0 });
+    assert.equal(guard.check("alice", T0 + 1000).allowed, true);
+  });
+
+  it("성공은 그 키의 누적만 지운다", () => {
+    const guard = createKeyedLoginGuard({ threshold: 1 });
+    guard.recordFailure("a", T0);
+    guard.recordFailure("a", T0);
+    guard.recordFailure("b", T0);
+    guard.recordFailure("b", T0);
+    guard.recordSuccess("a");
+    assert.equal(guard.check("a", T0).allowed, true);
+    assert.equal(guard.check("b", T0).allowed, false);
+  });
+
+  it("마지막 실패 뒤 최대 지연 시간이 지나면 새로 센다", () => {
+    const guard = createKeyedLoginGuard({ threshold: 2 });
+    guard.recordFailure("k", T0);
+    guard.recordFailure("k", T0);
+    assert.equal(guard.recordFailure("k", T0 + 61_000), 1);
+  });
+
+  it("항목 수 상한을 넘으면 가장 오래된 키부터 지운다", () => {
+    const guard = createKeyedLoginGuard({ threshold: 0, maxEntries: 2 });
+    guard.recordFailure("k1", T0);
+    guard.recordFailure("k2", T0);
+    guard.recordFailure("k3", T0);
+    assert.equal(guard.size(), 2);
+    assert.equal(guard.check("k1", T0).allowed, true);
+    assert.equal(guard.check("k3", T0).allowed, false);
+  });
+});
