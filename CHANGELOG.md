@@ -53,6 +53,15 @@
 - `MEMENTO_WRITE_GATE`(`on`, `off`, 기본 `on`): `off`이면 진입점별 기본 단계만 적용한다. 호출 시점에 읽는다.
 - `MEMENTO_LOG_STDERR`(기본 `false`): `true`이면 콘솔 로그를 모든 수준에서 표준 오류로 보낸다. CLI는 `serve`를 뺀 명령에서 값이 없으면 `true`로 정해 `--json` 출력을 포함한 표준 출력을 명령 결과에만 쓴다.
 - `FragmentWriter`의 의미 메서드(`insert`, `update`)는 관문을 거치지 않은 의미 열(`content`, `topic`, `keywords`, `is_anchor`, `workspace`, `key_id`, `context_summary`, `goal`, `outcome`) 쓰기를 실행 시점에 거부한다. 의미 열을 쓰는 SQL이 `FragmentWriter`와 허용 목록 밖에 없는지 `tests/structure`의 구조 검사가 단위 시험(`npm test`, `npm run test:coverage`)에서 확인한다.
+- `MEMENTO_SENSITIVE_SCAN`(`mask`, `reject`, `off`, 기본 `mask`)과 민감 정보 규칙 표: 쓰기 관문이 content, topic, contextSummary, goal, outcome과 keywords(소문자로 바꾸기 전 값)에서 API 키와 토큰(sk-, GitHub, AWS, Slack, JWT, Bearer, mmcp_), PEM 개인 키, 주민등록번호, 카드 번호, 이메일, 비밀번호 필드, 휴대전화 번호를 표식으로 바꿔 저장한다. 이메일과 휴대전화 번호를 뺀 탐지는 `validation_warnings`에 `sensitive.<규칙>` 이름만 남기며 일치한 문자열은 기록하지 않는다. `api_keys.symbolic_hard_gate=true` 키는 고신뢰 탐지에서 `-32003`으로 거부하고, `reject`이면 마스터 키를 포함한 모든 키가 거부한다. `off`(또는 `MEMENTO_WRITE_GATE=off`)이면 레거시 규칙(API 키, 이메일, 비밀번호 필드, 휴대전화 번호)만 content에 적용한다. 로그 마스킹도 같은 규칙 표를 쓴다.
+- `MEMENTO_DEDUP_SCOPE`(`workspace`, `key`, 기본 `workspace`)와 migration-050(키와 workspace 단위 content_hash 유일 색인 `uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`): 같은 키가 다른 workspace에 같은 본문을 쓰면 별도 파편으로 저장하고, 같은 workspace나 전역 파편에 같은 본문이 있으면 그 id를 돌려준다. 판정은 실행 시점의 유효 색인을 따르며 키 단위 색인(`uq_frag_hash_per_key`, `uq_frag_hash_master`)이 남아 있는 동안은 키 단위로 동작한다. 운영 DB는 `scripts/ops/online-index.mjs`로 새 색인을 만든 뒤 `node scripts/ops/finish-dedup-scope.mjs --confirm`으로 키 단위 색인을 지워 전환을 마친다(절차와 되돌리기는 `docs/operations/online-migration.md`). `remember`가 같은 범위의 기존 파편에 적중하면 응답의 `duplicate_of`에 그 id를 싣는다.
+- `MEMENTO_WM_PG_FALLBACK`(`on`, `off`, 기본 `on`)과 `MEMENTO_WM_FALLBACK_MAX_ROWS`(기본 2000): Redis가 준비되지 않았을 때 `remember(scope=session)`를 `fragments`의 작업 기억 행(`source=wm-fallback`)으로 받고, `context`의 WORKING 구획, 세션 종합(`reflect`), 소비 항목 제거가 같은 행을 읽는다. 행은 `recall`, 통합, 할당량, 관리 화면과 CLI `stats` 집계, 내보내기에 나타나지 않으며 24시간 뒤 정리된다. 키별 행 수가 상한에 닿으면 오래된 행부터 지운다. 응답의 `working_memory`(`redis`, `postgres-fallback`, `none`)와 `_meta.hints`가 저장 경로를 알린다.
+- `MEMENTO_RANK_BEFORE_BUDGET`(`on`, `off`, 기본 `on`)과 migration-052(`search_events.candidate_count`, `budget_kept`): `recall`이 토큰 예산으로 자르지 않은 후보(최대 200건)에 연결 파편을 합쳐 최종 점수를 매긴 뒤 `tokenBudget` 안에서 고른다. 후보 전체가 예산 안이면 `off`와 같은 집합을 고른다. `off`이면 검색 순서대로 예산을 자른 뒤 연결 파편을 합친다. 두 열이 없는 DB에서는 검색 이벤트를 열 없이 기록하고 5분마다 다시 확인한다.
+- `recall-metrics --compare --metric <지표>`: 지정한 지표만 짝지은 부트스트랩으로 비교한다. 측정 실행은 `--include-links`를 받고 결과에 `include_links`, `rank_before_budget`을 기록한다.
+- 트랜잭션 outbox(migration-054의 `outbox_events`, `lib/outbox`): 변경 트랜잭션 안에서 이벤트를 기록하고, 작업자가 `SKIP LOCKED` 점유와 임대로 topic별 처리기에 전달하며 재시도(`MEMENTO_OUTBOX_MAX_ATTEMPTS`, 기본 12), dead-letter, 보존 정리(`MEMENTO_OUTBOX_RETENTION_DAYS`, 기본 7)를 한다. 처리기가 없는 topic의 미점유 행은 `MEMENTO_OUTBOX_UNHANDLED_DAYS`(기본 7) 뒤 dead-letter로 옮긴다. 스위치는 `MEMENTO_OUTBOX`(기록과 작업자 전체)와 `MEMENTO_OUTBOX_WORKER`(이 프로세스의 작업자)이며 둘 다 기본 `on`이다. 지표 `memento_outbox_*`와 경보 `MementoOutboxLag`, `MementoOutboxDeadLetter`, `MementoOutboxStatsStale`이 `docs/operations/monitoring.md`에 있다. 이벤트를 기록하는 생산자는 아직 없다.
+- 내보내기 형식 버전 2: `GET /export`와 CLI `export`가 머리 줄, 파편의 전체 열, 링크 줄, 선택적 수정 이력 줄(`include_versions`, CLI `--include-versions`), 끝 줄을 낸다. `format_version=1`(CLI `--format-version 1`)은 버전 1 형식을 낸다. 형식 버전과 호환 규칙은 `docs/api-versioning.md`에 있다.
+- 가져오기 실행기: `POST /import`와 CLI `import`가 버전 1과 2 파일을 읽어 파편, 링크, 수정 이력을 기록하고 `imported`, `duplicates`, `rejected`(`rejected_by_reason`), `errors`, `transformed`, `ignored` 집계를 돌려준다. 기록 대상 키는 `key_id`(CLI `--key`)가 정하며 파일 행의 `key_id`는 읽지 않는다. `restore=trusted`(CLI `--restore`)는 버전 2 파일의 저장 값(importance, ttl_tier, workspace_source, 품질 판정 열)을 되살리고 감사 기록을 남긴다. 알아볼 수 있는 기록이 없는 입력은 400 `no_valid_records`(CLI 종료 코드 1)다.
+- `MEMENTO_DB_LOCK_RETRY_MAX`(0 이상 10 이하, 기본 3, 0은 재시도 없음): 여러 파편 행을 잠그는 쓰기 트랜잭션이 교착(40P01)이나 잠금 대기 상한(55P03)으로 끝나면 처음부터 다시 실행한다. 지표 `memento_db_deadlock_retries_total{operation}`과 경보 `MementoDbLockRetries`, 경고 로그로 끝낸 배경 쓰기 실패를 세는 `memento_db_write_failures_total{operation}`.
 
 ### Changed
 
@@ -104,6 +113,12 @@
 - 관리 가져오기와 CLI 가져오기는 `FragmentWriter.insert`로 행을 기록해 `content_hash`(본문 전체 sha256)와 유형별 importance 상한을 채운다. 같은 본문이 이미 있는 행은 `skipped`, 관문이 받아들이지 않은 행과 행의 값 때문에 DB가 거부한 행(`type`, `assertion_status` CHECK 제약 등)은 `errors`로 세고 다음 행을 계속 가져온다.
 - CLI `remember` 로컬 모드는 서버와 같은 관문과 `FragmentWriter`로 한 트랜잭션에 기록한다. 같은 본문이 이미 있으면 새 행 없이 그 파편의 id를 출력하고, 출력의 importance는 요청 값이다.
 - 통합 분할 자식은 부모의 `key_id`와 workspace로 관문(entry `consolidate_split`)을 거쳐 마스킹과 길이 상한을 받고 부모의 workspace를 물려받는다.
+- 여러 파편 행을 갱신하거나 지우는 쓰기(접근 기록, 연결 파편 접근, 감쇠와 utility 묶음 갱신, 임베딩 기록, 링크 정리, 활성화 전파, 사례 보상, GC 삭제)는 한 트랜잭션에서 id 순 잠금 문장을 먼저 실행하고 잠근 행만 별도 문장으로 쓴다.
+- `remember(scope=session)`는 영구 저장과 같은 쓰기 관문(마스킹, 절삭, 정책, 거부)을 거친다. 세션 종합은 세션 ID가 같아도 호출한 키와 에이전트의 작업 기억 항목만 모으고 비운다(Redis 항목 포함).
+- `amend`로 본문을 바꾸면 `estimated_tokens`를 새 본문의 토큰 수로 기록한다.
+- 관리 가져오기의 JSON 본문 상한은 2 MiB이고, `Content-Type`이 `application/x-ndjson` 또는 `application/jsonl`인 export 파일 본문은 64 MiB까지 받는다. 초과하면 413이다.
+- 가져오기 `dryRun`(CLI `--dry-run`)은 DB에 연결해 같은 경로로 처리한 뒤 되돌리므로 집계가 실제 실행과 같다. 관문 지표는 남기지 않는다.
+- `scripts/backfill-reflect-workspace.js`는 대상 workspace에 같은 본문 파편이 이미 있는 파편을 옮기지 않는다.
 
 ### Removed
 
