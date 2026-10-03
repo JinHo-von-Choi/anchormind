@@ -4,7 +4,8 @@
  * 작성자: 최진호
  * 작성일: 2026-10-03
  *
- * 내부 메타데이터 갱신은 의미 열을 쓰지 못한다. DB 호출은 대역으로 받아 SQL과 바인딩을 본다.
+ * 내부 메타데이터 갱신은 의미 열을 쓰지 못하고, 의미 메서드는 관문이 돌려준 값만 받는다.
+ * DB 호출은 대역으로 받아 SQL과 바인딩을 본다.
  */
 
 import { describe, it, mock, beforeEach } from "node:test";
@@ -24,9 +25,11 @@ mock.module("../../lib/tools/db.js", {
 const {
   FragmentWriter,
   InternalUpdateError,
+  UngatedSemanticWriteError,
   SEMANTIC_COLUMNS,
   INTERNAL_COLUMNS
 } = await import("../../lib/memory/write/FragmentWriter.js");
+const { WriteGate, isGateApproved } = await import("../../lib/memory/write/WriteGate.js");
 
 beforeEach(() => { calls.length = 0; });
 
@@ -85,5 +88,43 @@ describe("FragmentWriter.updateInternal", () => {
     assert.match(calls[0].sql, /SET ttl_tier = \$2 WHERE id = \$1 AND key_id = \$3$/);
     assert.deepEqual(calls[1].params, ["f2", "rejected"]);
     assert.equal(calls[1].agentId, "system");
+  });
+});
+
+describe("FragmentWriter 의미 메서드의 관문 표식 확인", () => {
+  const writer = new FragmentWriter();
+
+  it("관문을 거치지 않은 의미 열 갱신은 DB를 부르기 전에 거부한다", async () => {
+    const existing = { id: "f1", agent_id: "default", key_id: null };
+    await assert.rejects(
+      () => writer.update("f1", { content: "바꾼 본문" }, "default", null, existing),
+      (err) => err instanceof UngatedSemanticWriteError && err.columns.includes("content")
+    );
+    await assert.rejects(
+      () => writer.update("f1", { importance: 0.4, keywords: ["k"] }, "default", null, existing),
+      (err) => err instanceof UngatedSemanticWriteError && err.columns.includes("keywords")
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  it("관문을 거치지 않은 insert는 거부한다", async () => {
+    await assert.rejects(
+      () => writer.insert({ id: "f1", content: "관문을 거치지 않은 본문", topic: "t", type: "fact" }),
+      (err) => err instanceof UngatedSemanticWriteError
+    );
+  });
+
+  it("관문이 돌려준 값은 받는다", async () => {
+    const gate = new WriteGate();
+    const { fields } = await gate.check({ entry: "amend", op: "update", fields: { content: "관문을 거친 본문" }, base: { type: "fact" } });
+    assert.equal(isGateApproved(fields), true);
+    assert.ok(Object.isFrozen(fields));
+    const { draft } = await gate.check({
+      entry: "remember", op: "create", fields: { content: "관문을 거친 새 본문", topic: "t", type: "fact" }, build: (input) => ({ ...input })
+    });
+    assert.equal(isGateApproved(draft), true);
+    assert.equal(isGateApproved({ ...draft }), false, "복사본은 표식이 없다");
+    /** getPrimaryPool이 null인 대역이므로 표식 확인을 통과하면 null을 돌려준다 */
+    assert.equal(await writer.insert(draft), null);
   });
 });

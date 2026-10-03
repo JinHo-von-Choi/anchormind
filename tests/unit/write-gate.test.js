@@ -312,7 +312,7 @@ describe("WriteGate.check", () => {
     assert.equal(out.fields.content, "교체된 마스킹 결과");
   });
 
-  it("MEMENTO_WRITE_GATE=off이면 진입점별 기존 단계만 적용한다", async () => {
+  it("MEMENTO_WRITE_GATE=off이면 진입점별 기본 단계만 적용한다", async () => {
     process.env.MEMENTO_WRITE_GATE = "off";
     const gate = new WriteGate({ policyRules: decisionRule, policyGatingEnabled: true });
 
@@ -335,7 +335,7 @@ describe("WriteGate.check", () => {
     assert.deepEqual(remembered.warnings, ["decisionHasRationale"]);
   });
 
-  it("기존 단계 표의 단계 이름은 모두 정의된 단계다", () => {
+  it("기본 단계 표의 단계 이름은 모두 정의된 단계다", () => {
     for (const steps of Object.values(LEGACY_STEPS)) {
       for (const name of steps) assert.ok(STEP_ORDER.includes(name), name);
     }
