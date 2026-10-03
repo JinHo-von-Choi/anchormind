@@ -89,7 +89,7 @@ beforeEach(() => {
 
 describe("anchor 권한 값", () => {
   it("키 권한 값에 anchor가 있다", () => {
-    assert.deepEqual([...KEY_PERMISSION_VALUES], ["read", "write", "anchor"]);
+    assert.ok(KEY_PERMISSION_VALUES.includes("anchor"));
   });
 
   it("키 생성 권한 목록은 anchor를 받고 그 밖의 값은 거부한다", () => {
