@@ -1,5 +1,5 @@
 /**
- * Memento MCP Admin Console — 감사 로그 뷰
+ * Memento MCP Admin Console: 감사 로그 뷰
  *
  * 작성자: 최진호
  * 작성일: 2026-10-03
