@@ -34,6 +34,7 @@ import {
 } from "../../lib/admin/admin-review.js";
 import { ADMIN_BASE }          from "../../lib/admin/admin-auth.js";
 import { reviewDecisionTotal } from "../../lib/memory/write/write-gate-metrics.js";
+import { ANCHOR_QUOTA_LOCK_SQL } from "../../lib/memory/write/anchorQuota.js";
 
 const SECRET = `sk-ant-api03-${"A1b2".repeat(20)}`;
 
@@ -63,12 +64,14 @@ const decisionRow = (extra = {}) => ({
 
 /** 검토 대기 파편 하나가 있는 저장소 응답기 */
 function pendingResponder({
-  state = "pending", reason = "instruction_override", validTo = null, replay = null, missing = false, permissions = ["read", "write"]
+  state = "pending", reason = "instruction_override", validTo = null, replay = null, missing = false, permissions = ["read", "write"],
+  anchors = 0
 } = {}) {
   return (sql) => {
     if (/FROM \S*memory_review_decisions\s+WHERE idempotency_key/.test(sql)) return replay ? [replay] : [];
     if (/^SELECT key_id, review_reason FROM/.test(sql.trim())) return missing ? [] : [{ key_id: "k1", review_reason: reason }];
-    if (/FROM \S*api_keys WHERE id = \$1 FOR UPDATE$/.test(sql.trim())) return [{ id: "k1" }];
+    if (/FROM \S*api_keys WHERE id = \$1 FOR NO KEY UPDATE$/.test(sql.trim())) return [{ id: "k1" }];
+    if (/COUNT\(\*\)::int AS count FROM/.test(sql)) return [{ count: anchors }];
     if (/^SELECT permissions FROM/.test(sql.trim())) return [{ permissions }];
     if (/FOR UPDATE$/.test(sql.trim())) return missing ? [] : [{ id: "f1", key_id: "k1", review_state: state, review_reason: reason, valid_to: validTo }];
     if (/^UPDATE/.test(sql.trim())) return [];
@@ -139,7 +142,7 @@ describe("결정 적용", () => {
     assert.deepEqual([r1.anchorApplied, r1.anchorReason], [false, "permission"]);
     assert.equal(denied.statements.find(s => /^UPDATE/.test(s.sql.trim())).params[2], false);
     const sqls = denied.statements.map(s => s.sql.trim());
-    const keyLock  = sqls.findIndex(q => /api_keys WHERE id = \$1 FOR UPDATE$/.test(q));
+    const keyLock  = sqls.findIndex(q => /api_keys WHERE id = \$1 FOR NO KEY UPDATE$/.test(q));
     const fragLock = sqls.findIndex(q => /fragments\s+WHERE id = \$1\s+FOR UPDATE$/.test(q));
     assert.ok(keyLock >= 0 && keyLock < fragLock, "잠금 순서: 키 행, 파편 행");
 
@@ -170,6 +173,20 @@ describe("결정 적용", () => {
     const declined = await decideReview({ fragmentId: "f1", decision: "approve", reviewer: "r", applyAnchor: false },
       fakePool(pendingResponder({ reason: "mode_all,anchor_requested", permissions: permitted })).pool);
     assert.deepEqual([declined.anchorApplied, declined.anchorReason], [false, "declined"]);
+  });
+
+  it("보류한 앵커의 승인은 쓰기 경로와 같은 키별 앵커 상한을 명시 적용에도 본다", async () => {
+    const full = { anchors: 1000, permissions: ["write", "anchor"] };
+    const held = await decideReview({ fragmentId: "f1", decision: "approve", reviewer: "r" },
+      fakePool(pendingResponder({ reason: "mode_all,anchor_requested", ...full })).pool);
+    assert.deepEqual([held.anchorApplied, held.anchorReason], [false, "limit"]);
+    const explicit = await decideReview({ fragmentId: "f1", decision: "approve", reviewer: "r", applyAnchor: true },
+      fakePool(pendingResponder({ reason: "anchor_unauthorized,anchor_requested", ...full })).pool);
+    assert.deepEqual([explicit.anchorApplied, explicit.anchorReason], [false, "limit"]);
+    const under = fakePool(pendingResponder({ reason: "mode_all,anchor_requested", anchors: 999, permissions: ["write", "anchor"] }));
+    const ok    = await decideReview({ fragmentId: "f1", decision: "approve", reviewer: "r" }, under.pool);
+    assert.deepEqual([ok.anchorApplied, ok.anchorReason], [true, "permitted"]);
+    assert.ok(under.statements.some(s => s.sql === ANCHOR_QUOTA_LOCK_SQL), "키 행 잠금은 쓰기 경로의 앵커 상한 잠금 문장이다");
   });
 
   it("앵커 요청이 없으면 키 행을 잠그지 않는다", async () => {
