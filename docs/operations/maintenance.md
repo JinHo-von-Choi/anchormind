@@ -242,7 +242,7 @@ MCP `memory_consolidate` 도구는 master 키 세션 전용이다. 일반 키 �
 릴리스 보고마다 기능 스위치의 on/off 표를 싣는다. 표는 `scripts/switch-report.mjs`가 만든다.
 
 1. 보고 대상 환경의 환경 변수를 셸에 올린다. 스크립트는 프로세스 환경만 읽고 `.env` 파일을 읽지 않는다. 서비스 환경 파일을 쓰는 설치에서는 `set -a; . <환경 파일 경로>; set +a`로 올린다.
-2. `npm run switches`를 실행해 표를 얻는다. 표에는 스위치, 적용 값, 기본값, 상태(`on`, `off`, 방식 선택 열거는 `mode`), 기본과 다름, 분류, 예외 분류, 용도가 있다. 키, 토큰, 주소를 담는 변수는 표에 없고, 잘못된 원본 값은 출력하지 않는다.
+2. `npm run switches -- --strict`를 실행해 표를 얻는다. 값이 잘못된 스위치가 있으면 종료 코드 1이므로 그 상태로는 릴리스 보고를 마치지 않는다(관문). 표에는 스위치, 적용 값, 기본값, 상태(`on`, `off`, 방식 선택 열거는 `mode`), 기본과 다름, 분류, 예외 분류, 용도가 있다. 키, 토큰, 주소를 담는 변수는 표에 없고, 잘못된 원본 값은 출력하지 않는다.
 3. 표를 릴리스 보고에 붙이고 다음을 본문에 적는다. 기본과 다른 스위치와 그 이유, `값 오류`로 표시된 스위치와 조치, 출고 때 켜지 않은 스위치(예외 분류 칸이 채워진 항목과 기본이 `off`인 항목)의 현재 상태.
 4. 서비스가 떠 있으면 같은 요약을 관리 API `GET /v1/internal/model/nothing/stats`의 `switches`와 기동 로그의 `[Startup] switches:` 줄에서 확인할 수 있다. 표와 이 요약의 개수가 같아야 한다.
 5. 스위치를 추가하거나 기본값을 바꾼 변경은 같은 변경에서 `config/switches.js`와 `docs/configuration.md`, `docs/configuration.en.md`, `.env.example`을 함께 고친다. `tests/unit/switch-ledger-structure.test.js`가 누락을 실패로 알린다.

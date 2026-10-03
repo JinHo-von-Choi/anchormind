@@ -9,7 +9,10 @@
  *   set -a; . /경로/.env; set +a; node scripts/switch-report.mjs
  * 레지스트리에는 기능 스위치만 있고 키, 토큰, 주소는 없다. 잘못된 원본 값은 출력하지 않는다.
  *
- * 사용: node scripts/switch-report.mjs   (npm run switches)
+ * --strict: 값이 잘못된 스위치가 하나라도 있으면 표를 출력한 뒤 종료 코드 1로 끝난다(릴리스 보고 관문).
+ *   없으면 0이다. 옵션이 없으면 항상 0이다.
+ *
+ * 사용: node scripts/switch-report.mjs [--strict]   (npm run switches [-- --strict])
  *
  * 작성자: 최진호
  * 작성일: 2026-10-03
@@ -30,3 +33,8 @@ const lines = [
 ];
 
 process.stdout.write(lines.join("\n"));
+
+if (process.argv.includes("--strict") && summary.invalid.length > 0) {
+  process.stderr.write(`값이 잘못된 스위치 ${summary.invalid.length}개: ${summary.invalid.join(", ")}\n`);
+  process.exitCode = 1;
+}

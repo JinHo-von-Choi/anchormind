@@ -13,5 +13,7 @@ test("queryWithAgentVector gates planner hints behind opts.forceVectorIndex", ()
   assert.match(fn, /SET LOCAL enable_seqscan = off/, "enable_seqscan SET LOCAL 누락");
   assert.match(fn, /SET LOCAL enable_bitmapscan = off/, "enable_bitmapscan SET LOCAL 누락");
   assert.match(fn, /SET LOCAL hnsw\.iterative_scan/, "iterative_scan SET LOCAL 누락");
-  assert.match(fn, /MEMENTO_VECTOR_FORCE_INDEX/, "토글 env 누락");
+  assert.match(fn, /readVectorForceIndex\(process\.env\)/, "토글 판독 누락");
+  const parse = readFileSync(new URL("../../lib/env-parse.js", import.meta.url), "utf8");
+  assert.match(parse, /MEMENTO_VECTOR_FORCE_INDEX/, "토글 env 누락");
 });

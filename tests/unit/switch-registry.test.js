@@ -164,6 +164,25 @@ describe("describeSwitches 잘못된 값", () => {
     assert.equal(cors.value, "observe");
   });
 
+  it("공백만 있는 MEMENTO_TOOL_ARGS_VALIDATION은 잘못된 값이고 enforce로 적용된다", () => {
+    const blank = byName(describeSwitches({ MEMENTO_TOOL_ARGS_VALIDATION: " " }), "MEMENTO_TOOL_ARGS_VALIDATION");
+    assert.equal(blank.invalid, true);
+    assert.equal(blank.value,   "enforce");
+    assert.equal(blank.state,   "on");
+    const empty = byName(describeSwitches({ MEMENTO_TOOL_ARGS_VALIDATION: "" }), "MEMENTO_TOOL_ARGS_VALIDATION");
+    assert.equal(empty.invalid, false);
+    assert.equal(empty.value,   "warn");
+  });
+
+  it("문서 값이 아닌 기본값 표기는 잘못된 값이다", () => {
+    const frame = byName(describeSwitches({ MEMENTO_FRAME_OPTIONS: "off" }), "MEMENTO_FRAME_OPTIONS");
+    assert.equal(frame.invalid, true);
+    assert.equal(frame.value,   "off");
+    const guard = byName(describeSwitches({ MEMENTO_VECTOR_FORCE_INDEX: "on" }), "MEMENTO_VECTOR_FORCE_INDEX");
+    assert.equal(guard.invalid, true);
+    assert.equal(guard.value,   "on");
+  });
+
   it("기동 실패로 이어지는 값은 invalid 상태로 표시한다", () => {
     const s = byName(describeSwitches({ MEMENTO_AUTO_PROMOTE_ANCHORS: "maybe" }), "MEMENTO_AUTO_PROMOTE_ANCHORS");
     assert.equal(s.invalid, true);

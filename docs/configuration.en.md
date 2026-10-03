@@ -21,7 +21,7 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | Integer, 100 to 4500, anything else uses 2000 | MEMENTO_HEALTH_READY_DB_TIMEOUT_MS |
 | Number, 1 or more, anything else uses `SESSION_TTL_MINUTES * 60` | OAUTH_ACCESS_TOKEN_TTL_SECONDS |
 | Number, 0 to 1 (above 1 is capped to 1; negative and non-numeric values become 0) | MEMENTO_DECAY_MIN_DELTA, MEMENTO_UTILITY_MIN_DELTA |
-| off, warn, enforce (any other value behaves as enforce) | MEMENTO_TOOL_ARGS_VALIDATION |
+| off, warn, enforce (any other value, including a whitespace-only value, behaves as enforce) | MEMENTO_TOOL_ARGS_VALIDATION |
 | warn, enforce (any other value is warn) | MEMENTO_SESSION_ID_POLICY, MEMENTO_RESERVED_AGENT_IDS, MEMENTO_OAUTH_REDIRECT_CHECK |
 | reflect, observe, allowlist (any other value is observe) | MEMENTO_CORS_MODE |
 | allow, deny (any other value is allow) | MEMENTO_SSE_QUERY_KEY |
@@ -41,6 +41,7 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 The name, documented default, purpose and category of each feature switch are in the registry `config/switches.js`. Given an environment, it computes the value that is actually in effect for every switch. The parsing rules are the ones the readers use, and an invalid value is shown as the value the reader applies.
 
 - Table output: `npm run switches` (`node scripts/switch-report.mjs`) prints a markdown table with switch, effective value, default, state, whether it differs from the default, category, exception class and purpose. It reads only the process environment and never reads a `.env` file. To report on a specific environment, load that environment into the shell first (`set -a; . <path to .env>; set +a; npm run switches`). The registry holds no keys, tokens or addresses, and an invalid raw value is never printed.
+- Release gate: `npm run switches -- --strict` prints the table and then exits with code 1 when any switch has an invalid value (0 otherwise). Without the option the exit code is always 0. The names of the invalid switches go to stderr before exit.
 - State column: `on` and `off` say whether a feature is enabled. `mode` marks an enum that selects a method rather than turning something on or off (`MEMENTO_CORS_MODE` and similar). A switch with an invalid value shows `값 오류` (invalid value) in the differs-from-default column and the value the reader applies in the effective-value column.
 - Admin API: `switches` in the `GET /v1/internal/model/nothing/stats` response carries `total`, `on`, `off`, `mode`, `nonDefaultCount`, `nonDefault` (names of switches that differ from the default) and `invalid` (names of switches with an invalid value). No values are included.
 - Startup log: one line `[Startup] switches: total=N on=N off=N mode=N nonDefault=N (name=on|off|enum value, ...) invalid=N (name, ...)`.

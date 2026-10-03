@@ -3,8 +3,11 @@
  *
  * 스위치마다 여러 원시값(미설정, 빈 값, 공백, 대소문자, 잘못된 값, 문서 값)을 자식 프로세스의 환경에
  * 넣고, 실제 사용처가 읽은 값이 describeSwitches의 적용 값과 같은지 본다. 사용처가 모듈 상수나
- * 내보낸 함수로 값을 드러내는 스위치가 대상이다. 나머지 스위치는 사용처 소스에 판독 지점이 있고
- * 대장의 불리언 해석과 같은 비교식인지 소스로 본다.
+ * 내보낸 함수로 값을 드러내는 스위치가 대상이다. 호출 시점에 열거를 읽는 8개는 사용처가 부르는
+ * lib/env-parse.js의 판독 함수와 대장을 같은 원시값 표로 비교하고, 사용처가 그 함수를 부르는지 소스로 본다.
+ * 값을 내보내지 않는 불리언은 사용처 소스에 판독 지점이 있고 대장의 불리언 해석과 같은 비교식인지 소스로 본다.
+ * 환경 변수 도우미(envBool, envEnum)로도 읽는 스위치는 대장이 잘못된 값으로 본 집합이 기동 시 설정 문제
+ * 목록과 같은지도 본다.
  *
  * 작성자: 최진호
  * 작성일: 2026-10-03
@@ -13,11 +16,13 @@
 import { describe, it, before } from "node:test";
 import assert                   from "node:assert/strict";
 import { spawn }                from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path                     from "node:path";
 import { fileURLToPath }        from "node:url";
 
 import { SWITCHES, describeSwitches } from "../../config/switches.js";
+import * as readers                    from "../../lib/env-parse.js";
+import { helperReadNames, listJs }     from "./switch-source-helpers.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -74,15 +79,31 @@ const RUNTIME = {
 };
 
 /**
- * 사용처가 호출 시점에 환경을 직접 비교하고 값을 모듈 밖으로 내보내지 않는 스위치.
- * 불리언은 소스의 비교식이 대장의 기본값과 맞는지 보고, 열거는 판독 지점의 존재만 본다.
+ * 사용처가 호출 시점에 환경을 직접 비교하고 값을 모듈 밖으로 내보내지 않는 불리언 스위치.
+ * 소스의 비교식이 대장의 기본값과 맞는지 본다.
  */
 const SOURCE_ONLY = [
-  "MEMENTO_TOOL_ARGS_VALIDATION", "MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN", "MEMENTO_REMEMBER_ATOMIC", "MEMENTO_WORKSPACE_GATE",
-  "MEMENTO_OAUTH_REDIRECT_CHECK", "MEMENTO_CORS_MODE", "MEMENTO_FRAME_OPTIONS", "MEMENTO_SSE_QUERY_KEY",
-  "MEMENTO_VECTOR_FORCE_INDEX", "MEMENTO_ADMIN_METRICS_SAMPLING", "MEMENTO_METRICS_DEFAULT",
+  "MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN", "MEMENTO_REMEMBER_ATOMIC", "MEMENTO_WORKSPACE_GATE",
   "ENABLE_RECONSOLIDATION", "ENABLE_SPREADING_ACTIVATION", "UPDATE_REQUIRE_SIGNED_TAG"
 ];
+
+/**
+ * 호출 시점에 열거를 읽는 스위치와 사용처가 부르는 판독 함수. 판독 함수는 lib/env-parse.js에 있다.
+ */
+const ENUM_READERS = {
+  MEMENTO_TOOL_ARGS_VALIDATION:   "readToolArgsValidation",
+  MEMENTO_OAUTH_REDIRECT_CHECK:   "readOauthRedirectCheck",
+  MEMENTO_CORS_MODE:              "readCorsMode",
+  MEMENTO_FRAME_OPTIONS:          "readFrameOptions",
+  MEMENTO_SSE_QUERY_KEY:          "readSseQueryKey",
+  MEMENTO_VECTOR_FORCE_INDEX:     "readVectorForceIndex",
+  MEMENTO_ADMIN_METRICS_SAMPLING: "readAdminMetricsSampling",
+  MEMENTO_METRICS_DEFAULT:        "readMetricsDefault"
+};
+
+/** 열거 판독 시험에 쓰는 원시값 표 */
+const ENUM_RAW = [undefined, "", " ", "\t", "garbage", "Deny", "DENY", "Enforce", " enforce", "off", "on", "warn", "enforce",
+  "reflect", "observe", "allowlist", "allow", "deny"];
 
 /** 모든 스위치에 공통으로 넣는 원시값. undefined는 미설정이다. */
 const COMMON_RAW = [undefined, "", " ", "true", "false", "TRUE", "False", "1", "yes", " true", "garbage", "on", "off"];
@@ -100,6 +121,7 @@ const out = {};
 `;
 
 const CHILD_TAIL = `
+out.__issues = cfg.getConfigIssues().map((i) => i.name).join(",");
 process.stdout.write("\\n@@" + JSON.stringify(out) + "\\n");
 process.exit(0);
 `;
@@ -164,7 +186,8 @@ describe("스위치 대장과 사용처 판독", () => {
     const names = new Set(SWITCHES.map((s) => s.name));
     for (const name of Object.keys(RUNTIME)) assert.ok(names.has(name), `${name}은 대장에 없다`);
     const rest = SWITCHES.filter((s) => RUNTIME[s.name] === undefined).map((s) => s.name).sort();
-    assert.deepEqual(rest, [...SOURCE_ONLY].sort(), "판독 식이 없는 스위치와 소스 검사 목록이 다르다");
+    const expected = [...SOURCE_ONLY, ...Object.keys(ENUM_READERS)].sort();
+    assert.deepEqual(rest, expected, "판독 식이 없는 스위치와 소스 검사, 판독 함수 목록이 다르다");
   });
 
   it("모든 원시값에서 사용처가 읽은 값이 대장의 적용 값과 같다", () => {
@@ -181,6 +204,23 @@ describe("스위치 대장과 사용처 판독", () => {
     assert.deepEqual(wrong, []);
   });
 
+  it("도우미로도 읽는 스위치는 대장이 잘못된 값으로 본 집합이 기동 시 설정 문제 목록과 같다", () => {
+    const helperNames = helperReadNames(readFileSync(path.join(ROOT, "lib", "config.js"), "utf8"));
+    const both        = new Set(SWITCHES.map((s) => s.name).filter((n) => helperNames.has(n)));
+    assert.ok(both.size >= 20, `대상이 ${both.size}개뿐이다`);
+    const wrong = [];
+    for (const { env, runtime } of results) {
+      const issues = new Set(runtime.__issues.split(",").filter((n) => both.has(n)));
+      const ledger = new Set(describeSwitches(env).filter((s) => s.invalid && both.has(s.name)).map((s) => s.name));
+      for (const name of both) {
+        if (issues.has(name) !== ledger.has(name)) {
+          wrong.push(`${name} raw=${JSON.stringify(env[name])} 설정 문제 목록=${issues.has(name)} 대장=${ledger.has(name)}`);
+        }
+      }
+    }
+    assert.deepEqual(wrong, []);
+  });
+
   it("후보 원시값이 미설정과 잘못된 값과 허용 값을 모두 포함한다", () => {
     for (const spec of covered) {
       const list = candidates(spec);
@@ -190,17 +230,6 @@ describe("스위치 대장과 사용처 판독", () => {
     }
   });
 });
-
-/** 디렉터리 아래 .js 파일을 재귀로 모은다. */
-function listJs(dir) {
-  const out = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...listJs(full));
-    else if (entry.name.endsWith(".js")) out.push(full);
-  }
-  return out;
-}
 
 describe("소스에서만 확인하는 스위치", () => {
   const files  = [...listJs(path.join(ROOT, "lib")), ...listJs(path.join(ROOT, "config")), path.join(ROOT, "server.js")];
@@ -223,5 +252,29 @@ describe("소스에서만 확인하는 스위치", () => {
         else assert.ok(/===\s*"true"/.test(m[0]) || /!==\s*"true"/.test(m[0]));
       });
     }
+  }
+});
+
+describe("호출 시점에 열거를 읽는 스위치", () => {
+  const files  = [...listJs(path.join(ROOT, "lib")), ...listJs(path.join(ROOT, "config")), path.join(ROOT, "server.js")];
+  const source = files.filter((f) => !f.endsWith(path.join("lib", "env-parse.js"))).map((f) => readFileSync(f, "utf8")).join("\n");
+
+  for (const [name, fn] of Object.entries(ENUM_READERS)) {
+    it(`${name}: 사용처가 ${fn}으로 읽고 환경을 직접 비교하지 않는다`, () => {
+      assert.match(source, new RegExp(`${fn}\\(process\\.env\\)`));
+      assert.doesNotMatch(source, new RegExp(`process\\.env\\.${name}\\b`));
+    });
+
+    it(`${name}: 모든 원시값에서 판독 함수의 값이 대장의 적용 값과 같다`, () => {
+      assert.equal(typeof readers[fn], "function", fn);
+      const wrong = [];
+      for (const raw of ENUM_RAW) {
+        const env   = raw === undefined ? {} : { [name]: raw };
+        const state = describeSwitches(env).find((s) => s.name === name);
+        const got   = readers[fn](env);
+        if (got !== state.value) wrong.push(`raw=${JSON.stringify(raw)} 판독=${got} 대장=${state.value}`);
+      }
+      assert.deepEqual(wrong, []);
+    });
   }
 });

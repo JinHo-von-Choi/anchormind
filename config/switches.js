@@ -20,6 +20,7 @@
  *   ci          true이면 사용처가 대소문자를 구분하지 않고 읽는다
  *   trim        true이면 사용처가 앞뒤 공백을 지우고 읽는다
  *   strictBlank true이면 빈 문자열을 미설정이 아니라 잘못된 값으로 읽는다
+ *   emptyOnly   enum에서 true이면 빈 문자열만 미설정이고 공백만 있는 값은 잘못된 값이다
  *   follows     기본값이 다른 불리언 스위치의 값이고, "true"이면 그 값과 무관하게 켜진다
  *   exception   기본값이 켜짐이 아닌 이유의 분류
  *   category    분류
@@ -69,7 +70,7 @@ export const SWITCHES = Object.freeze([
   boolOff("ENABLE_OPENAPI", "네트워크", "GET /openapi.json 엔드포인트를 연다"),
 
   /* 입력 검증과 쓰기 경로 */
-  enumOf("MEMENTO_TOOL_ARGS_VALIDATION", ["off", "warn", "enforce"], "warn", "쓰기 경로", "tools/call 인자를 inputSchema와 대조하는 방식", { off: ["off"], invalid: "enforce" }),
+  enumOf("MEMENTO_TOOL_ARGS_VALIDATION", ["off", "warn", "enforce"], "warn", "쓰기 경로", "tools/call 인자를 inputSchema와 대조하는 방식", { off: ["off"], invalid: "enforce", emptyOnly: true }),
   boolOff("MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN", "쓰기 경로", "inputSchema에 없는 인자를 위반으로 보지 않는다"),
   boolOff("MEMENTO_REMEMBER_ATOMIC", "쓰기 경로", "remember의 한도 확인과 저장을 한 트랜잭션으로 묶는다"),
   boolOff("MEMENTO_REMEMBER_DUPLICATE_GUARD", "쓰기 경로", "remember 중복 적중 시 기존 파편을 고치지 않고 상태만 알린다"),
@@ -153,7 +154,7 @@ function normalizeRaw(raw, spec) {
 function classify(text, spec) {
   if (spec.strictBlank && text !== undefined && text.trim() === "") return { status: "invalid" };
   if (spec.kind === "boolean") return classifyBool(text);
-  return classifyEnum(text, [...spec.values, spec.default]);
+  return classifyEnum(text, spec.values, { emptyOnly: Boolean(spec.emptyOnly) });
 }
 
 /**

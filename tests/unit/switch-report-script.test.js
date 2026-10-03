@@ -21,8 +21,8 @@ import { SWITCHES } from "../../config/switches.js";
 const SCRIPT = fileURLToPath(new URL("../../scripts/switch-report.mjs", import.meta.url));
 
 /** 부모 환경을 넘기지 않고 지정한 변수만 가진 자식 환경으로 실행한다. */
-function run(env, { cwd } = {}) {
-  return spawnSync(process.execPath, [SCRIPT], {
+function run(env, { cwd, args = [] } = {}) {
+  return spawnSync(process.execPath, [SCRIPT, ...args], {
     cwd,
     env     : { PATH: process.env.PATH, ...env },
     encoding: "utf8"
@@ -67,5 +67,19 @@ describe("switch-report.mjs", () => {
     assert.equal(res.status, 0, res.stderr);
     assert.ok(!/_SECRET_/.test(res.stdout + res.stderr));
     assert.ok(res.stdout.includes("값 오류"));
+  });
+
+  it("--strict이면 잘못된 값이 있을 때만 표를 출력한 뒤 1로 끝난다", () => {
+    const bad = run({ MEMENTO_CORS_MODE: "bogus_SECRET_1" }, { cwd: dir, args: ["--strict"] });
+    assert.equal(bad.status, 1);
+    assert.ok(bad.stdout.includes("| 스위치 |"));
+    assert.ok(bad.stderr.includes("MEMENTO_CORS_MODE"));
+    assert.ok(!/_SECRET_/.test(bad.stdout + bad.stderr));
+    assert.equal(run({}, { cwd: dir, args: ["--strict"] }).status, 0);
+    assert.equal(run({ MEMENTO_WORKSPACE_GATE: "true" }, { cwd: dir, args: ["--strict"] }).status, 0);
+  });
+
+  it("옵션이 없으면 잘못된 값이 있어도 0으로 끝난다", () => {
+    assert.equal(run({ MEMENTO_CORS_MODE: "bogus" }, { cwd: dir }).status, 0);
   });
 });
