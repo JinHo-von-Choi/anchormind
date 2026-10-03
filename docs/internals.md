@@ -288,7 +288,7 @@ API 키 원문을 client_id로 등록한 기존 Redis 토큰은 `bound_key_id=nu
 
 ### initialize 요청 IP rate limit 선차단
 
-`handleMcpPost`는 무세션(`!sessionId`) `initialize` 요청에 한해 `_createInitializeSession()` 호출(및 그 내부의 인증·`api_keys` 조회)보다 먼저 IP 기반 rate limit을 적용한다. `rateLimiter.allow(clientIp, null)`이 false를 반환하면 즉시 429(`Retry-After` 헤더 포함)를 반환하고 `recordInitializeIpRateLimited()`로 `mcp_initialize_ip_rate_limited_total` 카운터를 증가시킨다. 미인증 initialize 폭주가 DB 조회 단계까지 도달하는 경로를 차단하는 것이 목적이다. `GET /sse`(레거시 SSE 연결)도 같은 IP 버킷(`RATE_LIMIT_PER_IP`)으로 요청 제한을 받으며 초과하면 429와 `Retry-After`를 돌려준다.
+`handleMcpPost`는 무세션(`!sessionId`) `initialize` 요청에 한해 `_createInitializeSession()` 호출(및 그 내부의 인증·`api_keys` 조회)보다 먼저 IP 기반 rate limit을 적용한다. `rateLimiter.allow(clientIp, null)`이 false를 반환하면 즉시 429(`Retry-After` 헤더 포함)를 반환하고 `recordInitializeIpRateLimited()`로 `mcp_initialize_ip_rate_limited_total` 카운터를 증가시킨다. 미인증 initialize 폭주가 DB 조회 단계까지 도달하는 경로를 차단하는 것이 목적이다. `GET /sse`(레거시 SSE 연결)도 같은 IP 버킷(`RATE_LIMIT_PER_IP`)으로 요청 제한을 받으며 초과하면 429와 `Retry-After`를 돌려주고, 거절마다 `mcp_sse_rate_limited_total`(label 없음) 카운터를 증가시키며 클라이언트 값을 담지 않은 경고 한 줄을 남긴다.
 
 이 선차단은 `keyId=null`인 IP 버킷을 사용하며, `DualRateLimiter`의 IP 버킷과 key 버킷은 서로 독립적이다(같은 IP라도 인증된 key 버킷은 별도로 소진). 선차단을 통과한 initialize 요청은 이후 일반 rate limit 분기(`!isInitializeRequest(msg) && !rateLimiter.allow(clientIp, sessionKeyId)`)에서 제외되어 동일 IP 버킷을 이중으로 소비하지 않는다.
 

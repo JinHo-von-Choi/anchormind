@@ -23,6 +23,8 @@ mock.module("../../lib/auth.js", {
 });
 
 const { handleLegacySseGet }   = await import("../../lib/handlers/sse-handler.js");
+const { register }             = await import("../../lib/metrics.js");
+const { default: logger }      = await import("../../lib/logger.js");
 const { DualRateLimiter }      = await import("../../lib/rate-limiter.js");
 const { RATE_LIMIT_WINDOW_MS } = await import("../../lib/config.js");
 
@@ -58,6 +60,42 @@ describe("GET /sse IP 기준 제한", () => {
     }
     assert.deepEqual(statuses, [401, 401, 401, 429, 429]);
     assert.equal(last.headers.get("retry-after"), String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)));
+  });
+
+  it("429마다 mcp_sse_rate_limited_total이 1씩 늘고 응답 본문과 상태는 그대로다", async (t) => {
+    const counter = async () => (await register.getSingleMetric("mcp_sse_rate_limited_total").get()).values[0]?.value ?? 0;
+    const local   = new DualRateLimiter({ windowMs: 60_000, perIp: 1, perKey: 100 });
+    const srv     = http.createServer((req, res) => { handleLegacySseGet(req, res, local); });
+    await new Promise((resolve) => srv.listen(0, "127.0.0.1", resolve));
+    const url     = `http://127.0.0.1:${srv.address().port}/sse?accessKey=wrong`;
+    const all     = [];
+    const logged  = () => all.filter((line) => /rate limit/.test(line));
+    const warn    = t.mock.method(logger, "warn", (...args) => { all.push(JSON.stringify(args)); return logger; });
+    const headers = { "x-forwarded-for": "203.0.113.77", "user-agent": "marker-agent-7" };
+    try {
+      const startCount = await counter();
+      const first      = await fetch(url, { headers });
+      await first.text();
+      assert.equal(first.status, 401);
+      assert.equal(await counter(), startCount);
+      assert.equal(logged().length, 0);
+
+      for (let i = 1; i <= 2; i++) {
+        const res = await fetch(url, { headers });
+        assert.equal(res.status, 429);
+        assert.equal(await res.text(), "Too Many Requests");
+        assert.equal(await counter(), startCount + i);
+        assert.equal(logged().length, i);
+      }
+      for (const line of all) {
+        assert.doesNotMatch(line, /203\.0\.113\.77|127\.0\.0\.1|marker-agent-7|accessKey|wrong/);
+      }
+    } finally {
+      warn.mock.restore();
+      local.destroy();
+      srv.closeAllConnections();
+      await new Promise((resolve) => srv.close(resolve));
+    }
   });
 
   it("limiter를 넘기지 않으면 제한 없이 기존 인증 판정만 수행한다", async () => {
