@@ -91,6 +91,13 @@ describe("authorizeAdminRoute", () => {
     assert.equal(denied.res.statusCode, 403);
   });
 
+  it("세션 id 형식이 아닌 경로(GET /sessions/purge)는 /sessions/:id의 능력을 물려받지 않고 owner만 통과한다", () => {
+    assert.equal(authorize(session("viewer"), "GET", `/sessions/${SAMPLE}`).ok, true);
+    assert.equal(authorize(session("viewer"), "GET", "/sessions/purge").ok, false);
+    assert.equal(authorize(session("admin"), "DELETE", "/sessions/purge").ok, false);
+    assert.equal(authorize(masterPrincipal(), "GET", "/sessions/purge").ok, true);
+  });
+
   it("라우트 표의 능력으로 판정한다", () => {
     assert.equal(authorize(session("viewer"), "GET", "/stats").ok, true);
     assert.equal(authorize(session("viewer"), "GET", "/keys").ok, false);

@@ -21,7 +21,9 @@ import path             from "node:path";
 
 import { ROOT } from "./_source-scan.js";
 import { SAMPLE, routePairs, uncoveredRoutes } from "./_admin-checks.js";
-import { ADMIN_ROUTES, ROUTE_SCOPES, findAdminRoute, compileRoutePath, isRateLimitedAdminRequest } from "../../lib/admin/admin-route-table.js";
+import {
+  ADMIN_ROUTES, ROUTE_SCOPES, findAdminRoute, compileRoutePath, isRateLimitedAdminRequest, RouteTableError
+} from "../../lib/admin/admin-route-table.js";
 import { CAPABILITIES, CAP_PUBLIC, CAP_AUTHENTICATED } from "../../lib/admin/capabilities.js";
 import { isValidAuditAction } from "../../lib/logging/audit-event.js";
 
@@ -75,6 +77,14 @@ describe("관리 라우트 표 항목 형식", () => {
     }
   });
 
+  it("형식이 붙은 경로 변수는 그 형식의 값만 받고, 같은 자리의 글자 그대로 조각은 받지 않는다", () => {
+    assert.equal(findAdminRoute("GET", `/sessions/${SAMPLE}`)?.entry.path, "/sessions/:id(uuid)");
+    for (const method of ["GET", "DELETE"]) assert.equal(findAdminRoute(method, "/sessions/purge"), null, method);
+    assert.equal(findAdminRoute("POST", "/sessions/purge/reflect"), null);
+    assert.throws(() => compileRoutePath("/x/:id(nope)"), RouteTableError);
+    assert.throws(() => compileRoutePath("/x/:i-d"), RouteTableError);
+  });
+
   it("처리 모듈 파일이 있다", () => {
     for (const m of routeModules) assert.ok(existsSync(path.join(ADMIN_DIR, `${m}.js`)), m);
   });
@@ -125,6 +135,11 @@ describe("라우트 대응 검사의 변형 소스 시험", () => {
   it("기존 경로 아래 새 경로(POST /sessions/purge)는 /sessions/:id에 흡수되지 않고 누락으로 잡힌다", () => {
     const out = check(inject("  if (req.method === \"POST\" && url.pathname === `${SESSION_PREFIX}/purge`) { return true; }"));
     assert.ok(out.some((m) => m.includes("POST /sessions/purge")), out.join("; "));
+  });
+
+  it("같은 메서드의 변수 경로 자리에 새 글자 그대로 경로(GET /sessions/purge)를 더해도 /sessions/:id에 흡수되지 않는다", () => {
+    const out = check(inject("  if (req.method === \"GET\" && url.pathname === `${SESSION_PREFIX}/purge`) { return true; }"));
+    assert.ok(out.some((m) => m.includes("GET /sessions/purge")), out.join("; "));
   });
 
   it("같은 경로에 다른 메서드를 더하면 그 메서드의 항목이 없어 누락으로 잡힌다", () => {
