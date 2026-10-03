@@ -123,7 +123,7 @@ node bin/memento.js benchmark --key-scope corpus --repeat 3
 
 기준선과 비교하려면 `--baseline scripts/baseline-recall.json`을 붙인다. 회귀 판정은 이 비교로 한다.
 
-기준선은 isolated 모드, `Xenova/bge-m3`(1024차원), `--repeat 3`으로 새로 마이그레이션한 DB에서 만든다. `--save-baseline`은 임베딩 provider, 모델, 차원을 함께 기록하고, `--baseline` 비교 시 모델이 다르면 경고한다. 기준선 파일에 `embedding` 필드가 없으면 경고를 내지 않으므로, 경고가 없다는 사실이 모델이 같다는 뜻은 아니다. 임베딩된 파편이 0건인 실행은 `--save-baseline`을 거부하고 종료 코드 1로 끝난다. 회귀 판정 허용 하락폭은 Recall과 MRR 2pp, p95 지연 15%다.
+기준선은 isolated 모드, `Xenova/bge-m3`(1024차원), `--repeat 3`으로 새로 마이그레이션한 DB에서 만든다. `--save-baseline`은 임베딩 provider, 모델, 차원을 함께 기록하고, `--baseline` 비교 시 모델이 다르면 경고한다. 기준선 파일에 `embedding` 필드가 없으면 경고를 내지 않으므로, 경고가 없다는 사실이 모델이 같다는 뜻은 아니다. 임베딩된 파편이 0건인 실행은 `--save-baseline`을 거부하고 종료 코드 1로 끝난다. `--no-seed` 실행은 파편을 적재하지도 임베딩하지도 않으므로 기준선으로 저장할 수 없고, 거부 메시지가 이를 밝힌다. 회귀 판정 허용 하락폭은 Recall과 MRR 2pp, p95 지연 15%다.
 
 `scripts/baseline-recall.json`은 저장된 기준선이다. 임베딩 모델을 지정해 아래 절차를 실행하고 `--save-baseline`으로 덮어써서 갱신한다. 아래 표는 2026-10-03에 isolated 새 DB, `Xenova/bge-m3`, 골드셋 100문항, `--repeat 3`으로 측정한 값이며 저장된 기준선 파일의 내용과는 별개다.
 
