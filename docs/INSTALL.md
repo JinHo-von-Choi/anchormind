@@ -172,6 +172,7 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-049-align-synthetic-query-
 psql $DATABASE_URL -f lib/memory/migrations/migration-050-dedup-scope-workspace.sql                 # 키와 workspace 단위 content_hash 유일 색인 (운영 DB는 online-index로 먼저 생성)
 psql $DATABASE_URL -f lib/memory/migrations/migration-051-search-events-budget.sql                   # search_events 예산 선택 열(candidate_count, budget_kept) 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-052-outbox-events.sql                         # outbox_events 표 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-057-fragment-provenance.sql                    # 파편 출처, 신뢰 등급, 검토 상태 열
 ```
 
 migration-046은 결번이다. 수동 적용보다 `npm run migrate`를 권장한다(적용 이력과 opclass 치환을 자동 처리).

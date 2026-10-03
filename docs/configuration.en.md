@@ -1120,6 +1120,7 @@ Run `npm run migrate` to execute unapplied migrations in order. History is manag
 | 050 | migration-050-dedup-scope-workspace.sql | Adds the per key and workspace content_hash unique indexes `uq_frag_hash_ws_per_key` and `uq_frag_hash_ws_master`. Production databases create them first with `scripts/ops/online-index.mjs`; the key-scope indexes are dropped in an operational step ([operations/online-migration.md](operations/online-migration.md#중복-판정-범위-전환)) |
 | 051 | migration-051-search-events-budget.sql | `search_events.candidate_count`, `budget_kept` (candidate count and kept count of recall budget selection, nullable). Searches that do not go through budget selection record NULL |
 | 052 | migration-052-outbox-events.sql | `outbox_events` table (transactional outbox: topic, aggregate_id, payload, available_at, attempts, processed_at, last_error, dead_at, claim_token) with partial indexes for pending, processed and dead-letter rows |
+| 057 | migration-057-fragment-provenance.sql | `fragments.origin`, `observed_client`, `trust_tier` (smallint), `review_state`, `review_reason` (all nullable without defaults, no table rewrite) and CHECK constraints on `origin` and `trust_tier` (NOT VALID, applied to newly written rows only). Existing rows are not backfilled and a NULL `trust_tier` is read as 2 in code (`MEMENTO_PROVENANCE`). `origin` is the origin claimed by the client and differs in role from `source` (label) and `assertion_status` (verification state) |
 
 ---
 

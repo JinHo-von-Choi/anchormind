@@ -279,6 +279,9 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-051-search-events-budget.s
 
 # outbox_events table
 psql $DATABASE_URL -f lib/memory/migrations/migration-052-outbox-events.sql
+
+# Fragment provenance, trust tier and review state columns
+psql $DATABASE_URL -f lib/memory/migrations/migration-057-fragment-provenance.sql
 ```
 
 There is no migration 046. Prefer `npm run migrate`, which records applied files and substitutes the vector opclass automatically.

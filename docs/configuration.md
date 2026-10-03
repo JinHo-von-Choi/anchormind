@@ -1195,6 +1195,7 @@ EMBEDDING_DIMENSIONS=768
 | 050 | migration-050-dedup-scope-workspace.sql | 키와 workspace 단위 content_hash 유일 색인 `uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master` 추가. 운영 DB는 `scripts/ops/online-index.mjs`로 먼저 만들고, 키 범위 색인은 운영 단계로 지운다([operations/online-migration.md](operations/online-migration.md#중복-판정-범위-전환)) |
 | 051 | migration-051-search-events-budget.sql | `search_events.candidate_count`, `budget_kept`(recall 예산 선택의 후보 수와 선택 수, nullable). 예산 선택을 거치지 않은 검색은 NULL |
 | 052 | migration-052-outbox-events.sql | `outbox_events` 표(트랜잭션 outbox: topic, aggregate_id, payload, available_at, attempts, processed_at, last_error, dead_at, claim_token)와 대기, 완료, dead-letter 부분 색인 |
+| 057 | migration-057-fragment-provenance.sql | `fragments.origin`, `observed_client`, `trust_tier`(smallint), `review_state`, `review_reason`(모두 기본값 없는 nullable, 표 재작성 없음)과 `origin`, `trust_tier` CHECK 제약(NOT VALID, 새로 쓰는 행에만 적용). 기존 행은 백필하지 않으며 NULL `trust_tier`는 코드에서 2로 해석한다(`MEMENTO_PROVENANCE`). `origin`은 클라이언트 주장 출처로 `source`(라벨), `assertion_status`(검증 상태)와 역할이 다르다 |
 
 ---
 
