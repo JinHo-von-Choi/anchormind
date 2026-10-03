@@ -56,6 +56,7 @@ const { FragmentSearch }                       = await import("../../lib/memory/
 const { ConflictResolver } = await import("../../lib/memory/write/ConflictResolver.js");
 const { MemoryRecaller, computeRecallScore }   = await import("../../lib/memory/processors/MemoryRecaller.js");
 const { MEMORY_CONFIG }                        = await import("../../config/memory.js");
+const { markLexicalOnly, lexicalOnlyLast, LEXICAL_ONLY_TIER } = await import("../../lib/memory/read/LexicalSearch.js");
 
 const NOW = new Date().toISOString();
 const DAY = 86400000;
@@ -201,6 +202,51 @@ describe("recall 최종 점수와 순서", () => {
       assert.ok(withLex.includes("lex-1"));
     });
   }
+
+  /** 질의 낱말을 본문에 모두 담은 중요도 높은 어휘 단독 후보. 최종 점수만 보면 키워드 일치 항목보다 앞선다. */
+  const strongLexical = (id) => frag({
+    id, content: "배포 절차 배포 절차 점검", keywords: [], importance: 1, _lexicalScore: 1, _rrfScore: 0.02, _lexicalOnly: true
+  });
+  const keywordHits = Array.from({ length: 6 }, (_, i) => frag({
+    id: `kw-${i}`, keywords: ["배포"], importance: 0.3, created_at: new Date(Date.parse(NOW) - (i + 1) * DAY).toISOString(), _rrfScore: 0.01
+  }));
+
+  for (const mode of ["on", "off"]) {
+    it(`${mode}: 어휘 단독 후보는 키워드 일치 항목을 상위 5개에서 밀어내지 않는다`, async () => {
+      process.env.MEMENTO_RANK_BEFORE_BUDGET = mode;
+      const params  = { text: "배포 절차", keywords: ["배포"], tokenBudget: 5000, includeLinks: false, excludeSeen: false };
+      const off     = (await recallerWith(keywordHits).recall({ ...params })).fragments.map(f => f.id).slice(0, 5);
+      const on      = (await recallerWith([...keywordHits, strongLexical("lex-a"), strongLexical("lex-b")]).recall({ ...params }))
+        .fragments.map(f => f.id);
+      assert.deepEqual(on.slice(0, 5), off);
+      assert.deepEqual(on.slice(-2).sort(), ["lex-a", "lex-b"]);
+    });
+
+    it(`${mode}: 다른 채널 후보가 5개보다 적으면 어휘 단독 후보가 남은 자리를 채운다`, async () => {
+      process.env.MEMENTO_RANK_BEFORE_BUDGET = mode;
+      const params = { text: "배포 절차", keywords: ["배포"], tokenBudget: 5000, includeLinks: false, excludeSeen: false };
+      const on     = (await recallerWith([...keywordHits.slice(0, 2), strongLexical("lex-a"), strongLexical("lex-b")]).recall({ ...params }))
+        .fragments.map(f => f.id);
+      assert.deepEqual(on.slice(0, 2).sort(), ["kw-0", "kw-1"]);
+      assert.deepEqual(on.slice(2).sort(), ["lex-a", "lex-b"]);
+      assert.ok(on.every(id => typeof id === "string"));
+    });
+  }
+
+  it("RRF 병합은 어휘 계층에만 있는 후보에만 표지를 달고 다른 계층과 함께 찾은 후보에는 달지 않는다", () => {
+    const merged = [frag({ id: "both" }), frag({ id: "lex-only" }), frag({ id: "kw-only" })];
+    markLexicalOnly(merged, [frag({ id: "both" }), frag({ id: "lex-only" })], [["kw-only"], [frag({ id: "both" })]]);
+    assert.deepEqual(merged.map(f => f._lexicalOnly === true), [false, true, false]);
+  });
+
+  it("어휘 단독 계층은 다른 후보끼리와 어휘 단독 후보끼리의 순서를 바꾸지 않는다", () => {
+    const rank = lexicalOnlyLast(f => f.score);
+    const list = [
+      { id: "a", score: 3 }, { id: "x", score: 9, _lexicalOnly: true }, { id: "b", score: 1 }, { id: "y", score: 5, _lexicalOnly: true }
+    ];
+    assert.deepEqual([...list].sort((p, q) => rank(q) - rank(p)).map(f => f.id), ["a", "b", "x", "y"]);
+    assert.ok(LEXICAL_ONLY_TIER > 1000);
+  });
 
   it("recall은 검색 질의에 어휘 채널 플래그를 켠다", async () => {
     const seen = [];
