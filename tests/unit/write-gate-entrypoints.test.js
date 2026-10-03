@@ -66,13 +66,13 @@ const { MemoryRememberer }       = await import("../../lib/memory/processors/Mem
 const { FragmentFactory }        = await import("../../lib/memory/write/FragmentFactory.js");
 const { BatchRememberProcessor } = await import("../../lib/memory/write/BatchRememberProcessor.js");
 const { ReflectProcessor }       = await import("../../lib/memory/processors/ReflectProcessor.js");
-const { WriteGate }              = await import("../../lib/memory/write/WriteGate.js");
+const { WriteGate, WriteInputError } = await import("../../lib/memory/write/WriteGate.js");
 const { autoReflect }            = await import("../../lib/memory/processors/AutoReflect.js");
 const { handleMemory }           = await import("../../lib/admin/admin-memory.js");
 const { handleImport }           = await import("../../lib/admin/admin-export.js");
 const { importRows }             = await import("../../lib/cli/import.js");
 const { rememberLocal }          = await import("../../lib/cli/remember.js");
-const { importFragment, IMPORT_DEFAULTS, buildImportFragment } = await import("../../lib/memory/write/FragmentImporter.js");
+const { checkImportRow, writeImportRow, IMPORT_DEFAULTS, buildImportFragment } = await import("../../lib/memory/write/FragmentImporter.js");
 const { teardownTestResources }  = await import("../_lifecycle.js");
 
 after(async () => { await teardownTestResources(); });
@@ -138,6 +138,14 @@ describe("MCP remember", () => {
   }
 });
 
+describe("MCP remember 마스킹 후 품질 판정", () => {
+  it("원문이 품질 기준을 통과하면 마스킹 결과가 URL만 남아도 저장한다", async () => {
+    const { rememberer, inserted } = makeRememberer();
+    await rememberer.remember({ content: "https://a.example/010 1234 5678", topic: "ops", type: "fact" });
+    assert.equal(inserted[0]?.content, "https://a.example/[REDACTED_PHONE]");
+  });
+});
+
 describe("MCP amend", () => {
   for (const [label, content, secret, marker] of MASKING_TABLE) {
     it(`${label} 원문을 마스킹해 갱신한다`, async () => {
@@ -180,6 +188,21 @@ describe("MCP amend", () => {
       (err) => err.name === "SymbolicPolicyViolationError"
     );
     assert.equal(updated.length, 0);
+  });
+
+  it("저장 상한을 넘는 기존 행의 메타데이터만 바꾸면 본문을 건드리지 않고 거부하지 않는다", async () => {
+    const legacy = { ...EXISTING, content: "가".repeat(524), type: "decision" };
+    const { rememberer, updated } = makeRememberer({
+      existing           : legacy,
+      policyRules        : { check: (f) => (f.type === "decision" ? [{ rule: "decisionHasRationale", severity: "medium" }] : []) },
+      policyGatingEnabled: true,
+      getHardGate        : async () => true
+    });
+    const result = await rememberer.amend({ id: legacy.id, importance: 0.8, _keyId: null });
+    assert.equal(result.updated, true);
+    assert.equal(Object.hasOwn(updated[0], "content"), false);
+    assert.deepEqual(Object.keys(updated[0]), ["importance"]);
+    assert.equal(result.validation_warnings, undefined);
   });
 
   it("위반이 없으면 응답 형태가 그대로다", async () => {
@@ -317,7 +340,7 @@ describe("MCP batch_remember", () => {
     assert.equal(contents.length, 1);
   });
 
-  it("MEMENTO_WRITE_GATE=off이면 기존처럼 마스킹만 하고 정책 경고는 없다", async () => {
+  it("MEMENTO_WRITE_GATE=off이면 마스킹만 하고 정책 경고는 없다", async () => {
     process.env.MEMENTO_WRITE_GATE = "off";
     const contents = [];
     const proc     = makeBatchProcessor(contents, () => new WriteGate({ policyRules: decisionRule, policyGatingEnabled: true }));
@@ -411,10 +434,11 @@ describe("admin import", () => {
 });
 
 /** CLI 가져오기 의존성 */
-function cliImportDeps({ inserted = [], dryRun = false } = {}) {
+function cliImportDeps({ inserted = [], dryRun = false, order = [] } = {}) {
   return {
-    importFragment,
-    withTransaction: (_pool, fn) => fn({ query: async () => ({ rows: [] }) }),
+    checkImportRow : (...a) => { order.push("gate"); return checkImportRow(...a); },
+    writeImportRow,
+    withTransaction: (_pool, fn) => { order.push("transaction"); return fn({ query: async () => ({ rows: [] }) }); },
     pool    : {},
     entry   : "cli_import",
     gate    : new WriteGate(),
@@ -480,5 +504,88 @@ describe("buildImportFragment", () => {
   it("id가 없으면 새 id를 만든다", () => {
     const built = buildImportFragment({ content: "본문", topic: "t" }, IMPORT_DEFAULTS.cli);
     assert.match(built.id, /^[0-9a-f-]{36}$/);
+  });
+});
+
+describe("가져오기 행 오류 격리", () => {
+  beforeEach(() => {
+    writerHolder.inserted = [];
+    writerHolder.idFor    = (f) => f.id;
+  });
+
+  it("admin 가져오기는 형식이 잘못된 행을 skipped로 세고 나머지를 기록한다", async () => {
+    const res = fakeRes();
+    await handleImport(jsonReq("POST", { fragments: [
+      null,
+      { content: "키워드 형식이 잘못된 행이다", topic: "ops", type: "fact", keywords: [{ bad: true }] },
+      { content: 12345, topic: "ops", type: "fact" },
+      { content: "정상적으로 가져오는 본문 하나", topic: "ops", type: "fact" }
+    ] }), res, new URL(`http://localhost${ADMIN_BASE}/import`));
+    assert.equal(res.statusCode, 200, res.body);
+    assert.deepEqual(JSON.parse(res.body), { imported: 1, skipped: 3 });
+  });
+
+  it("admin 가져오기는 같은 id가 이미 있는 행을 skipped로 세고 응답을 끝까지 돌려준다", async () => {
+    writerHolder.idFor = (f) => {
+      if (f.id === "dup-id") throw Object.assign(new Error("duplicate key value violates unique constraint"), { code: "23505" });
+      return f.id;
+    };
+    const res = fakeRes();
+    await handleImport(jsonReq("POST", { fragments: [
+      { id: "dup-id", content: "같은 id로 다른 본문을 가져온다", topic: "ops", type: "fact" },
+      { id: "new-id", content: "새 id로 가져오는 본문 하나다", topic: "ops", type: "fact" }
+    ] }), res, new URL(`http://localhost${ADMIN_BASE}/import`));
+    assert.equal(res.statusCode, 200, res.body);
+    assert.deepEqual(JSON.parse(res.body), { imported: 1, skipped: 1 });
+  });
+
+  it("CLI 가져오기는 관문을 트랜잭션 전에 거치고 잘못된 행은 errors로 센다", async () => {
+    const order  = [];
+    const lines  = [
+      JSON.stringify({ content: "키워드 형식이 잘못된 행이다", topic: "ops", keywords: [{ bad: true }] }),
+      JSON.stringify({ content: "정상적으로 가져오는 본문 하나", topic: "ops" })
+    ];
+    const counts = await importRows(lines, cliImportDeps({ order }));
+    assert.deepEqual([counts.imported, counts.errors], [1, 1]);
+    assert.deepEqual(order, ["gate", "gate", "transaction"]);
+  });
+});
+
+describe("reflect 개별 저장 경로의 관문 값", () => {
+  it("관문을 거친 topic, keywords, goal, outcome, contextSummary로 기록한다", async () => {
+    const inserted = [];
+    const gate     = new WriteGate({
+      steps: {
+        sensitive: (state) => ({
+          ...state,
+          fields: { ...state.fields, topic: "gated-topic", goal: "gated-goal", outcome: "gated-outcome", contextSummary: "gated-summary", keywords: ["gated"] }
+        })
+      }
+    });
+    const reflect = makeReflectProcessor({ inserted, writeGate: () => gate });
+    await reflect.process({ decisions: ["Redis 캐시 레이어를 도입하기로 결정했다, 근거는 조회 부하다"], agentId: "a1" });
+    assert.equal(inserted.length, 1);
+    const [f] = inserted;
+    assert.deepEqual([f.topic, f.goal, f.outcome, f.context_summary, f.keywords], ["gated-topic", "gated-goal", "gated-outcome", "gated-summary", ["gated"]]);
+  });
+
+  it("관문이 거부한 항목은 그룹을 재시도 대상으로 남기지 않는다", async () => {
+    const index    = { index: async () => {}, evictWorkingMemoryItems: mock.fn(async () => 0) };
+    const reflect  = new ReflectProcessor({
+      store        : { insert: async (f) => f.id },
+      index,
+      factory      : new FragmentFactory(),
+      sessionLinker: {
+        consolidateSessionFragments: async () => ([{
+          workspace: null, topic: null, caseId: null, summary: "세션 통합 요약 내용 하나", decisions: [],
+          errors_resolved: [], new_procedures: [], open_questions: [], sourceFragmentIds: [], wmItemIds: ["wm-1"]
+        }]),
+        autoLinkSessionFragments: async () => ({ linkSuggestions: [] })
+      },
+      remember : async () => ({ id: null }),
+      writeGate: () => new WriteGate({ steps: { normalize: () => { throw new WriteInputError("Content too short: length < 10 and word count < 3"); } } })
+    });
+    await reflect.process({ sessionId: "sess-reject", agentId: "a1" });
+    assert.equal(index.evictWorkingMemoryItems.mock.callCount(), 1, "거부된 그룹의 작업 기억도 걷어 낸다");
   });
 });

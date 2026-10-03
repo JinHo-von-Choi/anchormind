@@ -95,12 +95,13 @@ describe("M6: import.js", () => {
   });
 
   it("--idempotent 플래그: 같은 id로 거부된 행은 skipped, 플래그가 없으면 errors로 센다", async () => {
-    const { importRows }                    = await import("../../lib/cli/import.js");
-    const { importFragment, IMPORT_DEFAULTS } = await import("../../lib/memory/write/FragmentImporter.js");
-    const { WriteGate }                     = await import("../../lib/memory/write/WriteGate.js");
+    const { importRows }                                      = await import("../../lib/cli/import.js");
+    const { checkImportRow, writeImportRow, IMPORT_DEFAULTS } = await import("../../lib/memory/write/FragmentImporter.js");
+    const { WriteGate }                                       = await import("../../lib/memory/write/WriteGate.js");
     const conflict = Object.assign(new Error("duplicate key value violates unique constraint"), { code: "23505" });
     const deps = (idempotent) => ({
-      importFragment,
+      checkImportRow,
+      writeImportRow,
       withTransaction: (_pool, fn) => fn({}),
       pool    : {},
       entry   : "cli_import",

@@ -1,9 +1,11 @@
 /**
- * Unit tests: split 자식 파편이 본문 기반 keywords와 함께 저장되는지 검증한다.
+ * 통합 분할 자식의 의미 쓰기 관문 시험
  *
- * 빈 keywords로 저장되면 keywords 배열 교집합(&&)을 쓰는 검색 경로에서
- * 영구히 조회되지 않으므로, 정상 저장 경로(FragmentFactory)와 동일한
- * 추출 규칙이 적용되어야 한다.
+ * 작성자: 최진호
+ * 작성일: 2026-10-03
+ *
+ * LLM이 쓴 분할 자식은 부모의 키와 workspace로 의미 쓰기 관문을 거쳐 마스킹과 길이 상한을 받는다.
+ * 20자 품질 판정과 분할 결과 형태(자식 수, 출처, 키워드)는 그대로다.
  */
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
@@ -64,10 +66,11 @@ mock.module("../../lib/logger.js", {
   }
 });
 
+const skips = [];
 mock.module("../../lib/memory/consolidate/split-metrics.js", {
   namedExports: {
     recordSplitStepFailure: () => {},
-    recordSplitSkip       : () => {},
+    recordSplitSkip       : (reason) => { skips.push(reason); },
     splitSkippedTotal     : { inc: () => {} }
   }
 });
@@ -94,6 +97,19 @@ mock.module("../../config/memory.js", {
 });
 
 const { ConsolidatorGC } = await import("../../lib/memory/consolidate/ConsolidatorGC.js");
+const { WriteGate, WriteInputError } = await import("../../lib/memory/write/WriteGate.js");
+
+/** 넘어온 요청을 기록하는 관문 */
+class RecordingGate extends WriteGate {
+  constructor(requests, deps) {
+    super(deps);
+    this.requests = requests;
+  }
+  async check(request) {
+    this.requests.push(request);
+    return super.check(request);
+  }
+}
 
 function makeStubs() {
   const inserted = [];
@@ -108,7 +124,7 @@ function makeStubs() {
         return {
           rows: [{
             id: "parent-1", content: "z".repeat(400), topic: "infra",
-            type: "fact", importance: 0.9, agent_id: "default", key_id: null
+            type: "fact", importance: 0.9, agent_id: "default", key_id: "key-7", workspace: "ws-1"
           }],
           rowCount: 1
         };
@@ -119,34 +135,68 @@ function makeStubs() {
   return { store, pool, inserted };
 }
 
-describe("split 자식 keywords 생성", () => {
-  it("자식마다 본문에서 추출한 keywords를 채워 저장한다", async () => {
+describe("통합 분할 자식의 의미 쓰기 관문", () => {
+  it("비밀 형태 문자열을 마스킹하고 키워드도 마스킹된 본문에서 뽑는다", async () => {
     llmReturn = [
-      "nginx 업스트림 커넥션 풀이 고갈되어 502 응답률이 상승했다",
+      "장애 보고는 담당자 ops-team@example.com 메일로 접수했다",
       "worker_connections 값을 8192로 올린 뒤 복구가 완료되었다"
     ];
     const { store, pool, inserted } = makeStubs();
-    await new ConsolidatorGC(store).splitLongFragments({ pool });
+    await new ConsolidatorGC(store, { writeGate: () => new WriteGate() }).splitLongFragments({ pool });
 
     assert.equal(inserted.length, 2);
-    for (const child of inserted) {
-      assert.ok(Array.isArray(child.keywords), "keywords는 배열이어야 한다");
-      assert.ok(child.keywords.length > 0, `빈 keywords로 저장됨: ${child.content}`);
-    }
+    assert.ok(inserted[0].content.includes("[REDACTED_EMAIL]"), inserted[0].content);
+    assert.ok(!inserted[0].content.includes("ops-team@example.com"));
+    assert.ok(!inserted[0].keywords.some(k => k.includes("example")), inserted[0].keywords.join(","));
+    assert.equal(inserted[0].source, "split:parent-1");
   });
 
-  it("추출된 keywords가 자식 본문의 고유 토큰을 반영한다", async () => {
+  it("저장 상한을 넘는 자식은 잘라 기록한다", async () => {
+    llmReturn = [
+      `긴 자식 본문 ${"가".repeat(400)}`,
+      "worker_connections 값을 8192로 올린 뒤 복구가 완료되었다"
+    ];
+    const { store, pool, inserted } = makeStubs();
+    await new ConsolidatorGC(store, { writeGate: () => new WriteGate() }).splitLongFragments({ pool });
+
+    assert.equal(inserted.length, 2);
+    assert.equal(inserted[0].content.length, 303);
+    assert.ok(inserted[0].content.endsWith("..."));
+  });
+
+  it("부모의 키와 workspace로 판정하고 자식은 부모 workspace에 둔다", async () => {
     llmReturn = [
       "nginx 업스트림 커넥션 풀이 고갈되어 502 응답률이 상승했다",
       "worker_connections 값을 8192로 올린 뒤 복구가 완료되었다"
     ];
+    const requests = [];
     const { store, pool, inserted } = makeStubs();
-    await new ConsolidatorGC(store).splitLongFragments({ pool });
+    await new ConsolidatorGC(store, { writeGate: () => new RecordingGate(requests) }).splitLongFragments({ pool });
 
-    const first  = inserted[0].keywords.join(" ");
-    const second = inserted[1].keywords.join(" ");
-    assert.ok(first.includes("nginx"), `첫 자식 keywords에 nginx 없음: ${first}`);
-    assert.ok(second.includes("worker_connections"), `둘째 자식 keywords에 식별자 없음: ${second}`);
-    assert.notDeepEqual(inserted[0].keywords, inserted[1].keywords, "자식마다 본문 기준으로 달라야 한다");
+    assert.deepEqual(requests.map(r => [r.entry, r.ctx.keyId]), [["consolidate_split", "key-7"], ["consolidate_split", "key-7"]]);
+    assert.deepEqual(inserted.map(f => [f.key_id, f.workspace]), [["key-7", "ws-1"], ["key-7", "ws-1"]]);
+  });
+
+  it("20자 미만 자식은 관문 전에 거르고 관문이 거부한 자식은 건너뛴다", async () => {
+    llmReturn = [
+      "짧은 자식",
+      "nginx 업스트림 커넥션 풀이 고갈되어 502 응답률이 상승했다",
+      "worker_connections 값을 8192로 올린 뒤 복구가 완료되었다",
+      "관문이 거부하도록 만든 세 번째 자식 본문이다"
+    ];
+    skips.length = 0;
+    const requests = [];
+    const gate     = new RecordingGate(requests, {
+      steps: { normalize: (state) => {
+        if (state.fields.content.startsWith("관문이")) throw new WriteInputError("rejected for test");
+        return state;
+      } }
+    });
+    const { store, pool, inserted } = makeStubs();
+    await new ConsolidatorGC(store, { writeGate: () => gate }).splitLongFragments({ pool });
+
+    assert.equal(requests.length, 3, "20자 미만 자식은 관문에 오지 않는다");
+    assert.equal(inserted.length, 2);
+    assert.ok(skips.includes("write_gate"));
   });
 });
