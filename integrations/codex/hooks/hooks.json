@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "anchormind hook SessionStart --client codex",
+            "timeout": 10,
+            "statusMessage": "Loading AnchorMind memory"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "anchormind hook SessionEnd --client codex",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

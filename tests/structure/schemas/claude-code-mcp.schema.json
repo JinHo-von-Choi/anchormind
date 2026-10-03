@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "claude-code-mcp.schema.json",
+  "title": "Claude Code plugin .mcp.json",
+  "description": "Written from https://code.claude.com/docs/en/mcp (Plugin-provided MCP servers, remote HTTP server config: type, url, headers) and plugins-reference (where ${...} resolves for http servers: url, headers).",
+  "type": "object",
+  "required": ["mcpServers"],
+  "additionalProperties": false,
+  "properties": {
+    "mcpServers": {
+      "type": "object",
+      "propertyNames": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+      "additionalProperties": {
+        "oneOf": [
+          { "$ref": "#/$defs/remoteServer" },
+          { "$ref": "#/$defs/stdioServer" }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "remoteServer": {
+      "type": "object",
+      "required": ["type", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["http", "sse", "ws"] },
+        "url": { "type": "string", "minLength": 1 },
+        "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+        "headersHelper": { "type": "string" }
+      }
+    },
+    "stdioServer": {
+      "type": "object",
+      "required": ["command"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "stdio" },
+        "command": { "type": "string", "minLength": 1 },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    }
+  }
+}

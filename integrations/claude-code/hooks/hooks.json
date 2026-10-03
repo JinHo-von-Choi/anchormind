@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "anchormind hook SessionStart --client claude-code",
+            "timeout": 10,
+            "statusMessage": "Loading AnchorMind memory"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "anchormind hook SessionEnd --client claude-code"
+          }
+        ]
+      }
+    ]
+  }
+}

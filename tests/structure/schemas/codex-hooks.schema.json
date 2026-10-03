@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex-hooks.schema.json",
+  "title": "Codex plugin hooks/hooks.json",
+  "description": "Written from https://learn.chatgpt.com/docs/hooks (event names, three-level structure, command and mcp_tool handlers, command fields command, timeout, statusMessage, additionalContextLimit, async, commandWindows). Codex runs no http handler.",
+  "type": "object",
+  "required": ["hooks"],
+  "additionalProperties": false,
+  "properties": {
+    "hooks": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "PreToolUse", "PostToolUse", "PermissionRequest", "UserPromptSubmit", "SessionStart", "SessionEnd",
+          "PreCompact", "PostCompact", "SubagentStart", "SubagentStop", "Stop", "Interrupt"
+        ]
+      },
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": { "$ref": "#/$defs/matcherGroup" }
+      }
+    }
+  },
+  "$defs": {
+    "matcherGroup": {
+      "type": "object",
+      "required": ["hooks"],
+      "additionalProperties": false,
+      "properties": {
+        "matcher": { "type": "string" },
+        "hooks": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "oneOf": [{ "$ref": "#/$defs/commandHandler" }, { "$ref": "#/$defs/mcpToolHandler" }] }
+        }
+      }
+    },
+    "commandHandler": {
+      "type": "object",
+      "required": ["type", "command"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "command" },
+        "command": { "type": "string", "minLength": 1 },
+        "commandWindows": { "type": "string", "minLength": 1 },
+        "timeout": { "type": "number", "exclusiveMinimum": 0 },
+        "statusMessage": { "type": "string" },
+        "additionalContextLimit": { "type": "integer", "minimum": 0 },
+        "async": { "type": "boolean" }
+      }
+    },
+    "mcpToolHandler": {
+      "type": "object",
+      "required": ["type", "server", "tool"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "mcp_tool" },
+        "server": { "type": "string", "minLength": 1 },
+        "tool": { "type": "string", "minLength": 1 },
+        "input": { "type": "object" },
+        "timeout": { "type": "number", "exclusiveMinimum": 0 },
+        "statusMessage": { "type": "string" }
+      }
+    }
+  }
+}

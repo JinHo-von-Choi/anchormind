@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "claude-code-hooks.schema.json",
+  "title": "Claude Code plugin hooks/hooks.json",
+  "description": "Written from https://code.claude.com/docs/en/hooks (hook event names, three-level structure, command and http handler fields) and plugins-reference (a hooks file wraps the event map in a top-level hooks key).",
+  "type": "object",
+  "required": ["hooks"],
+  "additionalProperties": false,
+  "properties": {
+    "hooks": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "SessionStart", "Setup", "UserPromptSubmit", "UserPromptExpansion", "PreToolUse",
+          "PermissionRequest", "PermissionDenied", "PostToolUse", "PostToolUseFailure", "PostToolBatch",
+          "Notification", "MessageDisplay", "SubagentStart", "SubagentStop", "TaskCreated", "TaskCompleted",
+          "Stop", "StopFailure", "TeammateIdle", "InstructionsLoaded", "ConfigChange", "CwdChanged",
+          "DirectoryAdded", "FileChanged", "WorktreeCreate", "WorktreeRemove", "PreCompact", "PostCompact",
+          "PreModelSwitch", "PostModelSwitch", "Elicitation", "ElicitationResult", "SessionEnd"
+        ]
+      },
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": { "$ref": "#/$defs/matcherGroup" }
+      }
+    }
+  },
+  "$defs": {
+    "matcherGroup": {
+      "type": "object",
+      "required": ["hooks"],
+      "additionalProperties": false,
+      "properties": {
+        "matcher": { "type": "string" },
+        "hooks": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "oneOf": [{ "$ref": "#/$defs/commandHandler" }, { "$ref": "#/$defs/httpHandler" }] }
+        }
+      }
+    },
+    "commandHandler": {
+      "type": "object",
+      "required": ["type", "command"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "command" },
+        "command": { "type": "string", "minLength": 1 },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "async": { "type": "boolean" },
+        "asyncRewake": { "type": "boolean" },
+        "shell": { "enum": ["bash", "powershell"] },
+        "timeout": { "type": "number", "exclusiveMinimum": 0 },
+        "statusMessage": { "type": "string" },
+        "once": { "type": "boolean" }
+      }
+    },
+    "httpHandler": {
+      "type": "object",
+      "required": ["type", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "http" },
+        "url": { "type": "string", "minLength": 1 },
+        "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+        "allowedEnvVars": { "type": "array", "items": { "type": "string" } },
+        "timeout": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    }
+  }
+}

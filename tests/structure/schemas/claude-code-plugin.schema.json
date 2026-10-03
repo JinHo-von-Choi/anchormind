@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "claude-code-plugin.schema.json",
+  "title": "Claude Code .claude-plugin/plugin.json",
+  "description": "Written from https://code.claude.com/docs/en/plugins-reference (Fields table, name rules, userConfig strict option object). Unknown top-level keys are rejected here although Claude Code strips them with a validator warning.",
+  "type": "object",
+  "required": ["name"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "not": { "pattern": "^(claude|anthropic|anthropics|cc-plugin)-|^(claude|anthropic|anthropics|claude-code|claude-mods)$" }
+    },
+    "displayName": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "author": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "email": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    },
+    "homepage": { "type": "string", "pattern": "^https://" },
+    "repository": { "type": "string" },
+    "license": { "type": "string" },
+    "keywords": { "type": "array", "items": { "type": "string" } },
+    "metadata": { "type": "object" },
+    "defaultEnabled": { "type": "boolean" },
+    "skills": { "$ref": "#/$defs/pathOrPaths" },
+    "agents": { "$ref": "#/$defs/pathOrPaths" },
+    "hooks": { "$ref": "#/$defs/pathOrInline" },
+    "mcpServers": { "$ref": "#/$defs/pathOrInline" },
+    "userConfig": {
+      "type": "object",
+      "propertyNames": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+      "additionalProperties": { "$ref": "#/$defs/userConfigOption" }
+    }
+  },
+  "$defs": {
+    "relativePath": { "type": "string", "pattern": "^\\./", "not": { "pattern": "\\.\\." } },
+    "pathOrPaths": {
+      "anyOf": [
+        { "$ref": "#/$defs/relativePath" },
+        { "type": "array", "items": { "$ref": "#/$defs/relativePath" } }
+      ]
+    },
+    "pathOrInline": {
+      "anyOf": [
+        { "$ref": "#/$defs/relativePath" },
+        { "type": "object" },
+        { "type": "array" }
+      ]
+    },
+    "userConfigOption": {
+      "type": "object",
+      "required": ["type", "title", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["string", "number", "boolean", "directory", "file"] },
+        "title": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
+        "default": { "type": ["string", "number", "boolean", "array"] },
+        "options": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 64 } },
+        "multiple": { "type": "boolean" },
+        "sensitive": { "type": "boolean" },
+        "min": { "type": "number" },
+        "max": { "type": "number" }
+      }
+    }
+  }
+}

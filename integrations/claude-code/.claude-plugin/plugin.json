@@ -1,0 +1,27 @@
+{
+  "name": "anchormind",
+  "displayName": "AnchorMind",
+  "description": "AnchorMind long-term memory: MCP server connection, session start memory injection and session end reflection hooks, and the memory tool usage skill",
+  "author": {
+    "name": "최진호"
+  },
+  "homepage": "https://github.com/JinHo-von-Choi/anchormind",
+  "repository": "https://github.com/JinHo-von-Choi/anchormind",
+  "license": "Apache-2.0",
+  "keywords": ["memory", "mcp", "anchormind", "hooks"],
+  "userConfig": {
+    "server_url": {
+      "type": "string",
+      "title": "AnchorMind server URL",
+      "description": "MCP endpoint of your AnchorMind server, for example https://memento.example.com/mcp",
+      "required": true
+    },
+    "api_key": {
+      "type": "string",
+      "title": "AnchorMind API key",
+      "description": "API key issued in the admin console. Session start injection needs read, session end reflection needs read and write",
+      "sensitive": true,
+      "required": true
+    }
+  }
+}

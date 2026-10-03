@@ -1,0 +1,12 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "anchormind",
+  "description": "AnchorMind long-term memory hooks: session start memory injection and session end reflection",
+  "author": {
+    "name": "최진호"
+  },
+  "homepage": "https://github.com/JinHo-von-Choi/anchormind",
+  "repository": "https://github.com/JinHo-von-Choi/anchormind",
+  "license": "Apache-2.0",
+  "keywords": ["memory", "mcp", "anchormind", "hooks"]
+}

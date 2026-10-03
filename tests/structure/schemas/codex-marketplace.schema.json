@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex-marketplace.schema.json",
+  "title": "Codex .agents/plugins/marketplace.json",
+  "description": "Written from https://developers.openai.com/codex/plugins/build (marketplace file locations, required entry fields name, source {source: local, path}, policy.installation, policy.authentication, category; interface.displayName).",
+  "type": "object",
+  "required": ["name", "plugins"],
+  "additionalProperties": false,
+  "properties": {
+    "name": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "interface": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "displayName": { "type": "string", "minLength": 1 } }
+    },
+    "plugins": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "source", "policy", "category"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "source": {
+            "type": "object",
+            "required": ["source", "path"],
+            "additionalProperties": false,
+            "properties": {
+              "source": { "const": "local" },
+              "path": { "type": "string", "pattern": "^\\./", "not": { "pattern": "\\.\\." } }
+            }
+          },
+          "policy": {
+            "type": "object",
+            "required": ["installation", "authentication"],
+            "additionalProperties": false,
+            "properties": {
+              "installation": { "enum": ["AVAILABLE", "INSTALLED_BY_DEFAULT", "NOT_AVAILABLE"] },
+              "authentication": { "type": "string", "pattern": "^[A-Z_]+$" }
+            }
+          },
+          "category": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}
