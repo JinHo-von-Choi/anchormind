@@ -19,6 +19,14 @@ import { validateJsonSchema }       from "./_json-schema.js";
 import { scanText }                 from "../../lib/security/SensitiveScanner.js";
 import { HOOK_CLIENTS, HOOK_EVENTS } from "../../lib/hooks/hook-contract.js";
 import { usage as hookUsage }       from "../../lib/cli/hook.js";
+import { planInit }                 from "../../lib/cli/init.js";
+
+/** marketplace-reference의 Reserved names 중 이 검사와 관련된 이름 */
+const RESERVED_MARKETPLACE_NAMES = new Set([
+  "claude-code-marketplace", "claude-code-plugins", "claude-plugins-official", "anthropic-marketplace",
+  "anthropic-plugins", "agent-skills", "anthropic-agent-skills", "inline", "builtin", "skills-dir", "synced",
+  "claude-plugin-test", "npm", "pip", "uv", "cargo", "github", "gh"
+]);
 
 const ROOT         = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const INTEGRATIONS = path.join(ROOT, "integrations");
@@ -84,6 +92,18 @@ describe("매니페스트 스키마", () => {
     hooks.hooks.Unknown = hooks.hooks.SessionStart;
     hooks.hooks.SessionStart[0].hooks[0].type = "http";
     assert.ok(validateJsonSchema(schema("codex-hooks"), hooks).length >= 2);
+  });
+
+  it("init이 만드는 마켓플레이스가 각 하네스 스키마에 맞는다", () => {
+    const pick = (target, file) => JSON.parse(planInit({ target, dir: "/scratch/x" }).files.find(f => f.path === file).content);
+    const claude = pick("claude", ".claude-plugin/marketplace.json");
+    assert.deepEqual(validateJsonSchema(schema("claude-code-marketplace"), claude), []);
+    assert.ok(!RESERVED_MARKETPLACE_NAMES.has(claude.name) && !/^claudeai-/.test(claude.name));
+    assert.deepEqual(validateJsonSchema(schema("codex-marketplace"), pick("codex", ".agents/plugins/marketplace.json")), []);
+  });
+
+  it("npm 패키지가 init이 읽는 integrations/를 담는다", () => {
+    assert.ok(readJson("package.json").files.includes("integrations/"));
   });
 
   it("Claude Code와 Codex 플러그인 이름이 같다", () => {

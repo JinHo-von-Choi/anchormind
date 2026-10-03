@@ -11,6 +11,7 @@
     "scripts/",
     "assets/admin/",
     "assets/images/",
+    "integrations/",
     "server.js",
     "setup.sh",
     "SKILL.md",
