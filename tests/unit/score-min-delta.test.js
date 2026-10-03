@@ -19,6 +19,7 @@ mock.module("../../lib/logger.js", {
 
 const { changedRowsSpec, minDeltaFromEnv } = await import("../../lib/memory/consolidate/idOrderedUpdate.js");
 const { scoreMinDeltaEnv }                 = await import("../../lib/config.js");
+const { decayUpdateSpec, decayedImportanceSql } = await import("../../lib/memory/consolidate/FragmentGC.js");
 
 beforeEach(() => { warnings.length = 0; });
 afterEach(() => {
@@ -99,5 +100,30 @@ describe("changedRowsSpec", () => {
     const { where, params } = changedRowsSpec(spec);
     assert.deepEqual(params, [1e-9]);
     assert.match(where, /\(EXPR\)::real\) > \$4::real$/);
+  });
+});
+
+describe("decayUpdateSpec", () => {
+  const PLAIN = "ttl_tier != 'permanent' AND is_anchor = FALSE";
+
+  it("최소 변화량이 0이면 조건은 대상 전체이고 매개변수가 없다", () => {
+    const { where, params, set } = decayUpdateSpec(0);
+    assert.equal(where, PLAIN);
+    assert.deepEqual(params, []);
+    assert.equal(set, `importance = ${decayedImportanceSql("$3::timestamptz", "f")}, last_decay_at = $3::timestamptz`);
+  });
+
+  it("양수이면 감쇠 계산식을 real로 바꿔 $4::real과 비교하고 최소 변화량을 매개변수로 싣는다", () => {
+    const { where, params } = decayUpdateSpec(0.01);
+    const computed = decayedImportanceSql("$3::timestamptz");
+    assert.ok(where.startsWith(PLAIN), where);
+    assert.ok(where.includes(`ABS((${computed})::real - importance) >= $4::real`), where);
+    assert.match(where, /last_decay_at IS NULL/);
+    assert.match(where, /last_decay_at < \$3::timestamptz - INTERVAL '24 hours'/);
+    assert.deepEqual(params, [0.01]);
+  });
+
+  it("대입절은 최소 변화량과 무관하다", () => {
+    assert.equal(decayUpdateSpec(0.5).set, decayUpdateSpec(0).set);
   });
 });
