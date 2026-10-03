@@ -13,6 +13,7 @@ import { INDEX_SCHEMA } from "./index-manifest.mjs";
 export const DEFAULT_LOCK_TIMEOUT = "3s";
 export const DEFAULT_RETRIES      = 2;
 export const DEFAULT_RETRY_WAIT   = 2000;
+export const DEFAULT_RETRY_CAP    = 30000;
 export const DISK_FACTOR          = 2;
 
 /** 단계 식별자. 계획과 실행이 같은 이름을 쓴다. */
@@ -21,6 +22,7 @@ export const STEP = Object.freeze({
   CONNECT     : "connect",
   SESSION     : "session-settings",
   DISK_CHECK  : "disk-check",
+  TXN_CHECK   : "txn-check",
   INSPECT     : "inspect",
   DROP_INVALID: "drop-invalid",
   CREATE      : "create",
@@ -66,6 +68,7 @@ const VALUE_FLAGS = Object.freeze({
   "--lock-timeout" : "lockTimeout",
   "--retries"      : "retries",
   "--retry-wait-ms": "retryWaitMs",
+  "--retry-max-wait-ms": "retryMaxWaitMs",
   "--free-bytes"   : "freeBytes",
   "--data-dir"     : "dataDir",
 });
@@ -87,6 +90,7 @@ function parseIntegerOption(name, text, { min, max }) {
 function coerceOption(key, text) {
   if (key === "retries")     return parseIntegerOption("--retries",       text, { min: 0, max: 10 });
   if (key === "retryWaitMs") return parseIntegerOption("--retry-wait-ms", text, { min: 0, max: 600000 });
+  if (key === "retryMaxWaitMs") return parseIntegerOption("--retry-max-wait-ms", text, { min: 0, max: 3600000 });
   if (key === "freeBytes")   return parseIntegerOption("--free-bytes",    text, { min: 0, max: Number.MAX_SAFE_INTEGER });
   if (key === "lockTimeout" && !/^\d+(ms|s|min)$/.test(text)) {
     throw new OnlineIndexUsageError(`--lock-timeout 은 3s, 500ms, 1min 같은 형식이어야 한다: ${text}`);
@@ -99,13 +103,14 @@ function coerceOption(key, text) {
  *
  * @param {string[]} argv process.argv.slice(2)
  * @returns {{dryRun: boolean, confirm: boolean, help: boolean, indexes: string[], url?: string,
- *            manifest?: string, lockTimeout: string, retries: number, retryWaitMs: number,
+ *            manifest?: string, lockTimeout: string, retries: number, retryWaitMs: number, retryMaxWaitMs: number,
  *            freeBytes?: number, dataDir?: string}}
  */
 export function parseArgs(argv) {
   const opts = {
     dryRun: false, confirm: false, help: false, indexes: [],
     lockTimeout: DEFAULT_LOCK_TIMEOUT, retries: DEFAULT_RETRIES, retryWaitMs: DEFAULT_RETRY_WAIT,
+    retryMaxWaitMs: DEFAULT_RETRY_CAP,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -158,6 +163,9 @@ function targetFromUrl(text) {
   if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") {
     throw new OnlineIndexUsageError("--url 은 postgres:// 또는 postgresql:// 주소여야 한다");
   }
+  if (url.search !== "") {
+    throw new OnlineIndexUsageError("--url 의 쿼리 매개변수(sslmode 등)는 쓰지 않는다. SSL 대상은 PG 환경변수(PGSSLMODE 등)로 지정한다");
+  }
   const database = decodeURIComponent(url.pathname.replace(/^\//, ""));
   if (!url.hostname || !database) throw new OnlineIndexUsageError("--url 에 호스트와 데이터베이스 이름이 필요하다");
 
@@ -203,6 +211,18 @@ export function requiredDiskBytes(tableBytes) {
   return tableBytes * DISK_FACTOR;
 }
 
+/**
+ * 재시도 전 대기 시간. 기본 대기를 시도마다 두 배로 늘리고 상한으로 자른다.
+ *
+ * @param {number} attempt 방금 실패한 시도의 번호(1부터)
+ * @param {number} baseMs
+ * @param {number} maxMs
+ * @returns {number}
+ */
+export function retryDelayMs(attempt, baseMs, maxMs) {
+  return Math.min(maxMs, baseMs * 2 ** (attempt - 1));
+}
+
 /** 색인 생성 문. definition 은 작업 목록이 검증한 값이다. */
 export function createSql(entry) {
   return `CREATE ${entry.unique ? "UNIQUE " : ""}INDEX CONCURRENTLY IF NOT EXISTS ${entry.name} ${entry.definition}`;
@@ -222,6 +242,17 @@ export const INSPECT_SQL =
   + "JOIN pg_class t ON t.oid = i.indrelid "
   + "JOIN pg_namespace tn ON tn.oid = t.relnamespace "
   + "WHERE n.nspname = $1 AND c.relname = $2";
+
+/**
+ * 같은 데이터베이스에서 열려 있는 다른 세션의 트랜잭션 수와 가장 오래된 시작 시각의 경과 초.
+ * CONCURRENTLY 는 이 트랜잭션이 끝나기를 기다린다. 다른 역할의 세션은 권한이 없으면 보이지 않는다.
+ */
+export const OPEN_TXN_SQL =
+  "SELECT count(*)::int AS open_count, "
+  + "COALESCE(EXTRACT(EPOCH FROM (now() - min(xact_start)))::int, 0) AS oldest_seconds "
+  + "FROM pg_stat_activity "
+  + "WHERE datname = current_database() AND pid <> pg_backend_pid() "
+  + "AND backend_type = 'client backend' AND xact_start IS NOT NULL";
 
 /** 표 크기 조회 문. $1 은 스키마가 붙은 표 이름이다. */
 export const TABLE_SIZE_SQL = "SELECT pg_total_relation_size($1::regclass)::text AS bytes";
@@ -253,11 +284,12 @@ function indexSteps(entry, retries) {
   const base  = { index: entry.name };
   return [
     { ...base, id: STEP.DISK_CHECK,   sql: [TABLE_SIZE_SQL],  text: `${table} 크기의 ${DISK_FACTOR}배 이상 디스크 여유를 확인한다` },
+    { ...base, id: STEP.TXN_CHECK,    sql: [OPEN_TXN_SQL],  text: "열려 있는 트랜잭션의 수와 가장 오래된 경과 시간을 경고로 알린다(CONCURRENTLY 는 이 트랜잭션을 기다린다)" },
     { ...base, id: STEP.INSPECT,      sql: [INSPECT_SQL],     text: "같은 이름의 색인 상태를 pg_index 에서 읽는다. 유효하면 건너뛴다" },
     { ...base, id: STEP.DROP_INVALID, sql: [dropSql(entry)],  text: "이전 시도가 남긴 무효 색인이 있을 때만 제거한다" },
     { ...base, id: STEP.CREATE,       sql: [createSql(entry)], text: "색인을 CONCURRENTLY 로 만든다" },
     { ...base, id: STEP.VERIFY,       sql: [INSPECT_SQL],     text: "pg_index.indisvalid 가 참인지 확인한다" },
-    { ...base, id: STEP.RETRY,        sql: [dropSql(entry)],  text: `무효이거나 잠금 대기 초과이면 무효 색인을 제거하고 ${STEP.CREATE} 부터 최대 ${retries}회 다시 시도한다` },
+    { ...base, id: STEP.RETRY,        sql: [dropSql(entry)],  text: `무효이거나 잠금 대기 초과이면 무효 색인을 제거하고 ${STEP.CREATE} 부터 최대 ${retries}회, 기본 대기를 시도마다 두 배로 늘리며 다시 시도한다` },
   ];
 }
 

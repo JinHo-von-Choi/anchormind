@@ -14,10 +14,10 @@ import os                from "node:os";
 import path              from "node:path";
 import {
   STEP, parseArgs, resolveTarget, resolveFreeBytes, requiredDiskBytes, createSql, planSteps,
-  formatPlan, INSPECT_SQL, TABLE_SIZE_SQL,
+  formatPlan, retryDelayMs, INSPECT_SQL, TABLE_SIZE_SQL, OPEN_TXN_SQL,
   OnlineIndexUsageError, OnlineIndexPreconditionError, OnlineIndexBuildError
 } from "../../scripts/ops/online-index-plan.mjs";
-import { buildIndexOnline, main } from "../../scripts/ops/online-index.mjs";
+import { buildIndexOnline, warnOpenTransactions, main } from "../../scripts/ops/online-index.mjs";
 import {
   validateManifest, loadManifest, findBuildableEntry, IndexManifestError
 } from "../../scripts/ops/index-manifest.mjs";
@@ -45,6 +45,8 @@ describe("parseArgs", () => {
     const o = parseArgs(["--index", "a"]);
     assert.equal(o.lockTimeout, "3s");
     assert.equal(o.retries, 2);
+    assert.equal(o.retryWaitMs, 2000);
+    assert.equal(o.retryMaxWaitMs, 30000);
     assert.equal(o.dryRun, false);
     assert.equal(o.confirm, false);
     assert.deepEqual(o.indexes, ["a"]);
@@ -52,13 +54,14 @@ describe("parseArgs", () => {
 
   it("값 옵션과 불리언 옵션을 읽는다", () => {
     const o = parseArgs(["--dry-run", "--confirm", "--index", "a", "--index", "b", "--lock-timeout", "500ms",
-                         "--retries", "0", "--retry-wait-ms", "10", "--free-bytes", "1000", "--url", "postgres://h/d"]);
+                         "--retries", "0", "--retry-wait-ms", "10", "--retry-max-wait-ms", "99", "--free-bytes", "1000", "--url", "postgres://h/d"]);
     assert.deepEqual(o.indexes, ["a", "b"]);
     assert.equal(o.dryRun, true);
     assert.equal(o.confirm, true);
     assert.equal(o.lockTimeout, "500ms");
     assert.equal(o.retries, 0);
     assert.equal(o.retryWaitMs, 10);
+    assert.equal(o.retryMaxWaitMs, 99);
     assert.equal(o.freeBytes, 1000);
     assert.equal(o.url, "postgres://h/d");
   });
@@ -72,7 +75,8 @@ describe("parseArgs", () => {
     ["재시도 음수",              ["--retries", "-1"]],
     ["재시도 상한 초과",         ["--retries", "11"]],
     ["여유 바이트 비정수",       ["--free-bytes", "1e9"]],
-    ["대기 시간 상한 초과",      ["--retry-wait-ms", "600001"]]
+    ["대기 시간 상한 초과",      ["--retry-wait-ms", "600001"]],
+    ["대기 상한 비정수",         ["--retry-max-wait-ms", "1.5"]]
   ];
   for (const [name, argv] of rejected) {
     it(`${name}는 거부한다`, () => {
@@ -105,7 +109,8 @@ describe("resolveTarget", () => {
     ["PGHOST 없음",              {},                                          { PGDATABASE: "d" }],
     ["postgres 가 아닌 주소",    { url: "http://h/d" },                       {}],
     ["주소 형식 오류",           { url: "not a url" },                        {}],
-    ["데이터베이스 이름 없음",   { url: "postgres://h:5432/" },               {}]
+    ["데이터베이스 이름 없음",   { url: "postgres://h:5432/" },               {}],
+    ["쿼리 매개변수(sslmode)",   { url: "postgres://h:5432/d?sslmode=require" }, {}]
   ];
   for (const [name, opts, env] of rejected) {
     it(`${name}는 거부한다`, () => {
@@ -136,12 +141,24 @@ describe("resolveFreeBytes", () => {
   });
 });
 
+describe("retryDelayMs", () => {
+  const cases = [
+    [1, 2000, 30000, 2000], [2, 2000, 30000, 4000], [3, 2000, 30000, 8000],
+    [4, 2000, 30000, 16000], [5, 2000, 30000, 30000], [10, 2000, 30000, 30000], [1, 0, 30000, 0], [3, 100, 150, 150]
+  ];
+  for (const [attempt, base, cap, expected] of cases) {
+    it(`시도 ${attempt}, 기본 ${base}, 상한 ${cap} 은 ${expected}`, () => {
+      assert.equal(retryDelayMs(attempt, base, cap), expected);
+    });
+  }
+});
+
 describe("planSteps 단계 순서", () => {
   const plan = planSteps({ entries: [ENTRY, UNIQUE_ENTRY], lockTimeout: "3s", retries: 2, targetLabel: "u@h:1/d" });
   const ids  = plan.map(s => s.id);
 
-  it("공통 단계 뒤에 색인마다 같은 순서의 여섯 단계가 이어진다", () => {
-    const perIndex = [STEP.DISK_CHECK, STEP.INSPECT, STEP.DROP_INVALID, STEP.CREATE, STEP.VERIFY, STEP.RETRY];
+  it("공통 단계 뒤에 색인마다 같은 순서의 일곱 단계가 이어진다", () => {
+    const perIndex = [STEP.DISK_CHECK, STEP.TXN_CHECK, STEP.INSPECT, STEP.DROP_INVALID, STEP.CREATE, STEP.VERIFY, STEP.RETRY];
     assert.deepEqual(ids, [STEP.BACKUP_GATE, STEP.CONNECT, STEP.SESSION, ...perIndex, ...perIndex]);
   });
 
@@ -169,9 +186,10 @@ describe("planSteps 단계 순서", () => {
 });
 
 /** SQL 종류를 보고 응답하는 가짜 클라이언트. */
-function fakeClient({ state = "absent", tableName = "fragments", bytes = 1000, creates = [] } = {}) {
+function fakeClient({ state = "absent", tableName = "fragments", bytes = 1000, creates = [], drops = [], open = { open_count: 0, oldest_seconds: 0 } } = {}) {
   const log   = [];
   const queue = [...creates];
+  const dropQueue = [...drops];
   const self  = {
     log,
     get state() { return state; },
@@ -183,7 +201,14 @@ function fakeClient({ state = "absent", tableName = "fragments", bytes = 1000, c
           : { rows: [{ valid: state === "valid", table_name: tableName, table_schema: "agent_memory" }] };
       }
       if (sql === TABLE_SIZE_SQL) { log.push("size"); return { rows: [{ bytes: String(bytes) }] }; }
-      if (sql.startsWith("DROP INDEX CONCURRENTLY")) { log.push("drop"); state = "absent"; return { rows: [] }; }
+      if (sql === OPEN_TXN_SQL) { log.push("txn"); return { rows: [open] }; }
+      if (sql.startsWith("DROP INDEX CONCURRENTLY")) {
+        log.push("drop");
+        const failure = dropQueue.shift();
+        if (failure) throw Object.assign(new Error(failure.message ?? "정리 오류"), { code: failure.code });
+        state = "absent";
+        return { rows: [] };
+      }
       if (sql.startsWith("CREATE ")) {
         log.push("create");
         const behavior = queue.shift() ?? "valid";
@@ -213,21 +238,21 @@ describe("buildIndexOnline", () => {
     const c = fakeClient();
     const { promise } = runBuild(c);
     assert.deepEqual(await promise, { status: "created", attempts: 1 });
-    assert.deepEqual(c.log, ["size", "inspect", "create", "inspect"]);
+    assert.deepEqual(c.log, ["size", "txn", "inspect", "create", "inspect"]);
   });
 
   it("이미 유효한 색인은 만들거나 제거하지 않는다", async () => {
     const c = fakeClient({ state: "valid" });
     const { promise } = runBuild(c);
     assert.deepEqual(await promise, { status: "exists", attempts: 0 });
-    assert.deepEqual(c.log, ["size", "inspect"]);
+    assert.deepEqual(c.log, ["size", "txn", "inspect"]);
   });
 
   it("남아 있는 무효 색인은 제거한 뒤 만든다", async () => {
     const c = fakeClient({ state: "invalid" });
     const { promise } = runBuild(c);
     assert.equal((await promise).status, "created");
-    assert.deepEqual(c.log, ["size", "inspect", "inspect", "drop", "create", "inspect"]);
+    assert.deepEqual(c.log, ["size", "txn", "inspect", "inspect", "drop", "create", "inspect"]);
   });
 
   it("만든 뒤 무효이면 제거하고 다시 시도한다", async () => {
@@ -280,6 +305,68 @@ describe("buildIndexOnline", () => {
     assert.ok(!c.log.includes("drop"));
   });
 
+  it("재시도 대기는 두 배씩 늘고 상한으로 잘린다", async () => {
+    const c = fakeClient({ creates: ["invalid", "invalid", "invalid", "invalid", "valid"] });
+    const { promise, sleeps } = runBuild(c, { retries: 5, retryWaitMs: 1000, retryMaxWaitMs: 3500 });
+    assert.equal((await promise).attempts, 5);
+    assert.deepEqual(sleeps, [1000, 2000, 3500, 3500]);
+  });
+
+  it("생성이 재시도 불가 오류로 실패하고 정리도 실패하면 원 오류를 cause 로 남긴다", async () => {
+    const c = fakeClient({ creates: [{ code: "23505", message: "중복", leave: "invalid" }], drops: [{ code: "55P03", message: "정리 잠금" }] });
+    const { promise } = runBuild(c);
+    await assert.rejects(promise, err => {
+      assert.ok(err instanceof OnlineIndexBuildError);
+      assert.equal(err.cause.code, "23505");
+      assert.match(err.message, /정리 잠금/);
+      return true;
+    });
+  });
+
+  it("생성이 재시도 가능 오류이고 정리가 55P03 으로 실패하면 다음 시도가 정리하고 이어간다", async () => {
+    const c = fakeClient({ creates: [{ code: "55P03", leave: "invalid" }, "valid"], drops: [{ code: "55P03" }] });
+    const { promise, sleeps } = runBuild(c);
+    assert.deepEqual(await promise, { status: "created", attempts: 2 });
+    assert.deepEqual(sleeps, [7]);
+    assert.equal(c.state, "valid");
+    assert.equal(c.log.filter(x => x === "drop").length, 2);
+  });
+
+  it("만든 뒤 무효이고 정리가 55P03 이면 재시도로 처리한다", async () => {
+    const c = fakeClient({ creates: ["invalid", "valid"], drops: [{ code: "55P03" }] });
+    const { promise } = runBuild(c);
+    assert.equal((await promise).attempts, 2);
+  });
+
+  it("시작 전 정리가 재시도 불가 오류이면 그대로 던진다", async () => {
+    const c = fakeClient({ state: "invalid", drops: [{ code: "42501", message: "권한 없음" }] });
+    const { promise } = runBuild(c);
+    await assert.rejects(promise, err => err.code === "42501");
+    assert.ok(!c.log.includes("create"));
+  });
+
+  it("재시도를 소진했는데 정리가 계속 실패하면 남은 무효 색인을 알린다", async () => {
+    const c = fakeClient({ creates: [{ code: "55P03", leave: "invalid" }], drops: [{ code: "55P03" }, { code: "55P03" }], state: "absent" });
+    const { promise } = runBuild(c, { retries: 0 });
+    await assert.rejects(promise, err => err instanceof OnlineIndexBuildError && /무효 색인이 남아 있을 수 있/.test(err.message));
+  });
+
+  it("열린 트랜잭션이 있으면 수와 경과 시간을 경고하고 계속한다", async () => {
+    const lines = [];
+    const c = fakeClient({ open: { open_count: 2, oldest_seconds: 4210 } });
+    const { promise } = runBuild(c, { log: l => lines.push(l) });
+    assert.equal((await promise).status, "created");
+    const warning = lines.find(l => l.startsWith("경고"));
+    assert.ok(warning.includes("2개") && warning.includes("4210초"));
+  });
+
+  it("열린 트랜잭션이 없으면 경고하지 않는다", async () => {
+    const lines = [];
+    const result = await warnOpenTransactions(fakeClient(), l => lines.push(l));
+    assert.deepEqual(result, { openCount: 0, oldestSeconds: 0 });
+    assert.deepEqual(lines, []);
+  });
+
   it("디스크 여유가 표 크기의 2배보다 작으면 만들지 않는다", async () => {
     const c = fakeClient({ bytes: 600 });
     const { promise } = runBuild(c, { freeBytes: 1199 });
@@ -328,7 +415,7 @@ describe("main 실행 모드", () => {
     assert.equal(code, 0);
     assert.equal(h.state.connects, 0);
     const ids = h.out.join("\n").split("\n").filter(l => /^\d+\. /.test(l)).map(l => l.split(" ")[1]);
-    const per = [STEP.DISK_CHECK, STEP.INSPECT, STEP.DROP_INVALID, STEP.CREATE, STEP.VERIFY, STEP.RETRY];
+    const per = [STEP.DISK_CHECK, STEP.TXN_CHECK, STEP.INSPECT, STEP.DROP_INVALID, STEP.CREATE, STEP.VERIFY, STEP.RETRY];
     assert.deepEqual(ids, [STEP.BACKUP_GATE, STEP.CONNECT, STEP.SESSION, ...per, ...per]);
   });
 

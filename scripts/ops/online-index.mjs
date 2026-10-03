@@ -29,7 +29,8 @@ import { loadManifest, findBuildableEntry, IndexManifestError, INDEX_SCHEMA } fr
 import {
   OnlineIndexError, OnlineIndexUsageError, OnlineIndexPreconditionError, OnlineIndexBuildError,
   parseArgs, resolveTarget, resolveFreeBytes, requiredDiskBytes, createSql, dropSql,
-  sessionSql, planSteps, formatPlan, INSPECT_SQL, TABLE_SIZE_SQL, DEFAULT_LOCK_TIMEOUT,
+  sessionSql, planSteps, formatPlan, retryDelayMs, INSPECT_SQL, TABLE_SIZE_SQL, OPEN_TXN_SQL,
+  DEFAULT_LOCK_TIMEOUT, DEFAULT_RETRY_CAP,
 } from "./online-index-plan.mjs";
 
 /** 재시도로 회복할 수 있는 SQLSTATE: lock_not_available, deadlock_detected. */
@@ -41,7 +42,8 @@ const USAGE = [
   "  --manifest <경로>         작업 목록(기본 scripts/ops/index-manifest.json)",
   `  --lock-timeout <값>       잠금 대기 제한(기본 ${DEFAULT_LOCK_TIMEOUT})`,
   "  --retries <횟수>          실패 뒤 다시 시도할 횟수(기본 2)",
-  "  --retry-wait-ms <ms>      재시도 사이 대기(기본 2000)",
+  "  --retry-wait-ms <ms>      첫 재시도 전 대기(기본 2000). 시도마다 두 배로 늘어난다",
+  "  --retry-max-wait-ms <ms>  재시도 대기의 상한(기본 30000)",
   "  --free-bytes <바이트>     디스크 여유(실제 실행에 필요)",
   "  --data-dir <경로>         디스크 여유를 읽을 데이터 디렉터리(--free-bytes 대신)",
 ].join("\n");
@@ -74,6 +76,40 @@ async function dropIfInvalid(client, entry, log) {
   await client.query(dropSql(entry));
 }
 
+/** 재시도로 회복할 수 있는 오류인지. */
+function isRetriable(err) {
+  return RETRIABLE_SQLSTATE.has(err?.code);
+}
+
+/** 무효 색인을 정리한다. 실패해도 던지지 않고 그 오류를 돌려주며 성공하면 null 이다. */
+async function cleanupQuietly(client, entry, log) {
+  try {
+    await dropIfInvalid(client, entry, log);
+    return null;
+  } catch (err) {
+    log(`무효 색인 정리 실패 ${err.code ?? ""}: ${err.message}`);
+    return err;
+  }
+}
+
+/**
+ * 열려 있는 다른 트랜잭션을 경고한다. CONCURRENTLY 는 이 트랜잭션이 끝나기를 기다리며, 그동안
+ * 잠금 대기 제한을 넘으면 시도가 실패한다. 경고만 하고 중단하지 않는다.
+ *
+ * @returns {Promise<{openCount: number, oldestSeconds: number}>}
+ */
+export async function warnOpenTransactions(client, log) {
+  const { rows: [row] } = await client.query(OPEN_TXN_SQL);
+  const openCount     = Number(row.open_count);
+  const oldestSeconds = Number(row.oldest_seconds);
+  if (openCount > 0) {
+    log(`경고: 열려 있는 트랜잭션 ${openCount}개, 가장 오래된 것은 ${oldestSeconds}초 전에 시작했다. `
+      + `색인 생성은 이 트랜잭션이 끝나기를 기다리므로 잠금 대기 제한에 걸려 시도가 실패할 수 있다. `
+      + `실행 중인 백업이나 긴 트랜잭션이 끝난 뒤에 실행한다`);
+  }
+  return { openCount, oldestSeconds };
+}
+
 /** 대상 표 크기의 2배가 여유보다 크면 거부한다. */
 async function assertDiskRoom(client, entry, freeBytes, log) {
   const { rows } = await client.query(TABLE_SIZE_SQL, [`${INDEX_SCHEMA}.${entry.table}`]);
@@ -88,22 +124,49 @@ async function assertDiskRoom(client, entry, freeBytes, log) {
 }
 
 /**
- * 한 번의 생성 시도. 성공하면 true, 재시도 가능한 실패면 false 를 돌려준다.
- * 재시도할 수 없는 오류는 무효 색인을 정리한 뒤 그대로 던진다.
+ * 생성 문이 실패한 뒤의 처리. 무효 색인을 정리하고, 재시도할 수 있는 오류면 false 를 돌려준다.
+ * 그 밖의 오류는 던진다. 정리까지 실패했으면 원 오류를 cause 로 담아 던진다.
  */
-async function attemptCreate(client, entry, log) {
+async function afterCreateFailure(client, entry, log, createError) {
+  const cleanupError = await cleanupQuietly(client, entry, log);
+  if (isRetriable(createError)) {
+    log(`재시도 가능한 오류 ${createError.code}: ${createError.message}`);
+    return false;
+  }
+  if (cleanupError) {
+    throw new OnlineIndexBuildError(
+      `색인 ${entry.name} 생성이 실패했고(${createError.code ?? "코드 없음"}: ${createError.message}) 무효 색인 정리도 실패했다: ${cleanupError.message}`,
+      { cause: createError }
+    );
+  }
+  throw createError;
+}
+
+/**
+ * 한 번의 생성 시도. 성공하면 true, 재시도 가능한 실패면 false 를 돌려준다.
+ * dirty 이면 시작 전에 무효 색인을 정리하며, 그 정리가 재시도 가능한 오류로 실패해도 false 다.
+ */
+async function attemptCreate(client, entry, log, dirty) {
+  if (dirty) {
+    const cleanupError = await cleanupQuietly(client, entry, log);
+    if (cleanupError) {
+      if (isRetriable(cleanupError)) return false;
+      throw cleanupError;
+    }
+  }
+
   try {
     await client.query(createSql(entry));
   } catch (err) {
-    await dropIfInvalid(client, entry, log);
-    if (!RETRIABLE_SQLSTATE.has(err.code)) throw err;
-    log(`재시도 가능한 오류 ${err.code}: ${err.message}`);
-    return false;
+    return afterCreateFailure(client, entry, log, err);
   }
 
   if (await inspectIndex(client, entry) === "valid") return true;
   log(`색인 ${entry.name} 이 유효하지 않다`);
-  await dropIfInvalid(client, entry, log);
+  const cleanupError = await cleanupQuietly(client, entry, log);
+  if (cleanupError && !isRetriable(cleanupError)) {
+    throw new OnlineIndexBuildError(`색인 ${entry.name} 이 유효하지 않고 정리에도 실패했다: ${cleanupError.message}`, { cause: cleanupError });
+  }
   return false;
 }
 
@@ -112,33 +175,42 @@ async function attemptCreate(client, entry, log) {
  *
  * @param {{query: Function}} client
  * @param {object} entry 작업 목록의 작업 항목
- * @param {{freeBytes: number, retries: number, retryWaitMs: number,
+ * @param {{freeBytes: number, retries: number, retryWaitMs: number, retryMaxWaitMs?: number,
  *          log: (line: string) => void, sleep: (ms: number) => Promise<void>}} opts
  * @returns {Promise<{status: "exists"|"created", attempts: number}>}
  * @throws {OnlineIndexPreconditionError|OnlineIndexBuildError}
  */
 export async function buildIndexOnline(client, entry, opts) {
   const { freeBytes, retries, retryWaitMs, log, sleep } = opts;
+  const retryMaxWaitMs = opts.retryMaxWaitMs ?? DEFAULT_RETRY_CAP;
 
   await assertDiskRoom(client, entry, freeBytes, log);
+  await warnOpenTransactions(client, log);
 
   const state = await inspectIndex(client, entry);
   if (state === "valid") {
     log(`색인 ${entry.name} 이 이미 유효하다. 건너뛴다`);
     return { status: "exists", attempts: 0 };
   }
-  if (state === "invalid") await dropIfInvalid(client, entry, log);
 
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     log(`색인 ${entry.name} 생성 시도 ${attempt}/${retries + 1}`);
-    if (await attemptCreate(client, entry, log)) {
+    if (await attemptCreate(client, entry, log, attempt > 1 || state === "invalid")) {
       log(`색인 ${entry.name} 이 유효하다`);
       return { status: "created", attempts: attempt };
     }
-    if (attempt <= retries) await sleep(retryWaitMs);
+    if (attempt <= retries) {
+      const delay = retryDelayMs(attempt, retryWaitMs, retryMaxWaitMs);
+      log(`${delay}ms 뒤에 다시 시도한다`);
+      await sleep(delay);
+    }
   }
 
-  throw new OnlineIndexBuildError(`색인 ${entry.name} 을 ${retries + 1}번 시도했으나 유효하게 만들지 못했다`);
+  const leftover = await cleanupQuietly(client, entry, log);
+  throw new OnlineIndexBuildError(
+    `색인 ${entry.name} 을 ${retries + 1}번 시도했으나 유효하게 만들지 못했다`
+    + (leftover ? `. 무효 색인이 남아 있을 수 있으니 직접 확인한다: ${leftover.message}` : "")
+  );
 }
 
 /** pg 연결을 연다. 기본 연결 함수. */
@@ -176,7 +248,7 @@ async function executePlan({ client, entries, opts, freeBytes, io, sleep }) {
   const results = [];
   for (const entry of entries) {
     const result = await buildIndexOnline(client, entry, {
-      freeBytes, retries: opts.retries, retryWaitMs: opts.retryWaitMs, log, sleep,
+      freeBytes, retries: opts.retries, retryWaitMs: opts.retryWaitMs, retryMaxWaitMs: opts.retryMaxWaitMs, log, sleep,
     });
     results.push(`${entry.name}: ${result.status}`);
   }

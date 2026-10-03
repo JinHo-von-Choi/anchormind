@@ -72,6 +72,19 @@ async function holdTableLock() {
   };
 }
 
+/** 스냅숏을 잡은 채 열려 있는 트랜잭션. CONCURRENTLY 문은 이 트랜잭션이 끝나기를 기다린다. */
+async function holdOpenSnapshot() {
+  const client = new pg.Client(CONFIG);
+  await client.connect();
+  await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
+  await client.query("SELECT count(*) FROM agent_memory.fragments");
+  return {
+    async release() {
+      try { await client.query("COMMIT"); } finally { await client.end(); }
+    }
+  };
+}
+
 before(async () => {
   manifestDir = fs.mkdtempSync(path.join(os.tmpdir(), "oi-lane-"));
   await seedFragments("online-index", 300);
@@ -134,7 +147,7 @@ describe("online-index 실서버", () => {
     try {
       result = await runScript(
         ["--confirm", "--url", URL_ARG, "--manifest", manifest, "--index", "idx_oi_retry", "--free-bytes", PLENTY,
-         "--lock-timeout", "300ms", "--retries", "10", "--retry-wait-ms", "200"],
+         "--lock-timeout", "300ms", "--retries", "10", "--retry-wait-ms", "200", "--retry-max-wait-ms", "400"],
         {
           onOutput: output => {
             if (!released && output.includes("55P03")) { released = true; lock.release().catch(() => {}); }
@@ -161,6 +174,30 @@ describe("online-index 실서버", () => {
     }
     assert.equal(result.code, 1, result.output);
     assert.equal(await indexRow("idx_oi_exhaust"), null);
+  });
+
+  it("열린 트랜잭션이 있으면 경고하고, 끝나면 만든다", async () => {
+    const manifest = manifestFor([{ name: "idx_oi_snapshot", table: "fragments", definition: "ON agent_memory.fragments (created_at)" }]);
+    const args     = ["--confirm", "--url", URL_ARG, "--manifest", manifest, "--index", "idx_oi_snapshot", "--free-bytes", PLENTY,
+                      "--lock-timeout", "300ms", "--retries", "1", "--retry-wait-ms", "50"];
+    const snapshot = await holdOpenSnapshot();
+    let   blocked;
+    try {
+      blocked = await runScript(args);
+    } finally {
+      await snapshot.release();
+    }
+    assert.equal(blocked.code, 1, blocked.output);
+    assert.match(blocked.output, /경고: 열려 있는 트랜잭션 \d+개/);
+    /** 열린 트랜잭션은 무효 색인의 제거도 막으므로 무효 색인이 남을 수 있다. 유효한 색인은 남지 않는다. */
+    const leftover = await indexRow("idx_oi_snapshot");
+    assert.ok(leftover === null || leftover.valid === false);
+    if (leftover !== null) assert.match(blocked.output, /무효 색인이 남아 있을 수 있/);
+
+    const after = await runScript(args);
+    assert.equal(after.code, 0, after.output);
+    assert.doesNotMatch(after.output, /경고: 열려 있는 트랜잭션/);
+    assert.equal((await indexRow("idx_oi_snapshot")).valid, true);
   });
 
   it("디스크 여유가 표 크기의 2배보다 작으면 만들지 않는다", async () => {
