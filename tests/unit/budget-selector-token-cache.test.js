@@ -32,6 +32,13 @@ describe("fragmentTokens 기억", () => {
     assert.deepEqual(counted, ["object-once"]);
   });
 
+  it("객체의 본문이 바뀌면 기억을 쓰지 않고 새 본문을 센다", () => {
+    const fragment = { id: "m", content: "first-body" };
+    assert.equal(fragmentTokens(fragment), 10);
+    fragment.content = "second-longer-body";
+    assert.equal(fragmentTokens(fragment), 18);
+  });
+
   it("본문이 같은 다른 객체는 다시 세지 않는다", () => {
     assert.equal(fragmentTokens({ id: "b", content: "shared-body" }), 11);
     assert.equal(fragmentTokens({ id: "c", content: "shared-body" }), 11);

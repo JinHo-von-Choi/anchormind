@@ -43,7 +43,7 @@ mock.module("../../lib/memory/read/Reranker.js", {
 
 const { FragmentSearch }                     = await import("../../lib/memory/read/FragmentSearch.js");
 const { MemoryRecaller, buildRecallScorer }  = await import("../../lib/memory/processors/MemoryRecaller.js");
-const { RANK_CANDIDATE_LIMIT, fragmentTokens } = await import("../../lib/memory/read/BudgetSelector.js");
+const { RANK_CANDIDATE_LIMIT, fragmentTokens, clearTokenCaches } = await import("../../lib/memory/read/BudgetSelector.js");
 const { createRng }                          = await import("../../lib/memory/signals/PairedBootstrap.js");
 
 const ANCHOR = Date.parse("2026-10-01T00:00:00.000Z");
@@ -261,11 +261,16 @@ describe("recall 순위 후 예산 선택", () => {
     assert.ok(linkedCases > 20, `연결 파편이 합류한 시드가 적다: ${linkedCases}`);
   });
 
-  it("예산이 묶이면 on의 최종 점수 합은 off 이상이고 토큰 합은 예산 이하다(시드 400개)", async () => {
+  it("예산이 묶이면 토큰 합은 예산 이하이고, 모든 후보에 토큰 수가 있으면 on의 최종 점수 합은 off 이상이다(시드 400개)", async () => {
     let bindingCases = 0;
     let strictGains  = 0;
     for (let seed = 1001; seed <= 1400; seed++) {
-      const scenario = randomScenario(seed);
+      const mixed    = randomScenario(seed);
+      /** 짝수 시드: 모든 후보에 estimated_tokens(추정값 = 정확한 수), 홀수 시드: 일부만(추정값이 틀릴 수 있다) */
+      const exact    = seed % 2 === 0;
+      const scenario = exact
+        ? { ...mixed, makeCombined: () => mixed.makeCombined().map(r => ({ ...r, estimated_tokens: fragmentTokens(r) })) }
+        : mixed;
       const params   = { ...scenario.params, includeLinks: false, tokenBudget: 1 + Math.floor(scenario.rowTokens * 0.4) };
       const scoreOf  = buildRecallScorer(params, ANCHOR, null);
 
@@ -274,7 +279,7 @@ describe("recall 순위 후 예산 선택", () => {
 
       const onScore  = scoreSum(on.result.fragments, scoreOf);
       const offScore = scoreSum(off.result.fragments, scoreOf);
-      assert.ok(onScore >= offScore - 1e-9, `seed ${seed}: on ${onScore} < off ${offScore}`);
+      if (exact) assert.ok(onScore >= offScore - 1e-9, `seed ${seed}: on ${onScore} < off ${offScore}`);
       assert.ok(tokenSum(on.result.fragments) <= params.tokenBudget, `seed ${seed}: 예산 초과`);
       assert.equal(on.result.totalTokens, tokenSum(on.result.fragments));
       if (params.tokenBudget < scenario.rowTokens) bindingCases++;
@@ -403,5 +408,67 @@ describe("recall 순위 후 예산 선택", () => {
     const result = await recaller.recall({ includeLinks: false, excludeSeen: false, anchorTime: ANCHOR });
     assert.equal(searched, 1);
     assert.deepEqual(result.fragments.map(f => f.id), ["a"]);
+  });
+
+  describe("페이지와 반복 호출의 결정성(토큰 기억 상태와 무관)", () => {
+    /** 같은 인자로 cursor를 따라 모든 페이지를 읽는다 */
+    const allPages = async (scenario, params) => {
+      const pages = [];
+      let cursor;
+      do {
+        const page = await runWith(scenario, "on", { ...params, ...(cursor ? { cursor } : {}) });
+        pages.push(page.result);
+        cursor = page.result.nextCursor;
+      } while (cursor && pages.length < 100);
+      return pages;
+    };
+    const idsOf = (result) => result.fragments.map(f => f.id);
+
+    it("같은 요청을 기억이 빈 상태와 찬 상태에서 페이지로 두 번 읽으면 페이지가 같다(시드 40개)", async () => {
+      for (let seed = 3001; seed <= 3040; seed++) {
+        const scenario = randomScenario(seed);
+        const params   = { ...scenario.params, includeLinks: false, pageSize: 3, tokenBudget: 1 + Math.floor(scenario.rowTokens * 0.4) };
+        clearTokenCaches();
+        const cold = await allPages(scenario, params);
+        const warm = await allPages(scenario, params);
+        assert.deepStrictEqual(warm, cold, `seed ${seed}`);
+      }
+    });
+
+    it("다른 요청이 기억을 채운 뒤에도 새 프로세스와 같은 결과를 낸다(시드 40개)", async () => {
+      for (let seed = 3041; seed <= 3080; seed++) {
+        const scenario = randomScenario(seed);
+        const params   = { ...scenario.params, includeLinks: false, pageSize: 50, tokenBudget: 1 + Math.floor(scenario.rowTokens * 0.4) };
+        clearTokenCaches();
+        const fresh = await runWith(scenario, "on", params);
+        clearTokenCaches();
+        /** 같은 본문을 모두 정확히 세는 요청(예산이 넉넉한 off 경로)을 먼저 보낸다 */
+        await runWith(scenario, "off", { ...params, tokenBudget: scenario.totalTokens + 1 });
+        const after = await runWith(scenario, "on", params);
+        assert.deepStrictEqual(after.result, fresh.result, `seed ${seed}`);
+      }
+    });
+
+    it("성질: 추정값이 섞인 후보에서 페이지 합집합은 한 번의 전체 호출과 같고 중복이 없으며 반복 호출이 같다(시드 300개)", async () => {
+      let paged = 0;
+      for (let seed = 3101; seed <= 3400; seed++) {
+        const scenario = randomScenario(seed);
+        const budget   = 1 + Math.floor(scenario.rowTokens * (0.1 + (seed % 5) * 0.15));
+        const base     = { ...scenario.params, includeLinks: seed % 3 === 0, tokenBudget: budget };
+
+        clearTokenCaches();
+        const pages = await allPages(scenario, { ...base, pageSize: 1 + (seed % 4) });
+        const full  = await runWith(scenario, "on", { ...base, pageSize: 50 });
+        const again = await runWith(scenario, "on", { ...base, pageSize: 50 });
+
+        const union = pages.flatMap(idsOf);
+        assert.equal(new Set(union).size, union.length, `seed ${seed}: 페이지 사이 중복`);
+        assert.equal(union.length, pages[0].totalCount, `seed ${seed}: 합집합과 totalCount가 다르다`);
+        if (full.result.totalCount <= 50) assert.deepStrictEqual(union, idsOf(full.result), `seed ${seed}: 페이지와 전체 호출이 다르다`);
+        assert.deepStrictEqual(again.result, full.result, `seed ${seed}: 반복 호출이 다르다`);
+        if (pages.length > 1) paged++;
+      }
+      assert.ok(paged > 100, `여러 페이지인 시드가 적다: ${paged}`);
+    });
   });
 });

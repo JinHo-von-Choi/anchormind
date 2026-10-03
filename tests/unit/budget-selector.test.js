@@ -234,6 +234,15 @@ describe("추정값 선택과 정확한 확인", () => {
     assert.equal(estimateTokens({ id: "e", content: "abcdefghi", estimated_tokens: 11, _storedTokens: 7 }), 11);
   });
 
+  it("estimateTokens는 요청의 exactCounts만 보고 프로세스 전체의 토큰 기억은 읽지 않는다", () => {
+    const content = "estimate purity check body with several words";
+    fragmentTokens({ id: "warm", content });
+    const fresh = { id: "fresh", content, _storedTokens: 2 };
+    assert.equal(estimateTokens(fresh), 2);
+    assert.equal(estimateTokens(fresh, new Map([[fresh, 9]])), 9);
+    assert.equal(estimateTokens({ id: "plain", content }), Math.ceil(content.length / 4));
+  });
+
   it("저장값이 실제보다 작아 고른 집합이 예산을 넘으면 이득이 가장 작은 파편부터 뺀다", () => {
     const pool = [
       { id: "a", score: 1.0, estimated_tokens: 40 },
