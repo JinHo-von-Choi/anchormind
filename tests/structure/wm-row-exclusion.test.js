@@ -54,11 +54,11 @@ describe("작업 기억 행 제외 조건", () => {
     assert.deepEqual(offenders, []);
   });
 
-  it("임베딩 백필 스크립트는 닫힌 행과 작업 기억 행을 건너뛰는 조건을 질의에 둔다", () => {
+  it("임베딩 백필 스크립트는 작업 기억 행만 건너뛰고 닫힌 파편은 그대로 대상으로 둔다", () => {
     const src = read("scripts/backfill-embeddings.js");
     const query = /SELECT id, content FROM[\s\S]*?LIMIT \$1/.exec(src)?.[0] ?? "";
-    assert.match(query, /valid_to IS NULL/);
     assert.match(query, /\$\{NOT_WM_ROW\}/);
+    assert.doesNotMatch(query, /valid_to/);
   });
 
   it("임베딩 대기 조회와 형태소 백필은 공용 조건을 질의에 둔다", () => {

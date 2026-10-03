@@ -35,7 +35,7 @@ const ALLOWED = {
   "cli/inspect.js": 1,
   "cli/stats.js": 5,
   "memory/FragmentIndex.js": 1,
-  "memory/WorkingMemoryRows.js": 7, // 작업 기억 행의 조회와 삭제는 FragmentIndex의 작업 기억 계약 뒤에서 호출되며, FragmentWriter가 FragmentIndex를 가져오므로 데이터 계층으로 옮기면 가져오기 순환이 생긴다
+  "memory/WorkingMemoryRows.js": 8, // 작업 기억 행의 조회와 삭제는 FragmentIndex의 작업 기억 계약 뒤에서 호출되며, FragmentWriter가 FragmentIndex를 가져오므로 데이터 계층으로 옮기면 가져오기 순환이 생긴다
   "memory/WorkingMemorySql.js": 1, // 키 삭제 트랜잭션이 키 행을 지우기 전에 그 키의 작업 기억 행을 지운다. 질의를 받는 client를 인자로 쓰므로 데이터 계층 객체를 거치지 않는다
   "memory/consolidate/ConsolidatorGC.js": 12,
   "memory/consolidate/FragmentGC.js": 11,

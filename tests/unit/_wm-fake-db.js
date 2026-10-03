@@ -52,6 +52,11 @@ export function createFakeWmDb() {
   /** 문장 하나를 실행한다. 모양은 SQL 문장으로, 조건 값은 매개변수로 읽는다. */
   function run(sql, params = []) {
     calls.push({ sql, params });
+    if (/^\s*SELECT count/i.test(sql)) {
+      const [source, keyId] = params;
+      const n = rows.filter(r => r.source === source && r.valid_to !== null && r.key_id === keyId).length;
+      return { rows: [{ n }], rowCount: 1 };
+    }
     if (/^\s*SELECT/i.test(sql)) {
       const [sessionId, source, cutoff] = params;
       const found = rows
@@ -66,12 +71,12 @@ export function createFakeWmDb() {
       const [sessionId, source, ids] = params;
       doomed = rows.filter(r => r.session_id === sessionId && r.source === source
         && r.valid_to !== null && ids.includes(r.id));
-    } else if (/OFFSET/.test(sql)) {
-      const [source, keyId, keep] = params;
+    } else if (/IS NOT DISTINCT FROM/.test(sql)) {
+      const [source, keyId, limit] = params;
       doomed = rows
         .filter(r => r.source === source && r.valid_to !== null && r.key_id === keyId)
-        .sort((a, b) => b.created_at - a.created_at || (a.id < b.id ? 1 : -1))
-        .slice(keep);
+        .sort((a, b) => a.created_at - b.created_at || (a.id < b.id ? -1 : 1))
+        .slice(0, limit);
     } else if (/LIMIT/.test(sql)) {
       const [source, cutoff, chunk] = params;
       doomed = rows

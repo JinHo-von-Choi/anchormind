@@ -30,7 +30,7 @@ const decisionRule = { check: (f) => (f.type === "decision" ? [{ rule: "decision
  * @param {boolean} [opts.redisStores]  - addToWorkingMemory의 반환값
  * @param {*}       [opts.insertResult] - store.insert가 돌려줄 값. undefined면 파편 id
  */
-function makeRememberer({ redisStores = true, insertResult, policyRules = { check: () => [] }, policyGatingEnabled = false, getHardGate = async () => false } = {}) {
+function makeRememberer({ redisStores = true, backend = "postgres", insertResult, policyRules = { check: () => [] }, policyGatingEnabled = false, getHardGate = async () => false } = {}) {
   const calls = { wm: [], inserted: [], approved: [], budget: [], cap: [], order: [] };
   const store = {
     findByIdempotencyKey            : async () => null,
@@ -50,6 +50,7 @@ function makeRememberer({ redisStores = true, insertResult, policyRules = { chec
     deindex                          : async () => {},
     addToWorkingMemory               : async (sessionId, f) => { calls.wm.push({ sessionId, f }); return redisStores; },
     enforceFallbackWorkingMemoryBudget: async (sessionId) => { calls.budget.push(sessionId); return 0; },
+    workingMemoryBackend              : () => backend,
     enforceFallbackKeyCap             : async (keyId) => { calls.order.push("cap"); calls.cap.push(keyId); return 0; }
   };
   const rememberer = new MemoryRememberer({
@@ -151,6 +152,22 @@ describe("저장소 선택", () => {
     assert.equal(row.hash_scope, "wm:sess-wm-0001:default");
     assert.equal(result.working_memory, "postgres-fallback");
     assert.equal(result.id, row.id);
+  });
+
+  it("Redis가 준비되지 않은 경우의 힌트는 준비되지 않았다고 알린다", async () => {
+    const { rememberer } = makeRememberer({ redisStores: false, backend: "postgres" });
+    const result = await rememberer.remember({ ...SESSION_WRITE });
+    assert.match(result._meta.hints[0].suggestion, /준비되지 않아/);
+  });
+
+  it("Redis가 준비됐지만 쓰기에 실패한 경우의 힌트는 준비 상태를 잘못 말하지 않는다", async () => {
+    const { rememberer, calls } = makeRememberer({ redisStores: false, backend: "redis" });
+    const result = await rememberer.remember({ ...SESSION_WRITE });
+    assert.equal(calls.inserted.length, 1);
+    assert.equal(result.working_memory, "postgres-fallback");
+    assert.equal(result._meta.hints[0].signal, "working_memory_fallback");
+    assert.doesNotMatch(result._meta.hints[0].suggestion, /준비되지 않아/);
+    assert.match(result._meta.hints[0].suggestion, /Redis에 쓰지 못해/);
   });
 
   it("대체 경로 응답은 _meta.hints에 working_memory_fallback을 싣는다", async () => {

@@ -246,9 +246,22 @@ describe("키별 상한", () => {
     assert.ok(dbRef.fake.rows.some(r => r.id === keyed));
   });
 
-  it("상한 안이면 아무것도 지우지 않는다", async () => {
+  it("상한 안이면 행 수만 세고 삭제 문장을 보내지 않는다", async () => {
     seed({ key: "key-1" });
     assert.equal(await trimWorkingMemoryRowsOfKey("key-1", 5), 0);
+    assert.equal(dbRef.fake.calls.length, 1);
+    assert.match(dbRef.fake.calls[0].sql, /^\s*SELECT count/);
+    assert.equal(dbRef.fake.calls.some(c => /^\s*DELETE/.test(c.sql)), false);
+  });
+
+  it("넘는 만큼만 한 문장으로 지우고 OFFSET으로 묶음을 훑지 않는다", async () => {
+    for (let i = 0; i < 6; i++) seed({ key: "key-1", at: T0 + i * 1000, session: `x${i}` });
+    assert.equal(await trimWorkingMemoryRowsOfKey("key-1", 4), 2);
+    const del = dbRef.fake.calls.find(c => /^\s*DELETE/.test(c.sql));
+    assert.equal(del.params.at(-1), 2);
+    assert.match(del.sql, /LIMIT \$3/);
+    assert.doesNotMatch(del.sql, /OFFSET/);
+    assert.equal(dbRef.fake.rows.length, 4);
   });
 });
 

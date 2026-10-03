@@ -41,7 +41,6 @@ async function main() {
     const { rows } = await queryWithAgentVector("system",
       `SELECT id, content FROM ${SCHEMA}.fragments
        WHERE embedding IS NULL
-         AND valid_to IS NULL
          AND ${NOT_WM_ROW}
        ORDER BY importance DESC, created_at DESC
        LIMIT $1`,
