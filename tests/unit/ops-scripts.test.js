@@ -94,10 +94,19 @@ describe("운영 스크립트 구조", () => {
 
   it("backup.sh는 옵션 변수를 맨 위에서 초기화한다", () => {
     const text = source("backup.sh");
-    for (const v of ["dbname", "label", "prune_days", "snapshot", "SNAP_PID"]) {
+    for (const v of ["dbname", "label", "prune_days", "snapshot", "snap_pid", "snap_in", "snap_out"]) {
       assert.match(text, new RegExp(`^${v}=""$`, "m"), v);
     }
     assert.doesNotMatch(text, /\$\{dbname:-\}/);
+  });
+
+  it("backup.sh는 코프로세스 변수(SNAP, SNAP_PID)를 시작 직후 한 번만 읽는다", () => {
+    const text  = source("backup.sh");
+    const start = text.indexOf("coproc SNAP ");
+    assert.ok(start > 0);
+    const reads = [...text.matchAll(/\$\{?SNAP(_PID|\[)/g)].map(m => m.index);
+    assert.equal(reads.length, 3);
+    for (const at of reads) assert.ok(at > start && at < text.indexOf("snap_send()"), String(at));
   });
 
   it("backup.sh는 정책 계산을 프로세스 치환으로 읽지 않는다", () => {

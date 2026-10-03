@@ -60,7 +60,9 @@ prune_days=""
 dbname=""
 snapshot=""
 roles_status=0
-SNAP_PID=""
+snap_pid=""
+snap_in=""
+snap_out=""
 partial_files=()
 conn=()
 
@@ -198,9 +200,9 @@ create_exclusive() {
 cleanup() {
   local file
   for file in "${partial_files[@]}"; do rm -f -- "$file"; done
-  if [[ -n "${SNAP_PID:-}" ]]; then
-    exec {SNAP[1]}>&- 2>/dev/null || true
-    kill "$SNAP_PID" 2>/dev/null || true
+  if [[ -n "$snap_pid" ]]; then
+    exec {snap_in}>&- 2>/dev/null || true
+    kill "$snap_pid" 2>/dev/null || true
   fi
 }
 trap cleanup EXIT
@@ -227,15 +229,20 @@ create_exclusive "$dump_part"
 
 # 덤프와 행 수가 같은 시점을 보도록 스냅숏을 내보낸 읽기 전용 트랜잭션을 덤프가 끝날 때까지 연다.
 coproc SNAP { psql "${conn[@]}" -X -q -A -t -v ON_ERROR_STOP=1; }
+# bash 는 코프로세스를 거두는 즉시 SNAP 와 SNAP_PID 를 지우고 그 fd 를 닫으므로, 시작 직후 값을 받아 두고 이후에는 받아 둔 값만 쓴다.
+snap_pid=${SNAP_PID:-}
+snap_in=${SNAP[1]:-}
+snap_out=${SNAP[0]:-}
+[[ -n "$snap_pid" && -n "$snap_in" && -n "$snap_out" ]] || die 1 "스냅숏 세션을 열지 못했다 (접속 값과 권한을 확인한다)"
 
 snap_send() {
-  printf '%s\n' "$@" '\echo @@END@@' >&"${SNAP[1]}"
+  printf '%s\n' "$@" '\echo @@END@@' >&"$snap_in"
 }
 
 snap_read() {
   local line
   SNAP_LINES=()
-  while IFS= read -r -t 120 line <&"${SNAP[0]}"; do
+  while IFS= read -r -t 120 line <&"$snap_out"; do
     [[ "$line" == "@@END@@" ]] && return 0
     SNAP_LINES+=("$line")
   done
@@ -266,9 +273,9 @@ pg_dump "${conn[@]}" --format=custom --schema="$SCHEMA" --snapshot="$snapshot" -
 # COMMIT 의 응답을 받은 뒤 입력을 닫아 psql 이 스스로 끝나게 한다. psql 이 끝난 뒤에는 쓰지 않는다.
 snap_send "COMMIT;"
 snap_read || true
-exec {SNAP[1]}>&-
-wait "$SNAP_PID" 2>/dev/null || true
-SNAP_PID=""
+exec {snap_in}>&-
+wait "$snap_pid" 2>/dev/null || true
+snap_pid=""
 
 toc_entries=$(pg_restore --list "$dump_part" | grep -cE '^[0-9]+;' || true)
 [[ "$toc_entries" -gt 0 ]] || die 1 "덤프 목차를 읽지 못했다"
