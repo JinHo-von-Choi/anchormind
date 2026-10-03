@@ -94,3 +94,23 @@ describe("SyntheticQueryGenerator 외부 전송 문맥", () => {
     assert.deepEqual(seen[0].egress, { stage: "synthetic_query", keyId: "k3", workspace: "ops" });
   });
 });
+
+describe("키 문맥 해석", () => {
+  it("AutoReflect는 호출자가 키를 모르면 세션 활동 기록의 소유 키를 쓴다", async () => {
+    const { reflectEgressContext } = await import("../../lib/memory/processors/AutoReflect.js");
+    assert.deepEqual(reflectEgressContext({}, { keyId: "k7", workspace: "w" }), { keyId: "k7", workspace: "w" });
+    assert.deepEqual(reflectEgressContext({}, { keyId: null }), { keyId: null, workspace: null });
+    assert.deepEqual(reflectEgressContext({ keyId: "k1", workspace: "a" }, { keyId: "k7" }), { keyId: "k1", workspace: "a" });
+    assert.deepEqual(reflectEgressContext({ keyId: null }, { keyId: "k7" }), { keyId: null });
+    assert.deepEqual(reflectEgressContext({}, { toolCalls: {} }), {});
+    assert.deepEqual(reflectEgressContext({}, null), {});
+  });
+
+  it("ClaimExtractor는 받은 키 문맥을 형태소 분석에 넘긴다", async () => {
+    const { ClaimExtractor } = await import("../../lib/symbolic/ClaimExtractor.js");
+    const seen = [];
+    const extractor = new ClaimExtractor({ morphemeIndex: { tokenize: async (_t, ctx) => { seen.push(ctx); return []; } } });
+    await extractor.extract("Redis 포트는 6379다", "infra", { keyId: "k2", workspace: "ops" });
+    assert.deepEqual(seen[0], { keyId: "k2", workspace: "ops" });
+  });
+});
