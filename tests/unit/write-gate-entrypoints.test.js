@@ -9,19 +9,59 @@
  * 함께 확인한다.
  */
 
-import { describe, it, mock, beforeEach, afterEach } from "node:test";
-import assert                                         from "node:assert/strict";
-import { Readable }                                   from "node:stream";
+import { describe, it, mock, beforeEach, afterEach, after } from "node:test";
+import assert                                                from "node:assert/strict";
+import { Readable }                                          from "node:stream";
 
-/** admin 처리기가 동적으로 불러오는 MemoryManager를 대역으로 바꾼다. */
+/** admin 처리기와 AutoReflect가 불러오는 MemoryManager를 대역으로 바꾼다. */
 const managerHolder = { instance: null };
 mock.module("../../lib/memory/MemoryManager.js", {
   namedExports: { MemoryManager: { getInstance: () => managerHolder.instance } }
 });
 
-const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
-const { FragmentFactory }  = await import("../../lib/memory/write/FragmentFactory.js");
-const { handleMemory }     = await import("../../lib/admin/admin-memory.js");
+/** AutoReflect의 세션 활동 기록과 요약 생성기를 대역으로 바꾼다. */
+const geminiHolder = { result: null };
+mock.module("../../lib/memory/processors/SessionActivityTracker.js", {
+  namedExports: {
+    SessionActivityTracker: {
+      getActivity   : async () => ({
+        toolCalls   : { recall: 4 },
+        fragments   : [],
+        startedAt   : "2026-10-03T00:00:00.000Z",
+        lastActivity: "2026-10-03T00:10:00.000Z"
+      }),
+      markReflected: async () => {}
+    }
+  }
+});
+mock.module("../../lib/gemini.js", {
+  namedExports: {
+    isGeminiCLIAvailable: async () => true,
+    geminiCLIJson       : async () => geminiHolder.result
+  }
+});
+mock.module("../../lib/memory/embedding/MorphemeIndex.js", {
+  namedExports: {
+    MorphemeIndex: class {
+      async tokenize(t)               { return String(t).split(/\s+/).slice(0, 5); }
+      async getOrRegisterEmbeddings() { return []; }
+    }
+  }
+});
+mock.module("../../lib/memory/processors/EpisodeContinuityService.js", {
+  namedExports: { linkEpisodeMilestone: async () => null }
+});
+
+const { MemoryRememberer }       = await import("../../lib/memory/processors/MemoryRememberer.js");
+const { FragmentFactory }        = await import("../../lib/memory/write/FragmentFactory.js");
+const { BatchRememberProcessor } = await import("../../lib/memory/write/BatchRememberProcessor.js");
+const { ReflectProcessor }       = await import("../../lib/memory/processors/ReflectProcessor.js");
+const { WriteGate }              = await import("../../lib/memory/write/WriteGate.js");
+const { autoReflect }            = await import("../../lib/memory/processors/AutoReflect.js");
+const { handleMemory }           = await import("../../lib/admin/admin-memory.js");
+const { teardownTestResources }  = await import("../_lifecycle.js");
+
+after(async () => { await teardownTestResources(); });
 
 /** 민감 정보 입력 표: [이름, 본문, 원문 조각, 표식] */
 const MASKING_TABLE = [
@@ -174,4 +214,155 @@ describe("admin 기억 PATCH", () => {
       assertMasked(updated[0]?.content, secret, marker);
     });
   }
+});
+
+/** 관문에 넘어온 진입점 이름을 기록하는 관문 */
+class RecordingGate extends WriteGate {
+  constructor(entries, deps) {
+    super(deps);
+    this.entries = entries;
+  }
+  async check(request) {
+    this.entries.push(request.entry);
+    return super.check(request);
+  }
+}
+
+/** 다중 행 INSERT의 본문 열(행마다 24열 중 둘째)을 모으는 일괄 저장 풀 */
+function makeBatchPool(contents) {
+  const COLS = 24;
+  return {
+    connect: async () => ({
+      query: async (sql, params) => {
+        if (typeof sql !== "string" || !sql.includes("INSERT INTO")) return { rows: [] };
+        const rows = [];
+        for (let i = 0; i < params.length; i += COLS) {
+          contents.push(params[i + 1]);
+          rows.push({ id: params[i] });
+        }
+        return { rows };
+      },
+      release() {}
+    })
+  };
+}
+
+function makeBatchProcessor(contents, writeGate) {
+  const proc = new BatchRememberProcessor({
+    store  : {},
+    index  : { index: async () => {} },
+    factory: new FragmentFactory(),
+    ...(writeGate ? { writeGate } : {})
+  });
+  proc.setPool(makeBatchPool(contents));
+  return proc;
+}
+
+const decisionRule = { check: (f) => (f.type === "decision" ? [{ rule: "decisionHasRationale", severity: "medium" }] : []) };
+
+describe("MCP batch_remember", () => {
+  it("항목마다 민감 정보를 마스킹해 기록한다", async () => {
+    const contents = [];
+    const proc     = makeBatchProcessor(contents);
+    const result   = await proc.process({
+      fragments: MASKING_TABLE.map(([, content]) => ({ content, type: "fact", topic: "ops" }))
+    });
+    assert.equal(result.inserted, MASKING_TABLE.length);
+    MASKING_TABLE.forEach(([, , secret, marker], i) => assertMasked(contents[i], secret, marker));
+  });
+
+  it("항목별 정책 경고를 결과에 싣고 다른 항목은 그대로 저장한다", async () => {
+    const contents = [];
+    const proc     = makeBatchProcessor(contents, () => new WriteGate({ policyRules: decisionRule, policyGatingEnabled: true }));
+    const result   = await proc.process({
+      fragments: [
+        { content: "Redis 캐시 레이어를 도입하기로 했다", type: "decision", topic: "ops" },
+        { content: "Redis 포트는 6380으로 운영한다",       type: "fact",     topic: "ops" }
+      ]
+    });
+    assert.deepEqual(result.results[0].validation_warnings, ["decisionHasRationale"]);
+    assert.equal(result.results[1].validation_warnings, undefined);
+    assert.equal(result.inserted, 2);
+  });
+
+  it("hard gate 키의 위반 항목만 거부한다", async () => {
+    const contents = [];
+    const proc     = makeBatchProcessor(contents, () => new WriteGate({
+      policyRules: decisionRule, policyGatingEnabled: true, getHardGate: async () => true
+    }));
+    const result = await proc.process({
+      _keyId   : "key-1",
+      fragments: [
+        { content: "Redis 캐시 레이어를 도입하기로 했다", type: "decision", topic: "ops" },
+        { content: "Redis 포트는 6380으로 운영한다",       type: "fact",     topic: "ops" }
+      ]
+    });
+    assert.equal(result.results[0].success, false);
+    assert.match(result.results[0].error, /policy_violation: decisionHasRationale/);
+    assert.equal(result.results[1].success, true);
+    assert.equal(contents.length, 1);
+  });
+
+  it("MEMENTO_WRITE_GATE=off이면 기존처럼 마스킹만 하고 정책 경고는 없다", async () => {
+    process.env.MEMENTO_WRITE_GATE = "off";
+    const contents = [];
+    const proc     = makeBatchProcessor(contents, () => new WriteGate({ policyRules: decisionRule, policyGatingEnabled: true }));
+    const [, content, secret, marker] = MASKING_TABLE[0];
+    const result = await proc.process({ fragments: [{ content, type: "decision", topic: "ops" }] });
+    assertMasked(contents[0], secret, marker);
+    assert.equal(result.results[0].validation_warnings, undefined);
+  });
+});
+
+/** reflect 처리기 */
+function makeReflectProcessor({ batchRememberProcessor = null, inserted = [], writeGate } = {}) {
+  return new ReflectProcessor({
+    store        : { insert: async (f) => { inserted.push(f); return f.id ?? "frag-x"; } },
+    index        : { index: async () => {}, evictWorkingMemoryItems: async () => 0 },
+    factory      : new FragmentFactory(),
+    sessionLinker: { consolidateSessionFragments: async () => null, autoLinkSessionFragments: async () => ({ linkSuggestions: [] }) },
+    remember     : async () => ({ id: null }),
+    batchRememberProcessor,
+    ...(writeGate ? { writeGate } : {})
+  });
+}
+
+describe("reflect 파생 파편", () => {
+  it("일괄 저장 경로는 reflect 진입점으로 관문을 거쳐 마스킹해 기록한다", async () => {
+    const contents = [];
+    const entries  = [];
+    const proc     = makeBatchProcessor(contents, () => new RecordingGate(entries));
+    const reflect  = makeReflectProcessor({ batchRememberProcessor: proc });
+    await reflect.process({ summary: MASKING_TABLE.map(([, content]) => content), agentId: "a1" });
+    MASKING_TABLE.forEach(([, , secret, marker], i) => assertMasked(contents[i], secret, marker));
+    assert.ok(entries.length > 0 && entries.every(e => e === "reflect"), JSON.stringify(entries));
+  });
+
+  it("개별 저장 경로도 항목마다 관문을 거쳐 마스킹해 기록한다", async () => {
+    const inserted = [];
+    const entries  = [];
+    const reflect  = makeReflectProcessor({ inserted, writeGate: () => new RecordingGate(entries) });
+    await reflect.process({ decisions: MASKING_TABLE.map(([, content]) => content), agentId: "a1" });
+    assert.equal(inserted.length, MASKING_TABLE.length);
+    for (const [, , secret, marker] of MASKING_TABLE) {
+      assert.ok(inserted.some(f => f.content.includes(marker) && !f.content.includes(secret)), marker);
+    }
+    assert.equal(entries.length, MASKING_TABLE.length);
+  });
+});
+
+describe("AutoReflect", () => {
+  it("요약 결과를 auto_reflect 진입점으로 관문에 통과시켜 마스킹해 기록한다", async () => {
+    const contents = [];
+    const entries  = [];
+    const proc     = makeBatchProcessor(contents, () => new RecordingGate(entries));
+    const reflect  = makeReflectProcessor({ batchRememberProcessor: proc });
+    managerHolder.instance = { reflect: (p, opts) => reflect.process(p, opts) };
+    geminiHolder.result    = { summary: MASKING_TABLE.map(([, content]) => content), decisions: [], errors_resolved: [], new_procedures: [], open_questions: [] };
+
+    const result = await autoReflect("sess-auto-1", "a1");
+    assert.equal(result.count, MASKING_TABLE.length);
+    MASKING_TABLE.forEach(([, , secret, marker], i) => assertMasked(contents[i], secret, marker));
+    assert.ok(entries.length > 0 && entries.every(e => e === "auto_reflect"), JSON.stringify(entries));
+  });
 });

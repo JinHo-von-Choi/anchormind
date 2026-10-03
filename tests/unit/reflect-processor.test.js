@@ -144,7 +144,7 @@ describe("ReflectProcessor - summary", () => {
     madeProcessors.add(processor);
 
     const result = await processor.process({
-      summary: ["요약 1", "요약 2", "요약 3"],
+      summary: ["첫째 요약 항목", "둘째 요약 항목", "셋째 요약 항목"],
       agentId: "test-agent",
     });
 
@@ -255,7 +255,7 @@ describe("ReflectProcessor - session consolidation", () => {
           workspace        : null,
           topic             : null,
           caseId            : null,
-          summary           : "통합 요약",
+          summary           : "세션 통합 요약 내용",
           decisions         : ["통합 결정: 마이크로서비스 분리 전략을 다음 분기 로드맵에 반영"],
           errors_resolved   : [],
           new_procedures    : [],
@@ -287,7 +287,7 @@ describe("ReflectProcessor - session consolidation", () => {
           workspace        : null,
           topic             : null,
           caseId            : null,
-          summary           : "통합 요약",
+          summary           : "세션 통합 요약 내용",
           decisions         : [],
           errors_resolved   : [],
           new_procedures    : [],
@@ -361,7 +361,7 @@ describe("ReflectProcessor - combined", () => {
     madeProcessors.add(processor);
 
     const result = await processor.process({
-      summary        : ["요약 A", "요약 B"],
+      summary        : ["요약 항목 A", "요약 항목 B"],
       decisions      : ["결정 1: Redis 캐시 레이어 도입으로 DB 조회 부하 절감"],
       errors_resolved: ["에러 1: 커넥션 풀 고갈로 인한 타임아웃 발생 원인 확인 완료", "에러 2: SSL 인증서 갱신 누락으로 외부 API 호출 실패 원인 파악"],
       new_procedures : ["절차 1: 마이그레이션 실행 전 백업 스냅샷 생성 후 검증 단계 추가"],
@@ -445,7 +445,7 @@ describe("ReflectProcessor - keyId and workspace propagation", () => {
     madeProcessors.add(processor);
 
     await processor.process({
-      summary  : "테스트",
+      summary  : "테스트 요약 항목",
       _keyId   : "key-abc",
       workspace: "ws-1",
       agentId  : "test-agent",
@@ -474,7 +474,7 @@ describe("ReflectProcessor - insert failure handling", () => {
     madeProcessors.add(processor);
 
     const result = await processor.process({
-      summary: ["성공 1", "실패할 항목", "성공 2"],
+      summary: ["성공 항목 하나", "실패할 항목 하나", "성공 항목 둘"],
       agentId: "test-agent",
     });
 
