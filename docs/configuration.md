@@ -445,6 +445,17 @@ Claude Code와 Codex의 훅이 부르는 `POST /hooks/{client}/{event}`다. `cli
 - 로그: 클라이언트, 이벤트, 상태 코드, 오류 이름과 코드만 남기고 발췌, 요약 후보, 키, 세션 id는 남기지 않는다.
 - 응답 시간: 일회용 시험 DB(풀 20 연결)에서 50개 동시 요청 10회(실제 키 인증, 접수 확인, 기록) 측정은 p50 53~59 ms, p95 78~91 ms, p99 80~93 ms, 순차 요청 p50 5 ms다(`scripts/measure-hook-latency.mjs`). 운영 DB와 풀 크기에 따라 달라진다.
 
+#### 훅 실행체가 읽는 변수(서버 설정 아님)
+
+`anchormind hook`은 하네스가 실행하는 로컬 명령이며 서버의 `.env`나 작업 중인 저장소(cwd)의 `.env`를 읽지 않는다. 서버 주소와 키는 명령 인자 `--remote`, `--key` 또는 아래 프로세스 환경 변수에서만 읽고, 주소와 키는 언제나 같은 출처의 한 쌍으로 고른다. 이 변수들은 `.env.example`에 두지 않는다.
+
+| 변수 | 출처 | 설명 |
+|-|-|-|
+| CLAUDE_PLUGIN_OPTION_SERVER_URL, CLAUDE_PLUGIN_OPTION_API_KEY | Claude Code(하네스가 넣는다) | AnchorMind 플러그인의 userConfig `server_url`, `api_key`. Claude Code가 플러그인 훅 프로세스에만 넣는다. 사용자가 직접 설정하지 않는다. 둘 다 있을 때만 쓰며 MEMENTO_CLI_* 쌍보다 앞선다. 하나만 있으면 둘 다 버리고 경고한 뒤 MEMENTO_CLI_* 쌍을 쓴다 |
+| MEMENTO_CLI_REMOTE, MEMENTO_CLI_KEY | 사용자 셸 환경 | 원격 CLI 공통 변수([cli.md](cli.md#원격-접속-환경변수)). 플러그인 쌍이 없을 때 훅이 쓴다 |
+
+플러그인 설치는 [getting-started/plugins.md](getting-started/plugins.md)에 있다.
+
 ### Redis
 
 | 변수 | 기본값 | 설명 |

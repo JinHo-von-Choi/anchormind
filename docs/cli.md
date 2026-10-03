@@ -42,9 +42,9 @@ node bin/memento.js stats
 |------|------|
 | `MEMENTO_CLI_REMOTE` | `--remote` 미지정 시 사용할 MCP 서버 URL |
 | `MEMENTO_CLI_KEY` | `--key` 미지정 시 사용할 API 키 |
-| `CLAUDE_PLUGIN_OPTION_SERVER_URL`, `CLAUDE_PLUGIN_OPTION_API_KEY` | `hook` 전용. Claude Code가 플러그인 훅 프로세스에 넘기는 userConfig 값(`server_url`, `api_key`)이다. 있으면 `MEMENTO_CLI_REMOTE`, `MEMENTO_CLI_KEY`보다 앞선다. 직접 설정하지 않는다 |
+| `CLAUDE_PLUGIN_OPTION_SERVER_URL`, `CLAUDE_PLUGIN_OPTION_API_KEY` | `hook` 전용. Claude Code가 플러그인 훅 프로세스에 넘기는 userConfig 값(`server_url`, `api_key`)이다. 둘 다 있을 때만 `MEMENTO_CLI_REMOTE`, `MEMENTO_CLI_KEY` 쌍보다 앞서고, 하나만 있으면 둘 다 버리고 경고한다. 직접 설정하지 않는다 |
 
-`init`은 현재 디렉터리의 `.env`를 불러오지 않으며, 만드는 파일은 환경 변수의 영향을 받지 않는다.
+`hook`과 `init`은 현재 디렉터리의 `.env`를 불러오지 않는다. `hook`의 서버 주소와 키는 명령 인자나 프로세스 환경 변수에서만 같은 출처의 한 쌍으로 읽는다. `init`이 만드는 파일은 환경 변수의 영향을 받지 않는다.
 
 ---
 
@@ -477,7 +477,7 @@ anchormind hook SessionEnd   --client codex --timeout 3000
 |-|-|
 | `<event>` | `SessionStart`, `Stop`, `SessionEnd` |
 | `--client` | `claude-code`, `codex` |
-| `--remote`, `--key` | 서버 MCP 주소와 API 키. 없으면 프로세스 환경 변수 `MEMENTO_CLI_REMOTE`, `MEMENTO_CLI_KEY`를 쓴다. 키는 명령줄 대신 환경 변수로 준다(명령줄 인자는 프로세스 목록에 보인다). `hook`은 다른 명령과 달리 작업 디렉터리의 `.env`를 읽지 않는다(하네스는 작업 중인 저장소에서 훅을 실행하므로 저장소의 `.env`가 키와 발췌를 보낼 주소를 바꾸지 못하게 한다). 업데이트 확인도 하지 않는다 |
+| `--remote`, `--key` | 서버 MCP 주소와 API 키. 없으면 프로세스 환경 변수 `MEMENTO_CLI_REMOTE`, `MEMENTO_CLI_KEY`를 쓴다. 키는 명령줄 대신 환경 변수로 준다(명령줄 인자는 프로세스 목록에 보인다). `hook`은 다른 명령과 달리 작업 디렉터리의 `.env`를 읽지 않는다(하네스는 작업 중인 저장소에서 훅을 실행하므로 저장소의 `.env`가 키와 발췌를 보낼 주소를 바꾸지 못하게 한다). 업데이트 확인도 하지 않는다. Claude Code 플러그인 훅에서는 플러그인 설정값 쌍(`CLAUDE_PLUGIN_OPTION_SERVER_URL`, `CLAUDE_PLUGIN_OPTION_API_KEY`)이 둘 다 있을 때 `MEMENTO_CLI_*` 쌍보다 앞서고, 하나만 있으면 둘 다 버리고 경고한다 |
 | `--timeout` | 요청 제한 시간(ms). 기본 `SessionEnd` 1200(Claude Code의 SessionEnd 훅 예산 1.5초 안), 그 밖 5000 |
 
 - `SessionStart`: 서버 응답 `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}`를 표준 출력에 그대로 쓴다.
@@ -503,7 +503,9 @@ anchormind init --target codex --dir ./mk --url https://memento.example.com/mcp 
 | `--write` | 파일을 쓴다. 없으면 아무것도 쓰지 않는다 |
 | `--force` | `--write`와 함께 내용이 다른 기존 파일을 바꾼다 |
 
-- 파일마다 상태를 출력한다: `create`(새 파일), `unchanged`(내용이 같아 건너뜀), `conflict`(내용이 다름. `--force` 없이 `--write`하면 아무 파일도 쓰지 않고 종료 코드 1), `blocked`(디렉터리나 심볼릭 링크. 언제나 쓰지 않음). `create`와 `conflict`는 기존 내용과의 줄 단위 diff를 함께 출력한다.
+- 파일마다 상태를 출력한다: `create`(새 파일), `unchanged`(내용이 같아 건너뜀), `conflict`(내용이 다름. `--force` 없이 `--write`하면 아무 파일도 쓰지 않고 종료 코드 1), `blocked`(`--dir` 아래 경로의 어느 조각이든 심볼릭 링크이거나 최종 경로가 일반 파일이 아님. 언제나 쓰지 않음). `create`와 `conflict`는 기존 내용과의 줄 단위 diff를 함께 출력한다.
+- `--write`는 먼저 모든 위치의 쓰기 권한을 확인하고(하나라도 없으면 아무것도 쓰지 않음), 파일마다 같은 디렉터리의 임시 파일에 쓴 뒤 rename으로 바꾼다. 도중에 실패하면 이번 실행이 만든 파일과 디렉터리를 지우고 바꾼 파일을 원래 내용으로 되돌린 뒤 종료 코드 1로 끝난다.
+- `anchormind`가 PATH에 없으면 경고한다(플러그인 훅이 실행하는 명령). 출력을 받는 쪽이 먼저 닫혀도(`| head`) 쓰기 결과로 종료 코드를 정한다.
 - 만드는 파일: Claude Code는 `.claude-plugin/marketplace.json`(마켓플레이스 `anchormind-local`)과 `plugins/anchormind/` 아래 `.claude-plugin/plugin.json`, `.mcp.json`, `hooks/hooks.json`, `skills/anchormind/SKILL.md`. Codex는 `.agents/plugins/marketplace.json`과 `plugins/anchormind/` 아래 `plugin.json`, `hooks/hooks.json`.
 - API 키는 어떤 파일에도 쓰지 않고 `--key`도 받지 않는다. Claude Code는 플러그인을 켤 때 `api_key`를 묻고 보안 저장소에 둔다. Codex는 `config.toml`에 환경 변수 이름(`bearer_token_env_var = "MEMENTO_CLI_KEY"`)만 적도록 안내한다.
 - 서버에 접속하지 않고, 현재 디렉터리의 `.env`를 불러오지 않는다.

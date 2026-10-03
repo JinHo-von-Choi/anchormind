@@ -450,6 +450,17 @@ Behavior
 - Logs: only client, event, status code and error name and code are logged; the excerpt, summary candidate, key and session id are not.
 - Response time: on a disposable test database (pool of 20 connections), 10 rounds of 50 concurrent requests (real key authentication, admission check and write) measured p50 53 to 59 ms, p95 78 to 91 ms, p99 80 to 93 ms, sequential p50 5 ms (`scripts/measure-hook-latency.mjs`). Results depend on the production database and pool size.
 
+#### Variables read by the hook runner (not server settings)
+
+`anchormind hook` is a local command run by the harness and reads neither the server `.env` nor the `.env` of the repository it runs in (cwd). The server URL and key come only from the `--remote`, `--key` arguments or the process environment variables below, and the URL and key are always taken as a pair from the same source. These variables are not listed in `.env.example`.
+
+| Variable | Source | Description |
+|-|-|-|
+| CLAUDE_PLUGIN_OPTION_SERVER_URL, CLAUDE_PLUGIN_OPTION_API_KEY | Claude Code (set by the harness) | The AnchorMind plugin's userConfig `server_url` and `api_key`. Claude Code puts them only into plugin hook processes. Do not set them yourself. Used only when both are present, ahead of the MEMENTO_CLI_* pair. When only one is present both are ignored with a warning and the MEMENTO_CLI_* pair is used |
+| MEMENTO_CLI_REMOTE, MEMENTO_CLI_KEY | User shell environment | Common remote CLI variables ([cli.en.md](cli.en.md#remote-access-environment-variables)). The hook uses them when the plugin pair is absent |
+
+Plugin installation is described in [getting-started/plugins.en.md](getting-started/plugins.en.md).
+
 ### Redis
 
 | Variable | Default | Description |

@@ -59,15 +59,15 @@ When the plugin is enabled, Claude Code asks for two values.
 | `server_url` | MCP URL, for example `https://memento.example.com/mcp` | `pluginConfigs` in `settings.json` |
 | `api_key` | The issued API key | Operating system credential store |
 
-To set the values from the command line, pass them to `claude plugin configure` on standard input. The key is read from the environment variable, so it does not appear on the command line or in the shell history.
+To set the values from the command line, pass them to `claude plugin configure` on standard input. The key is read from the environment variable and serialized as JSON, so it does not appear on the command line or in the shell history, and a key containing `"` or `\` still yields valid JSON.
 
 ```bash
-printf '{"server_url":"%s","api_key":"%s"}' "$MEMENTO_CLI_REMOTE" "$MEMENTO_CLI_KEY" \
+node -e 'process.stdout.write(JSON.stringify({ server_url: process.env.MEMENTO_CLI_REMOTE, api_key: process.env.MEMENTO_CLI_KEY }))' \
   | claude plugin configure anchormind@anchormind-local --values-stdin
 ```
 
 - The MCP connection is filled from `${user_config.server_url}` and `${user_config.api_key}`.
-- Hook processes receive the same values as `CLAUDE_PLUGIN_OPTION_SERVER_URL` and `CLAUDE_PLUGIN_OPTION_API_KEY`. `anchormind hook` uses them before `MEMENTO_CLI_REMOTE` and `MEMENTO_CLI_KEY`, so the hooks and the MCP connection use the same server and key.
+- Hook processes receive the same values as `CLAUDE_PLUGIN_OPTION_SERVER_URL` and `CLAUDE_PLUGIN_OPTION_API_KEY`. When both are present, `anchormind hook` uses them before the `MEMENTO_CLI_REMOTE`, `MEMENTO_CLI_KEY` pair, so the hooks and the MCP connection use the same server and key. When only one is present both are ignored with a warning. The URL and key are always a pair from one source, and the `.env` of the repository being worked on is not read.
 - If you already added the same hooks to `~/.claude/settings.json` following [Hook Setup](hooks.en.md), remove them. With both in place, injection and reflection run twice.
 - To try the plugin without installing it, run `claude --plugin-dir integrations/claude-code` from the repository.
 - Update: `anchormind init --target claude --write --force`, then `claude plugin update anchormind@anchormind-local` (applies after a restart).

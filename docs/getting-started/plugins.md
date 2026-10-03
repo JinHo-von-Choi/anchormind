@@ -59,15 +59,15 @@ claude plugin install anchormind@anchormind-local
 | `server_url` | MCP 주소, 예: `https://memento.example.com/mcp` | `settings.json`의 `pluginConfigs` |
 | `api_key` | 발급한 API 키 | 운영체제 보안 저장소 |
 
-명령줄에서 값을 넣으려면 `claude plugin configure`에 표준 입력으로 준다. 키는 환경 변수에서 읽어 넘기므로 명령줄과 셸 기록에 남지 않는다.
+명령줄에서 값을 넣으려면 `claude plugin configure`에 표준 입력으로 준다. 키는 환경 변수에서 읽어 JSON으로 직렬화하므로 명령줄과 셸 기록에 남지 않고, 키에 `"`나 `\`가 있어도 올바른 JSON이 된다.
 
 ```bash
-printf '{"server_url":"%s","api_key":"%s"}' "$MEMENTO_CLI_REMOTE" "$MEMENTO_CLI_KEY" \
+node -e 'process.stdout.write(JSON.stringify({ server_url: process.env.MEMENTO_CLI_REMOTE, api_key: process.env.MEMENTO_CLI_KEY }))' \
   | claude plugin configure anchormind@anchormind-local --values-stdin
 ```
 
 - MCP 연결은 `${user_config.server_url}`, `${user_config.api_key}`로 채워진다.
-- 훅 프로세스는 같은 값을 `CLAUDE_PLUGIN_OPTION_SERVER_URL`, `CLAUDE_PLUGIN_OPTION_API_KEY`로 받는다. `anchormind hook`은 이 값을 `MEMENTO_CLI_REMOTE`, `MEMENTO_CLI_KEY`보다 먼저 쓰므로 훅과 MCP 연결이 같은 서버와 키를 쓴다.
+- 훅 프로세스는 같은 값을 `CLAUDE_PLUGIN_OPTION_SERVER_URL`, `CLAUDE_PLUGIN_OPTION_API_KEY`로 받는다. `anchormind hook`은 이 두 값이 모두 있을 때 `MEMENTO_CLI_REMOTE`, `MEMENTO_CLI_KEY` 쌍보다 먼저 쓰므로 훅과 MCP 연결이 같은 서버와 키를 쓴다. 하나만 있으면 둘 다 버리고 경고한다. 주소와 키는 언제나 같은 출처의 한 쌍이고, 작업 중인 저장소의 `.env`는 읽지 않는다.
 - [훅 설정](hooks.md)대로 `~/.claude/settings.json`에 같은 훅을 이미 걸었다면 지운다. 두 곳에 있으면 주입과 회고가 두 번 실행된다.
 - 설치 없이 시험하려면 저장소에서 `claude --plugin-dir integrations/claude-code`로 실행한다.
 - 갱신: `anchormind init --target claude --write --force` 뒤 `claude plugin update anchormind@anchormind-local`(재시작 후 적용).

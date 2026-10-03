@@ -41,9 +41,9 @@ Every command except `serve` sends server logs to stderr (the CLI sets `MEMENTO_
 |----------|-------------|
 | `MEMENTO_CLI_REMOTE` | MCP server URL to use when `--remote` is not specified |
 | `MEMENTO_CLI_KEY` | API key to use when `--key` is not specified |
-| `CLAUDE_PLUGIN_OPTION_SERVER_URL`, `CLAUDE_PLUGIN_OPTION_API_KEY` | `hook` only. The userConfig values (`server_url`, `api_key`) that Claude Code passes to plugin hook processes. When present they take precedence over `MEMENTO_CLI_REMOTE` and `MEMENTO_CLI_KEY`. Not set by hand |
+| `CLAUDE_PLUGIN_OPTION_SERVER_URL`, `CLAUDE_PLUGIN_OPTION_API_KEY` | `hook` only. The userConfig values (`server_url`, `api_key`) that Claude Code passes to plugin hook processes. Only when both are present do they take precedence over the `MEMENTO_CLI_REMOTE`, `MEMENTO_CLI_KEY` pair; when only one is present both are ignored with a warning. Not set by hand |
 
-`init` does not load the `.env` of the current directory, and the files it creates do not depend on environment variables.
+`hook` and `init` do not load the `.env` of the current directory. `hook` reads the server URL and key only from command arguments or process environment variables, as a pair from one source. The files `init` creates do not depend on environment variables.
 
 ---
 
@@ -476,7 +476,7 @@ anchormind hook SessionEnd   --client codex --timeout 3000
 |-|-|
 | `<event>` | `SessionStart`, `Stop`, `SessionEnd` |
 | `--client` | `claude-code`, `codex` |
-| `--remote`, `--key` | Server MCP URL and API key. Without them the process environment variables `MEMENTO_CLI_REMOTE` and `MEMENTO_CLI_KEY` are used. Pass the key through the environment instead of the command line (command-line arguments are visible in the process list). Unlike other commands, `hook` does not read the `.env` file of the working directory (harnesses run hooks inside the repository being worked on, so a repository `.env` must not change where the key and excerpt are sent), and it does not check for updates |
+| `--remote`, `--key` | Server MCP URL and API key. Without them the process environment variables `MEMENTO_CLI_REMOTE` and `MEMENTO_CLI_KEY` are used. Pass the key through the environment instead of the command line (command-line arguments are visible in the process list). Unlike other commands, `hook` does not read the `.env` file of the working directory (harnesses run hooks inside the repository being worked on, so a repository `.env` must not change where the key and excerpt are sent), and it does not check for updates. In a Claude Code plugin hook, the plugin settings pair (`CLAUDE_PLUGIN_OPTION_SERVER_URL`, `CLAUDE_PLUGIN_OPTION_API_KEY`) takes precedence over the `MEMENTO_CLI_*` pair when both are present; when only one is present both are ignored with a warning |
 | `--timeout` | Request timeout (ms). Default 1200 for `SessionEnd` (inside the 1.5 second Claude Code SessionEnd hook budget), 5000 otherwise |
 
 - `SessionStart`: writes the server response `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}` to standard output unchanged.
@@ -502,7 +502,9 @@ anchormind init --target codex --dir ./mk --url https://memento.example.com/mcp 
 | `--write` | Write the files. Without it nothing is written |
 | `--force` | With `--write`, replace existing files whose content differs |
 
-- Each file is reported with a status: `create` (new file), `unchanged` (same content, skipped), `conflict` (different content; `--write` without `--force` writes no file at all and exits with code 1), `blocked` (a directory or symbolic link; never written). `create` and `conflict` are followed by a line diff against the existing content.
+- Each file is reported with a status: `create` (new file), `unchanged` (same content, skipped), `conflict` (different content; `--write` without `--force` writes no file at all and exits with code 1), `blocked` (some component of the path under `--dir` is a symbolic link, or the final path is not a regular file; never written). `create` and `conflict` are followed by a line diff against the existing content.
+- `--write` first checks that every location is writable (if any is not, nothing is written), then writes each file to a temporary file in the same directory and renames it into place. If a write fails midway, the files and directories created by this run are removed, replaced files are restored to their previous content, and the command exits with code 1.
+- It warns when `anchormind` is not on PATH (the command the plugin hooks run). When the reader closes the output early (`| head`), the exit code still follows the write result.
 - Files created: for Claude Code, `.claude-plugin/marketplace.json` (marketplace `anchormind-local`) and, under `plugins/anchormind/`, `.claude-plugin/plugin.json`, `.mcp.json`, `hooks/hooks.json`, `skills/anchormind/SKILL.md`. For Codex, `.agents/plugins/marketplace.json` and, under `plugins/anchormind/`, `plugin.json`, `hooks/hooks.json`.
 - The API key is never written to a file and `--key` is not accepted. Claude Code asks for `api_key` when the plugin is enabled and keeps it in the secure credential store. For Codex, the `config.toml` snippet names only the environment variable (`bearer_token_env_var = "MEMENTO_CLI_KEY"`).
 - It does not contact a server and does not load the `.env` of the current directory.
