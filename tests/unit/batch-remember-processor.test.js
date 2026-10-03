@@ -69,11 +69,11 @@ function makeMockStore() {
  */
 function makeMockClient(opts = {}) {
   /**
-   * 기본 insertFn: multi-row INSERT params 구조(24컬럼 × N행)에서
-   * 첫 번째 파라미터($1)가 각 행의 id이므로 stride=24로 추출하여 rows 반환.
+   * 기본 insertFn: multi-row INSERT params 구조(24컬럼 × N행, 출처 열이 붙으면 27컬럼)에서
+   * 첫 번째 파라미터($1)가 각 행의 id이므로 열 수를 stride로 추출하여 rows 반환.
    */
   const insertFn  = opts.insertFn  || ((sql, params) => {
-    const COLS = 24;
+    const COLS = sql.includes("trust_tier") ? 27 : 24;
     const rows = [];
     for (let i = 0; i < params.length; i += COLS) {
       rows.push({ id: params[i] });

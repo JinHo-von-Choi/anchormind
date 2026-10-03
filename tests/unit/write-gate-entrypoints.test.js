@@ -271,13 +271,13 @@ class RecordingGate extends WriteGate {
   }
 }
 
-/** 다중 행 INSERT의 본문 열(행마다 24열 중 둘째)을 모으는 일괄 저장 풀 */
+/** 다중 행 INSERT의 본문 열(행마다 24열, 출처 열이 붙으면 27열 중 둘째)을 모으는 일괄 저장 풀 */
 function makeBatchPool(contents) {
-  const COLS = 24;
   return {
     connect: async () => ({
       query: async (sql, params) => {
         if (typeof sql !== "string" || !sql.includes("INSERT INTO")) return { rows: [] };
+        const COLS = sql.includes("trust_tier") ? 27 : 24;
         const rows = [];
         for (let i = 0; i < params.length; i += COLS) {
           contents.push(params[i + 1]);

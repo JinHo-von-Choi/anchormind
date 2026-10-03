@@ -41,9 +41,12 @@ function pgError(code, message, constraint) {
   return err;
 }
 
-/** INSERT 바인딩에서 행을 읽는다. 단건(FragmentWriter)은 32열, batch는 24열이다. */
+/**
+ * INSERT 바인딩에서 행을 읽는다. 단건(FragmentWriter)은 32열, batch는 24열이고, 출처 열
+ * (origin, observed_client, trust_tier)이 붙은 문장은 행마다 3열이 더 있다.
+ */
 function insertedRows(sql, params) {
-  const stride = sql.includes("idempotency_key") ? 32 : 24;
+  const stride = (sql.includes("idempotency_key") ? 32 : 24) + (sql.includes("trust_tier") ? 3 : 0);
   const rows   = [];
   for (let i = 0; i < params.length; i += stride) {
     const p = params.slice(i, i + stride);

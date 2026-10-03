@@ -59,14 +59,14 @@ function makeMockIndex() {
   return { index: mock.fn(async () => {}) };
 }
 
-/** 동기 INSERT 경로용 mock client (24컬럼 stride로 id 추출) */
+/** 동기 INSERT 경로용 mock client (24컬럼, 출처 열이 붙으면 27컬럼 stride로 id 추출) */
 function makeMockClient() {
   return {
     query: mock.fn(async (sql, params) => {
       if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [] };
       if (typeof sql === "string" && sql.startsWith("SET LOCAL")) return { rows: [] };
       if (typeof sql === "string" && sql.includes("INSERT INTO")) {
-        const COLS = 24;
+        const COLS = sql.includes("trust_tier") ? 27 : 24;
         const rows = [];
         for (let i = 0; i < params.length; i += COLS) rows.push({ id: params[i] });
         return { rows };
