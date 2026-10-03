@@ -191,6 +191,19 @@ describe("작업 디렉터리 정리", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  it("Error가 아닌 값이 던져져도 예외 없이 값을 보고한다", () => {
+    for (const [thrown, expected] of [["boom", "boom"], [null, "null"], [undefined, "undefined"], [42, "42"]]) {
+      const dir = cliWorkDir();
+      mock.method(fs, "rmSync", () => { throw thrown; });
+      const write = mock.method(process.stderr, "write", () => true);
+      assert.doesNotThrow(() => cleanupCliWorkDir());
+      assert.equal(write.mock.calls.length, 1);
+      assert.equal(write.mock.calls[0].arguments[0], `[LLM] CLI work dir cleanup failed: ${expected}\n`);
+      mock.restoreAll();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("정리하면 디렉터리가 사라지고 다음 호출은 새 디렉터리를 만든다", () => {
     const dir = cliWorkDir();
     cleanupCliWorkDir();
