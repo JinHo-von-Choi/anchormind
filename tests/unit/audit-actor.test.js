@@ -1,6 +1,7 @@
 /**
  * 감사 기록의 행위자 표기와 관리 인증 실패 처리 시험.
- * 실제 logAudit, handleToolsCall, handleAdminApi를 호출하고 MemoryManager와 ApiKeyStore만 대체한다.
+ * 실제 logAudit, handleToolsCall, handleAdminApi를 호출하고 MemoryManager, ApiKeyStore, 감사 이벤트 기록기
+ * (audit-outbox.recordAudit)만 대체한다.
  *
  * 작성자: 최진호
  * 작성일: 2026-10-03
@@ -21,6 +22,12 @@ process.env.CACHE_ENABLED           ??= "false";
 
 const KEY_ID = "7a1e0000-0000-4000-8000-000000000001";
 const SID    = "e9509944-0482-4e7e-9a69-78cfb07b2f5a";
+
+/** 감사 이벤트 기록기가 받은 이벤트 */
+const auditEvents = [];
+mock.module("../../lib/logging/audit-outbox.js", {
+  exports: { recordAudit: async (event) => { auditEvents.push(event); return null; }, enqueueAudit: async () => null }
+});
 
 const realManager = await import("../../lib/memory/MemoryManager.js");
 mock.module("../../lib/memory/MemoryManager.js", {
@@ -57,6 +64,7 @@ after(async () => {
 beforeEach(() => {
   delete process.env.MEMENTO_ADMIN_AUTH_BACKOFF;
   _resetAdminAuthGuardForTest();
+  auditEvents.length = 0;
   for (const f of fs.readdirSync(LOG_DIR)) fs.rmSync(path.join(LOG_DIR, f));
 });
 
@@ -194,3 +202,59 @@ describe("관리 감사 기록의 경로 표기", () => {
     assert.equal(line.split("|").length, 7);
   });
 });
+
+describe("관리 감사 이벤트", () => {
+  /** finish 이벤트 뒤 감사 이벤트가 기록되기를 기다린다 */
+  async function eventFor(action) {
+    for (let i = 0; i < 50 && !auditEvents.some((e) => e.action === action); i++) await new Promise((r) => setTimeout(r, 10));
+    return auditEvents.find((e) => e.action === action);
+  }
+
+  it("관리 로그인 실패는 시도한 값 없이 admin.auth denied로 남는다", async () => {
+    await loginForm("wrong-key-value");
+    const event = await eventFor("admin.auth");
+    assert.equal(event.outcome, "denied");
+    assert.equal(event.actor.keyId, "unknown");
+    assert.doesNotMatch(JSON.stringify(event), /wrong-key-value/);
+  });
+
+  it("키 상태 변경은 선언된 행위, 대상 키, 이후 상태, 마스터 행위자로 남는다", async () => {
+    const res = await fetch(`${base}/keys/${KEY_ID}`, {
+      method : "PUT",
+      headers: { "content-type": "application/json", authorization: `Bearer ${ACCESS_KEY}` },
+      body   : JSON.stringify({ status: "inactive" })
+    });
+    assert.equal(res.status, 200);
+    const event = await eventFor("admin.key.status_update");
+    assert.equal(event.outcome, "success");
+    assert.deepEqual(event.target, { type: "api_key", id: KEY_ID });
+    assert.deepEqual(event.detail.after, { status: "inactive" });
+    assert.equal(event.detail.status, 200);
+    assert.equal(event.actor.keyId, "master");
+    assert.doesNotMatch(JSON.stringify(event), new RegExp(ACCESS_KEY.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  });
+
+  it("세션 종료의 대상은 세션 id 앞 8자다", async () => {
+    await fetch(`${base}/sessions/${SID}`, { method: "DELETE", headers: { authorization: `Bearer ${ACCESS_KEY}` } });
+    const event = await eventFor("admin.session.close");
+    assert.deepEqual(event.target, { type: "session", id: SID.slice(0, 8) });
+    assert.doesNotMatch(JSON.stringify(event), new RegExp(SID));
+  });
+
+  it("읽기 전용 요청은 감사 이벤트를 만들지 않는다", async () => {
+    await fetch(`${base}/keys`, { headers: { authorization: `Bearer ${ACCESS_KEY}` } });
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(auditEvents.filter((e) => e.action.startsWith("admin.") && e.action !== "admin.auth").length, 0);
+  });
+
+  it("도구 forget은 서버가 확인한 행위자로 memory.forget을 남긴다", async () => {
+    await handleToolsCall({ name: "forget", arguments: { id: "frag-0000000000000000" } }, {
+      authenticated: true, isMaster: false, keyId: KEY_ID, groupKeyIds: [KEY_ID], permissions: ["read", "write"],
+      defaultWorkspace: null, mode: null, sessionId: SID, clientIp: "203.0.113.7"
+    });
+    const event = await eventFor("memory.forget");
+    assert.equal(event.actor.keyId, KEY_ID);
+    assert.deepEqual(event.target, { type: "fragment", id: "frag-0000000000000000" });
+  });
+});
+
