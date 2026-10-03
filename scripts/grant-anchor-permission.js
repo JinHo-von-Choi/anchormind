@@ -7,8 +7,8 @@
  *
  * 목적: 최근 90일 동안 앵커 파편(is_anchor, created_at)을 만든 키를 찾아, 활성이고 anchor 권한이 없는
  *       키 가운데 write 권한이 있는 키에만 anchor를 덧붙인다. 앵커 지정은 anchor 권한으로 분리되어 있으므로(MEMENTO_ANCHOR_PERMISSION)
- *       앵커를 실제로 쓰는 키가 배포 뒤에도 앵커를 계속 지정하게 한다. 배포 전에 실행한다(이전 버전의 서버는
- *       키 권한 목록의 anchor 값을 무시한다).
+ *       앵커를 실제로 쓰는 키가 배포 뒤에도 앵커를 계속 지정하게 한다. 배포 전에 실행한다(부여 시점의 서버는
+ *       권한 판정에 anchor 값을 쓰지 않는다).
  * 출력: 대상 키(id, 이름, 상태, 권한, 90일 앵커 수, 처리)와 집계를 JSON 한 덩어리로 표준 출력에 쓴다.
  *       처리 값은 grant(부여 대상), skip_has_permission(anchor 또는 admin 보유), skip_inactive(비활성 키),
  *       skip_no_write(write 권한 없음). 기간 안의 앵커에는 정리 작업의 자동 앵커 승격으로 앵커가 된 파편도
