@@ -18,7 +18,7 @@ mock.module("../../lib/tools/db.js", {
   }
 });
 
-const { updateInIdOrder, updateOneBatch, readBatchClock, scoreUpdateBatchSize, paramGuard } = await import("../../lib/memory/consolidate/idOrderedUpdate.js");
+const { updateInIdOrder, updateOneBatch, readBatchClock, scoreUpdateBatchSize, paramGuard, selectBatchIds, BatchParamError } = await import("../../lib/memory/consolidate/idOrderedUpdate.js");
 
 /** 잠금 문장이 ids 를 잠그고 갱신 문장이 n 행을 갱신한 결과 */
 const locked = (n, ids) => ({ rows: [], rowCount: n, lockedIds: ids });
@@ -104,6 +104,27 @@ describe("updateOneBatch", () => {
     replies  = [{ rows: [{ ts }] }];
     assert.equal(await readBatchClock(), ts);
     assert.equal(calls.length, 1);
+  });
+});
+
+describe("값 목록의 null", () => {
+  it("updateOneBatch 는 null 인자를 BatchParamError 로 거부하고 질의하지 않는다", async () => {
+    await assert.rejects(
+      updateOneBatch({ where: "importance > $4", set: "importance = 1", params: [null], batchSize: 5, clock: new Date() }),
+      (err) => err instanceof BatchParamError && err.position === 4
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  it("updateOneBatch 는 기준 시각과 onlyId 의 null 도 거부한다", async () => {
+    await assert.rejects(updateOneBatch({ where: "true", set: "importance = 1", batchSize: 5, clock: null }), BatchParamError);
+    await assert.rejects(updateOneBatch({ where: "true", set: "importance = 1", batchSize: 1, clock: new Date(), onlyId: null }), BatchParamError);
+    assert.equal(calls.length, 0);
+  });
+
+  it("selectBatchIds 는 null 인자를 BatchParamError 로 거부하고 질의하지 않는다", async () => {
+    await assert.rejects(selectBatchIds({ where: "true", params: [undefined], batchSize: 5, clock: new Date() }), BatchParamError);
+    assert.equal(calls.length, 0);
   });
 });
 
