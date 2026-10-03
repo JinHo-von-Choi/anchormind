@@ -11,10 +11,12 @@ import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
 import {
-  NEW_INDEXES, OLD_INDEXES, STATE_SQL, EXISTS_SQL,
-  parseFinishArgs, planFinish, evaluateState, dropOldSql, main
+  NEW_INDEXES, OLD_INDEXES, OLD_INDEX_ALIASES, OLD_INDEX_DEFINITIONS, LEGACY_NAMES, STATE_SQL, EXISTS_SQL,
+  parseFinishArgs, planFinish, evaluateState, dropOldSql, aliasDefinitionMatches, main
 } from "../../scripts/ops/finish-dedup-scope.mjs";
-import { DEDUP_INDEXES } from "../../lib/memory/write/DedupScope.js";
+import {
+  DEDUP_INDEXES, LEGACY_INDEX_ALIASES, LEGACY_INDEX_DEFINITIONS, legacyDefinitionMatches
+} from "../../lib/memory/write/DedupScope.js";
 import { OPEN_TXN_SQL }  from "../../scripts/ops/online-index-plan.mjs";
 
 const URL_ARGS = ["--url", "postgresql://u:secret-pw@db.example:5432/memento"];
@@ -63,10 +65,35 @@ function capture() {
 
 const ALL_VALID = Object.fromEntries([...NEW_INDEXES, ...OLD_INDEXES].map(n => [n, { valid: true, ready: true }]));
 
+const KEY_ALIAS    = "fragments_new_key_id_content_hash_idx";
+const MASTER_ALIAS = "fragments_new_content_hash_idx";
+
+/** 운영 카탈로그와 같은 모양의 다른 이름 색인 상태. */
+const ALIAS_DEFS = {
+  [KEY_ALIAS]   : { valid: true, ready: true, unique: true, table_name: "fragments", columns: ["key_id", "content_hash"], predicate: "key_id IS NOT NULL" },
+  [MASTER_ALIAS]: { valid: true, ready: true, unique: true, table_name: "fragments", columns: ["content_hash"], predicate: "key_id IS NULL" }
+};
+const NEW_VALID = Object.fromEntries(NEW_INDEXES.map(n => [n, { valid: true, ready: true }]));
+
 describe("이름과 인자", () => {
   it("색인 이름은 앱의 판정 색인 이름과 같다", () => {
     assert.deepEqual([...NEW_INDEXES], [DEDUP_INDEXES.keyScoped, DEDUP_INDEXES.masterScoped]);
     assert.deepEqual([...OLD_INDEXES], [DEDUP_INDEXES.keyLegacy, DEDUP_INDEXES.masterLegacy]);
+    assert.deepEqual(OLD_INDEX_ALIASES, LEGACY_INDEX_ALIASES);
+    assert.deepEqual(OLD_INDEX_DEFINITIONS, LEGACY_INDEX_DEFINITIONS);
+    assert.deepEqual([...LEGACY_NAMES], [DEDUP_INDEXES.keyLegacy, KEY_ALIAS, DEDUP_INDEXES.masterLegacy, MASTER_ALIAS]);
+  });
+
+  it("정의 판정이 앱과 같다", () => {
+    const base = ALIAS_DEFS[KEY_ALIAS];
+    const rows = [base, { ...base, unique: false }, { ...base, predicate: "(key_id IS NOT NULL)" },
+      { ...base, columns: ["key_id"] }, { ...base, table_name: "other" }, { ...base, predicate: "key_id IS NULL" }];
+    for (const row of rows) {
+      for (const legacy of OLD_INDEXES) {
+        assert.equal(aliasDefinitionMatches(row, legacy), legacyDefinitionMatches(row, legacy), JSON.stringify({ row, legacy }));
+      }
+    }
+    assert.equal(aliasDefinitionMatches(ALIAS_DEFS[MASTER_ALIAS], DEDUP_INDEXES.masterLegacy), true);
   });
 
   it("online-index 전용 옵션은 거부한다", () => {
@@ -84,7 +111,7 @@ describe("단계 계획과 상태 판정", () => {
     assert.ok(ids.indexOf("inspect") < ids.indexOf("require-new"));
     assert.ok(ids.indexOf("require-new") < ids.indexOf("drop"));
     assert.equal(ids.at(-1), "verify");
-    assert.deepEqual(steps.filter(s => s.id === "drop").map(s => s.sql[0]), OLD_INDEXES.map(dropOldSql));
+    assert.deepEqual(steps.filter(s => s.id === "drop").map(s => s.sql[0]), LEGACY_NAMES.map(dropOldSql));
     assert.equal(dropOldSql("uq_frag_hash_master"), "DROP INDEX CONCURRENTLY IF EXISTS agent_memory.uq_frag_hash_master");
   });
 
@@ -96,6 +123,17 @@ describe("단계 계획과 상태 판정", () => {
     assert.equal(bad.newValid, false);
     assert.deepEqual(bad.missingNew, [NEW_INDEXES[1]]);
   });
+
+  it("다른 이름 색인은 정의가 같을 때만 지울 대상이다", () => {
+    const rows  = name => ({ name, ...ALIAS_DEFS[name] });
+    const ok    = evaluateState([...NEW_INDEXES.map(name => ({ name, valid: true, ready: true })), rows(KEY_ALIAS), rows(MASTER_ALIAS)]);
+    assert.deepEqual(ok.oldPresent, [KEY_ALIAS, MASTER_ALIAS]);
+    assert.deepEqual(ok.mismatched, []);
+    const other = evaluateState([{ ...rows(KEY_ALIAS), unique: false }]);
+    assert.deepEqual(other.oldPresent, []);
+    assert.deepEqual(other.mismatched, [KEY_ALIAS]);
+    assert.ok(other.lines.some(l => l.startsWith(KEY_ALIAS) && l.includes("정의가 달라")));
+  });
 });
 
 describe("실행", () => {
@@ -103,7 +141,8 @@ describe("실행", () => {
     const { out, deps } = capture();
     const code = await main([], {}, { ...deps, connect: async () => { throw new Error("연결하면 안 된다"); } });
     assert.equal(code, 0);
-    assert.ok(out.some(l => l.includes(dropOldSql(OLD_INDEXES[0]))));
+    for (const name of LEGACY_NAMES) assert.ok(out.some(l => l.includes(dropOldSql(name))), name);
+    assert.ok(out.some(l => l.includes(`[${KEY_ALIAS}]`) && l.includes(`${DEDUP_INDEXES.keyLegacy} 와 같은 정의`)));
   });
 
   it("대상이 없으면 거부한다(종료 코드 2)", async () => {
@@ -152,6 +191,28 @@ describe("실행", () => {
     assert.ok(err.some(l => l.includes("무효 상태로 남았을 수 있으며")));
     assert.ok(out.some(l => l.includes("경고: 열려 있는 트랜잭션 1개")));
     assert.deepEqual(client.state.get(OLD_INDEXES[0]), { valid: false, ready: true });
+  });
+
+  it("다른 이름의 키 범위 색인만 있는 설치에서 그 색인을 지우고 남지 않았는지 확인한다", async () => {
+    const client = fakeClient({ indexes: { ...NEW_VALID, ...ALIAS_DEFS }, dropFailures: { [KEY_ALIAS]: 1 } });
+    const { out, deps } = capture();
+    const code = await main(["--confirm", ...URL_ARGS, "--retry-wait-ms", "0"], {},
+      { ...deps, connect: async () => client, sleep: async () => {} });
+    assert.equal(code, 0, out.join("\n"));
+    assert.deepEqual([...client.state.keys()].sort(), [...NEW_INDEXES].sort());
+    assert.ok(client.calls.includes(dropOldSql(KEY_ALIAS)));
+    assert.ok(client.calls.includes(dropOldSql(MASTER_ALIAS)));
+    assert.equal(client.calls.includes(dropOldSql(DEDUP_INDEXES.keyLegacy)), false, "없는 이름은 지우지 않는다");
+  });
+
+  it("정의가 다른 다른 이름 색인은 지우지 않고 알린다", async () => {
+    const client = fakeClient({ indexes: { ...ALL_VALID, [MASTER_ALIAS]: { ...ALIAS_DEFS[MASTER_ALIAS], predicate: null } } });
+    const { out, deps } = capture();
+    assert.equal(await main(["--confirm", ...URL_ARGS], {}, { ...deps, connect: async () => client }), 0);
+    assert.equal(client.calls.includes(dropOldSql(MASTER_ALIAS)), false);
+    assert.ok(client.state.has(MASTER_ALIAS));
+    assert.equal(OLD_INDEXES.some(n => client.state.has(n)), false);
+    assert.ok(out.some(l => l.includes(`경고: ${MASTER_ALIAS}`)));
   });
 
   it("옛 색인이 이미 없으면 지우지 않고 성공한다", async () => {
