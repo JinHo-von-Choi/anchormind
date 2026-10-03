@@ -266,7 +266,7 @@ MCP `memory_consolidate` 도구는 master 키 세션 전용이다. 일반 키 �
 | `scripts/normalize-vectors.js` | 기존 임베딩 벡터 L2 정규화 | 임베딩 제공자 전환 직후 1회 | 조건부 1회 |
 | `scripts/cleanup-noise.js` | 초단문·빈 세션 요약·NLI 재귀 쓰레기 파편 탐지·삭제 | recall 품질 저하 또는 context 토큰 예산 오염 시 | 조건부, 필요 시 월 1회 |
 | `scripts/purge-oauth-clients.js` | 한 번도 쓰이지 않은 오래된 OAuth DCR 클라이언트 정리 (기본 미리보기, `--execute`로 삭제, `--older-than-days`, 키 묶음 클라이언트 제외) | `oauth_clients`에 미사용 행이 누적됐을 때. 삭제 전 `pg_dump -t agent_memory.oauth_clients` 보관 | 조건부 |
-| `scripts/purge-orphan-case-summaries.js` | 원본 파편이 없는 `case_events` 요약을 `[삭제됨]`으로 정리 (기본 미리보기, `--execute`로 변경, `--batch`) | migration-054 배포 직후 1회, 이후 만료 정리와 병합이 남긴 요약을 확인할 때. 변경 전 `pg_dump -t agent_memory.case_events` 보관 | 일회성, 이후 조건부 |
+| `scripts/purge-orphan-case-summaries.js` | 원본 파편이 없는 `case_events` 요약을 `[삭제됨]`으로 정리 (대상은 `--url` 또는 PG 환경변수만, 기본 미리보기, `--execute --i-have-a-backup`으로 변경, `--batch`) | migration-054 배포 직후 1회, 이후 만료 정리와 병합이 남긴 요약을 확인할 때. 변경 전 `pg_dump -t agent_memory.case_events` 보관 | 일회성, 이후 조건부 |
 | `scripts/post-migrate-flexible-embedding-dims.js` | fragments + morpheme_dict + fragment_synthetic_query 임베딩 컬럼 차원 동시 조정 | EMBEDDING_DIMENSIONS 변경 또는 provider 전환 시 | 조건부 1회 |
 | `scripts/backfill-claims.js` | 기존 코퍼스에 ClaimExtractor 소급 실행 | Shadow mode(MEMENTO_SYMBOLIC_SHADOW=true) 활성화 전 | 일회성 |
 | `scripts/backfill-split-keywords.js` | keywords가 빈 split 자식 파편에 키워드 소급 생성 | 5.3.1 이하에서 생성된 split 자식이 키워드 검색에 잡히지 않을 때 | 일회성 |

@@ -282,7 +282,7 @@ scripts/
 ├── post-migrate-flexible-embedding-dims.js      임베딩 차원 마이그레이션
 ├── cleanup-noise.js                             저품질/노이즈 파편 일괄 정리 (1회성)
 ├── purge-oauth-clients.js                       한 번도 쓰이지 않은 오래된 동적 등록 OAuth 클라이언트 정리 (기본 미리보기, `--execute`로 삭제)
-├── purge-orphan-case-summaries.js               원본 파편이 없는 case_events 요약을 `[삭제됨]`으로 정리 (기본 미리보기, `--execute`로 변경)
+├── purge-orphan-case-summaries.js               원본 파편이 없는 case_events 요약을 `[삭제됨]`으로 정리 (대상은 `--url` 또는 PG 환경변수, 기본 미리보기, `--execute --i-have-a-backup`으로 변경)
 ├── lint-migrations.js                           마이그레이션 파일 규약 검사 (`npm run lint:migrations`)
 ├── lint-ratchet.js                              무처리 catch 처리기, 복잡도, 파일 길이, 직접 환경 변수 읽기 수치를 `scripts/lint-baseline.json`과 비교 (`npm run lint:ratchet`)
 ├── import-cycles.js                             `lib`, `config`, `server.js`의 상대 경로 import 순환 검사 (정적 import만 본 결과와 동적 import를 포함한 결과를 따로 출력)

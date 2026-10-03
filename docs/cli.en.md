@@ -630,15 +630,19 @@ Deletion cannot be undone, so keep a copy of the table with `pg_dump -t agent_me
 
 ### Orphan case_events summary cleanup
 
-Replaces the `summary` of `case_events` rows whose `source_fragment_id` has no row in `fragments` with `[삭제됨]`. Event rows, types, order and edges remain. Closed fragments (`valid_to` set) still have their row and are not targets. With `MEMENTO_FORGET_CASCADE=on` (the default) `forget` replaces the summaries in the same transaction, so this script cleans up summaries left by `forget` while the switch is off and by other deletion paths (expiry cleanup, merges). The default is a preview that prints the target count and an `event_id` sample (summaries are not printed); `--execute` changes them in batches of 500 (`--batch`, 1 to 10000) and skips rows locked by other transactions. The database connection uses the server settings (`POSTGRES_*`, `DOTENV_CONFIG_PATH`).
+Replaces the `summary` of `case_events` rows whose `source_fragment_id` (empty strings excluded) has no row in `fragments` with `[삭제됨]`. Event rows, types, order and edges remain. Closed fragments (`valid_to` set) still have their row and are not targets, and contradiction resolution records are not handled. With `MEMENTO_FORGET_CASCADE=on` (the default) `forget` replaces the summaries in the same transaction, so this script cleans up summaries left by `forget` while the switch is off and by other deletion paths (expiry cleanup, merges).
+
+The target comes only from `--url postgresql://...` or the standard PG environment variables (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`). It does not read `.env`, `DOTENV_CONFIG_PATH` or the application settings (`POSTGRES_*`, `DATABASE_URL`), and without a target it refuses with exit code 2 before connecting. The output shows only the host, port and database of the target. The default is a preview that prints the target count and an `event_id` sample (summaries are not printed). A change needs both `--execute` and the backup confirmation flag `--i-have-a-backup`; without the flag it prints the `pg_dump ... -t agent_memory.case_events` command to run and refuses. Changes run in batches of 500 (`--batch`, 1 to 10000) and skip rows locked by other transactions. Exit codes are 0 (success), 1 (execution failure) and 2 (argument or target refused).
 
 ```bash
-node scripts/purge-orphan-case-summaries.js                      # preview
-node scripts/purge-orphan-case-summaries.js --execute            # change
-node scripts/purge-orphan-case-summaries.js --execute --batch 200
+PGHOST=<host> PGDATABASE=<db> PGUSER=<user> PGPASSWORD=<password> \
+  node scripts/purge-orphan-case-summaries.js                                   # preview
+pg_dump -h <host> -d <db> -t agent_memory.case_events -Fc -f case_events.dump    # backup
+PGHOST=<host> PGDATABASE=<db> PGUSER=<user> PGPASSWORD=<password> \
+  node scripts/purge-orphan-case-summaries.js --execute --i-have-a-backup       # change
 ```
 
-The change cannot be undone, so keep a copy of the table with `pg_dump -t agent_memory.case_events` before running it.
+Copies that neither this script nor the `forget` deletion cascade handle: contradiction resolution records written while the switch is off hold the first 80 characters of both fragments and are deleted by the cascade when a fragment they point to is forgotten. A resolution record whose fragment was already deleted no longer has that id in `linked_to`, so it cannot be found and its copy remains.
 
 ### Import cycle check
 

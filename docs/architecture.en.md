@@ -279,7 +279,7 @@ scripts/
 +-- post-migrate-flexible-embedding-dims.js      Embedding dimension migration
 +-- cleanup-noise.js                             Bulk cleanup of low-quality/noise fragments (one-time)
 +-- purge-oauth-clients.js                       Removes old dynamically registered OAuth clients that were never used (preview by default, `--execute` deletes)
-+-- purge-orphan-case-summaries.js               Replaces case_events summaries whose source fragment no longer exists with `[삭제됨]` (preview by default, `--execute` changes)
++-- purge-orphan-case-summaries.js               Replaces case_events summaries whose source fragment no longer exists with `[삭제됨]` (target from `--url` or PG variables, preview by default, `--execute --i-have-a-backup` changes)
 +-- lint-migrations.js                           Migration file convention check (`npm run lint:migrations`)
 +-- lint-ratchet.js                              Compares silent catch handlers, complexity, file length and direct environment reads against `scripts/lint-baseline.json` (`npm run lint:ratchet`)
 +-- import-cycles.js                             Import cycle check over relative imports in `lib`, `config` and `server.js` (static-only and static+dynamic results printed separately)
