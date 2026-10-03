@@ -213,7 +213,7 @@ describe("호출 시점에 읽는 변수의 기동 검사", () => {
       return spawnSync(process.execPath, ["server.js"], {
         cwd     : new URL("../../", import.meta.url),
         env     : {
-          PATH: process.env.PATH, DOTENV_CONFIG_PATH: "/nonexistent.env", PORT: "19201",
+          PATH: process.env.PATH, DOTENV_CONFIG_PATH: "/nonexistent.env", PORT: "0",
           POSTGRES_HOST: "127.0.0.1", POSTGRES_PORT: "1",
           MEMENTO_ACCESS_KEY: "scratch", REDIS_ENABLED: "false", CACHE_ENABLED: "false",
           MEMENTO_METRICS_DEFAULT: "off", LOG_DIR: logDir, ...GARBAGE, ...extra
@@ -239,9 +239,11 @@ describe("호출 시점에 읽는 변수의 기동 검사", () => {
     const c  = await import("./lib/config.js");
     const a  = await import("./lib/llm/util/cli-approval.js");
     const k  = await import("./lib/admin/ApiKeyStore.js");
+    const h  = await import("./lib/handlers/sse-handler.js");
     console.log("PROBE " + JSON.stringify({
       approval: a.cliToolApprovalMode(), session: c.sessionIdPolicy(), backoff: c.adminAuthBackoffMode(),
       dup: c.isRememberDuplicateGuardEnabled(), del: k.isApiKeyDeleteGuardEnabled(),
+      sse: h.legacySseQueryKeyMode(),
       issues: c.getConfigIssues().map(i => [i.name, i.problem, i.used])
     }));
   `], {
@@ -262,6 +264,71 @@ describe("호출 시점에 읽는 변수의 기동 검사", () => {
     assert.equal(r.backoff, "off");
     assert.equal(r.dup, false);
     assert.equal(r.del, true);
+  });
+
+  /** [이름, 문서 밖 값, 사용처가 그 값에 적용하는 값, 문서에 있는 값] */
+  const ENUM_SWITCHES = [
+    ["MEMENTO_OAUTH_REDIRECT_CHECK", "block",      "warn",    ["warn", "enforce"]],
+    ["MEMENTO_CORS_MODE",           "open",       "observe", ["reflect", "observe", "allowlist"]],
+    ["MEMENTO_FRAME_OPTIONS",       "sameorigin", "off",     ["deny"]],
+    ["MEMENTO_SSE_QUERY_KEY",       "block",      "allow",   ["allow", "deny"]]
+  ];
+
+  /** [이름, 사용처가 문서 밖 값에 적용하는 값]. 문서에 있는 값은 true와 false다. */
+  const BOOL_SWITCHES = [
+    ["MEMENTO_REMEMBER_ATOMIC",                    false],
+    ["MEMENTO_WORKSPACE_GATE",                     false],
+    ["MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN",            false],
+    ["ENABLE_RECONSOLIDATION",                     false],
+    ["ENABLE_SPREADING_ACTIVATION",                false],
+    ["UPDATE_REQUIRE_SIGNED_TAG",                  false],
+    ["MEMENTO_AUTH_DISABLED",                      false],
+    ["REDIS_ENABLED",                              false],
+    ["REDIS_SENTINEL_ENABLED",                     false],
+    ["MEMENTO_REDIS_SESSION_FAIL_CLOSED",          false],
+    ["CACHE_ENABLED",                              false],
+    ["EMBEDDING_SUPPORTS_DIMS_PARAM",              false],
+    ["MEMENTO_RERANKER_ENABLED",                   false],
+    ["MEMENTO_CASE_BACKPROP_ENABLED",              false],
+    ["UPDATE_CHECK_DISABLED",                      false],
+    ["ENABLE_OPENAPI",                             false],
+    ["MCP_ALLOW_AUTO_DCR_REGISTER",                false],
+    ["MCP_STRICT_ORIGIN",                          false],
+    ["MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE",   true],
+    ["LLM_CONCURRENCY_ENABLED",                    true],
+    ["MCP_REJECT_NONAPIKEY_OAUTH",                 true]
+  ];
+
+  it("열거형 스위치의 문서 밖 값은 기록하고 사용처가 적용하는 값을 남긴다", () => {
+    const r = probe(Object.fromEntries(ENUM_SWITCHES.map(([n, bad]) => [n, bad])));
+    assert.deepEqual(r.issues.map(i => i[0]).sort(), ENUM_SWITCHES.map(e => e[0]).sort());
+    for (const [name, , used] of ENUM_SWITCHES) {
+      const issue = r.issues.find(i => i[0] === name);
+      assert.equal(issue[1], "not_in_enum");
+      assert.equal(issue[2], used, `${name} 적용 값`);
+    }
+    assert.equal(r.sse, "allow");
+  });
+
+  it("논리 스위치의 true와 false 밖 값은 기록하고 사용처가 적용하는 값을 남긴다", () => {
+    const r = probe(Object.fromEntries(BOOL_SWITCHES.map(([n]) => [n, "yes"])));
+    assert.deepEqual(r.issues.map(i => i[0]).sort(), BOOL_SWITCHES.map(e => e[0]).sort());
+    for (const [name, used] of BOOL_SWITCHES) {
+      const issue = r.issues.find(i => i[0] === name);
+      assert.equal(issue[1], "not_boolean");
+      assert.equal(issue[2], used, `${name} 적용 값`);
+    }
+  });
+
+  it("스위치의 문서에 있는 값과 빈 값은 기록하지 않는다", () => {
+    const rounds = [0, 1, 2].map(i => Object.fromEntries(ENUM_SWITCHES.map(([n, , , doc]) => [n, doc[i % doc.length]])));
+    /** Redis 스위치를 true로 두면 자식 프로세스가 로컬 Redis에 닿을 수 있어 true 값 점검에서 뺀다. */
+    const bools = (v) => Object.fromEntries(BOOL_SWITCHES
+      .filter(([n]) => v !== "true" || !/^(REDIS_|CACHE_)/.test(n)).map(([n]) => [n, v]));
+    for (const env of [...rounds, ...["true", "false", ""].map(bools),
+      Object.fromEntries(ENUM_SWITCHES.map(([n]) => [n, " "]))]) {
+      assert.deepEqual(probe(env).issues, [], JSON.stringify(env));
+    }
   });
 
   it("문서에 있는 값과 빈 값은 기록하지 않고 적용 값이 그대로다", () => {

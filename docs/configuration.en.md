@@ -22,15 +22,18 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | Number, 1 or more, anything else uses `SESSION_TTL_MINUTES * 60` | OAUTH_ACCESS_TOKEN_TTL_SECONDS |
 | Number, 0 to 1 (above 1 is capped to 1; negative and non-numeric values become 0) | MEMENTO_DECAY_MIN_DELTA, MEMENTO_UTILITY_MIN_DELTA |
 | off, warn, enforce (any other value behaves as enforce) | MEMENTO_TOOL_ARGS_VALIDATION |
-| warn, enforce (any other value is warn) | MEMENTO_SESSION_ID_POLICY, MEMENTO_RESERVED_AGENT_IDS |
+| warn, enforce (any other value is warn) | MEMENTO_SESSION_ID_POLICY, MEMENTO_RESERVED_AGENT_IDS, MEMENTO_OAUTH_REDIRECT_CHECK |
+| reflect, observe, allowlist (any other value is observe) | MEMENTO_CORS_MODE |
+| allow, deny (any other value is allow) | MEMENTO_SSE_QUERY_KEY |
+| deny (any other value adds no header) | MEMENTO_FRAME_OPTIONS |
 | 401, 503 (any other value is 401) | MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS |
 | inner, outer (any other value is inner) | MEMENTO_SEMANTIC_THRESHOLD_MODE |
 | none, all (any other value is none) | MEMENTO_LLM_CLI_TOOL_APPROVAL |
 | true, false (any other value is false) | MEMENTO_CONFIG_STRICT |
 | true, false (any other value fails startup in `MEMORY_CONFIG` validation) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (any other value is off) | MEMENTO_ADMIN_AUTH_BACKOFF |
-| true, false (any value other than false is true) | MEMENTO_API_KEY_DELETE_GUARD |
-| true, false (any value other than true is false) | MEMENTO_REMEMBER_DUPLICATE_GUARD |
+| true, false (any value other than false is true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
+| true, false (any value other than true is false) | MEMENTO_REMEMBER_DUPLICATE_GUARD, MEMENTO_REMEMBER_ATOMIC, MEMENTO_WORKSPACE_GATE, MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN, ENABLE_RECONSOLIDATION, ENABLE_SPREADING_ACTIVATION, UPDATE_REQUIRE_SIGNED_TAG, MEMENTO_AUTH_DISABLED, REDIS_ENABLED, REDIS_SENTINEL_ENABLED, MEMENTO_REDIS_SESSION_FAIL_CLOSED, EMBEDDING_SUPPORTS_DIMS_PARAM, MEMENTO_RERANKER_ENABLED, MEMENTO_CASE_BACKPROP_ENABLED, UPDATE_CHECK_DISABLED, ENABLE_OPENAPI, MCP_ALLOW_AUTO_DCR_REGISTER, MCP_STRICT_ORIGIN |
 
 ### Server
 
