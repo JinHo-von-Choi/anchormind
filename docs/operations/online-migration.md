@@ -49,6 +49,8 @@ lint 규칙은 번호 `050` 이상 파일에 적용한다(`scripts/lint-migratio
 |`large-index-table-mismatch`|등록된 이름을 작업 목록의 표와 다른 대형 표에 쓴다|
 |`large-index-if-not-exists`|대형 표의 `CREATE INDEX` 문에 `IF NOT EXISTS`가 없다|
 
+주석과 작은따옴표 문자열 안의 단어는 검사하지 않고, `DO $$ ... $$` 블록과 함수 본문 같은 달러 인용 본문과 `EXECUTE` 바로 뒤의 작은따옴표 문자열은 코드로 검사한다. `COMMENT ... IS $$...$$`처럼 달러 인용 문자열에 `CREATE INDEX`나 `CONCURRENTLY`를 적으면 위반으로 읽히므로(허용하는 쪽이 아니라 막는 쪽으로 틀린다) 문장 설명은 작은따옴표 문자열로 쓴다.
+
 ---
 
 ## 규칙 2. 대형 표 색인

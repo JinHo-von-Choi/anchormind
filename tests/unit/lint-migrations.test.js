@@ -97,6 +97,32 @@ describe("대형 표 색인 등록과 IF NOT EXISTS", () => {
   });
 });
 
+describe("달러 인용 본문은 코드로 검사한다", () => {
+  const cases = [
+    ["DO 블록의 큰 표 색인",          "DO $$ BEGIN\n  CREATE INDEX idx_new_do ON agent_memory.fragments (x);\nEND $$;", ["large-index-unregistered", "large-index-if-not-exists"]],
+    ["DO 블록의 이름 없는 색인",      "DO $$ BEGIN CREATE INDEX ON agent_memory.fragments (x); END $$;", ["large-index-unregistered", "large-index-if-not-exists"]],
+    ["태그 있는 DO 블록",             "DO $do$ BEGIN CREATE UNIQUE INDEX IF NOT EXISTS idx_new_tag ON agent_memory.fragment_links (a); END $do$;", ["large-index-unregistered"]],
+    ["CREATE FUNCTION 본문의 색인",   "CREATE OR REPLACE FUNCTION agent_memory.f() RETURNS void AS $fn$\nBEGIN\n  CREATE INDEX idx_new_fn ON agent_memory.case_events (case_id);\nEND;\n$fn$ LANGUAGE plpgsql;", ["no-begin", "large-index-unregistered", "large-index-if-not-exists"]],
+    ["CREATE FUNCTION 본문(BEGIN 이 같은 줄)", "CREATE OR REPLACE FUNCTION agent_memory.f() RETURNS void AS $fn$ BEGIN\n  CREATE INDEX idx_new_fn ON agent_memory.case_events (case_id);\nEND; $fn$ LANGUAGE plpgsql;", ["large-index-unregistered", "large-index-if-not-exists"]],
+    ["EXECUTE 뒤의 문자열은 코드",    "DO $$ BEGIN EXECUTE 'CREATE INDEX idx_new_dyn ON agent_memory.fragments (x)'; END $$;", ["large-index-unregistered", "large-index-if-not-exists"]],
+    ["EXECUTE 뒤 줄바꿈 문자열",      "DO $$ BEGIN EXECUTE\n  'CREATE INDEX idx_new_dyn ON agent_memory.fragments (x)'; END $$;", ["large-index-unregistered", "large-index-if-not-exists"]],
+    ["DO 본문의 CONCURRENTLY",        "DO $$ BEGIN EXECUTE 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_known_fragments ON agent_memory.fragments (x)'; END $$;", ["no-concurrently"]],
+    ["DO 본문의 등록된 색인은 통과",  "DO $$ BEGIN\n  CREATE INDEX IF NOT EXISTS idx_known_fragments ON agent_memory.fragments (x);\nEND $$;", []],
+    ["달러 인용 COMMENT 안의 문구(오탐, 닫는 쪽으로 틀림)", "COMMENT ON TABLE agent_memory.api_keys IS $$CREATE INDEX CONCURRENTLY idx_x ON agent_memory.fragments (a)$$;", ["no-concurrently", "large-index-unregistered", "large-index-if-not-exists"]]
+  ];
+  for (const [name, sql, expected] of cases) {
+    it(name, () => {
+      assert.deepEqual(ruleIds("migration-050-x.sql", sql), expected);
+    });
+  }
+
+  it("위반 줄 번호는 본문 안의 줄을 가리킨다", () => {
+    const sql = "SELECT 1;\nDO $$ BEGIN\n  PERFORM 1;\n  CREATE INDEX idx_new_do ON agent_memory.fragments (x);\nEND $$;";
+    const [v]  = lintMigrationContent("migration-050-x.sql", sql, KNOWN);
+    assert.equal(v.line, 4);
+  });
+});
+
 describe("적용 번호", () => {
   const sql = "CREATE INDEX CONCURRENTLY idx_new_one ON agent_memory.fragments (workspace);";
 
@@ -161,14 +187,19 @@ describe("문자열 안의 단어는 위반이 아니다", () => {
   const cases = [
     ["COMMENT ON 의 문자열",   "COMMENT ON TABLE agent_memory.api_keys IS 'use CREATE INDEX CONCURRENTLY later';"],
     ["COMMENT 의 큰 표 색인 문구", "COMMENT ON TABLE agent_memory.api_keys IS 'CREATE INDEX idx_x ON agent_memory.fragments (a)';"],
-    ["달러 인용 문자열",       "COMMENT ON TABLE agent_memory.api_keys IS $$CREATE INDEX CONCURRENTLY idx_x ON agent_memory.fragments (a)$$;"],
-    ["태그 있는 달러 인용",    "COMMENT ON TABLE agent_memory.api_keys IS $c$CONCURRENTLY$c$;"],
+    ["달러 인용 본문 안의 주석", "DO $$ BEGIN\n  -- CREATE INDEX CONCURRENTLY idx_x ON agent_memory.fragments (a)\n  PERFORM 1;\nEND $$;"],
+    ["달러 인용 본문 안의 문자열", "DO $$ BEGIN RAISE NOTICE 'CONCURRENTLY is not used'; END $$;"],
     ["중첩 블록 주석",         "/* outer /* inner */ CONCURRENTLY */\nSELECT 1;"],
     ["이스케이프된 따옴표",    "SELECT 'it''s CONCURRENTLY';"]
   ];
   for (const [name, sql] of cases) {
     it(name, () => assert.deepEqual(ruleIds("migration-050-x.sql", sql), []));
   }
+
+  it("달러 인용 본문 안의 짝 없는 작은따옴표가 뒤의 문장을 가리지 않는다", () => {
+    const sql = "COMMENT ON TABLE agent_memory.api_keys IS $$it's a note$$;\nDROP INDEX CONCURRENTLY IF EXISTS agent_memory.idx_old;";
+    assert.deepEqual(ruleIds("migration-050-x.sql", sql), ["no-concurrently"]);
+  });
 
   it("문자열 뒤의 실제 문장은 계속 검사한다", () => {
     const sql = "COMMENT ON TABLE agent_memory.api_keys IS 'note';\nDROP INDEX CONCURRENTLY IF EXISTS agent_memory.idx_old;";

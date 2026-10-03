@@ -113,9 +113,16 @@ function dollarTagAt(sql, i) {
 }
 
 /**
- * SQL 에서 주석과 문자열의 내용을 공백으로 바꾼다. 줄바꿈은 유지하므로 줄 번호가 같다.
- * -- 줄 주석, 중첩되는 블록 주석, 작은따옴표 문자열, 달러 인용 문자열의 내용을 지우고
- * 따옴표와 달러 표지는 남긴다. 문자열 안의 단어는 문장이 아니므로 검사에서 빠진다.
+ * SQL 에서 주석과 작은따옴표 문자열의 내용을 공백으로 바꾼다. 줄바꿈은 유지하므로 줄 번호가 같다.
+ * -- 줄 주석, 중첩되는 블록 주석, 작은따옴표 문자열의 내용을 지우고 따옴표는 남긴다.
+ *
+ * 달러 인용 본문은 DO 블록과 함수 본문이므로 코드로 검사한다. 본문을 같은 규칙으로 다시 처리하므로
+ * 그 안의 주석과 작은따옴표 문자열은 지워지고, 본문 안의 작은따옴표가 짝이 맞지 않아도 닫는
+ * 표지 밖으로 번지지 않는다. 달러 인용을 문장 설명(COMMENT ... IS $$...$$)에 쓰고 그 안에
+ * CREATE INDEX 나 CONCURRENTLY 를 적으면 위반으로 읽힌다. 이 오탐은 검사가 놓치는 쪽이 아니라
+ * 막는 쪽으로 틀리므로 받아들이고, 문장 설명은 작은따옴표 문자열로 쓴다.
+ *
+ * EXECUTE 바로 뒤의 작은따옴표 문자열은 실행되는 SQL 이므로 지우지 않고 코드로 검사한다.
  *
  * @param {string} sql
  * @returns {string}
@@ -138,14 +145,16 @@ export function stripSqlComments(sql) {
       out += blank(sql.slice(i, stop));
       i    = stop;
     } else if (sql[i] === "'") {
-      const stop = quotedEnd(sql, i);
-      out += `'${blank(sql.slice(i + 1, stop - 1))}'`;
+      const stop    = quotedEnd(sql, i);
+      const body    = sql.slice(i + 1, stop - 1);
+      const dynamic = /\bEXECUTE\s*$/i.test(out);
+      out += `'${dynamic ? body : blank(body)}'`;
       i    = stop;
     } else if (tag !== null) {
       const close = sql.indexOf(tag, i + tag.length);
       const stop  = close === -1 ? sql.length : close + tag.length;
       const inner = close === -1 ? sql.slice(i + tag.length) : sql.slice(i + tag.length, close);
-      out += close === -1 ? tag + blank(inner) : tag + blank(inner) + tag;
+      out += tag + stripSqlComments(inner) + (close === -1 ? "" : tag);
       i    = stop;
     } else {
       out += sql[i];
