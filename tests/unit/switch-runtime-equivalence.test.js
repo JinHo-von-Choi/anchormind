@@ -3,7 +3,7 @@
  *
  * 스위치마다 여러 원시값(미설정, 빈 값, 공백, 대소문자, 잘못된 값, 문서 값)을 넣고 실제 사용처가 읽은 값이
  * describeSwitches의 적용 값과 같은지 본다. 모든 스위치가 대상이다.
- *   1. 사용처가 모듈 상수나 내보낸 함수로 값을 드러내는 52개: 자식 프로세스의 환경에 원시값을 넣고 읽은 값을 비교한다.
+ *   1. 사용처가 모듈 상수나 내보낸 함수로 값을 드러내는 53개: 자식 프로세스의 환경에 원시값을 넣고 읽은 값을 비교한다.
  *   2. 호출 시점에 읽는 열거 8개와 리터럴 true 불리언 5개: 사용처가 부르는 lib/env-parse.js의 판독 함수와
  *      대장을 같은 원시값 표로 비교하고, 사용처가 그 함수를 부르며 환경을 직접 비교하지 않는지 소스로 본다.
  *   3. 잘못된 값 표시: 환경 변수 도우미(envBool, envEnum)로도 읽는 스위치는 기동 시 설정 문제 목록과, 기동 실패로
@@ -44,6 +44,7 @@ const RUNTIME = {
   MEMENTO_WRITE_GATE:                       "cfg.writeGateEnabled() ? 'on' : 'off'",
   MEMENTO_SENSITIVE_SCAN:                   "cfg.sensitiveScanMode()",
   MEMENTO_WM_PG_FALLBACK:                   "cfg.wmPgFallbackEnabled() ? 'on' : 'off'",
+  MEMENTO_DEDUP_SCOPE:                      "cfg.dedupScope()",
   MEMENTO_LOG_STDERR:                       "cfg.logToStderr()",
   MEMENTO_OUTBOX:                           "cfg.outboxEnabled() ? 'on' : 'off'",
   MEMENTO_OUTBOX_WORKER:                    "cfg.outboxWorkerEnabled() ? 'on' : 'off'",

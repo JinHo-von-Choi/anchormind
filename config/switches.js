@@ -83,6 +83,7 @@ export const SWITCHES = Object.freeze([
   enumOf("MEMENTO_WRITE_GATE", ["on", "off"], "on", "쓰기 경로", "의미 쓰기 진입점이 쓰기 관문의 전체 단계를 거친다", { off: ["off"] }),
   enumOf("MEMENTO_SENSITIVE_SCAN", ["mask", "reject", "off"], "mask", "쓰기 경로", "쓰기 값의 비밀과 개인정보를 가리고(mask) 고신뢰 탐지는 전 키 거부(reject)하거나 레거시 규칙만 적용한다(off)", { off: ["off"] }),
   enumOf("MEMENTO_WM_PG_FALLBACK", ["on", "off"], "on", "쓰기 경로", "Redis가 준비되지 않았을 때 scope=session 쓰기를 PostgreSQL 작업 기억 행으로 받는다", { off: ["off"] }),
+  enumOf("MEMENTO_DEDUP_SCOPE", ["workspace", "key"], "workspace", "쓰기 경로", "같은 본문 중복 판정을 키와 workspace 단위로 한다(key는 키 단위)", { off: ["key"] }),
 
   /* 저장소와 캐시 */
   boolOff("REDIS_ENABLED", "저장소", "Redis를 쓴다(L1 검색, 세션, 캐시)"),
