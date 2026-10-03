@@ -62,9 +62,14 @@ const decisionRow = (extra = {}) => ({
 });
 
 /** 검토 대기 파편 하나가 있는 저장소 응답기 */
-function pendingResponder({ state = "pending", reason = "instruction_override", validTo = null, replay = null, missing = false } = {}) {
+function pendingResponder({
+  state = "pending", reason = "instruction_override", validTo = null, replay = null, missing = false, permissions = ["read", "write"]
+} = {}) {
   return (sql) => {
     if (/FROM \S*memory_review_decisions\s+WHERE idempotency_key/.test(sql)) return replay ? [replay] : [];
+    if (/^SELECT key_id, review_reason FROM/.test(sql.trim())) return missing ? [] : [{ key_id: "k1", review_reason: reason }];
+    if (/FROM \S*api_keys WHERE id = \$1 FOR UPDATE$/.test(sql.trim())) return [{ id: "k1" }];
+    if (/^SELECT permissions FROM/.test(sql.trim())) return [{ permissions }];
     if (/FOR UPDATE$/.test(sql.trim())) return missing ? [] : [{ id: "f1", key_id: "k1", review_state: state, review_reason: reason, valid_to: validTo }];
     if (/^UPDATE/.test(sql.trim())) return [];
     if (/INSERT INTO \S*memory_review_decisions/.test(sql)) return [decisionRow()];
@@ -77,6 +82,8 @@ describe("결정 요청 검증", () => {
     assert.deepEqual(parseDecisionBody({ note: "ok", idempotencyKey: "a-1" }, { "idempotency-key": "h-1" }), { note: "ok", idempotencyKey: "a-1" });
     assert.deepEqual(parseDecisionBody(null, { "idempotency-key": "h-1" }), { note: null, idempotencyKey: "h-1" });
     assert.deepEqual(parseDecisionBody({}), { note: null, idempotencyKey: null });
+    assert.deepEqual(parseDecisionBody({ applyAnchor: true }), { note: null, idempotencyKey: null, applyAnchor: true });
+    assert.throws(() => parseDecisionBody({ applyAnchor: "yes" }), (err) => err.field === "applyAnchor");
   });
 
   it("모르는 필드, 긴 메모, 허용 밖 멱등 키, 배열 본문은 field와 함께 거부한다", () => {
@@ -126,11 +133,50 @@ describe("결정 적용", () => {
     assert.equal(sqls.at(-1), "COMMIT");
   });
 
-  it("앵커 요청 표지가 있는 파편은 승인할 때 앵커로 지정한다", async () => {
-    const { statements, pool } = fakePool(pendingResponder({ reason: "low_trust_directive,anchor_requested" }));
-    const result = await decideReview({ fragmentId: "f1", decision: "approve", reviewer: "master:c1" }, pool);
-    assert.equal(result.anchorApplied, true);
-    assert.equal(statements.find(s => /^UPDATE/.test(s.sql.trim())).params[2], true);
+  it("보류한 앵커 요청은 키 행을 먼저 잠그고 결정 시점 판정을 통과할 때만 적용한다", async () => {
+    const denied = fakePool(pendingResponder({ reason: "low_trust_directive,anchor_requested" }));
+    const r1 = await decideReview({ fragmentId: "f1", decision: "approve", reviewer: "master:c1" }, denied.pool);
+    assert.deepEqual([r1.anchorApplied, r1.anchorReason], [false, "permission"]);
+    assert.equal(denied.statements.find(s => /^UPDATE/.test(s.sql.trim())).params[2], false);
+    const sqls = denied.statements.map(s => s.sql.trim());
+    const keyLock  = sqls.findIndex(q => /api_keys WHERE id = \$1 FOR UPDATE$/.test(q));
+    const fragLock = sqls.findIndex(q => /fragments\s+WHERE id = \$1\s+FOR UPDATE$/.test(q));
+    assert.ok(keyLock >= 0 && keyLock < fragLock, "잠금 순서: 키 행, 파편 행");
+
+    for (const permissions of [["write", "anchor"], ["write", "admin"]]) {
+      const allowed = fakePool(pendingResponder({ reason: "low_trust_directive,anchor_requested", permissions }));
+      const r2 = await decideReview({ fragmentId: "f1", decision: "approve", reviewer: "r" }, allowed.pool);
+      assert.deepEqual([r2.anchorApplied, r2.anchorReason], [true, "permitted"], permissions.join());
+    }
+  });
+
+  it("앵커 판정 함수는 주입할 수 있고 결정 트랜잭션의 연결을 받는다", async () => {
+    const seen = [];
+    const { pool } = fakePool(pendingResponder({ reason: "mode_all,anchor_requested" }));
+    const result = await decideReview({ fragmentId: "f1", decision: "approve", reviewer: "r" }, pool, {
+      anchorDecisionCheck: async (keyId, fragment, client) => { seen.push([keyId, fragment.id, typeof client.query]); return { allowed: true, reason: "quota_ok" }; }
+    });
+    assert.deepEqual(seen, [["k1", "f1", "function"]]);
+    assert.deepEqual([result.anchorApplied, result.anchorReason], [true, "quota_ok"]);
+  });
+
+  it("무권한 앵커 요청은 applyAnchor:true를 명시할 때만 적용하고 false는 언제나 적용하지 않는다", async () => {
+    const reason = "anchor_unauthorized,anchor_requested";
+    const permitted = ["write", "anchor"];
+    const plain = await decideReview({ fragmentId: "f1", decision: "approve", reviewer: "r" }, fakePool(pendingResponder({ reason, permissions: permitted })).pool);
+    assert.deepEqual([plain.anchorApplied, plain.anchorReason], [false, "explicit_required"]);
+    const explicit = await decideReview({ fragmentId: "f1", decision: "approve", reviewer: "r", applyAnchor: true }, fakePool(pendingResponder({ reason })).pool);
+    assert.deepEqual([explicit.anchorApplied, explicit.anchorReason], [true, "explicit"]);
+    const declined = await decideReview({ fragmentId: "f1", decision: "approve", reviewer: "r", applyAnchor: false },
+      fakePool(pendingResponder({ reason: "mode_all,anchor_requested", permissions: permitted })).pool);
+    assert.deepEqual([declined.anchorApplied, declined.anchorReason], [false, "declined"]);
+  });
+
+  it("앵커 요청이 없으면 키 행을 잠그지 않는다", async () => {
+    const { statements, pool } = fakePool(pendingResponder());
+    const result = await decideReview({ fragmentId: "f1", decision: "approve", reviewer: "r" }, pool);
+    assert.equal(result.anchorReason, "not_requested");
+    assert.ok(!statements.some(s => /api_keys/.test(s.sql)));
   });
 
   it("거절은 rejected와 valid_to를 함께 설정한다", async () => {
@@ -152,12 +198,14 @@ describe("결정 적용", () => {
     await assert.rejects(decideReview({ fragmentId: "f1", decision: "approve", reviewer: "r" }, pool), ReviewNotFoundError);
   });
 
-  it("같은 멱등 키의 재요청은 앞선 결정을 돌려주고 파편을 다시 바꾸지 않는다", async () => {
-    const { statements, pool } = fakePool(pendingResponder({ replay: decisionRow() }));
+  it("같은 멱등 키의 재요청은 파편 행을 잠근 뒤 앞선 결정을 돌려주고 파편을 다시 바꾸지 않는다", async () => {
+    const { statements, pool } = fakePool(pendingResponder({ state: "approved", replay: decisionRow() }));
     const result = await decideReview({ fragmentId: "f1", decision: "approve", reviewer: "r", idempotencyKey: "k-1" }, pool);
     assert.equal(result.replayed, true);
     assert.equal(result.decisionId, "7");
-    assert.ok(!statements.some(s => /FOR UPDATE|^UPDATE/.test(s.sql.trim())));
+    const sqls = statements.map(s => s.sql.trim());
+    assert.ok(sqls.findIndex(q => /FOR UPDATE$/.test(q)) < sqls.findIndex(q => /WHERE idempotency_key/.test(q)));
+    assert.ok(!sqls.some(q => /^UPDATE|^INSERT/.test(q)));
   });
 
   it("다른 결정에 쓰인 멱등 키는 충돌이다", async () => {
@@ -258,11 +306,9 @@ describe("목록과 자동 거절", () => {
       assert.equal(await runReviewExpiry(async () => ({ rejected: 0, fragmentIds: [] })), 0);
     });
 
-    it("MEMENTO_REVIEW_QUEUE=off이면 자동 거절을 부르지 않는다", async () => {
+    it("MEMENTO_REVIEW_QUEUE=off여도 이미 대기인 파편의 자동 거절은 계속한다", async () => {
       process.env.MEMENTO_REVIEW_QUEUE = "off";
-      let called = false;
-      assert.equal(await runReviewExpiry(async () => { called = true; return { rejected: 1, fragmentIds: ["a"] }; }), 0);
-      assert.equal(called, false);
+      assert.equal(await runReviewExpiry(async () => ({ rejected: 1, fragmentIds: ["a"] })), 1);
     });
   });
 });
