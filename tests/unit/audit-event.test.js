@@ -46,6 +46,18 @@ describe("행위자", () => {
     assert.deepEqual(auditActor("system"), { kind: "system", keyId: null, session: null, ip: null });
   });
 
+  it("관리자 계정 행위자는 계정 id를 keyId 자리에 담고, payload 판독에서 id 없는 계정 행위자는 거부한다", () => {
+    const userId = "0b9d6a3e-5c1f-4e2a-8d7b-112233445566";
+    assert.deepEqual(auditActor({ adminUserId: userId, sessionId: "u1a2b3c4d", clientIp: "203.0.113.9" }),
+      { kind: "admin", keyId: userId, session: "u1a2b3c4", ip: "203.0.113.9" });
+    const payload = buildAuditPayload({ action: "admin.user.create", actor: { adminUserId: userId } });
+    assert.equal(readAuditPayload(JSON.parse(JSON.stringify(payload))).actorKind, "admin");
+    assert.equal(readAuditPayload(JSON.parse(JSON.stringify(payload))).actorKeyId, userId);
+    const forged = { ...payload, actor: { kind: "admin", keyId: null, session: null, ip: null } };
+    assert.throws(() => readAuditPayload(forged), (e) => e instanceof AuditEventError && e.field === "actor");
+    assert.equal(auditActor({ adminUserId: "x y" }).kind, "anonymous");
+  });
+
   it("키 형식이 아닌 keyId는 키 행위자로 보지 않는다", () => {
     assert.equal(auditActor({ keyId: "x y;z" }).kind, "anonymous");
   });
