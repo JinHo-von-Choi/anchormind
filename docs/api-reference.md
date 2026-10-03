@@ -205,7 +205,7 @@ Content-Type: application/json
 | `recall` | Recall: 저장 기억 회상(검색) | Y | N | Y | N |
 | `context` | Context: 세션 시작 기억 주입 | Y | N | Y | N |
 | `remember` | Remember: 기억 저장 | N | N | N | N |
-| `amend` | Amend: 기억 갱신 | N | N | N | N |
+| `amend` | Amend: 기억 갱신 | N | Y | N | N |
 | `apply_update` | Apply Update: 업데이트 적용 | N | Y | N | Y |
 | `batch_remember` | Batch Remember: 대량 기억 저장 | N | N | N | N |
 | `batch_status` | Batch Status: 일괄 저장 상태 조회 | Y | N | Y | N |
@@ -223,8 +223,9 @@ Content-Type: application/json
 | `session_rotate` | Session Rotate: 세션 교체 | N | N | N | N |
 | `tool_feedback` | Tool Feedback: 도구 유용성 피드백 | N | N | N | N |
 
-- `readOnlyHint`가 `Y`인 도구는 저장된 기억의 내용을 바꾸지 않는다. `recall`은 접근 횟수와 검색 이벤트 기록을 남기고 `check_update`는 로컬 확인 결과 캐시를 갱신한다. 이 기록은 도구가 돌려주는 기억 내용에 속하지 않는다.
-- `destructiveHint`가 `Y`인 도구는 `forget`(파편 삭제), `memory_consolidate`(만료 삭제와 병합), `apply_update`(설치본 갱신)다.
+- `readOnlyHint`가 `Y`인 도구는 저장된 기억의 내용을 바꾸지 않는다. `recall`은 `readOnlyHint`가 `Y`이지만 반환한 파편의 `access_count`, `accessed_at`, `ema_activation`을 갱신하고 함께 조회된 이웃 파편의 `accessed_at`을 갱신하며 검색 이벤트 한 건을 기록한다. 이는 기억 내용이 아닌 한정된 부수 기록이다. `check_update`는 로컬 확인 결과 캐시를 갱신한다.
+- `destructiveHint`가 `Y`인 도구는 `forget`(파편 삭제), `amend`(내용과 메타데이터를 제자리에서 덮어쓴다. 이전 버전 보관 행에는 `is_anchor`와 `assertion_status`가 담기지 않고 버전을 되돌리는 도구가 없다), `memory_consolidate`(만료 삭제와 병합), `apply_update`(설치본 갱신)다.
+- `remember`와 `batch_remember`는 `destructiveHint`가 `N`이다. 새 파편을 추가하는 것이 본래 용도이며, `supersedes`를 명시한 호출에서만 대상 파편의 `valid_to`를 닫고 `importance`를 절반으로 낮춘다. 이 변경은 보관 행을 남기지 않고, 만료된 파편은 `amend`로 고칠 수 없다. 이 효과는 호출자가 명시적으로 선택할 때만 일어난다.
 - `openWorldHint`는 서버 밖 시스템에 접근하는 도구(`check_update`, `apply_update`)만 `Y`다.
 
 ### ping

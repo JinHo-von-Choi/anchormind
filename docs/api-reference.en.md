@@ -201,7 +201,7 @@ Tools appear in the order `recall`, `context`, `remember`, followed by the rest 
 | `recall` | Recall: 저장 기억 회상(검색) | Y | N | Y | N |
 | `context` | Context: 세션 시작 기억 주입 | Y | N | Y | N |
 | `remember` | Remember: 기억 저장 | N | N | N | N |
-| `amend` | Amend: 기억 갱신 | N | N | N | N |
+| `amend` | Amend: 기억 갱신 | N | Y | N | N |
 | `apply_update` | Apply Update: 업데이트 적용 | N | Y | N | Y |
 | `batch_remember` | Batch Remember: 대량 기억 저장 | N | N | N | N |
 | `batch_status` | Batch Status: 일괄 저장 상태 조회 | Y | N | Y | N |
@@ -219,8 +219,9 @@ Tools appear in the order `recall`, `context`, `remember`, followed by the rest 
 | `session_rotate` | Session Rotate: 세션 교체 | N | N | N | N |
 | `tool_feedback` | Tool Feedback: 도구 유용성 피드백 | N | N | N | N |
 
-- A tool with `readOnlyHint` `Y` does not change the content of stored memory. `recall` records access counts and a search event, and `check_update` refreshes the local check-result cache. These records are not part of the memory content the tool returns.
-- Tools with `destructiveHint` `Y` are `forget` (deletes fragments), `memory_consolidate` (expiry deletion and merging), and `apply_update` (updates the installation).
+- A tool with `readOnlyHint` `Y` does not change the content of stored memory. `recall` is marked `readOnlyHint` `Y` although it updates `access_count`, `accessed_at` and `ema_activation` on the fragments it returns, updates `accessed_at` on co-retrieved neighbor fragments, and writes one search event. This is bounded bookkeeping, not a change to memory content. `check_update` refreshes the local check-result cache.
+- Tools with `destructiveHint` `Y` are `forget` (deletes fragments), `amend` (overwrites content and metadata in place; the archived previous-version row omits `is_anchor` and `assertion_status`, and no tool restores versions), `memory_consolidate` (expiry deletion and merging), and `apply_update` (updates the installation).
+- `remember` and `batch_remember` are `destructiveHint` `N`. Adding new fragments is their primary use; only a call that names `supersedes` closes the target's `valid_to` and halves its `importance`. That change leaves no archive row, and an expired fragment cannot be amended. The effect happens only when the caller opts in explicitly.
 - `openWorldHint` is `Y` only for tools that reach systems outside the server (`check_update`, `apply_update`).
 
 ### ping

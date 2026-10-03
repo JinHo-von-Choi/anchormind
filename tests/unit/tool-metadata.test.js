@@ -20,7 +20,7 @@ import { dispatchJsonRpc }                         from "../../lib/jsonrpc.js";
 const MASTER      = getToolsDefinition(null, true);
 const HINT_KEYS   = ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"];
 const WRITE_CAPS  = new Set(["memory:write", "memory:destructive", "session:write"]);
-const DASHES      = /[–—―]/;
+const DASHES      = /[\u2013\u2014\u2015]/;
 
 describe("title", () => {
   test("모든 도구가 비어 있지 않은 title 문자열을 가진다", () => {
@@ -61,7 +61,7 @@ describe("annotations", () => {
   });
 
   test("파괴적 도구는 destructiveHint true 이고 읽기 전용이 아니다", () => {
-    const destructive = new Set(["forget", "memory_consolidate", "apply_update"]);
+    const destructive = new Set(["forget", "amend", "memory_consolidate", "apply_update"]);
     for (const name of destructive) {
       const ann = MASTER.find(t => t.name === name)?.annotations;
       assert.ok(ann, `${name} 정의가 없다`);
