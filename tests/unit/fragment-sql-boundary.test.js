@@ -43,7 +43,7 @@ const ALLOWED = {
   "memory/consolidate/MemoryConsolidator.js": 26, // semantic_dedup 병합은 잠금, 폐기, linked_to, 합산을 한 트랜잭션 클라이언트로 쓴다
   "memory/consolidate/MorphemeBackfill.js": 2,
   "memory/consolidate/UtilityBaseline.js": 1,
-  "memory/consolidate/idOrderedUpdate.js": 2, // id 순 묶음 갱신은 잠금 CTE와 갱신 문장을 함께 쓴다
+  "memory/consolidate/idOrderedUpdate.js": 3, // id 순 묶음 갱신은 잠금 CTE와 갱신 문장을, 재개형 백필의 후보 id 조회는 같은 조건식을 함께 쓴다
   "memory/embedding/EmbeddingWorker.js": 5, // 배치 저장은 id 순 잠금 CTE와 갱신 문장을 함께 쓴다
   "memory/embedding/SyntheticQueryWorker.js": 3,
   "memory/link/ContradictionDetector.js": 12,

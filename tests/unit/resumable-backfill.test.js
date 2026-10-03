@@ -103,8 +103,10 @@ mock.module("../../lib/tools/db.js", {
 
 const {
   runResumableBackfill, retryBackfillFailures, listBackfillFailures, ensureBackfillTables,
-  unreferencedParamGuard, isRowLevelError, BackfillError, BackfillTableMissingError, BACKFILL_TABLES_DDL
+  isRowLevelError, BackfillError, BackfillTableMissingError, BACKFILL_TABLES_DDL
 } = await import("../../lib/memory/consolidate/resumableBackfill.js");
+
+const { unreferencedParamGuard } = await import("../../lib/memory/consolidate/idOrderedUpdate.js");
 
 const SPEC = { job: "job-a", where: "importance < $4", set: "importance = $4", params: [0.9], batchSize: 2 };
 const ids  = n => Array.from({ length: n }, (_, i) => `f${String(i + 1).padStart(3, "0")}`);
