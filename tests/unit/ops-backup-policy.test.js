@@ -15,7 +15,8 @@ import os                              from "node:os";
 import path                            from "node:path";
 
 import {
-  BackupPolicyError, parseBackupFile, selectExpired, assertOutsideRepo, resolveReal, backupSet, main
+  BackupPolicyError, parseBackupFile, selectExpired, assertOutsideRepo, resolveReal, backupSet, main,
+  isOwnPartial, assertLabel, assertNotProtectedDir
 } from "../../scripts/ops/backup-policy.mjs";
 
 /** 한 번의 백업이 만드는 파일 묶음. */
@@ -25,12 +26,27 @@ const setOf = (stamp, kinds = ["dump", "dump.sha256", "counts.json", "roles.sql"
 describe("백업 파일 이름 해석", () => {
   it("관리 대상 파일은 시각과 종류를 돌려준다", () => {
     assert.deepEqual(parseBackupFile("memento-20261003T031500Z.dump"), {
-      stamp: "20261003T031500Z", day: "20261003", kind: "dump"
+      stamp: "20261003T031500Z", day: "20261003", label: null, kind: "dump"
     });
     assert.equal(parseBackupFile("memento-20261003T031500Z.dump.sha256").kind, "dump.sha256");
     assert.equal(parseBackupFile("memento-20261003T031500Z.counts.json").kind, "counts.json");
     assert.equal(parseBackupFile("memento-20261003T031500Z.roles.sql").kind, "roles.sql");
   });
+
+  it("라벨이 붙은 파일은 라벨을 돌려준다", () => {
+    assert.deepEqual(parseBackupFile("memento-20261003T031500Z-pre-migration.dump.sha256"), {
+      stamp: "20261003T031500Z", day: "20261003", label: "pre-migration", kind: "dump.sha256"
+    });
+  });
+
+  for (const name of [
+    "memento-20261003T031500Z-Upper.dump", "memento-20261003T031500Z-.dump", `memento-20261003T031500Z-${"a".repeat(33)}.dump`,
+    "memento-20261003T031500Z-a_b.dump"
+  ]) {
+    it(`형식이 틀린 라벨 이름 ${JSON.stringify(name)} 은 null이다`, () => {
+      assert.equal(parseBackupFile(name), null);
+    });
+  }
 
   for (const name of [
     "notes.txt", ".backup.lock", "memento-20261003T031500Z.dump.partial", "memento-2026.dump",
@@ -95,6 +111,73 @@ describe("보관 일수에 따른 삭제 대상", () => {
   }
 });
 
+describe("라벨이 붙은 벌의 보관", () => {
+  const named    = (stamp, label) => ["dump", "dump.sha256", "counts.json", "roles.sql"].map(k => `memento-${stamp}-${label}.${k}`);
+  const NOW      = new Date("2026-10-03T12:00:00Z");
+
+  it("라벨 벌은 보관 일수와 날짜별 대표 선정에서 제외되어 지워지지 않는다", () => {
+    const names = [...setOf("20261003T030000Z"), ...named("20261003T020000Z", "pre-migration"), ...named("20260101T020000Z", "pre-migration")];
+    assert.deepEqual(selectExpired(names, 1, { now: NOW }), []);
+  });
+
+  it("같은 날의 라벨 없는 벌은 라벨 벌과 별개로 센다", () => {
+    const names = [...setOf("20261003T010000Z"), ...setOf("20261003T150000Z"), ...named("20261003T200000Z", "pre-migration")];
+    assert.deepEqual(selectExpired(names, 1, { now: NOW }), setOf("20261003T010000Z").sort());
+  });
+
+  it("라벨 벌은 정리 일수를 줄 때만 그 일수보다 오래된 것이 삭제 대상이다", () => {
+    const old   = named("20260801T020000Z", "pre-migration");
+    const fresh = named("20260930T020000Z", "pre-migration");
+    const names = [...old, ...fresh, ...setOf("20261003T030000Z")];
+    assert.deepEqual(selectExpired(names, 3, { now: NOW }), []);
+    assert.deepEqual(selectExpired(names, 3, { pruneLabelledDays: 30, now: NOW }), old.sort());
+    assert.deepEqual(selectExpired(names, 3, { pruneLabelledDays: 90, now: NOW }), []);
+  });
+
+  it("라벨 벌은 dump 없이 남은 조각도 정리 일수 전에는 지우지 않는다", () => {
+    const orphan = ["memento-20260801T020000Z-pre-migration.dump.sha256"];
+    assert.deepEqual(selectExpired(orphan, 1, { now: NOW }), []);
+    assert.deepEqual(selectExpired(orphan, 1, { pruneLabelledDays: 7, now: NOW }), orphan);
+  });
+
+  it("정리 일수는 1 이상의 정수여야 한다", () => {
+    for (const bad of [0, -1, 1.5, "7", NaN]) {
+      assert.throws(() => selectExpired(setOf("20261003T030000Z"), 1, { pruneLabelledDays: bad }), BackupPolicyError);
+    }
+  });
+
+  it("라벨 벌 이름은 라벨 검증을 거쳐 만들어진다", () => {
+    assert.deepEqual(backupSet("20261003T031500Z", "pre-migration"), {
+      dump  : "memento-20261003T031500Z-pre-migration.dump",
+      sha256: "memento-20261003T031500Z-pre-migration.dump.sha256",
+      counts: "memento-20261003T031500Z-pre-migration.counts.json",
+      roles : "memento-20261003T031500Z-pre-migration.roles.sql"
+    });
+    for (const bad of ["", "Up", "a b", "a/b", "a".repeat(33), "a_b", "../x"]) {
+      assert.throws(() => backupSet("20261003T031500Z", bad), BackupPolicyError, bad);
+      assert.throws(() => assertLabel(bad), BackupPolicyError, bad);
+    }
+    assert.equal(assertLabel("a".repeat(32)), "a".repeat(32));
+  });
+});
+
+describe("이 스크립트의 미확정 파일 판정", () => {
+  for (const name of [
+    "memento-20261003T031500Z.dump.partial", "memento-20261003T031500Z.counts.json.partial",
+    "memento-20261003T031500Z-pre-migration.roles.sql.partial", "memento-20261003T031500Z.dump.sha256.partial"
+  ]) {
+    it(`${name} 은 미확정 파일이다`, () => assert.equal(isOwnPartial(name), true));
+  }
+
+  for (const name of [
+    "user-download.partial", "movie.mkv.partial", "memento-notes.partial", "memento-20261003T031500Z.dump",
+    "memento-20261003T031500Z.partial", "memento-20261003T031500Z.dump.partial.bak", "x/memento-20261003T031500Z.dump.partial",
+    "memento-20261003T031500Z.dump.PARTIAL"
+  ]) {
+    it(`${name} 은 미확정 파일이 아니다`, () => assert.equal(isOwnPartial(name), false));
+  }
+});
+
 describe("한 번의 백업 묶음 파일 이름", () => {
   it("시각에서 네 파일 이름을 만든다", () => {
     assert.deepEqual(backupSet("20261003T031500Z"), {
@@ -139,6 +222,26 @@ describe("저장소 안쪽 경로 거부", () => {
   it("빈 경로와 상대 경로가 아닌 값은 거부한다", () => {
     assert.throws(() => assertOutsideRepo("", repo, same), BackupPolicyError);
     assert.throws(() => assertOutsideRepo(undefined, repo, same), BackupPolicyError);
+  });
+});
+
+describe("루트와 홈 디렉터리 거부", () => {
+  const same = (p) => p;
+
+  it("루트와 홈 디렉터리 자체는 거부한다", () => {
+    assert.throws(() => assertNotProtectedDir("/", "/home/u", same), (e) => e instanceof BackupPolicyError && e.message.includes("루트"));
+    assert.throws(() => assertNotProtectedDir("/home/u", "/home/u", same), (e) => e instanceof BackupPolicyError && e.message.includes("홈 디렉터리"));
+  });
+
+  it("홈 아래 하위 디렉터리와 다른 경로는 허용한다", () => {
+    assert.equal(assertNotProtectedDir("/home/u/backups", "/home/u", same), "/home/u/backups");
+    assert.equal(assertNotProtectedDir("/var/backups", "/home/u", same), "/var/backups");
+    assert.equal(assertNotProtectedDir("/home/u2", "/home/u", same), "/home/u2");
+  });
+
+  it("홈이 비어 있으면 루트만 검사한다", () => {
+    assert.equal(assertNotProtectedDir("/var/backups", undefined, same), "/var/backups");
+    assert.throws(() => assertNotProtectedDir("/", "", same), BackupPolicyError);
   });
 });
 
@@ -194,7 +297,7 @@ describe("명령줄 진입점", () => {
 
   it("expire에 시각을 주면 그 시각의 새 벌을 포함해 고르고 새 벌의 이름은 내지 않는다", () => {
     const { lines, io } = collect();
-    main(["expire", tmp, "1", "20261003T030000Z"], io);
+    main(["expire", tmp, "1", "--with", "20261003T030000Z"], io);
     assert.deepEqual(lines, [...setOf("20261001T030000Z"), ...setOf("20261002T030000Z")].sort());
   });
 
@@ -208,6 +311,45 @@ describe("명령줄 진입점", () => {
     assert.throws(() => main(["expire", tmp, "x"], collect().io), BackupPolicyError);
     assert.throws(() => main(["expire", tmp, "1.5"], collect().io), BackupPolicyError);
     assert.throws(() => main(["unknown"], collect().io), BackupPolicyError);
+  });
+
+  it("expire는 정리 일수를 주면 오래된 라벨 벌을 포함한다", () => {
+    const labelledFiles = ["dump", "dump.sha256"].map(k => `memento-20200101T000000Z-pre-migration.${k}`);
+    for (const name of labelledFiles) fs.writeFileSync(path.join(tmp, name), "x");
+    try {
+      const without = collect();
+      main(["expire", tmp, "5"], without.io);
+      assert.deepEqual(without.lines, []);
+      const withPrune = collect();
+      main(["expire", tmp, "5", "--prune-labelled", "30"], withPrune.io);
+      assert.deepEqual(withPrune.lines, labelledFiles.sort());
+    } finally {
+      for (const name of labelledFiles) fs.rmSync(path.join(tmp, name));
+    }
+  });
+
+  it("expire의 인자가 틀리면 거부한다", () => {
+    assert.throws(() => main(["expire", tmp, "1", "--prune-labelled", "x"], collect().io), BackupPolicyError);
+    assert.throws(() => main(["expire", tmp, "1", "--bogus", "1"], collect().io), BackupPolicyError);
+  });
+
+  it("partials는 이 스크립트의 미확정 파일 이름만 낸다", () => {
+    const mine    = "memento-20261003T031500Z.dump.partial";
+    const foreign = ["user-download.partial", "memento-notes.partial"];
+    for (const name of [mine, ...foreign]) fs.writeFileSync(path.join(tmp, name), "x");
+    try {
+      const { lines, io } = collect();
+      main(["partials", tmp], io);
+      assert.deepEqual(lines, [mine]);
+    } finally {
+      for (const name of [mine, ...foreign]) fs.rmSync(path.join(tmp, name));
+    }
+  });
+
+  it("set은 라벨을 받아 라벨 이름을 낸다", () => {
+    const { lines, io } = collect();
+    main(["set", "20261003T031500Z", "pre-migration"], io);
+    assert.deepEqual(lines, Object.values(backupSet("20261003T031500Z", "pre-migration")));
   });
 
   it("set은 네 파일 이름을 낸다", () => {

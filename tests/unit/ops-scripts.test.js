@@ -23,6 +23,13 @@ const BACKUP    = path.join(OPS_DIR, "backup.sh");
 const OPS_FILES = fs.readdirSync(OPS_DIR).filter(name => /\.(sh|mjs|sql)$/.test(name));
 const source    = (name) => fs.readFileSync(path.join(OPS_DIR, name), "utf8");
 
+/** 문자열 위치를 찾는다. 없으면 순서 검사가 우연히 통과하지 않도록 실패시킨다. */
+const where = (text, needle, from = 0) => {
+  const at = text.indexOf(needle, from);
+  assert.ok(at >= 0, `찾지 못함: ${needle}`);
+  return at;
+};
+
 describe("운영 스크립트 구조", () => {
   it("백업과 복구 훈련 파일이 모두 있다", () => {
     for (const name of ["backup.sh", "backup-policy.mjs", "restore-verify.mjs", "restore-lib.mjs", "drill-counts.sql"]) {
@@ -44,7 +51,7 @@ describe("운영 스크립트 구조", () => {
     const text = source("backup.sh");
     assert.match(text, /^set -euo pipefail$/m);
     assert.match(text, /^umask 077$/m);
-    assert.ok(text.indexOf("umask 077") < text.indexOf("mkdir -p"));
+    assert.ok(where(text, "umask 077") < where(text, "mkdir -p"));
   });
 
   it("backup.sh는 비밀번호를 인자로 받거나 값을 쓰지 않는다", () => {
@@ -57,8 +64,21 @@ describe("운영 스크립트 구조", () => {
   it("backup.sh는 dry-run을 지원하고 쓰기 전에 저장 위치를 검사한다", () => {
     const text = source("backup.sh");
     assert.match(text, /--dry-run/);
-    assert.ok(text.indexOf('backup-policy.mjs" guard') < text.indexOf('mkdir -p -- "$dest"'));
-    assert.ok(text.indexOf("dry_run\" -eq 1") < text.indexOf('mkdir -p -- "$dest"'));
+    const mkdir = where(text, 'mkdir -p -m 700 -- "$dest"');
+    assert.ok(where(text, 'POLICY" guard') < mkdir);
+    assert.ok(where(text, 'dry_run" -eq 1') < mkdir);
+  });
+
+  it("backup.sh는 저장 위치의 권한을 바꾸지 않고 와일드카드로 파일을 지우지 않는다", () => {
+    const text = source("backup.sh");
+    assert.doesNotMatch(text, /\bchmod\b/);
+    assert.doesNotMatch(text, /\*\.partial/);
+    assert.doesNotMatch(text, /rm\s+-\w*r/);
+    assert.match(text, /policy_lines partials/);
+  });
+
+  it("backup.sh는 정책 계산을 프로세스 치환으로 읽지 않는다", () => {
+    assert.doesNotMatch(source("backup.sh"), /<\(\s*node/);
   });
 
   it("restore-verify는 대상 서버 검사 뒤에야 파일을 읽고 연결을 연다", () => {
@@ -179,7 +199,7 @@ describe("backup.sh dry-run과 저장 위치 거부", () => {
 
   it("dry-run은 새 벌을 더했을 때 보관 일수를 넘기는 기존 파일 이름만 알린다", () => {
     const dest = path.join(tmp, "existing");
-    fs.mkdirSync(dest);
+    fs.mkdirSync(dest, { mode: 0o700 });
     for (const day of ["20200101", "20200102", "20200103"]) {
       for (const kind of ["dump", "dump.sha256", "counts.json"]) fs.writeFileSync(path.join(dest, `memento-${day}T030000Z.${kind}`), "x");
     }
