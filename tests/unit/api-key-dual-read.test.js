@@ -6,9 +6,9 @@
  *
  * DB 풀만 대체하고 실제 ApiKeyStore를 거친다.
  *   - 원시 키 조회는 한 문장에서 api_key_secrets를 먼저 보고, 그 해시가 없을 때만 api_keys.key_hash를 본다
- *   - 운영 형태의 키 상태(활성/비활성, 한도 미만/도달, 비밀 행 유무)에서 인증 결과가 이전 판정과 같다
+ *   - 운영 형태의 키 상태(활성/비활성, 한도 미만/도달, 비밀 행 유무)에서 인증 결과가 api_keys 한 행 판정 규칙과 같다
  *   - 만료, 폐기, 회전 겹침 종료가 거부 사유로 나온다
- *   - 수명 스키마가 없으면 이전 판 질의로 같은 결과를 낸다
+ *   - 수명 스키마가 없으면 기본 판 질의로 같은 결과를 낸다
  *   - 마지막 사용 기록은 키별 간격 안에서 한 번만 쓴다(쓰기 수 측정)
  */
 import { describe, it, mock, beforeEach } from "node:test";
@@ -40,7 +40,7 @@ const isLookup  = (sql) => /WHERE\s+s\.key_hash\s*=\s*\$1/.test(sql);
 const isLegacy  = (sql) => /WHERE k\.key_hash = \$1/.test(sql);
 const isGroups  = (sql) => /api_key_group_members m1/.test(sql);
 
-/** 이전 판 판정(api_keys 한 행만 보던 규칙) */
+/** api_keys 한 행 판정 규칙(수명 열이 빈 키의 기준) */
 function legacyDecision(row) {
   if (!row) return { valid: false };
   if (row.status !== "active") return { valid: false, reason: "inactive" };
@@ -139,7 +139,7 @@ describe("수명 거부 사유", () => {
 describe("수명 스키마가 없는 DB", () => {
   const missing = () => Object.assign(new Error('relation "agent_memory.api_key_secrets" does not exist'), { code: "42P01" });
 
-  it("이전 판 질의로 같은 결과를 내고 재시도 간격 동안 수명 판을 건너뛴다", async () => {
+  it("기본 판 질의로 같은 결과를 내고 재시도 간격 동안 수명 판을 건너뛴다", async () => {
     rowsFor = async (sql) => {
       if (isLookup(sql)) throw missing();
       if (isLegacy(sql)) return { rows: [{ ...keyRow(), expires_at: undefined }], rowCount: 1 };

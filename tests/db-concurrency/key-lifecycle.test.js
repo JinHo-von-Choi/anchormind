@@ -5,7 +5,7 @@
  * 작성일: 2026-10-03
  *
  * migration-059의 api_key_secrets와 수명 열에서 다음을 본다.
- *   - 이전 판이 만든 키(api_keys 행만 있음)의 인증 결과가 해시 이관 전후로 같다(활성, 비활성, 한도 도달)
+ *   - api_keys 행만 있는 키의 인증 결과가 해시 이관 전후로 같다(활성, 비활성, 한도 도달)
  *   - 이관 스크립트가 모든 키를 옮기고 정합(활성 키 수 = 활성 현재 비밀 행 수)을 확인하며, 다시 실행해도 행이 늘지 않는다
  *   - 이관 뒤 api_keys에만 들어온 키도 이중 조회로 인증된다
  *   - 새 키는 두 표에 함께 쓰인다
@@ -41,7 +41,7 @@ const SECRETS = "agent_memory.api_key_secrets";
 const sha256  = (raw) => crypto.createHash("sha256").update(raw).digest("hex");
 const outcome = (r) => (r.valid ? "valid" : (r.reason ?? "unknown"));
 
-/** 이전 판이 쓰던 방식으로 api_keys 행만 만든다. */
+/** api_keys 행만 있는 키를 만든다(비밀 표 행 없음). */
 async function legacyKey(name, { status = "active", dailyLimit = 10, usage = 0 } = {}) {
   const raw = `mmcp_${name}_${crypto.randomBytes(16).toString("hex")}`;
   const { rows: [row] } = await directQuery(
@@ -75,7 +75,7 @@ after(async () => {
   }
 });
 
-describe("이전 판 키의 해시 이관과 이중 조회", () => {
+describe("api_keys 행만 있는 키의 해시 이관과 이중 조회", () => {
   it("이관 전후 인증 결과가 같고, 이관은 정합을 확인하며 멱등이다", async () => {
     const keys = {
       active  : await legacyKey("active"),

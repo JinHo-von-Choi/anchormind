@@ -25,6 +25,8 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | Integer, 1 to 100, anything else uses 12 | MEMENTO_OUTBOX_MAX_ATTEMPTS |
 | Integer, 1 to 3650, anything else uses 7 | MEMENTO_OUTBOX_RETENTION_DAYS, MEMENTO_OUTBOX_UNHANDLED_DAYS |
 | Integer, 1 to 3650, anything else uses 400 | MEMENTO_AUDIT_RETENTION_DAYS |
+| Integer, 0 to 720, anything else uses 24 | MEMENTO_KEY_ROTATION_GRACE_HOURS |
+| Integer, 0 to 86400, anything else uses 60 | MEMENTO_KEY_LAST_USED_INTERVAL_SEC |
 | Integer, 0 to 10, anything else uses 3 | MEMENTO_DB_LOCK_RETRY_MAX |
 | Number, 1 or more, anything else uses `SESSION_TTL_MINUTES * 60` | OAUTH_ACCESS_TOKEN_TTL_SECONDS |
 | Number, 0 to 1 (above 1 is capped to 1; negative and non-numeric values become 0) | MEMENTO_DECAY_MIN_DELTA, MEMENTO_UTILITY_MIN_DELTA |
@@ -166,7 +168,9 @@ The name, documented default, purpose and category of each feature switch are in
 | MEMENTO_WORKSPACE_DECAY | true | When `false`, disables workspace ranking decay. When enabled, if the search scope specifies a workspace, a decay multiplier is applied to the ranking score of mismatched or global (NULL) fragments (the fragments themselves are still returned). Applies to both the recall and context injection paths |
 | MEMENTO_WORKSPACE_DECAY_PENALTY | 0.7 | Decay multiplier (0-1) applied to the ranking score of workspace-mismatched or global fragments |
 | MEMENTO_SESSION_SEGMENT | true | When `false`, disables session segment rotation and uses the transport-layer session ID as-is |
-| MEMENTO_SESSION_KEY_RECHECK_MS | 30000 | Interval (ms) at which a session re-reads its API key state. Sessions of inactive or deleted keys are closed and permission changes reach open sessions. `0` disables the recheck. Only integers of 0 or more are accepted, anything else falls back to the default |
+| MEMENTO_SESSION_KEY_RECHECK_MS | 30000 | Interval (ms) at which a session re-reads its API key state. Sessions of inactive, deleted, revoked or expired keys, and session requests from an address outside the key's allowed blocks (`allowed_cidrs`), close the session; permission changes reach open sessions. `0` disables the recheck. Only integers of 0 or more are accepted, anything else falls back to the default |
+| MEMENTO_KEY_ROTATION_GRACE_HOURS | 24 | Hours the previous key keeps authenticating after a key rotation (`POST /keys/:id/rotate`) whose body has no `graceHours`. `0` refuses the previous key at once. Read at call time. Integer from 0 to 720, any other value uses 24 |
+| MEMENTO_KEY_LAST_USED_INTERVAL_SEC | 60 | An API key's `last_used_at` and `last_used_ip_hash` (an HMAC fingerprint of the request address keyed with the master key) are written at most once per this interval (seconds) per key. The daily usage (`api_key_usage`) is still added on every request. `0` writes on every request. Counted per process. Read at call time. Integer from 0 to 86400, any other value uses 60 |
 | MEMENTO_SEGMENT_IDLE_MS | 2700000 | When session idle time exceeds this value (ms), the segment rotates on the next tool call. Default 45 minutes |
 | MEMENTO_SEGMENT_MAX_AGE_MS | 43200000 | When a segment's age exceeds this value (ms), it rotates regardless of idle state. Default 12 hours |
 | MEMENTO_SEGMENT_MIN_ACTIVITY | 3 | Minimum activity (fragments + tool calls) required in the previous segment for AutoReflect to fire on segment rotation |

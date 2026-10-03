@@ -502,7 +502,7 @@ The `POST /keys/:id/revoke` body is `{ "reason": "..." }` (1 to 500 characters).
 
 Errors: 400 `{ "error": "...", "field": "..." }` (validation), 404 (no such key), 409 (revocation conflict), 413 (body too large).
 
-Lookup order: the SHA-256 hash of a raw key is looked up in `api_key_secrets` first, and in `api_keys.key_hash` only when the hash is not there. The row found is judged in this order: revoked, inactive, expired, secret row state (revoked, overlap ended), daily limit. Existing keys whose lifecycle columns are empty get the same result as before. The source is counted in `memento_api_key_lookup_total{source="secret"|"legacy"}`.
+Lookup order: the SHA-256 hash of a raw key is looked up in `api_key_secrets` first, and in `api_keys.key_hash` only when the hash is not there. The row found is judged in this order: revoked, inactive, expired, secret row state (revoked, overlap ended), daily limit. A key whose lifecycle columns are empty is judged on status and daily limit only. The source is counted in `memento_api_key_lookup_total{source="secret"|"legacy"}`.
 
 ---
 

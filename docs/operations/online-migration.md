@@ -436,6 +436,35 @@ CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uq_frag_hash_master
 
 ---
 
+## 키 비밀 이관
+
+migration-059는 `api_keys`에 수명 열(모두 NULL 허용)을 더하고 `api_key_secrets` 표를 만든다. 인증은 원시 키 해시를 `api_key_secrets`에서 먼저 찾고 그 해시가 없을 때만 `api_keys.key_hash`에서 찾는다(이중 읽기). 새 키와 회전한 키는 두 표에 함께 쓰이므로, `api_keys` 행만 있는 키의 현재 해시만 옮기면 된다. 이중 읽기는 다음 릴리스까지 유지한다.
+
+### 운영 순서
+
+1. 배포하고 `npm run migrate`로 migration-059를 적용한다. 마이그레이션 전에 코드가 먼저 떠도 인증은 수명 열 없는 질의로 돌아가 결과가 같다(경고 한 줄, 60초마다 다시 확인).
+2. 옮길 건수와 정합을 읽기 전용으로 본다. 접속 대상은 `--url` 또는 PG 표준 환경변수로 명시한다. 환경 파일은 읽지 않는다.
+
+   ```sh
+   PGHOST=<호스트> PGDATABASE=<DB> PGUSER=<사용자> PGPASSWORD=<비밀번호> \
+     node scripts/ops/backfill-key-secrets.mjs
+   ```
+
+3. `--confirm`으로 옮긴다. 비밀 표에 행이 없는 키를 500건씩 insert-select로 옮기고(`ON CONFLICT DO NOTHING`), 끝나면 정합을 확인한다. 정합은 모든 키에 현재 해시와 같은 비밀 행이 있고 활성 키 수와 활성 현재 비밀 행 수가 같은 것이다. 맞지 않으면 종료 코드 1이다. 다시 실행해도 안전하다.
+
+   ```sh
+   PGHOST=<호스트> PGDATABASE=<DB> PGUSER=<사용자> PGPASSWORD=<비밀번호> \
+     node scripts/ops/backfill-key-secrets.mjs --confirm
+   ```
+
+4. `memento_api_key_lookup_total{source="legacy"}`가 늘지 않는지 본다. 이 값이 0으로 유지되면 다음 릴리스에서 `api_keys.key_hash` 조회를 뺄 수 있다. 롤링 재시작 중 migration-059 이전 코드가 만든 키가 있으면 3단계를 다시 실행한다.
+
+### 되돌리기
+
+마이그레이션은 열과 표를 더하기만 한다. 이전 버전을 그대로 배포하면 이전 버전은 `api_keys.key_hash`만 보며, 회전은 이 열을 늘 새 해시로 바꾸므로 현재 키는 계속 인증된다. 회전 겹침 중인 이전 키는 즉시 거부된다. 폐기는 `status`를 `inactive`로도 바꾸므로 이전 버전에서도 거부된다. 만료(`expires_at`)와 허용 대역(`allowed_cidrs`)은 이전 버전에서 적용되지 않는다. `api_key_secrets`와 수명 열은 지우지 않아도 된다.
+
+---
+
 ## 배포 점검표
 
 1. `scripts/ops/backup.sh --label pre-migration`으로 백업을 완료하고 복원 가능 여부를 확인한다([backup-restore.md](backup-restore.md#마이그레이션-전-백업)).
@@ -448,6 +477,7 @@ CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uq_frag_hash_master
 8. 제약 검증이 있으면 `VALIDATE CONSTRAINT`를 실행한다.
 9. migration-050이 포함된 배포는 동작을 확인한 뒤 `node scripts/ops/finish-dedup-scope.mjs`로 단계를 보고 `--confirm`으로 키 범위 색인을 지운 다음 자료 정합을 확인한다(「중복 판정 범위 전환」의 6, 7단계). 3, 4단계의 색인은 `uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`다.
 10. migration-054가 포함된 배포는 3, 4단계에서 `idx_ce_source_fragment_id`(case_events)를 만든다. 배포 뒤 접속 대상을 명시해(`--url` 또는 PG 환경변수) `node scripts/purge-orphan-case-summaries.js`로 원본 파편이 없는 요약 수를 보고, `pg_dump -t agent_memory.case_events`로 표를 보관한 다음 `--execute --i-have-a-backup`으로 정리한다([cli.md](../cli.md)).
+11. migration-059가 포함된 배포는 `node scripts/ops/backfill-key-secrets.mjs`로 옮길 건수를 보고 `--confirm`으로 키 해시를 옮긴 뒤 정합 일치를 확인한다(「키 비밀 이관」).
 
 ---
 
@@ -458,6 +488,8 @@ CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uq_frag_hash_master
 |lint 규칙, 스크립트 계획과 실행 논리, 백필 도우미|`npm test`(`tests/unit/lint-migrations.test.js`, `tests/unit/online-index.test.js`, `tests/unit/resumable-backfill.test.js`)|
 |스크립트 실서버 동작, 백필 이어하기|`npm run test:db`(`tests/db-concurrency/online-index.test.js`, `tests/db-concurrency/resumable-backfill.test.js`)|
 |중복 판정 범위의 세 색인 상태, 무효 상태로 남은 키 범위 색인, 다른 이름의 키 범위 색인, 실행 중 색인 제거, 마무리 스크립트|`npm test`(`tests/unit/dedup-scope.test.js`, `tests/unit/dedup-scope-alias.test.js`, `tests/unit/fragment-writer-dedup-scope.test.js`, `tests/unit/batch-remember-dedup-scope.test.js`, `tests/unit/finish-dedup-scope.test.js`), `npm run test:db`(`tests/db-concurrency/dedup-scope.test.js`)|
+
+|키 비밀 이관 스크립트, 키 수명 판정, 이중 조회|`npm test`(`tests/unit/backfill-key-secrets.test.js`, `tests/unit/key-lifecycle.test.js`, `tests/unit/api-key-dual-read.test.js`), `npm run test:db`(`tests/db-concurrency/key-lifecycle.test.js`)|
 
 DB 레인 시험은 일회용 시험 서버(포트 35433)의 전용 데이터베이스에서만 실행한다. 운영 데이터베이스에는 실행하지 않는다.
 

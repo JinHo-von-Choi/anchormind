@@ -186,7 +186,13 @@ lib/admin/
 ├── admin-routes.js    Admin HTTP 디스패처 (UI, 이미지, 정적 파일, REST API 라우팅)
 ├── admin-auth.js      Admin 인증 라우트 (POST /auth, 세션 쿠키 발급)
 ├── admin-login-guard.js 관리 인증 실패 누적과 계정 단위 지연 (`MEMENTO_ADMIN_AUTH_BACKOFF=on`일 때만 지연 적용)
-├── key-state-cache.js 세션 사용 시 API 키 상태 재확인 캐시 (`MEMENTO_SESSION_KEY_RECHECK_MS`)
+├── key-state-cache.js 세션 사용 시 API 키 상태 재확인 캐시 (`MEMENTO_SESSION_KEY_RECHECK_MS`). 폐기, 만료, 허용 대역 밖 주소도 세션을 닫는다
+├── ApiKeyLifecycleStore.js 키 회전(겹침), 폐기, 수명 열 편집, 접근 검토 서명. 회전과 폐기는 키 행을 잠근 한 트랜잭션에서 api_keys와 api_key_secrets를 함께 바꾼다
+├── key-lifecycle.js   키 수명 판정(폐기, 비활성, 만료, 비밀 행, 한도 순), 회전 겹침, 수명 편집 값과 폐기 사유 검증, 요청 주소 지문
+├── key-lifecycle-limits.js 키 수명 설정의 기본값과 상한(config.js와 key-lifecycle.js가 공유)
+├── key-cidr.js        키 허용 주소 대역(allowed_cidrs) 판정(IPv4, IPv6, IPv4 매핑 주소, 잘못된 목록은 거부)
+├── key-material.js    원시 키 생성, SHA-256 해시, 표시용 접두
+├── key-schema-state.js 키 수명 스키마(migration-059)가 없는 DB에서 api_keys만 쓰는 기본 판 질의로 돌아가는 선택
 ├── admin-metrics.js   `/metrics-summary` 요약 (prom-client 레지스트리 직접 조회, 10초 응답 캐시)
 ├── admin-keys.js      API 키 관리 라우트
 ├── key-policy.js      키 정책 열(default_mode, allowed_workspaces, symbolic_hard_gate) 편집 값 검증과 감사 기록 형식
@@ -306,6 +312,7 @@ scripts/
 ├── ops/restore-verify.mjs                       덤프를 일회용 시험 서버에 복원해 매니페스트와 대조
 ├── ops/online-index.mjs                         대형 표 색인을 작업 목록(`ops/index-manifest.json`)에 따라 `CONCURRENTLY`로 생성
 ├── ops/finish-dedup-scope.mjs                   키 범위 content_hash 색인을 지워 중복 판정 범위 전환을 마무리
+├── ops/backfill-key-secrets.mjs                 api_keys의 현재 해시를 api_key_secrets로 일괄 이관하고 정합 확인
 └── release.js                                   릴리스 절차 (`npm run release -- X.Y.Z`)
 ```
 

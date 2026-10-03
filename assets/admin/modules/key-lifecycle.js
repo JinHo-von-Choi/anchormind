@@ -1,5 +1,5 @@
 /**
- * Memento MCP Admin Console — API 키 수명 카드
+ * Memento MCP Admin Console: API 키 수명 카드
  *
  * 작성자: 최진호
  * 작성일: 2026-10-03
@@ -218,9 +218,10 @@ export function renderKeyLifecycleCard(key, rerender) {
   });
 
   const reason = input("key-lifecycle-revoke-reason", "", "revoke reason (required)");
-  const revoke = button("key-lifecycle-revoke", "REVOKE KEY", "btn-danger");
+  const REVOKE_LABEL = "REVOKE PERMANENTLY";
+  const revoke = button("key-lifecycle-revoke", REVOKE_LABEL, "btn-danger");
   let confirming = false;
-  reason.addEventListener("input", () => { confirming = false; revoke.textContent = "REVOKE KEY"; });
+  reason.addEventListener("input", () => { confirming = false; revoke.textContent = REVOKE_LABEL; });
   revoke.addEventListener("click", async () => {
     if (String(reason.value ?? "").trim() === "") { showToast("Revoke reason required", "warning"); return; }
     if (!confirming) {
@@ -229,7 +230,7 @@ export function renderKeyLifecycleCard(key, rerender) {
       return;
     }
     confirming = false;
-    revoke.textContent = "REVOKE KEY";
+    revoke.textContent = REVOKE_LABEL;
     const r = await api("/keys/" + key.id + "/revoke", { method: "POST", body: { reason: reason.value.trim() } });
     if (r.ok) { showToast("Key revoked", "success"); rerender(); }
     else showToast(r.data?.error ?? "Revoke failed", "error");
@@ -238,7 +239,7 @@ export function renderKeyLifecycleCard(key, rerender) {
   if (!revoked) {
     card.appendChild(field("ROTATION OVERLAP", grace));
     card.appendChild(rotate);
-    card.appendChild(field("REVOKE", reason));
+    card.appendChild(field("PERMANENT REVOCATION", reason));
     card.appendChild(revoke);
   }
 

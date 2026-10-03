@@ -183,7 +183,13 @@ lib/admin/
 +-- admin-routes.js    Admin HTTP dispatcher (routes UI, images, static files, REST API)
 +-- admin-auth.js      Admin auth routes (POST /auth, session cookie issuance)
 +-- admin-login-guard.js Admin auth failure accumulation and per-account delay (delay applies only when `MEMENTO_ADMIN_AUTH_BACKOFF=on`)
-+-- key-state-cache.js API key state recheck cache used when a session is used (`MEMENTO_SESSION_KEY_RECHECK_MS`)
++-- key-state-cache.js API key state recheck cache used when a session is used (`MEMENTO_SESSION_KEY_RECHECK_MS`). Revoked or expired keys and addresses outside the allowed blocks also close the session
++-- ApiKeyLifecycleStore.js Key rotation (with overlap), revocation, lifecycle column edits, access review signature. Rotation and revocation change api_keys and api_key_secrets together in one transaction that locks the key row
++-- key-lifecycle.js   Key lifecycle decision (revoked, inactive, expired, secret row, limit, in that order), rotation overlap, validation of lifecycle edits and revoke reasons, request address fingerprint
++-- key-lifecycle-limits.js Defaults and bounds of the key lifecycle settings (shared by config.js and key-lifecycle.js)
++-- key-cidr.js        Key allowed address block (allowed_cidrs) matching (IPv4, IPv6, IPv4-mapped addresses; a malformed list refuses)
++-- key-material.js    Raw key generation, SHA-256 hash, display prefix
++-- key-schema-state.js Falls back to the base queries (api_keys only) on a database without the key lifecycle schema (migration 059)
 +-- admin-metrics.js   `/metrics-summary` summary (reads the prom-client registry directly, 10-second response cache)
 +-- admin-keys.js      API key management routes
 +-- key-policy.js      Validation of key policy column edits (default_mode, allowed_workspaces, symbolic_hard_gate) and the audit record format
@@ -303,6 +309,7 @@ scripts/
 +-- ops/restore-verify.mjs                       Restores a dump into a disposable test server and compares it with the manifest
 +-- ops/online-index.mjs                         Builds large table indexes from the work list (`ops/index-manifest.json`) with `CONCURRENTLY`
 +-- ops/finish-dedup-scope.mjs                   Drops the per-key content_hash indexes to finish the duplicate detection scope switch
++-- ops/backfill-key-secrets.mjs                 Moves the current api_keys hashes into api_key_secrets in batches and checks consistency
 +-- release.js                                   Release procedure (`npm run release -- X.Y.Z`)
 ```
 
