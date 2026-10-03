@@ -874,3 +874,15 @@ migration-047은 `fragment_versions`/`case_events` snapshot 컬럼만 추가한�
 `createShutdownGuard({ deadlineMs, run, exit, logError })`는 종료 절차를 한 번만 실행하며 이후 신호는 `Shutdown already in progress` 로그만 남긴다. `deadlineMs`(`MEMENTO_SHUTDOWN_DEADLINE_MS`, 기본 60000) 안에 `run`이 끝나지 않으면 `Deadline exceeded, forcing exit`을 기록하고 종료 코드 1로 나간다. `deadlineMs`가 0이면 상한을 걸지 않는다.
 
 server.js의 onFatal은 `gracefulShutdown("uncaughtException", { exitCode: 1 })`을 호출하고, drain이 행에 걸릴 경우를 대비해 35초 후 강제 `process.exit(1)` 타이머(unref)를 건다. `gracefulShutdown(signal, { exitCode })`는 SIGTERM/SIGINT 경로에서 exit 0, uncaught 경로에서 exit 1로 종료하여 systemd `Restart=on-failure`가 크래시에만 재시작하도록 구분한다.
+
+## outbox 생산자와 소비자 계약
+
+`lib/outbox`의 트랜잭션 outbox를 쓰는 모듈이 지키는 규칙이다. 설정과 운영 절차는 [configuration.md](configuration.md#outbox)에 있다.
+
+- 생산자는 업무 변경과 같은 트랜잭션 연결로 `enqueue(client, event)`를 부른다. 첫 인자는 연결 변수 또는 `<식별자>.client`이고 풀 객체가 아니다(`tests/structure/outbox-enqueue.test.js`). 업무 변경이 없는 이벤트만 `enqueueStandalone(pool, event)`를 쓴다.
+- 생산자는 자기 소비자의 스위치로 기록 여부를 정한다. 예를 들어 감사 승격 소비자가 꺼져 처리기를 등록하지 않는 설정이면 그 topic의 이벤트를 만들지 않는다. 어느 프로세스에도 처리기가 없는 topic의 행은 점유되지 않고 매 점유 질의가 훑으며, `MEMENTO_OUTBOX_UNHANDLED_DAYS`가 지나면 dead-letter(`no_handler`)로 옮겨진다.
+- `MEMENTO_OUTBOX=off`인 동안 `enqueue`는 `null`을 돌려주고 아무것도 기록하지 않는다. 그동안 생산된 이벤트는 나중에 기록되지 않고 영구히 사라지며, 이미 대기 중인 행은 다시 켠 뒤 전달된다. 연결과 이벤트 검사 오류는 스위치와 관계없이 던진다.
+- 소비자는 모듈을 불러오는 시점에 `registerOutboxHandler(topic, handler, { maxAttempts })`로 처리기를 한 번 등록한다. 같은 topic의 두 번째 등록은 `OutboxHandlerRegistrationError`다.
+- 처리기는 같은 이벤트를 두 번 이상 받을 수 있다(임대 만료 뒤 재점유, 시간 초과한 처리기와 재시도의 겹침, 임대 안에 반영되지 못한 완료 기록). `event.idempotencyKey`(`topic:id`)로 멱등을 보장한다.
+- 처리기는 15초 안에 끝내고 `signal`이 중단되면 하던 일을 멈춘다. 재시도해도 성공할 수 없는 입력에는 `OutboxPermanentError`를 던져 곧바로 dead-letter로 보낸다.
+- 처리기는 이벤트 사이의 순서를 가정하지 않는다. 순서가 필요한 소비자(예: 단일 해시 체인)는 자기 기록 시점에 순번을 정한다.

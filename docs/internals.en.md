@@ -853,3 +853,15 @@ Old sessions require reconnection and initialize. Old sessions reused without be
 `createShutdownGuard({ deadlineMs, run, exit, logError })` runs the shutdown procedure only once, and later signals only log `Shutdown already in progress`. If `run` does not finish within `deadlineMs` (`MEMENTO_SHUTDOWN_DEADLINE_MS`, default 60000), it logs `Deadline exceeded, forcing exit` and exits with code 1. A `deadlineMs` of 0 sets no cap.
 
 The server.js `onFatal` calls `gracefulShutdown("uncaughtException", { exitCode: 1 })` and arms a 35-second forced `process.exit(1)` timer (unref) in case the drain hangs. `gracefulShutdown(signal, { exitCode })` exits with 0 on the SIGTERM/SIGINT path and 1 on the uncaught path, so systemd `Restart=on-failure` restarts only on crashes.
+
+## outbox producer and consumer contract
+
+Rules for modules that use the transactional outbox in `lib/outbox`. Settings and operating procedures are in [configuration.en.md](configuration.en.md#outbox).
+
+- Producers call `enqueue(client, event)` with the same transaction connection as the business change. The first argument is a connection variable or `<identifier>.client`, never a pool object (`tests/structure/outbox-enqueue.test.js`). Only events without a business change use `enqueueStandalone(pool, event)`.
+- Producers decide whether to write by their consumer's switch. For example, when the audit promotion consumer is turned off and registers no handler, its topic's events are not produced. Rows of a topic that has no handler in any process are never claimed, every claim query scans them, and after `MEMENTO_OUTBOX_UNHANDLED_DAYS` they move to dead-letter (`no_handler`).
+- While `MEMENTO_OUTBOX=off`, `enqueue` returns `null` and writes nothing. Events produced in that time are lost for good and are not written later; rows that were already pending are delivered after the switch is turned back on. Connection and event check errors are thrown regardless of the switch.
+- Consumers register a handler once, when their module is loaded, with `registerOutboxHandler(topic, handler, { maxAttempts })`. A second registration for the same topic is an `OutboxHandlerRegistrationError`.
+- A handler can receive the same event more than once (claim again after lease expiry, a timed-out handler overlapping its retry, a complete write that did not land within the lease). It stays idempotent with `event.idempotencyKey` (`topic:id`).
+- A handler finishes within 15 seconds and stops its work when `signal` is aborted. For input that cannot succeed on retry it throws `OutboxPermanentError`, which moves the event to dead-letter at once.
+- A handler assumes no ordering between events. A consumer that needs order (for example a single hash chain) assigns sequence numbers at the time it writes.
