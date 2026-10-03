@@ -6,7 +6,8 @@
  *
  * 관리 처리기가 판정 범위를 ScopeFilter 술어로 붙인 질의를 실제 PostgreSQL에서 돌린다. owner 판정은 모든
  * workspace를, workspace 하나에 바인딩된 판정은 그 workspace만, 판정이 없는 요청은 빈 결과를 본다.
- * 파편 목록, 상세와 링크, 그래프, 개요 수치, 키별 수치, 내보내기를 확인한다.
+ * 파편 목록, 상세와 링크, 개요 수치(대체 링크 수는 양 끝이 모두 범위 안인 링크만), 키별 수치를 확인한다.
+ * 관리 모듈 밖 경로를 부르는 이력과 내보내기는 질의 범위가 전체가 아니면(판정 없음 포함) 403이다.
  */
 import { describe, it, before, after } from "node:test";
 import assert                          from "node:assert/strict";
@@ -84,7 +85,8 @@ before(async () => {
   await insertFragment(IDS.b, WS_B);
   await insertFragment(IDS.a2, WS_A);
   await client.query(
-    `INSERT INTO agent_memory.fragment_links (from_id, to_id, relation_type, weight) VALUES ($1, $2, 'related', 1), ($1, $3, 'related', 1)`,
+    `INSERT INTO agent_memory.fragment_links (from_id, to_id, relation_type, weight)
+     VALUES ($1, $2, 'related', 1), ($1, $3, 'related', 1), ($3, $1, 'superseded_by', 1), ($2, $1, 'superseded_by', 1)`,
     [IDS.a, IDS.b, IDS.a2]
   );
 });
@@ -114,9 +116,9 @@ describe("파편 목록과 상세", () => {
 
   it("상세의 링크는 범위 안 파편만 싣고 범위 밖 파편 상세는 404다", async () => {
     const owner = await memoryGet("owner", `/fragments/${IDS.a}`);
-    assert.deepEqual(owner.links.map((l) => l.id).sort(), [IDS.a2, IDS.b].sort());
+    assert.deepEqual([...new Set(owner.links.map((l) => l.id))].sort(), [IDS.a2, IDS.b].sort());
     const scoped = await memoryGet("reviewer", `/fragments/${IDS.a}`, `?workspace=${WS_A}`);
-    assert.deepEqual(scoped.links.map((l) => l.id), [IDS.a2]);
+    assert.deepEqual([...new Set(scoped.links.map((l) => l.id))], [IDS.a2]);
     const { req, res, url } = requestFor("reviewer", `${ADMIN_BASE}/memory/fragments/${IDS.b}?workspace=${WS_A}`, "mem.read", WS_A);
     await handleMemory(req, res, url);
     assert.equal(res.statusCode, 404);
@@ -133,6 +135,8 @@ describe("집계와 키 수치", () => {
     assert.equal(scoped.byTopic.find((t) => t.topic === TAG)?.count, 2);
     assert.equal(none.totalFragments, 0);
     assert.equal(none.supersededCount, 0);
+    assert.equal(owner.supersededCount, 2);
+    assert.equal(scoped.supersededCount, 1);
   });
 
   it("키별 수치는 판정 범위로 한정된다", async () => {
@@ -145,8 +149,8 @@ describe("집계와 키 수치", () => {
   });
 });
 
-describe("내보내기", () => {
-  it("범위 술어가 내보내기 조건에 붙는다", async () => {
+describe("관리 모듈 밖 경로(이력, 내보내기)", () => {
+  it("owner 내보내기는 범위 술어가 붙은 조건으로 세 파편을 내보내고, 판정 없는 요청은 403이다", async () => {
     const path  = `${ADMIN_BASE}/export?key_id=${KEY_ID}`;
     const owner = requestFor("owner", path, "export.data");
     await handleExport(owner.req, owner.res, owner.url);
@@ -154,7 +158,20 @@ describe("내보내기", () => {
     assert.equal(ownerLines.filter((l) => String(l.id ?? "").startsWith(TAG)).length, 3);
     const none = requestFor("none", path, "export.data");
     await handleExport(none.req, none.res, none.url);
-    const noneLines = none.res.chunks.join("").split("\n").filter(Boolean).map((l) => JSON.parse(l));
-    assert.equal(noneLines.filter((l) => String(l.id ?? "").startsWith(TAG)).length, 0);
+    assert.equal(none.res.statusCode, 403);
+    assert.equal(none.res.chunks.length, 0);
+  });
+
+  it("이력은 owner만 가드를 지나고 WS_A 바인딩과 판정 없는 요청은 403이며 내용을 받지 않는다", async () => {
+    const path  = `${ADMIN_BASE}/memory/fragments/${IDS.b}/history`;
+    const owner = requestFor("owner", path, "mem.read");
+    await handleMemory(owner.req, owner.res, owner.url);
+    assert.notEqual(owner.res.statusCode, 403);
+    for (const kind of ["reviewer", "none"]) {
+      const r = requestFor(kind, `${path}?workspace=${WS_A}`, "mem.read", WS_A);
+      await handleMemory(r.req, r.res, r.url);
+      assert.equal(r.res.statusCode, 403, kind);
+      assert.ok(!r.res.body.includes("범위 검사 본문"), kind);
+    }
   });
 });

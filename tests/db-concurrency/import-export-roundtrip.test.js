@@ -334,6 +334,7 @@ describe("저장 규칙을 지킨 데이터의 왕복", () => {
     req.method  = "POST";
     req.headers = { "content-type": "application/x-ndjson" };
     const out = { statusCode: 0, setHeader() {}, end(b) { this.body = b; } };
+    requireCapability(req, out, { principal: masterPrincipal(), cap: "import.data" });
     await handleImport(req, out, new URL("http://localhost/v1/internal/model/nothing/import"), {
       queueEmbeddings: async () => async (ids) => ids.length
     });

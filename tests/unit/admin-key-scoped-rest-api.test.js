@@ -54,9 +54,13 @@ mock.module("../../lib/memory/MemoryManager.js", {
 /* ApiKeyStore·admin-keys의 getFragmentCount/updateFragmentLimit는 실제 구현을 쓰되
  * getPrimaryPool(mock) 경유로 DB 응답을 queryResults로 주입한다. */
 
-const { handleMemory, handleSearch, handleSearchEvents } = await import("../../lib/admin/admin-memory.js");
-const { handleExport } = await import("../../lib/admin/admin-export.js");
-const { handleKeys }   = await import("../../lib/admin/admin-keys.js");
+const { ownerHandler } = await import("./_admin-owner.js");
+const adminMemory      = await import("../../lib/admin/admin-memory.js");
+const handleMemory       = ownerHandler(adminMemory.handleMemory);
+const handleSearch       = ownerHandler(adminMemory.handleSearch);
+const handleSearchEvents = ownerHandler(adminMemory.handleSearchEvents);
+const handleExport     = ownerHandler((await import("../../lib/admin/admin-export.js")).handleExport);
+const handleKeys       = ownerHandler((await import("../../lib/admin/admin-keys.js")).handleKeys);
 
 const ADMIN_BASE = "/v1/internal/model/nothing";
 

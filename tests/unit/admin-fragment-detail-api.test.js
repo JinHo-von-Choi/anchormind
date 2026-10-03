@@ -29,8 +29,9 @@ mock.module("../../lib/tools/db.js", {
   }
 });
 
-const { handleMemory } = await import("../../lib/admin/admin-memory.js");
-const { handleExport } = await import("../../lib/admin/admin-export.js");
+const { ownerHandler } = await import("./_admin-owner.js");
+const handleMemory     = ownerHandler((await import("../../lib/admin/admin-memory.js")).handleMemory);
+const handleExport     = ownerHandler((await import("../../lib/admin/admin-export.js")).handleExport);
 
 const ADMIN_BASE = "/v1/internal/model/nothing";
 

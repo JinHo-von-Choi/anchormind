@@ -34,7 +34,10 @@ mock.module("../../lib/logging/audit.js", {
   }
 });
 
-const { handleExport, handleImport } = await import("../../lib/admin/admin-export.js");
+const admin                          = await import("../../lib/admin/admin-export.js");
+const { ownerHandler }               = await import("./_admin-owner.js");
+const handleExport                   = ownerHandler(admin.handleExport);
+const handleImport                   = ownerHandler(admin.handleImport);
 const { ImportAbortedError, ImportInputError } = await import("../../lib/memory/transfer/importErrors.js");
 const { UnsupportedFormatVersionError, RECORD } = await import("../../lib/memory/transfer/exportFormat.js");
 const { ImportReport }               = await import("../../lib/memory/transfer/ImportReport.js");
