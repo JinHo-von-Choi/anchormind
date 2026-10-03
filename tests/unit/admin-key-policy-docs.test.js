@@ -130,6 +130,36 @@ describe("정책 편집 문서", () => {
     assert.match(text, /마스터 전용 preset\(`audit`\)은 API 키에 지정할 수 없다/);
   });
 
+  test("캐시 안내는 진행 중이던 조회를 언급하고 늦어도 약 30초를 적는다", () => {
+    for (const [rel, phrase] of [
+      ["docs/admin-console-guide.md", "약 30초"],
+      ["docs/api-reference.md", "약 30초"],
+      ["docs/api-reference.en.md", "about 30 seconds at the latest"],
+      ["docs/configuration.md", "약 30초"],
+      ["docs/configuration.en.md", "about 30 seconds at the latest"]
+    ]) {
+      assert.ok(read(rel).includes(phrase), `${rel}: ${phrase} 누락`);
+    }
+    assert.match(read("docs/api-reference.en.md"), /already in flight/);
+    assert.match(read("docs/api-reference.md"), /진행 중이던 조회/);
+  });
+
+  test("allowed_workspaces 설명은 경고와 저장 거부 조건을 같은 내용으로 싣는다", () => {
+    for (const rel of ["docs/api-reference.md", "docs/api-reference.en.md", "docs/configuration.md", "docs/configuration.en.md", "docs/admin-console-guide.md"]) {
+      const text = read(rel);
+      assert.ok(text.includes("workspaceNotAllowed"), `${rel}: workspaceNotAllowed 누락`);
+      assert.ok(text.includes("MEMENTO_WORKSPACE_GATE=true"), `${rel}: 게이트 조건 누락`);
+    }
+    assert.doesNotMatch(read("docs/configuration.md"), /빈 배열은 workspace 주장 전면 차단/);
+    assert.doesNotMatch(read("docs/configuration.en.md"), /an empty array blocks every workspace claim/);
+  });
+
+  test("POST /keys 권한 안내는 빈 배열과 null의 거절을 적는다", () => {
+    assert.match(read("docs/api-reference.md"), /빈 배열, `null`/);
+    assert.match(read("docs/api-reference.en.md"), /an empty array, `null`/);
+    assert.match(read("docs/admin-console-guide.md"), /빈 배열이나 `null`은 400/);
+  });
+
   test("한도는 영문 문서에도 같은 값으로 적힌다", () => {
     for (const rel of ["docs/api-reference.en.md", "docs/configuration.en.md"]) {
       assert.ok(read(rel).includes(`${MAX_ALLOWED_WORKSPACES} entries`), `${rel}: 항목 수 한도 누락`);

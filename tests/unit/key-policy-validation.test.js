@@ -181,10 +181,19 @@ describe("formatKeyPolicyAuditDetails", () => {
     const line = formatKeyPolicyAuditDetails("k-1", [
       { field: "default_mode", before: null, after: "recall-only" }
     ]);
-    assert.match(line, /key=k-1/);
+    assert.match(line, /target=k-1/);
     assert.match(line, /default_mode/);
     assert.match(line, /recall-only/);
     assert.doesNotMatch(line, /[\r\n]/);
+  });
+
+  it("대상 키는 앞 8자만 target으로 남기고 key= 토큰을 쓰지 않는다", () => {
+    const line = formatKeyPolicyAuditDetails("7a1e0000-0000-4000-8000-0000000000e3", [
+      { field: "symbolic_hard_gate", before: false, after: true }
+    ]);
+    assert.match(line, /^target=7a1e0000 /);
+    assert.doesNotMatch(line, /0000-4000/);
+    assert.doesNotMatch(line, /\bkey=/);
   });
 
   it("변경이 없으면 그 사실을 적는다", () => {

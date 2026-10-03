@@ -84,6 +84,32 @@ export function parseWorkspaceLines(text) {
   return Array.from(new Set(items));
 }
 
+/**
+ * default_mode 선택지. 저장된 값이 편집 가능 목록에 없으면 그 값을 선택된 항목으로 더해
+ * 다른 필드를 저장할 때 mode가 지워지지 않게 한다.
+ *
+ * @param {string|null|undefined} stored
+ * @returns {{ value: string, label: string }[]}
+ */
+export function keyModeChoices(stored) {
+  const choices = [{ value: "", label: "(none)" }]
+    .concat(KEY_MODE_OPTIONS.map(name => ({ value: name, label: name })));
+  if (stored && !KEY_MODE_OPTIONS.includes(stored)) {
+    choices.push({ value: stored, label: stored + " (not editable here)" });
+  }
+  return choices;
+}
+
+/**
+ * 빈 allowed_workspaces 배열을 보내는 변경인지 판정한다. 이 경우 저장 전에 한 번 더 확인한다.
+ *
+ * @param {{ allowed_workspaces?: string[]|null }} patch
+ * @returns {boolean}
+ */
+export function needsEmptyWorkspaceConfirm(patch) {
+  return Array.isArray(patch.allowed_workspaces) && patch.allowed_workspaces.length === 0;
+}
+
 /** 두 workspace 목록이 같은 순서로 같은 항목인지, null끼리인지 판정한다. */
 function sameWorkspaces(a, b) {
   if (a === null || b === null) return a === b;
@@ -150,11 +176,11 @@ export function renderKeyPolicyCard(key, container) {
   const modeSelect = document.createElement("select");
   modeSelect.className = "w-40 bg-surface-container-highest border border-outline-variant/30 rounded-sm px-2 py-1 text-xs font-mono text-on-surface focus:border-primary focus:outline-none";
   modeSelect.id = "key-policy-default-mode";
-  [""].concat(KEY_MODE_OPTIONS).forEach(name => {
+  keyModeChoices(key.default_mode).forEach(choice => {
     const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = name === "" ? "(none)" : name;
-    opt.selected = name === (key.default_mode ?? "");
+    opt.value = choice.value;
+    opt.textContent = choice.label;
+    opt.selected = choice.value === (key.default_mode ?? "");
     modeSelect.appendChild(opt);
   });
   modeSelect.value = key.default_mode ?? "";
@@ -174,7 +200,9 @@ export function renderKeyPolicyCard(key, container) {
   wsArea.disabled = !restrictCb.checked;
   restrictCb.addEventListener("change", () => { wsArea.disabled = !restrictCb.checked; });
   card.appendChild(policyRow("RESTRICT WORKSPACES", restrictCb,
-    "Unchecked allows every workspace. Checked with an empty list blocks every workspace claim. Up to "
+    "Unchecked allows every workspace. A workspace outside the list raises a warning; the write is rejected only when "
+    + "MEMENTO_WORKSPACE_GATE=true and the hard gate is on. A write without a workspace always passes. An empty list "
+    + "treats every workspace claim as outside the set. Up to "
     + KEY_WORKSPACE_LIMITS.count + " entries of " + KEY_WORKSPACE_LIMITS.length + " characters."));
   card.appendChild(wsArea);
 
@@ -189,6 +217,15 @@ export function renderKeyPolicyCard(key, container) {
   saveBtn.className = "btn btn-primary w-full";
   saveBtn.id = "key-policy-save";
   saveBtn.textContent = "SAVE POLICY";
+  let confirmingEmpty = false;
+  const resetConfirm  = () => {
+    confirmingEmpty     = false;
+    saveBtn.textContent = "SAVE POLICY";
+  };
+  [modeSelect, restrictCb, wsArea, gateCb].forEach(el => {
+    el.addEventListener("change", resetConfirm);
+    el.addEventListener("input", resetConfirm);
+  });
   saveBtn.addEventListener("click", async () => {
     const patch = buildKeyPolicyPatch(key, {
       defaultMode   : modeSelect.value,
@@ -197,6 +234,12 @@ export function renderKeyPolicyCard(key, container) {
       hardGate      : gateCb.checked
     });
     if (Object.keys(patch).length === 0) { showToast("No policy changes", "warning"); return; }
+    if (needsEmptyWorkspaceConfirm(patch) && !confirmingEmpty) {
+      confirmingEmpty     = true;
+      saveBtn.textContent = "CONFIRM: EMPTY LIST, EVERY WORKSPACE CLAIM IS OUTSIDE THE SET";
+      return;
+    }
+    resetConfirm();
     const r = await api("/keys/" + key.id + "/policy", { method: "PATCH", body: patch });
     if (r.ok) {
       showToast("Policy updated", "success");

@@ -161,7 +161,9 @@ describe("PATCH /keys/:id/policy 감사 기록", () => {
     const [{ operation, fields }] = audits;
     assert.equal(operation, "admin key_policy");
     assert.equal(fields.success, true);
-    assert.match(fields.details, new RegExp(`key=${KEY_ID}`));
+    assert.match(fields.details, new RegExp(`target=${KEY_ID.slice(0, 8)}\\b`));
+    assert.doesNotMatch(fields.details, new RegExp(KEY_ID));
+    assert.doesNotMatch(fields.details, /\bkey=/);
     assert.match(fields.details, /default_mode null -> "write-only"/);
     assert.match(fields.details, /symbolic_hard_gate false -> true/);
     assert.doesNotMatch(fields.details, /allowed_workspaces/);
@@ -249,6 +251,7 @@ describe("POST /keys 권한 검증", () => {
   it("배열이 아니거나 빈 배열이면 400", async () => {
     assert.equal((await create({ name: "k", permissions: "read" })).res.statusCode, 400);
     assert.equal((await create({ name: "k", permissions: [] })).res.statusCode, 400);
+    assert.equal((await create({ name: "k", permissions: null })).res.statusCode, 400);
     assert.equal(inserts().length, 0);
   });
 

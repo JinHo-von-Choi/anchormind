@@ -9,7 +9,7 @@
 
 ## 활성화
 
-admin console 키 상세의 ACCESS POLICY에서 SYMBOLIC HARD GATE를 켜거나 `PATCH /v1/internal/model/nothing/keys/:id/policy`에 `{ "symbolic_hard_gate": true }`를 보낸다. 이 프로세스의 캐시는 즉시 비워지고 다른 인스턴스는 30초 안에 반영된다. 변경은 감사 로그에 남는다. SQL로 직접 바꾸는 경우는 다음과 같다.
+admin console 키 상세의 ACCESS POLICY에서 SYMBOLIC HARD GATE를 켜거나 `PATCH /v1/internal/model/nothing/keys/:id/policy`에 `{ "symbolic_hard_gate": true }`를 보낸다. 이 프로세스의 캐시는 비워지지만 진행 중이던 조회가 이전 값을 쓸 수 있어, 변경은 늦어도 약 30초 안에 적용된다(다른 인스턴스도 같다). 변경은 감사 로그에 남는다. SQL로 직접 바꾸는 경우는 다음과 같다.
 
 ```sql
 UPDATE agent_memory.api_keys

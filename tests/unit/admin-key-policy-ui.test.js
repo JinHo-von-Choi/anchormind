@@ -21,6 +21,8 @@ const {
   renderKeyInspector,
   buildKeyPolicyPatch,
   parseWorkspaceLines,
+  keyModeChoices,
+  needsEmptyWorkspaceConfirm,
   KEY_MODE_OPTIONS,
   KEY_WORKSPACE_LIMITS
 } = await import("../../assets/admin/modules/keys.js");
@@ -59,6 +61,16 @@ describe("키 상세의 정책 카드 구조", () => {
     const texts = [];
     (function walk(n) { texts.push(n.textContent ?? ""); (n.children ?? []).forEach(walk); })(renderKeyInspector(baseKey));
     assert.ok(texts.some((t) => t.includes(`${MAX_ALLOWED_WORKSPACES} entries of ${MAX_WORKSPACE_LENGTH} characters`)));
+  });
+
+  test("workspace 안내문은 경고와 저장 거부 조건을 정확히 적는다", () => {
+    const texts = [];
+    (function walk(n) { texts.push(n.textContent ?? ""); (n.children ?? []).forEach(walk); })(renderKeyInspector(baseKey));
+    const hint = texts.find((t) => t.includes("Unchecked allows every workspace")) ?? "";
+    assert.match(hint, /warning/);
+    assert.match(hint, /MEMENTO_WORKSPACE_GATE=true/);
+    assert.match(hint, /without a workspace always passes/);
+    assert.doesNotMatch(hint, /blocks every workspace/);
   });
 
   test("현재 키 값이 입력에 채워진다", () => {
@@ -121,6 +133,117 @@ describe("저장 단추의 요청", () => {
   test("바뀐 값이 없으면 요청하지 않는다", async () => {
     await click(renderKeyInspector(baseKey));
     assert.equal(calls.length, 0);
+  });
+});
+
+describe("편집 목록에 없는 저장된 mode", () => {
+  let calls;
+  const realFetch = global.fetch;
+
+  beforeEach(() => {
+    calls = [];
+    global.fetch = async (url, options) => {
+      calls.push({ url, options });
+      return { ok: false, status: 400, headers: { get: () => "application/json" }, json: async () => ({ error: "rejected" }) };
+    };
+  });
+  afterEach(() => { global.fetch = realFetch; });
+
+  const keyWithAudit = { ...baseKey, default_mode: "audit", allowed_workspaces: null, symbolic_hard_gate: false };
+
+  test("keyModeChoices는 저장된 값을 항목으로 더하고 편집 불가를 표시한다", () => {
+    const choices = keyModeChoices("audit");
+    assert.deepEqual(choices.slice(0, -1).map((c) => c.value), ["", ...KEY_MODE_OPTIONS]);
+    const last = choices[choices.length - 1];
+    assert.equal(last.value, "audit");
+    assert.match(last.label, /not editable/);
+  });
+
+  test("keyModeChoices는 목록 안의 값이나 null에는 항목을 더하지 않는다", () => {
+    assert.equal(keyModeChoices("recall-only").length, KEY_MODE_OPTIONS.length + 1);
+    assert.equal(keyModeChoices(null).length, KEY_MODE_OPTIONS.length + 1);
+  });
+
+  test("선택 상자가 저장된 값을 선택한 상태로 보여 준다", () => {
+    const select = byId(renderKeyInspector(keyWithAudit), "key-policy-default-mode");
+    assert.equal(select.value, "audit");
+    assert.ok(select.children.some((opt) => opt.value === "audit" && opt.selected));
+  });
+
+  test("다른 필드만 바꾸면 default_mode를 보내지 않는다", async () => {
+    const panel = renderKeyInspector(keyWithAudit);
+    byId(panel, "key-policy-hard-gate").checked = true;
+    await byId(panel, "key-policy-save")._listeners.click[0]();
+    assert.equal(calls.length, 1);
+    assert.deepEqual(JSON.parse(calls[0].options.body), { symbolic_hard_gate: true });
+  });
+
+  test("아무것도 바꾸지 않으면 요청하지 않는다", async () => {
+    await byId(renderKeyInspector(keyWithAudit), "key-policy-save")._listeners.click[0]();
+    assert.equal(calls.length, 0);
+  });
+
+  test("buildKeyPolicyPatch는 저장된 값과 같은 mode를 변경으로 보지 않는다", () => {
+    assert.deepEqual(
+      buildKeyPolicyPatch({ default_mode: "audit" }, { defaultMode: "audit", restrict: false, workspacesText: "", hardGate: false }),
+      {}
+    );
+  });
+});
+
+describe("빈 allowed_workspaces 저장 확인", () => {
+  let calls;
+  const realFetch = global.fetch;
+
+  beforeEach(() => {
+    calls = [];
+    global.fetch = async (url, options) => {
+      calls.push({ url, options });
+      return { ok: false, status: 400, headers: { get: () => "application/json" }, json: async () => ({ error: "rejected" }) };
+    };
+  });
+  afterEach(() => { global.fetch = realFetch; });
+
+  const fire  = (el, ev) => (el._listeners[ev] ?? []).forEach((fn) => fn());
+  const click = (panel) => byId(panel, "key-policy-save")._listeners.click[0]();
+  const open  = () => {
+    const panel = renderKeyInspector({ ...baseKey, default_mode: null, allowed_workspaces: ["a"], symbolic_hard_gate: false });
+    byId(panel, "key-policy-workspaces").value = "";
+    return panel;
+  };
+
+  test("needsEmptyWorkspaceConfirm은 빈 배열일 때만 참", () => {
+    assert.equal(needsEmptyWorkspaceConfirm({ allowed_workspaces: [] }), true);
+    assert.equal(needsEmptyWorkspaceConfirm({ allowed_workspaces: ["a"] }), false);
+    assert.equal(needsEmptyWorkspaceConfirm({ allowed_workspaces: null }), false);
+    assert.equal(needsEmptyWorkspaceConfirm({}), false);
+  });
+
+  test("첫 클릭은 요청 없이 단추를 확인 상태로 바꾸고 둘째 클릭이 보낸다", async () => {
+    const panel = open();
+    await click(panel);
+    assert.equal(calls.length, 0);
+    assert.match(byId(panel, "key-policy-save").textContent, /^CONFIRM/);
+    await click(panel);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(JSON.parse(calls[0].options.body), { allowed_workspaces: [] });
+    assert.equal(byId(panel, "key-policy-save").textContent, "SAVE POLICY");
+  });
+
+  test("입력이 바뀌면 확인 상태가 풀린다", async () => {
+    const panel = open();
+    await click(panel);
+    fire(byId(panel, "key-policy-workspaces"), "input");
+    assert.equal(byId(panel, "key-policy-save").textContent, "SAVE POLICY");
+    await click(panel);
+    assert.equal(calls.length, 0, "다시 확인 단계부터 시작해야 한다");
+  });
+
+  test("빈 배열이 아닌 변경은 확인 없이 보낸다", async () => {
+    const panel = renderKeyInspector({ ...baseKey, default_mode: null, allowed_workspaces: ["a"], symbolic_hard_gate: false });
+    byId(panel, "key-policy-workspaces").value = "a\nb";
+    await click(panel);
+    assert.equal(calls.length, 1);
   });
 });
 

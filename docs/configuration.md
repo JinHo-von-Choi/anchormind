@@ -172,7 +172,7 @@
 | MEMENTO_SYMBOLIC_TIMEOUT_MS | 50 | - | symbolic 평가 timeout 설정값 (ms). 현재 이 값을 읽는 처리는 없다 |
 | MEMENTO_SYMBOLIC_MAX_CANDIDATES | 32 | - | symbolic 후보 수 상한 설정값. 현재 이 값을 읽는 처리는 없다 |
 
-`api_keys.symbolic_hard_gate` 컬럼 (migration-033)으로 키 단위 hard gate 전환 가능. 기본 false. true로 설정 시 PolicyRules violations 발생 시 저장이 거부되고 JSON-RPC **프로토콜 레벨** 에러 `-32003`으로 응답한다 (MCP 도구 에러 아님, `error.data.violations: string[]` 포함). 마스터 키(keyId=NULL) 제외. 캐시 TTL 30초. 값은 admin console 키 상세의 ACCESS POLICY 또는 `PATCH /v1/internal/model/nothing/keys/:id/policy`로 바꾸며, 이 프로세스의 캐시는 변경 즉시 비워진다.
+`api_keys.symbolic_hard_gate` 컬럼 (migration-033)으로 키 단위 hard gate 전환 가능. 기본 false. true로 설정 시 PolicyRules violations 발생 시 저장이 거부되고 JSON-RPC **프로토콜 레벨** 에러 `-32003`으로 응답한다 (MCP 도구 에러 아님, `error.data.violations: string[]` 포함). 마스터 키(keyId=NULL) 제외. 캐시 TTL 30초. 값은 admin console 키 상세의 ACCESS POLICY 또는 `PATCH /v1/internal/model/nothing/keys/:id/policy`로 바꾸며, 변경은 이 프로세스의 캐시를 비우며, 진행 중이던 조회가 이전 값을 쓸 수 있어 늦어도 약 30초 안에 적용된다.
 
 #### LLM Provider Fallback Chain
 
@@ -1117,7 +1117,7 @@ EMBEDDING_DIMENSIONS=768
 | 039 | migration-039-feedback-instrumentation.sql | `task_feedback`에 `outcome`·`evaluator`·`evidence`·`unmet_requirements` 컬럼 + `outcome`·`evaluator` CHECK 제약, `tool_feedback`에 `irrelevance_reason` 컬럼 + CHECK 제약 + partial index `idx_tf_irrelevance`. 기존 행은 백필하지 않으므로 NULL이 "미보고"를 뜻한다 |
 | 040 | migration-040-workspace-audit-columns.sql | `fragments.workspace_source TEXT`(explicit / key_default / inferred / unscoped CHECK, NULL은 미기록), `fragments.quality_rationale TEXT` |
 | 041 | migration-041-workspace-backfill-inference.sql | `fragments.workspace_inferred`, `inference_confidence`(0.0~1.0 CHECK), `backfill_batch_id`. 추론 결과를 workspace 컬럼과 분리해 기록 |
-| 042 | migration-042-api-keys-allowed-workspaces.sql | `api_keys.allowed_workspaces TEXT[]`. NULL은 무제한, 빈 배열은 workspace 주장 전면 차단. `PATCH /v1/internal/model/nothing/keys/:id/policy`로 편집(최대 64개, 항목당 128자) |
+| 042 | migration-042-api-keys-allowed-workspaces.sql | `api_keys.allowed_workspaces TEXT[]`. NULL은 무제한. 빈 배열은 모든 workspace 주장을 허가 집합 밖으로 판정해 `workspaceNotAllowed` 경고를 남기고, `MEMENTO_WORKSPACE_GATE=true`이며 키의 hard gate가 켜진 경우에만 저장을 거부한다. workspace가 없는 쓰기는 항상 통과한다. `PATCH /v1/internal/model/nothing/keys/:id/policy`로 편집(최대 64개, 항목당 128자) |
 | 043 | migration-043-fragment-synthetic-query.sql | `fragment_synthetic_query` 표(합성 역질의와 임베딩, HNSW 인덱스, 에이전트 격리 정책) |
 | 044 | migration-044-idempotency-records.sql | `idempotency_records` 표(`amend`, `tool_feedback`의 재시도 응답 기록, 기본 7일 만료) |
 | 045 | migration-045-fragment-rls.sql | `fragments`, `fragment_links`에 RLS ENABLE와 격리 정책. `FORCE ROW LEVEL SECURITY`는 적용하지 않음 |

@@ -33,7 +33,7 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | GET | /v1/internal/model/nothing/activity | Recent fragment activity log (10 entries) |
 | GET | /v1/internal/model/nothing/metrics-summary | Dashboard metrics summary |
 | GET | /v1/internal/model/nothing/keys | API key list. Includes the policy columns (`default_mode`, `allowed_workspaces`, `symbolic_hard_gate`) |
-| POST | /v1/internal/model/nothing/keys | Create API key. Raw key returned in response exactly once. `permissions` is a non-empty array of `read` and `write` only and defaults to `DEFAULT_PERMISSIONS` when omitted; any other value returns 400 |
+| POST | /v1/internal/model/nothing/keys | Create API key. Raw key returned in response exactly once. `permissions` is a non-empty array of `read` and `write` only and defaults to `DEFAULT_PERMISSIONS` when omitted; an empty array, `null` or any other value returns 400 |
 | PUT | /v1/internal/model/nothing/keys/:id | Change API key status (active <-> inactive) |
 | GET | /v1/internal/model/nothing/keys/:id/stats | Per-key usage statistics |
 | PUT | /v1/internal/model/nothing/keys/:id/daily-limit | Change API key daily call limit. Master key required |
@@ -357,7 +357,7 @@ Request body:
 | Field | Value | Description |
 |-|-|-|
 | `default_mode` | `recall-only`, `write-only`, `onboarding` or `null` | Per-key default mode preset. `null` clears it (all tools exposed). An unregistered name and a master-only preset (`audit`) return 400 |
-| `allowed_workspaces` | array of strings or `null` | `null` is unlimited. An empty array judges every workspace claim to be outside the allowed set. At most 64 entries (after de-duplication), 128 characters each; an empty string, surrounding whitespace or a control character returns 400 |
+| `allowed_workspaces` | array of strings or `null` | `null` is unlimited. An empty array judges every workspace claim to be outside the allowed set and records a `workspaceNotAllowed` warning; a write is rejected only when `MEMENTO_WORKSPACE_GATE=true` and the key has the hard gate on. A write without a workspace always passes. At most 64 entries (after de-duplication), 128 characters each; an empty string, surrounding whitespace or a control character returns 400 |
 | `symbolic_hard_gate` | boolean | `true` rejects a `remember` call whose fragment violates a PolicyRules rule |
 
 Response 200:
@@ -368,7 +368,7 @@ Response 200:
 
 Errors: 400 `{ "error": "...", "field": "default_mode" }` (validation failure), 404 (key not found), 413 (body too large).
 
-Effect: `symbolic_hard_gate` and `allowed_workspaces` clear this process's lookup cache immediately, so the next request sees the new value; other instances follow within the 30 second cache TTL. `default_mode` applies to sessions opened after the change. The change is written to the audit log as one `admin key_policy` line (field names with old and new values).
+Effect: `symbolic_hard_gate` and `allowed_workspaces` clear this process's lookup cache, but a lookup already in flight when the PATCH lands can still write the old value into the cache. That entry expires within the 30 second TTL, so the change is effective within about 30 seconds at the latest; other instances behave the same. `default_mode` applies to sessions opened after the change. The change is written to the audit log as one `admin key_policy` line (field names with old and new values).
 
 ---
 

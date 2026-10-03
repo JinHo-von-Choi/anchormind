@@ -36,7 +36,7 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | GET | /v1/internal/model/nothing/activity | 최근 파편 활동 로그 (10건) |
 | GET | /v1/internal/model/nothing/metrics-summary | 대시보드 메트릭 요약 |
 | GET | /v1/internal/model/nothing/keys | API 키 목록 조회. 정책 열(`default_mode`, `allowed_workspaces`, `symbolic_hard_gate`)을 포함한다 |
-| POST | /v1/internal/model/nothing/keys | API 키 생성. 원시 키는 응답에서 단 1회 반환. `permissions`는 `read`, `write`로만 이뤄진 비어 있지 않은 배열이며 생략하면 `DEFAULT_PERMISSIONS`. 그 밖의 값은 400 |
+| POST | /v1/internal/model/nothing/keys | API 키 생성. 원시 키는 응답에서 단 1회 반환. `permissions`는 `read`, `write`로만 이뤄진 비어 있지 않은 배열이며 생략하면 `DEFAULT_PERMISSIONS`. 빈 배열, `null`, 그 밖의 값은 400 |
 | PUT | /v1/internal/model/nothing/keys/:id | API 키 상태 변경 (active ↔ inactive) |
 | GET | /v1/internal/model/nothing/keys/:id/stats | API 키별 사용 통계 |
 | PUT | /v1/internal/model/nothing/keys/:id/daily-limit | API 키 일일 호출 제한 변경. 마스터 키 인증 필요 |
@@ -359,7 +359,7 @@ API 키의 정책 열을 변경한다. 마스터 키 인증 필요. 전달한 �
 | 필드 | 값 | 설명 |
 |-|-|-|
 | `default_mode` | `recall-only`, `write-only`, `onboarding` 또는 `null` | 키 단위 기본 mode preset. `null`은 해제(전체 도구 노출). 등록되지 않은 이름과 마스터 전용 preset(`audit`)은 400 |
-| `allowed_workspaces` | 문자열 배열 또는 `null` | `null`은 제한 없음. 빈 배열은 모든 workspace 주장을 허가 집합 밖으로 판정한다. 항목은 최대 64개(중복 제거 후), 항목당 128자 이하이며 빈 문자열, 앞뒤 공백, 제어 문자는 400 |
+| `allowed_workspaces` | 문자열 배열 또는 `null` | `null`은 제한 없음. 빈 배열은 모든 workspace 주장을 허가 집합 밖으로 판정해 `workspaceNotAllowed` 경고를 남기고, `MEMENTO_WORKSPACE_GATE=true`이며 hard gate가 켜진 키에서만 저장을 거부한다. workspace가 없는 쓰기는 항상 통과한다. 항목은 최대 64개(중복 제거 후), 항목당 128자 이하이며 빈 문자열, 앞뒤 공백, 제어 문자는 400 |
 | `symbolic_hard_gate` | boolean | `true`면 PolicyRules 위반 파편의 `remember`를 거부한다 |
 
 응답 200:
@@ -370,7 +370,7 @@ API 키의 정책 열을 변경한다. 마스터 키 인증 필요. 전달한 �
 
 오류: 400 `{ "error": "...", "field": "default_mode" }`(검증 실패), 404(키 없음), 413(본문 과대).
 
-반영 시점: `symbolic_hard_gate`와 `allowed_workspaces`는 이 프로세스의 조회 캐시를 즉시 비우므로 다음 요청부터 적용되고, 다른 인스턴스는 캐시 TTL 30초 안에 반영된다. `default_mode`는 변경 이후 열린 세션부터 적용된다. 변경은 감사 로그에 `admin key_policy` 한 줄(필드 이름과 이전, 이후 값)로 남는다.
+반영 시점: `symbolic_hard_gate`와 `allowed_workspaces`는 이 프로세스의 조회 캐시를 비우지만, 변경 시점에 이미 진행 중이던 조회가 이전 값을 캐시에 쓸 수 있다. 그 항목은 TTL 30초 안에 만료되므로 늦어도 약 30초 안에 적용되며, 다른 인스턴스도 같다. `default_mode`는 변경 이후 열린 세션부터 적용된다. 변경은 감사 로그에 `admin key_policy` 한 줄(필드 이름과 이전, 이후 값)로 남는다.
 
 ---
 
