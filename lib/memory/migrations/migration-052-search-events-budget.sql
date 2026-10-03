@@ -5,6 +5,9 @@
 --
 -- 두 열 모두 기본값 없는 nullable 열이라 기존 행을 다시 쓰지 않는다. 예산 선택을 거치지 않은
 -- 검색(MEMENTO_RANK_BEFORE_BUDGET=off, recall 밖의 검색 호출)은 NULL을 기록한다.
+-- 열 추가는 짧게 표 전체 잠금을 잡으므로 잠금 대기를 3초로 제한한다(docs/operations/online-migration.md).
+
+SET LOCAL lock_timeout = '3s';
 
 ALTER TABLE agent_memory.search_events
   ADD COLUMN IF NOT EXISTS candidate_count INTEGER,
