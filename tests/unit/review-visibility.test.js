@@ -50,6 +50,7 @@ const { LinkStore }            = await import("../../lib/memory/link/LinkStore.j
 const { CaseRecall }           = await import("../../lib/memory/read/CaseRecall.js");
 const { HistoryReconstructor } = await import("../../lib/memory/read/HistoryReconstructor.js");
 const { fetchGraphNeighbors }  = await import("../../lib/memory/read/GraphNeighborSearch.js");
+const { listWorkingMemoryRows } = await import("../../lib/memory/WorkingMemoryRows.js");
 
 const PREDICATE = /review_state IS DISTINCT FROM 'pending' OR (?:f\.)?key_id (?:IS NOT DISTINCT FROM \$(\d+)|IS NULL)/;
 
@@ -239,7 +240,7 @@ describe("앵커 승격", () => {
 });
 
 /** 앵커 하나와 유형별 core 파편 두 개(쓴 키의 검토 대기 하나)를 돌려주는 ContextBuilder */
-function makeBuilder(queries) {
+function makeBuilder(queries, workingMemory = []) {
   const recall = async params => {
     if (params.topic === "session_reflect") return { fragments: [] };
     return {
@@ -260,10 +261,15 @@ function makeBuilder(queries) {
   return new ContextBuilder({
     recall,
     store  : { searchBySource: async () => [] },
-    index  : { getWorkingMemory: async () => [], setSeenIds: async () => {} },
+    index  : { getWorkingMemory: async () => workingMemory, setSeenIds: async () => {} },
     getPool: () => pool
   });
 }
+
+const wmItem = (id, extra = {}) => ({
+  id, content: `${id} body`, type: "fact", agent_id: "default", key_id: "own", workspace: null,
+  added_at: "2026-10-03T00:00:00Z", created_at: "2026-10-03T00:00:00Z", ...extra
+});
 
 describe("ANCHOR와 CORE 주입", () => {
   /** 출처 등급 판정과 떼어 검토 대기 판정만 본다(출처 판정은 provenance-read 시험). */
@@ -286,6 +292,18 @@ describe("ANCHOR와 CORE 주입", () => {
     const result  = await makeBuilder(queries).build({ types: ["error"], _keyId: "own" });
     for (const sql of queries) assert.doesNotMatch(sql, /review_state/);
     assert.ok(result.injectionText.includes("pending body"), result.injectionText);
+  });
+
+  it("세션 작업 기억의 검토 대기 항목도 주입하지 않는다", async () => {
+    const wm = [wmItem("wm-pending", { review_state: "pending" }), wmItem("wm-ok")];
+    const result = await makeBuilder([], wm).build({ types: ["error"], _keyId: "own", sessionId: "s1" });
+    assert.ok(result.injectionText.includes("wm-ok body"), result.injectionText);
+    assert.ok(!result.injectionText.includes("wm-pending body"), result.injectionText);
+  });
+
+  it("작업 기억 대체 행 조회는 검토 대기 행을 읽지 않는다", async () => {
+    await listWorkingMemoryRows("s1");
+    assert.match(captured.at(-1).sql, /valid_to IS NOT NULL AND review_state IS DISTINCT FROM 'pending'/);
   });
 
   it("dropPendingReview는 표지나 상태가 검토 대기인 후보만 뺀다", () => {
