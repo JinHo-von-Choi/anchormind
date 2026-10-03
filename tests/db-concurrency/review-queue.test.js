@@ -30,6 +30,8 @@ const { ContextBuilder }               = await import("../../lib/memory/read/Con
 const { MemoryConsolidator }           = await import("../../lib/memory/consolidate/MemoryConsolidator.js");
 const { MemoryManager }                = await import("../../lib/memory/MemoryManager.js");
 const { withRecallAnnotations }        = await import("../../lib/memory/read/AnswerPackLoader.js");
+const { ContradictionDetector }        = await import("../../lib/memory/link/ContradictionDetector.js");
+const { FragmentStore }                = await import("../../lib/memory/write/FragmentStore.js");
 const {
   decideReview, expireStaleReviews, listReviewQueue, ReviewStateError
 } = await import("../../lib/admin/ReviewStore.js");
@@ -187,9 +189,55 @@ describe("recall 가시성", () => {
     assert.ok(!other.fragments.some(f => f.id === `${TAG}-pending-a`));
   });
 
-  it("MEMENTO_REVIEW_QUEUE=off이면 검토 열을 읽지 않아 모두에게 보인다", async () => {
+  it("MEMENTO_REVIEW_QUEUE=off여도 같은 그룹의 다른 키는 검토 대기 파편을 보지 못한다", async () => {
     process.env.MEMENTO_REVIEW_QUEUE = "off";
-    assert.ok(idsOf(await reader.searchByKeywords([TAG], opts(KEY_B))).has(`${TAG}-pending-a`));
+    assert.ok(!idsOf(await reader.searchByKeywords([TAG], opts(KEY_B))).has(`${TAG}-pending-a`));
+    assert.ok(idsOf(await reader.searchByKeywords([TAG], opts(KEY_A))).has(`${TAG}-pending-a`));
+  });
+
+  it("다른 키의 거절 파편은 includeSuperseded 조회와 recall에서도 보이지 않고 쓴 키에게만 보인다", async () => {
+    await insertRow(`${TAG}-rejected-a`, { key: KEY_A, state: "rejected", reason: "instruction_override" });
+    await client.query("UPDATE agent_memory.fragments SET valid_to = NOW() WHERE id = $1", [`${TAG}-rejected-a`]);
+    const withClosed = (viewer) => ({ ...opts(viewer), includeSuperseded: true });
+    assert.ok(!idsOf(await reader.searchByKeywords([TAG], withClosed(KEY_B))).has(`${TAG}-rejected-a`));
+    assert.ok(idsOf(await reader.searchByKeywords([TAG], withClosed(KEY_A))).has(`${TAG}-rejected-a`));
+
+    const mgr = MemoryManager.getInstance();
+    const recall = (keyId) => mgr.recall({
+      keywords: [TAG], agentId: "default", _keyId: keyId, _groupKeyIds: GROUP, includeSuperseded: true, tokenBudget: 5000
+    });
+    assert.ok(!(await recall(KEY_B)).fragments.some(f => f.id === `${TAG}-rejected-a`));
+    const own = (await recall(KEY_A)).fragments.find(f => f.id === `${TAG}-rejected-a`);
+    assert.equal(own?.review_rejected, true);
+  });
+
+  it("대체 체인(fragment_history)은 다른 키의 검토 대기 파편을 싣지 않는다", async () => {
+    await insertRow(`${TAG}-chain-base`, { key: KEY_B });
+    await insertRow(`${TAG}-chain-pending`, { key: KEY_A, state: "pending", reason: "instruction_override" });
+    await client.query(
+      "INSERT INTO agent_memory.fragment_links (from_id, to_id, relation_type) VALUES ($1, $2, 'superseded_by')",
+      [`${TAG}-chain-base`, `${TAG}-chain-pending`]
+    );
+    const forB = await reader.getHistory(`${TAG}-chain-base`, "default", KEY_B, GROUP);
+    assert.equal(forB.current.id, `${TAG}-chain-base`);
+    assert.deepEqual(forB.superseded_by_chain, []);
+    const forA = await reader.getHistory(`${TAG}-chain-base`, "default", KEY_A, GROUP);
+    assert.deepEqual(forA.superseded_by_chain.map(r => r.to_id), [`${TAG}-chain-pending`]);
+  });
+
+  it("검토 대기 파편은 모순 해소로 보이는 파편을 닫지 않는다", async () => {
+    await insertRow(`${TAG}-contra-old`, { key: KEY_A, createdAt: new Date(Date.now() - 86400000) });
+    await insertRow(`${TAG}-contra-new`, { key: KEY_A, state: "pending", reason: "instruction_override" });
+    const load = async (id) => (await client.query(
+      "SELECT id, content, created_at, is_anchor, key_id, review_state FROM agent_memory.fragments WHERE id = $1", [id]
+    )).rows[0];
+    const detector = new ContradictionDetector(new FragmentStore());
+    await detector.resolveContradiction(await load(`${TAG}-contra-new`), await load(`${TAG}-contra-old`), "lane");
+    assert.equal((await rowOf(`${TAG}-contra-old`)).valid_to, null);
+    const links = (await client.query(
+      "SELECT COUNT(*)::int AS n FROM agent_memory.fragment_links WHERE from_id = $1 OR to_id = $1", [`${TAG}-contra-old`]
+    )).rows[0].n;
+    assert.equal(links, 0);
   });
 });
 
@@ -221,18 +269,37 @@ describe("주입과 승격", () => {
 });
 
 describe("결정", () => {
-  it("승인은 approved로 바꾸고 보류한 앵커 요청을 적용하며 그룹의 다른 키에게 보이게 한다", async () => {
+  it("승인은 approved로 바꾸고 앵커 권한이 없는 키의 보류한 앵커 요청은 적용하지 않으며 그룹의 다른 키에게 보이게 한다", async () => {
     await insertRow(`${TAG}-approve`, { key: KEY_A, state: "pending", reason: "low_trust_directive,anchor_requested" });
     const result = await decideReview({ fragmentId: `${TAG}-approve`, decision: "approve", reviewer: "master:lane", note: "확인" });
-    assert.equal(result.anchorApplied, true);
+    assert.deepEqual([result.anchorApplied, result.anchorReason], [false, "permission"]);
     assert.deepEqual(await rowOf(`${TAG}-approve`), {
-      review_state: "approved", review_reason: "low_trust_directive,anchor_requested", is_anchor: true, valid_to: null
+      review_state: "approved", review_reason: "low_trust_directive,anchor_requested", is_anchor: false, valid_to: null
     });
     assert.ok(idsOf(await reader.searchByKeywords([TAG], { keyId: GROUP, viewerKeyId: KEY_B, agentId: "default", limit: 50 })).has(`${TAG}-approve`));
     const decisions = (await client.query(
       "SELECT decision, reviewer, note, key_id FROM agent_memory.memory_review_decisions WHERE fragment_id = $1", [`${TAG}-approve`]
     )).rows;
     assert.deepEqual(decisions, [{ decision: "approve", reviewer: "master:lane", note: "확인", key_id: KEY_A }]);
+  });
+
+  it("앵커 권한이 있는 키는 승인 때 앵커가 되고 무권한 앵커 요청은 명시해야 적용된다", async () => {
+    await client.query("UPDATE agent_memory.api_keys SET permissions = ARRAY['read', 'write', 'anchor'] WHERE id = $1", [KEY_A]);
+    try {
+      await insertRow(`${TAG}-anchor-ok-approve`, { key: KEY_A, state: "pending", reason: "mode_all,anchor_requested" });
+      const ok = await decideReview({ fragmentId: `${TAG}-anchor-ok-approve`, decision: "approve", reviewer: "master:lane" });
+      assert.deepEqual([ok.anchorApplied, ok.anchorReason], [true, "permitted"]);
+      assert.equal((await rowOf(`${TAG}-anchor-ok-approve`)).is_anchor, true);
+
+      await insertRow(`${TAG}-anchor-unauth`, { key: KEY_A, state: "pending", reason: "anchor_unauthorized,anchor_requested" });
+      const held = await decideReview({ fragmentId: `${TAG}-anchor-unauth`, decision: "approve", reviewer: "master:lane" });
+      assert.deepEqual([held.anchorApplied, held.anchorReason], [false, "explicit_required"]);
+      await insertRow(`${TAG}-anchor-unauth2`, { key: KEY_A, state: "pending", reason: "anchor_unauthorized,anchor_requested" });
+      const explicit = await decideReview({ fragmentId: `${TAG}-anchor-unauth2`, decision: "approve", reviewer: "master:lane", applyAnchor: true });
+      assert.deepEqual([explicit.anchorApplied, explicit.anchorReason], [true, "explicit"]);
+    } finally {
+      await client.query("UPDATE agent_memory.api_keys SET permissions = ARRAY['read', 'write'] WHERE id = $1", [KEY_A]);
+    }
   });
 
   it("거절은 만료 파편으로 만들고 같은 멱등 키의 재요청은 앞선 결정을 돌려준다", async () => {
@@ -261,16 +328,16 @@ describe("결정", () => {
     assert.equal(count, 1);
   });
 
-  it("같은 멱등 키의 동시 요청은 결정 하나와 재요청 응답이 된다", async () => {
+  it("같은 멱등 키의 동시 요청은 결정 하나와 재요청 응답이 되고 상태 충돌이 없다", async () => {
     await insertRow(`${TAG}-idem`, { key: KEY_A, state: "pending", reason: "mode_all" });
     const results = await Promise.all([1, 2, 3].map(() =>
       decideReview({ fragmentId: `${TAG}-idem`, decision: "approve", reviewer: "master:lane", idempotencyKey: `${TAG}-k2` })
         .catch(err => err)
     ));
-    const ok = results.filter(r => !(r instanceof Error));
-    assert.ok(ok.length >= 1);
-    assert.equal(ok.filter(r => r.replayed === false).length, 1);
-    for (const r of results.filter(x => x instanceof Error)) assert.ok(r instanceof ReviewStateError, String(r));
+    for (const r of results) assert.ok(!(r instanceof Error), String(r));
+    assert.equal(results.filter(r => r.replayed === false).length, 1);
+    assert.equal(results.filter(r => r.replayed === true).length, 2);
+    assert.equal(new Set(results.map(r => r.decisionId)).size, 1);
   });
 });
 
@@ -373,17 +440,27 @@ describe("실행 계획(7만 행)", () => {
     return { scans: fragmentScans(plan), ms };
   }
 
+  /**
+   * 검토 술어를 참으로 바꾼 같은 질의. 자리표시자는 그대로 참조해 매개변수 목록을 유지한다.
+   *
+   * @param {string} sql
+   * @returns {string}
+   */
+  function withoutReviewPredicate(sql) {
+    return sql.replace(
+      /\((?:\w+\.)?review_state IS NULL OR (?:\w+\.)?review_state NOT IN \('pending', 'rejected'\)(?: OR (?:\w+\.)?key_id (?:IS NOT DISTINCT FROM (\$\d+)|IS NULL))?\)/g,
+      (_m, param) => (param ? `(TRUE OR ${param}::text IS NULL)` : "TRUE")
+    );
+  }
+
   it("검토 술어가 붙은 recall과 주입 질의는 술어가 없을 때보다 순차 탐색을 늘리지 않는다", async (t) => {
     const on = await captureQueries();
-    process.env.MEMENTO_REVIEW_QUEUE = "off";
-    const off = await captureQueries();
-    delete process.env.MEMENTO_REVIEW_QUEUE;
-
-    assert.equal(on.length, off.length);
-    assert.ok(on.some(q => /review_state IS DISTINCT FROM 'pending'/.test(q.sql)));
+    assert.ok(on.some(q => /review_state NOT IN \('pending', 'rejected'\)/.test(q.sql)));
     for (let i = 0; i < on.length; i++) {
+      const offSql  = withoutReviewPredicate(on[i].sql);
+      assert.doesNotMatch(offSql, /review_state IS NULL OR/);
       const planOn  = await explain(on[i].sql, on[i].params);
-      const planOff = await explain(off[i].sql, off[i].params);
+      const planOff = await explain(offSql, on[i].params);
       const seqOn   = planOn.scans.filter(s => s === "Seq Scan").length;
       const seqOff  = planOff.scans.filter(s => s === "Seq Scan").length;
       t.diagnostic(`q${i} on=[${planOn.scans.join(",")}] ${planOn.ms.toFixed(2)}ms off=[${planOff.scans.join(",")}] ${planOff.ms.toFixed(2)}ms`);
