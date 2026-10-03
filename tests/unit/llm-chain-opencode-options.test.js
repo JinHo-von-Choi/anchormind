@@ -40,6 +40,7 @@ mock.module("../../lib/config.js", {
     LLM_CONCURRENCY_WAIT_MS         : 30_000,
     getConcurrencyLimit             : () => 1,
     egressPolicyEnabled             : () => false,
+    egressUnknownKeyMode            : () => "configured",
     EGRESS_LOCAL_HOSTS              : []
   }
 });

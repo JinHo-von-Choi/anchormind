@@ -8,7 +8,10 @@ import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
 const {
-  EGRESS_STAGES,
+  EXTERNAL_DEFAULT_STAGES,
+  KNOWN_STAGES,
+  STAGE_DEFAULT,
+  stageDefaultLocalOnly,
   classifyProvider,
   validateEgressPolicy,
   resolveEgressRule,
@@ -117,7 +120,7 @@ describe("validateEgressPolicy", () => {
 
 describe("resolveEgressRule", () => {
   it("정책이 없으면 기존 단계는 구성된 제공자를, 새 단계는 로컬만 쓴다", () => {
-    for (const stage of EGRESS_STAGES) {
+    for (const stage of EXTERNAL_DEFAULT_STAGES) {
       assert.deepEqual(resolveEgressRule(null, null, stage), { localOnly: false, approvedProviders: null }, stage);
     }
     assert.deepEqual(resolveEgressRule(null, null, "unlabeled"), { localOnly: true, approvedProviders: null });
@@ -142,6 +145,26 @@ describe("resolveEgressRule", () => {
       resolveEgressRule({ workspaces: { w: { local_only: false } } }, "w", "synthesis"),
       { localOnly: false, approvedProviders: null }
     );
+  });
+});
+
+describe("단계 등록부", () => {
+  it("구성된 제공자를 쓰는 기본 단계는 기존 LLM 기능 여섯 개뿐이다", () => {
+    assert.deepEqual([...EXTERNAL_DEFAULT_STAGES].sort(),
+      ["auto_reflect", "contradiction", "evaluate", "morpheme", "split", "synthetic_query"]);
+  });
+
+  it("알려진 단계 중 여섯 개 밖의 단계는 모두 local_only 기본값이다", () => {
+    for (const [stage, def] of Object.entries(KNOWN_STAGES)) {
+      const expected = EXTERNAL_DEFAULT_STAGES.includes(stage) ? STAGE_DEFAULT.CONFIGURED : STAGE_DEFAULT.LOCAL_ONLY;
+      assert.equal(def, expected, stage);
+    }
+    for (const stage of EXTERNAL_DEFAULT_STAGES) assert.equal(KNOWN_STAGES[stage], STAGE_DEFAULT.CONFIGURED, stage);
+  });
+
+  it("여섯 단계만 정책 없이 외부 제공자를 쓰고 그 밖의 이름은 로컬만 쓴다", () => {
+    for (const stage of EXTERNAL_DEFAULT_STAGES) assert.equal(stageDefaultLocalOnly(stage), false, stage);
+    for (const stage of ["synthesis", "unlabeled", "", "toString", "__proto__"]) assert.equal(stageDefaultLocalOnly(stage), true, stage);
   });
 });
 

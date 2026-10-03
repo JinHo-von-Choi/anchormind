@@ -11,6 +11,9 @@ const log      = [];
 let   enabled  = true;
 let   policies = new Map();
 let   auditOk  = true;
+let   outboxOn = true;
+let   unknownKeyMode = "configured";
+const warns    = [];
 
 class StubProvider {
   constructor(config) {
@@ -37,6 +40,7 @@ mock.module("../../lib/config.js", {
     LLM_CONCURRENCY_WAIT_MS        : 30_000,
     getConcurrencyLimit            : () => 1,
     egressPolicyEnabled            : () => enabled,
+    egressUnknownKeyMode           : () => unknownKeyMode,
     EGRESS_LOCAL_HOSTS             : []
   }
 });
@@ -45,7 +49,7 @@ mock.module("../../lib/llm/registry.js", {
 });
 mock.module("../../lib/logger.js", {
   namedExports: {
-    logWarn        : () => {},
+    logWarn        : (msg) => { warns.push(String(msg)); },
     REDACT_PATTERNS: [],
     redactString   : (value) => value
   }
@@ -60,6 +64,7 @@ mock.module("../../lib/outbox/Outbox.js", {
   namedExports: {
     enqueueStandalone: async (_pool, event) => {
       if (!auditOk) throw new Error("outbox down");
+      if (!outboxOn) return null;
       log.push({ kind: "audit", provider: event.payload.provider, stage: event.payload.stage });
       return { id: "1" };
     }
@@ -68,6 +73,13 @@ mock.module("../../lib/outbox/Outbox.js", {
 
 const { llmJson }            = await import("../../lib/llm/index.js");
 const { EgressSkippedError } = await import("../../lib/llm/EgressPolicy.js");
+const { register }           = await import("../../lib/metrics.js");
+
+async function counter(name, labels) {
+  const values = (await register.getSingleMetric(name).get()).values;
+  return values.filter(v => Object.entries(labels).every(([k, val]) => v.labels[k] === val))
+    .reduce((sum, v) => sum + v.value, 0);
+}
 
 const LOCAL    = { provider: "ollama", baseUrl: "http://127.0.0.1:11434" };
 const EXTERNAL = { provider: "anthropic", baseUrl: "https://api.anthropic.com" };
@@ -75,10 +87,13 @@ const CLI      = { provider: "codex-cli" };
 
 describe("llmJson과 외부 전송 관문", () => {
   beforeEach(() => {
-    log.length = 0;
-    enabled    = true;
-    auditOk    = true;
-    policies   = new Map();
+    log.length   = 0;
+    warns.length = 0;
+    enabled      = true;
+    auditOk      = true;
+    outboxOn     = true;
+    unknownKeyMode = "configured";
+    policies     = new Map();
   });
 
   it("정책이 없는 기존 단계는 구성된 체인의 첫 제공자를 그대로 쓴다", async () => {
@@ -133,6 +148,31 @@ describe("llmJson과 외부 전송 관문", () => {
     const out = await llmJson("p", { providers: [EXTERNAL, LOCAL], egress: { stage: "split", keyId: "k1" } });
     assert.equal(out.picked, "ollama");
     assert.deepEqual(log.filter(e => e.kind === "call").map(e => e.provider), ["ollama"]);
+  });
+
+  it("감사 기록 실패는 제공자 실패로 세지 않고 제공자 실패 경고도 남기지 않는다", async () => {
+    auditOk = false;
+    const before = await counter("memento_llm_provider_calls_total", { provider: "anthropic", outcome: "failure" });
+    await llmJson("p", { providers: [EXTERNAL, LOCAL], egress: { stage: "split", keyId: "k1" } });
+    assert.equal(await counter("memento_llm_provider_calls_total", { provider: "anthropic", outcome: "failure" }), before);
+    assert.equal(warns.filter(w => /anthropic failed, trying next/.test(w)).length, 0);
+  });
+
+  it("outbox가 꺼져 감사 행 없이 보낸 건은 sent_unaudited로 센다", async () => {
+    outboxOn = false;
+    const before = await counter("memento_llm_egress_calls_total", { stage: "split", provider: "anthropic", outcome: "sent_unaudited" });
+    const out    = await llmJson("p", { providers: [EXTERNAL], egress: { stage: "split", keyId: "k1" } });
+    assert.equal(out.picked, "anthropic");
+    assert.equal(await counter("memento_llm_egress_calls_total", { stage: "split", provider: "anthropic", outcome: "sent_unaudited" }), before + 1);
+  });
+
+  it("MEMENTO_EGRESS_UNKNOWN_KEY=local_only는 키를 알 수 없는 호출만 로컬로 제한한다", async () => {
+    unknownKeyMode = "local_only";
+    await assert.rejects(llmJson("p", { providers: [EXTERNAL], egress: { stage: "split" } }), EgressSkippedError);
+    const master = await llmJson("p", { providers: [EXTERNAL], egress: { stage: "split", keyId: null } });
+    assert.equal(master.picked, "anthropic");
+    const keyed  = await llmJson("p", { providers: [EXTERNAL], egress: { stage: "split", keyId: "k1" } });
+    assert.equal(keyed.picked, "anthropic");
   });
 
   it("스위치가 꺼져 있으면 정책과 관계없이 구성된 체인과 원문을 쓴다", async () => {

@@ -326,7 +326,7 @@ describe("레지스트리 항목", () => {
   it("키, 토큰, 비밀번호, 주소를 담는 변수 이름이 없다", () => {
     const secretLike = /(_KEY|_TOKEN|_SECRET|_PASSWORD|_URL|_HOST)$/;
     /** 이름에 KEY가 들어가지만 값이 고정 열거인 방식 선택 스위치 */
-    const modeOnly   = new Set(["MEMENTO_SSE_QUERY_KEY"]);
+    const modeOnly   = new Set(["MEMENTO_SSE_QUERY_KEY", "MEMENTO_EGRESS_UNKNOWN_KEY"]);
     for (const s of SWITCHES) {
       if (modeOnly.has(s.name)) assert.equal(s.kind, "enum", s.name);
       else assert.ok(!secretLike.test(s.name), s.name);

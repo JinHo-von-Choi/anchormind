@@ -34,6 +34,7 @@
 | deny (그 밖의 값은 헤더를 붙이지 않음) | MEMENTO_FRAME_OPTIONS |
 | 401, 503 (그 밖의 값은 401) | MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS |
 | inner, outer (그 밖의 값은 inner) | MEMENTO_SEMANTIC_THRESHOLD_MODE |
+| configured, local_only (그 밖의 값은 configured) | MEMENTO_EGRESS_UNKNOWN_KEY |
 | none, all (그 밖의 값은 none) | MEMENTO_LLM_CLI_TOOL_APPROVAL |
 | true, false (그 밖의 값은 false) | MEMENTO_CONFIG_STRICT |
 | true, false (그 밖의 값은 `MEMORY_CONFIG` 검증에서 기동 실패) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
@@ -264,7 +265,8 @@ REDIS_ENABLED=true면 Redis에 상태 저장, 아니면 in-memory.
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
 | MEMENTO_EGRESS_POLICY | on | `on`이면 위 관문이 동작한다. `off`이면 정책 조회, 제공자 거르기, 전송 전 마스킹, 감사 이벤트, 외부 전송 지표가 모두 빠지고 구성된 체인을 그대로 쓴다(되돌리기용). 호출 시점에 읽는다 |
-| MEMENTO_EGRESS_LOCAL_HOSTS | (없음) | 로컬 제공자로 볼 호스트 이름(쉼표 구분, 대소문자 무시). 루프백 주소(`localhost`, `127.0.0.0/8`, `::1`)는 지정하지 않아도 로컬이다. 예: 같은 망의 Ollama 호스트 |
+| MEMENTO_EGRESS_UNKNOWN_KEY | configured | 키를 알 수 없는 호출(키 문맥 없음)의 판정. `configured`는 단계 기본값을 쓰고, `local_only`는 로컬 제공자만 쓴다. master 키 호출은 키를 아는 호출이라 영향이 없다. 호출 시점에 읽는다 |
+| MEMENTO_EGRESS_LOCAL_HOSTS | (없음) | 로컬 제공자로 볼 호스트 이름(쉼표 구분, 대소문자 무시). 루프백 주소(`localhost`, `127.0.0.0/8`, `::1`)는 지정하지 않아도 로컬이다. 항목은 접속 주소의 호스트와 그대로 비교하므로 이름, IPv4, 대괄호로 감싼 IPv6(`[fd00::1]`)만 쓴다. 포트, 스킴, 경로가 붙은 값이나 대괄호 없는 IPv6는 맞을 수 없어 기동 시 설정 문제(`entry_never_matches`)로 한 번 기록하고 비교에서 뺀다. DNS 이름은 적힌 그대로 믿는다: 그 이름이 실제로 운영자 망 안을 가리키는지는 운영자 책임이다. 예: 같은 망의 Ollama 호스트 |
 
 제공자 분류: HTTP 제공자는 접속 주소(`baseUrl`)의 호스트가 루프백이거나 `MEMENTO_EGRESS_LOCAL_HOSTS`에 있으면 로컬, 그 밖(주소 없음, 해석 불가 포함)은 외부다. CLI 제공자(`gemini-cli`, `agy-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`, `opencode-cli`)는 항상 외부다. 분류는 이 프로세스가 접속하는 곳을 본다. 로컬 주소의 중계 서버가 외부로 다시 보내는 구성은 로컬로 분류된다.
 
@@ -279,13 +281,18 @@ REDIS_ENABLED=true면 Redis에 상태 저장, 아니면 in-memory.
 ```
 
 - 필드는 모두 생략할 수 있다. `null`은 정책 없음이다. 값은 workspace 재정의, 키 값, 단계 기본값 순으로 정한다.
-- 단계 기본값: 위 6개 단계는 정책이 없으면 구성된 제공자를 그대로 쓴다(전송 감사만 더해진다). 등록되지 않은 단계와 단계를 밝히지 않은 호출은 로컬만 쓴다. 키나 workspace에서 `local_only: false`를 명시하면 그런 단계도 외부 제공자를 쓴다.
+- 단계 기본값: 위 6개 단계(`EXTERNAL_DEFAULT_STAGES`, 늘리지 않는 고정 목록)는 정책이 없으면 구성된 제공자를 그대로 쓴다(전송 감사만 더해진다). 새 외부 전송 기능은 `lib/llm/EgressPolicy.js`의 `KNOWN_STAGES`에 `local_only` 기본값으로 단계를 더한다. 그런 단계, 등록되지 않은 단계, 단계를 밝히지 않은 호출은 로컬만 쓴다. 키나 workspace에서 `local_only: false`를 명시하면 그런 단계도 외부 제공자를 쓴다.
 - 판정: 로컬 제공자는 항상 허용한다. `local_only`가 참이면 외부 제공자는 모두 막는다. `approved_providers`가 `null`(생략)이면 구성된 외부 제공자를 모두, 목록이면 목록에 든 외부 제공자만 허용한다. 문맥에 workspace가 둘 이상이면(모순 판정의 두 파편) 하나라도 막으면 막는다.
 - 실패 정책: 거른 뒤 남는 제공자가 없으면 외부로 대체하지 않고 그 단계를 건너뛴다(`EgressSkippedError`). 정책을 읽지 못했거나 저장된 값이 규칙에 맞지 않을 때도 건너뛴다. 로컬 제공자가 실패해도 외부로 넘어가지 않는다.
-- master 키와 키를 알 수 없는 호출(LLM 형태소 분석의 검색어, 세션 레코드가 없는 관리 콘솔 일괄 reflect)은 정책 없이 단계 기본값을 쓴다.
+- 키 문맥: 호출 모듈은 처리하는 자료의 키를 넘긴다(파편의 `key_id`, 세션 키, 검색 요청의 키). AutoReflect는 세션 레코드가 없으면 세션 활동 기록에 남은 키를 쓴다. master 키 호출은 정책 없이 단계 기본값을 쓴다. 그래도 키를 알 수 없는 호출(LLM 형태소 분석의 topic 이름 비교, 활동 기록도 없는 세션의 관리 콘솔 reflect)은 `MEMENTO_EGRESS_UNKNOWN_KEY`를 따른다.
+- 모순 판정에서 정책을 읽지 못한 경우(`policy_unavailable`)를 포함해 건너뛴 판정은 다른 LLM 실패와 같이 "모순 아님"으로 처리되고 탐지 워터마크가 전진한다. 그 쌍은 다음 주기에 다시 보지 않는다.
+- 범위: 이 관문은 `lib/llm`의 생성형 LLM 호출만 다룬다. 임베딩(`EMBEDDING_*`), 재랭커(`MEMENTO_RERANKER_*`), NLI 분류기 전송은 관문 밖이며 `local_only`가 막지 않는다. 그 경로의 외부 전송은 각 설정의 주소로 정한다.
+- `MEMENTO_OUTBOX=off`이면 감사 행 없이 보내며 지표 outcome은 `sent_unaudited`다.
 - 정책 조회는 키별로 30초 캐시한다. 변경은 이 프로세스의 캐시를 바로 비우고, 다른 인스턴스에는 늦어도 약 30초 안에 적용된다.
 
-지표: `memento_llm_egress_calls_total{stage,provider,provider_class,outcome}`(outcome: `sent`, `denied`, `audit_failed`), `memento_llm_egress_bytes_total{stage,provider_class}`, `memento_llm_egress_skipped_total{stage,reason}`(reason: `local_only`, `not_approved`, `policy_unavailable`, `policy_invalid`), `memento_llm_egress_masked_total{stage}`.
+지표: `memento_llm_egress_calls_total{stage,provider,provider_class,outcome}`(outcome: `sent`, `sent_unaudited`, `denied`, `audit_failed`), `memento_llm_egress_bytes_total{stage,provider_class}`, `memento_llm_egress_skipped_total{stage,reason}`(reason: `local_only`, `not_approved`, `policy_unavailable`, `policy_invalid`), `memento_llm_egress_masked_total{stage}`(호출마다 일치한 민감 정보 규칙 종류 수. 같은 규칙의 여러 일치는 1). 관문이 보내지 않은 제공자(감사 실패, 호출 직전 거부)는 `memento_llm_provider_calls_total`의 failure로 세지 않는다.
+
+감사 이벤트 소비: `audit.llm.egress`의 기본 처리기(`lib/llm/egress-audit-handler.js`)가 기동 시 등록되어 이벤트마다 감사 로그 파일(`LOG_DIR/audit-<날짜>.log`)에 `llm_egress` 한 줄(키 id, 단계, 제공자, 분류, 바이트, 가린 규칙 수, workspace 수, 이벤트 id; 본문 없음)을 남긴다. 같은 프로세스에서 같은 이벤트가 다시 전달되면 줄을 다시 쓰지 않고, 다른 프로세스의 재전달은 이벤트 id로 구분한다.
 
 ##### Token Usage Cap
 
