@@ -757,7 +757,9 @@ violations 있는 경우 (soft gate — 저장됨):
 
 파편에는 workspace 해석 출처가 `workspace_source`로 함께 기록된다: `explicit`(요청에 workspace 명시) · `key_default`(API 키의 default_workspace 적용) · `unscoped`(둘 다 없어 미지정).
 
-`MEMENTO_REMEMBER_DUPLICATE_GUARD=true`(기본 `false`)이면 같은 키 범위의 기존 파편과 같은 본문을 받았을 때 기존 파편에 후처리, TTL 조정, 재색인을 하지 않고 응답에 `existing: true`와 `duplicate`(`same_scope`, `other_workspace`, `closed`, `unknown`)로 상태만 알린다. 중복 적중은 플래그와 무관하게 `mcp_remember_duplicate_total{kind}`로 센다.
+같은 본문의 중복 판정 범위는 `MEMENTO_DEDUP_SCOPE`(기본 `workspace`)가 정한다. `workspace`이면 같은 키가 다른 workspace에 같은 본문을 쓸 때 별도 파편으로 저장하고, 같은 workspace나 전역(workspace 없음) 파편에 같은 본문이 있으면 그 id를 돌려준다. `key`이면 키 단위로 판정한다. 기존 파편에 적중한 응답의 `id`는 기존 파편 id이며, 같은 범위(`same_scope`: 같은 workspace 또는 전역 파편) 적중이면 `duplicate_of`에 같은 id를 싣는다.
+
+`MEMENTO_REMEMBER_DUPLICATE_GUARD=true`(기본 `false`)이면 중복 판정 범위의 기존 파편과 같은 본문을 받았을 때 기존 파편에 후처리, TTL 조정, 재색인을 하지 않고 응답에 `existing: true`와 `duplicate`(`same_scope`, `other_workspace`, `closed`, `unknown`)로 상태만 알린다. `other_workspace`는 키 단위 판정에서만 나온다. 중복 적중은 플래그와 무관하게 `mcp_remember_duplicate_total{kind}`로 센다.
 
 ### 피드백 샘플링 힌트
 

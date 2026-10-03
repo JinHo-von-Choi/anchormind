@@ -283,7 +283,7 @@ Local mode (no `--remote`) passes the same semantic write gate as the server rem
 - Email addresses, password fields, mobile phone numbers, API keys and tokens, private keys, resident registration numbers and card numbers are masked (`MEMENTO_SENSITIVE_SCAN`).
 - Content longer than 300 characters (1000 for episode) is truncated when stored.
 - Supplied keywords are lowercased and merged with keywords extracted from the content.
-- When the same content already exists, no new row is created and the existing fragment id is printed.
+- When the same content already exists in the duplicate detection scope (`MEMENTO_DEDUP_SCOPE`, by default the same workspace or a global fragment), no new row is created and the existing fragment id is printed.
 - importance is stored with the same per-type cap as server writes (the output shows the requested value).
 - content_hash is the full sha256 of the content (64 hex characters), the same as server writes.
 - PolicyRules warnings, if any, are included as `validation_warnings` in the `--json` output.
@@ -420,7 +420,7 @@ Each fragment line passes the semantic write gate (outside the transaction) and 
 
 - Email addresses, password fields, mobile phone numbers, API keys and tokens, private keys, resident registration numbers and card numbers are masked, and content longer than 300 characters (1000 for episode) is truncated when stored. Keywords are lowercased.
 - The key written is chosen by `--key`; the `key_id` of a file row is never read (it is counted in `ignored.key_id`). The CLI runs with the DB account of the server host, which is the owner path, so `is_anchor` follows the file.
-- Counts are imported (newly written), duplicates (same content already stored), rejected (typed reason) and errors (failures that are not about the row); a row falls in exactly one. `skipped` in `--json` equals `duplicates`.
+- Counts are imported (newly written), duplicates (same content already stored in the duplicate detection scope, `MEMENTO_DEDUP_SCOPE`), rejected (typed reason) and errors (failures that are not about the row); a row falls in exactly one. `skipped` in `--json` equals `duplicates`.
 - Rows the gate does not accept (missing or too short content, more than 4000 characters, malformed keywords, policy violations on a hard-gate key) and rows the database rejects because of their values (CHECK constraints on type, assertion_status and so on) are counted per reason in `rejected_by_reason`, and the import continues with the next line.
 - A row whose id exists with different content is rejected as `id_conflict`. `--idempotent` counts only the same id within the same key as a duplicate; an id owned by another key is `id_conflict`. An `idempotency_key` used by another row is rejected as `idempotency_conflict`. When the same row is imported concurrently it is checked once more and counted as a duplicate when the content is the same.
 - Input with no header line, no end line and only lines that are not JSON or not records is refused without writing anything and the command exits with code 1.

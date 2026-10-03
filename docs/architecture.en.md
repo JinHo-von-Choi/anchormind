@@ -37,7 +37,7 @@ server.js  (HTTP server)
             |   +-- AutoReflect.js        Session-end auto reflect orchestrator
             |   +-- EpisodeContinuityService.js Inserts case_events milestone_reached + preceded_by edge after reflect() (idempotency_key-based dedup)
             |   +-- SessionActivityTracker.js Per-session tool call/fragment activity tracking (Redis)
-            |   +-- RememberDuplicate.js  Detects and classifies remember duplicate hits (`same_scope`, `other_workspace`, `closed`, `unknown`) and builds the existing-fragment status response when `MEMENTO_REMEMBER_DUPLICATE_GUARD` is on
+            |   +-- RememberDuplicate.js  Detects and classifies remember duplicate hits (`same_scope`, `other_workspace`, `closed`, `unknown`), adds `duplicate_of` for same-scope hits and builds the existing-fragment status response when `MEMENTO_REMEMBER_DUPLICATE_GUARD` is on
             +-- read/                     Search layer modules
             |   +-- FragmentSearch.js     3-layer search orchestration (structural: L1->L2, semantic: L1->L2||L3 RRF merge). `_executeSearch` decomposes into `_buildTextRRF` (L2+L3 parallel RRF when text parameter present) / `_buildFallbackCombined` (L1+L2 only when no text)
             |   +-- FragmentReader.js     Fragment reads. `getById(id, agentId, keyId, groupKeyIds)` -- groupKeyIds parameter enables single-call lookup of fragments belonging to same-group keys. `getByIds`, `getHistory`, `searchByKeywords`, `searchBySemantic`, `findCaseIdBySessionTopic`, `findErrorFragmentsBySessionTopic`
@@ -55,6 +55,7 @@ server.js  (HTTP server)
             |   +-- WriteGate.js          Single semantic write gate. Applies the normalize, sensitive, length, policy, workspace and anchor steps in order and records violations as warnings or rejects them on hard-gate keys. `MEMENTO_WRITE_GATE`
             |   +-- write-gate-metrics.js Gate verdict metric `memento_write_gate_total{entry,outcome}`
             |   +-- FragmentImporter.js   Passes import rows through the gate and writes them with FragmentWriter. Applies the target key profile (owner, restore) (shared by admin import and CLI import)
+            |   +-- DedupScope.js         content_hash duplicate detection scope (`MEMENTO_DEDUP_SCOPE`). Reads the valid detection indexes to choose the detection scope, ON CONFLICT target, pre-insert lookup and batch fold key
             |   +-- FragmentWriter.js     Fragment writes. The semantic methods (insert, update) accept only gated values; internal metadata goes through updateInternal, which cannot write the 9 semantic columns (also delete, incrementAccess, touchLinked)
             |   +-- FragmentFactory.js    Fragment creation, validation, PII masking entry point (`maskSensitiveText`, rules come from the `lib/security` table) and per-type truncation (`limitContentLength`)
             |   +-- affect.js             Allowed affect tag values and `sanitizeAffect` normalization (shared by FragmentFactory and FragmentWriter)
@@ -109,7 +110,7 @@ server.js  (HTTP server)
             +-- keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` shared helper. Generates key_id-scoped WHERE clauses. Used by FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js
             +-- CaseEventStore.js         Semantic milestone log (case_events CRUD, DAG edges, evidence join)
             +-- memory-schema.sql         PostgreSQL schema definition
-            +-- migrations/               48 DB migration SQL files (migration-001 through migration-049; 046 is unused), applied sequentially against the schema_migrations table. Used by `scripts/migrate.js` and `scripts/lint-migrations.js`
+            +-- migrations/               49 DB migration SQL files (migration-001 through migration-050; 046 is unused), applied sequentially against the schema_migrations table. Used by `scripts/migrate.js` and `scripts/lint-migrations.js`
 ```
 
 Supporting modules:
@@ -493,7 +494,7 @@ The store for all fragments. This is the core table of the system.
 | keywords | TEXT[] | NOT NULL DEFAULT '{}' | Search keyword array (GIN indexed) |
 | type | TEXT | NOT NULL, CHECK | fact / decision / error / preference / procedure / relation / episode |
 | importance | REAL | 0.0~1.0 CHECK | Importance. Defaults per type, decayed by MemoryConsolidator |
-| content_hash | TEXT | NOT NULL | SHA hash-based duplicate prevention. Not a global UNIQUE — enforced by two per-tenant partial unique indexes (`uq_frag_hash_master`, `uq_frag_hash_per_key`, migration-031) |
+| content_hash | TEXT | NOT NULL | SHA hash-based duplicate prevention. Not a global UNIQUE: enforced by two per key and workspace partial unique indexes (`uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`, migration-050). The per-key indexes (`uq_frag_hash_per_key`, `uq_frag_hash_master`, migration-031) are dropped in an operational step, and while they remain detection is per key (`MEMENTO_DEDUP_SCOPE`) |
 | source | TEXT | | Source identifier (session ID, tool name, etc.) |
 | linked_to | TEXT[] | DEFAULT '{}' | Connected fragment ID list (GIN indexed) |
 | agent_id | TEXT | NOT NULL DEFAULT 'default' | Agent scoping ID |
@@ -532,7 +533,7 @@ The store for all fragments. This is the core table of the system.
 | inference_confidence | REAL | CHECK | Confidence of the inference evidence, 0.0 to 1.0 (migration-041) |
 | backfill_batch_id | TEXT | | Identifier of the batch run that produced the inference. Used for per-batch rollback (migration-041) |
 
-Index list: two per-tenant partial UNIQUE indexes on content_hash (`uq_frag_hash_master`, `uq_frag_hash_per_key`), topic (B-tree), type (B-tree), keywords (GIN), importance DESC (B-tree), created_at DESC (B-tree), agent_id (B-tree), linked_to (GIN), (ttl_tier, created_at) (B-tree), source (B-tree), verified_at (B-tree), is_anchor WHERE TRUE (partial index), valid_from (B-tree), (topic, type) WHERE valid_to IS NULL (partial index), id WHERE valid_to IS NULL (partial UNIQUE). `idx_fragments_key_workspace` (key_id, workspace) WHERE valid_to IS NULL (composite partial index — optimizes simultaneous key + workspace filtering), `idx_fragments_workspace` (workspace) WHERE workspace IS NOT NULL AND valid_to IS NULL (partial index for workspace-only full scans).
+Index list: two per key and workspace partial UNIQUE indexes on content_hash (`uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`; before the rollout the per-key `uq_frag_hash_per_key`, `uq_frag_hash_master`), topic (B-tree), type (B-tree), keywords (GIN), importance DESC (B-tree), created_at DESC (B-tree), agent_id (B-tree), linked_to (GIN), (ttl_tier, created_at) (B-tree), source (B-tree), verified_at (B-tree), is_anchor WHERE TRUE (partial index), valid_from (B-tree), (topic, type) WHERE valid_to IS NULL (partial index), id WHERE valid_to IS NULL (partial UNIQUE). `idx_fragments_key_workspace` (key_id, workspace) WHERE valid_to IS NULL (composite partial index: optimizes simultaneous key + workspace filtering), `idx_fragments_workspace` (workspace) WHERE workspace IS NOT NULL AND valid_to IS NULL (partial index for workspace-only full scans).
 
 The HNSW vector index is created as a conditional index on `embedding IS NOT NULL`. Parameters: m=16 (neighbor connections), ef_construction=128 (index build search depth), distance function vector_cosine_ops. ef_search=80 (applied via session-level SET LOCAL). Before each vector search, `SET LOCAL enable_seqscan = off`, `SET LOCAL enable_bitmapscan = off`, and `SET LOCAL hnsw.iterative_scan = relaxed_order` are applied at the session level to guarantee the HNSW index path (`lib/tools/db.js` queryWithAgentVector).
 
@@ -1291,13 +1292,13 @@ Files under `lib/memory/` are split into subdirectories by functional domain.
 lib/memory/
 +-- read/          FragmentSearch, FragmentReader, ContextBuilder, GraphNeighborSearch, HistoryReconstructor, Reranker, CaseRecall, LinkedFragmentLoader, RecallSuggestionEngine, SearchScope, SearchSideEffects
 +-- transfer/      exportFormat, FragmentExporter, ImportRunner, ImportReport, importRecords, importErrors, importRuntime
-+-- write/         WriteGate, FragmentImporter, FragmentWriter, FragmentFactory, FragmentStore, RememberPostProcessor, ConflictResolver, BatchRememberProcessor, BatchRememberWorker
++-- write/         WriteGate, DedupScope, FragmentImporter, FragmentWriter, FragmentFactory, FragmentStore, RememberPostProcessor, ConflictResolver, BatchRememberProcessor, BatchRememberWorker
 +-- link/          ReconsolidationEngine, GraphLinker, LinkStore, SessionLinker, TemporalLinker, ContradictionDetector
 +-- consolidate/   MemoryConsolidator, ConsolidatorGC, FragmentGC, decay, UtilityBaseline
 +-- embedding/     EmbeddingWorker, EmbeddingCache, MorphemeIndex, MorphemeTokenizer
 +-- signals/       SpreadingActivation, CaseRewardBackprop, NLIClassifier, MemoryEvaluator, SearchMetrics, SearchEventAnalyzer, SearchEventRecorder, EvaluationMetrics, SearchParamAdaptor
 +-- processors/    MemoryRememberer, MemoryRecaller, MemoryReflector, MemoryLinker, ReflectProcessor, AutoReflect, EpisodeContinuityService, SessionActivityTracker
-+-- migrations/    48 migration SQL files (001 through 049, 046 unused)
++-- migrations/    49 migration SQL files (001 through 050, 046 unused)
 ```
 
 Modules kept directly at the root are MemoryManager, ModeRegistry, keyId, keyScope, QuotaChecker, CaseEventStore, FragmentIndex, and contentGuard. No re-export shim exists for modules moved into the subdirectories above — import paths follow the actual file locations directly.

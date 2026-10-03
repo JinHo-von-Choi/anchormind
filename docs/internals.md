@@ -75,7 +75,7 @@ remember(params)
 
 `dryRun` 분기는 관문 호출을 포함하여 atomic 가드 선언 직전에 위치한다. `WriteGate.check`는 mode 파라미터(`"dryRun"` / `"production"`)를 받아 같은 단계를 적용하므로, dryRun 응답과 실제 저장 경로의 정책 적용이 항상 일치한다. amend, batch_remember(항목별), reflect 파생 쓰기, AutoReflect, admin 가져오기, CLI 가져오기, CLI remember 로컬 모드도 같은 관문을 거친다. 관문은 트랜잭션 밖에서 실행되고, 판정은 `memento_write_gate_total{entry,outcome}`(outcome: pass, warn, reject)으로 센다.
 
-저장 결과 id가 새 파편 id와 달라 기존 파편에 적중한 호출은 `mcp_remember_duplicate_total{kind}` 카운터로 집계한다. `kind`는 `same_scope`, `other_workspace`, `closed`, `unknown` 네 값이며 `MEMENTO_REMEMBER_DUPLICATE_GUARD` 설정과 무관하게 기록한다. 라벨이 붙은 카운터라 첫 적중이 발생하기 전에는 값이 출력되지 않는다.
+저장 결과 id가 새 파편 id와 달라 기존 파편에 적중한 호출은 `mcp_remember_duplicate_total{kind}` 카운터로 집계한다. `kind`는 `same_scope`, `other_workspace`, `closed`, `unknown` 네 값이며 `MEMENTO_REMEMBER_DUPLICATE_GUARD` 설정과 무관하게 기록한다. `same_scope`는 같은 workspace 또는 전역 파편이고, `other_workspace`는 키 단위 판정(`MEMENTO_DEDUP_SCOPE=key` 또는 키 범위 색인이 남은 상태)에서만 나온다. 판정 범위와 색인 상태별 동작은 `lib/memory/write/DedupScope.js`와 [operations/online-migration.md](operations/online-migration.md#중복-판정-범위-전환)에 있다. 라벨이 붙은 카운터라 첫 적중이 발생하기 전에는 값이 출력되지 않는다.
 
 **recall() 파이프라인 단계별 fields pick 위치:**
 

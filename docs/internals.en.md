@@ -75,7 +75,7 @@ remember(params)
 
 The `dryRun` branch includes the gate call and is positioned before the atomic guard declaration. `WriteGate.check` accepts a mode parameter (`"dryRun"` / `"production"`) and applies the same steps, ensuring that the policy applied to dryRun responses and actual storage paths is always consistent. amend, batch_remember (per item), reflect-derived writes, AutoReflect, admin import, CLI import and the CLI remember local mode pass the same gate. The gate runs outside any transaction, and verdicts are counted in `memento_write_gate_total{entry,outcome}` (outcome: pass, warn, reject).
 
-A call whose stored id differs from the new fragment id, meaning it hit an existing fragment, is counted in the `mcp_remember_duplicate_total{kind}` counter. `kind` is one of `same_scope`, `other_workspace`, `closed` and `unknown`, and it is recorded regardless of `MEMENTO_REMEMBER_DUPLICATE_GUARD`. It is a labeled counter, so no value is exposed until the first hit.
+A call whose stored id differs from the new fragment id, meaning it hit an existing fragment, is counted in the `mcp_remember_duplicate_total{kind}` counter. `kind` is one of `same_scope`, `other_workspace`, `closed` and `unknown`, and it is recorded regardless of `MEMENTO_REMEMBER_DUPLICATE_GUARD`. `same_scope` means the same workspace or a global fragment, and `other_workspace` only occurs under per-key detection (`MEMENTO_DEDUP_SCOPE=key` or while the key-scope index remains). Behavior per detection scope and index state is described in `lib/memory/write/DedupScope.js` and [operations/online-migration.md](operations/online-migration.md#중복-판정-범위-전환). It is a labeled counter, so no value is exposed until the first hit.
 
 **recall() pipeline — fields pick position:**
 

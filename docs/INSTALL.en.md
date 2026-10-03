@@ -37,7 +37,7 @@ The fastest path for someone new to this repository is to hand the work to an AI
 After the assistant finishes, all of the following must hold:
 
 - `.env` exists, with `MEMENTO_ACCESS_KEY`, `POSTGRES_*`, and `REDIS_*` populated
-- `npm run migrate` succeeds through `migration-049`
+- `npm run migrate` succeeds through `migration-050`
 - `node bin/memento.js health` returns OK for DB, Redis, and the embedding provider
 - The AI client lists `mcp__*__remember`, `recall`, and `reflect`
 - A `context` call returns a valid response (zero fragments is fine; so does `memory_stats` with a master key)
@@ -271,11 +271,15 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-048-case-events-case-close
 # Synthetic query embedding alignment marker (the DDL is applied by scripts/migrate.js)
 psql $DATABASE_URL -f lib/memory/migrations/migration-049-align-synthetic-query-embedding.sql
 
+# Per key and workspace content_hash unique indexes (production databases create them first with online-index)
+psql $DATABASE_URL -f lib/memory/migrations/migration-050-dedup-scope-workspace.sql
 # outbox_events table
 psql $DATABASE_URL -f lib/memory/migrations/migration-054-outbox-events.sql
 ```
 
 There is no migration-046. Prefer `npm run migrate`, which records applied files and substitutes the vector opclass automatically.
+
+After migration-050 the per-key content_hash indexes (`uq_frag_hash_per_key`, `uq_frag_hash_master`) remain, so duplicate detection stays per key. The rollout to per workspace detection (`MEMENTO_DEDUP_SCOPE=workspace`, the default) and its rollback are described in [operations/online-migration.md](operations/online-migration.md#중복-판정-범위-전환).
 
 > **Re-running migration-007**: If you change `EMBEDDING_DIMENSIONS` or switch embedding providers, re-run `scripts/post-migrate-flexible-embedding-dims.js` to update the vector column dimensions in the `fragments`, `morpheme_dict`, and `fragment_synthetic_query` tables simultaneously.
 

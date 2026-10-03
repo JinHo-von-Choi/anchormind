@@ -284,7 +284,7 @@ node bin/memento.js remember "배포 완료" --topic deploy-2026 --type procedur
 - 이메일, 비밀번호 필드, 휴대전화 번호, API 키와 토큰, 개인 키, 주민등록번호, 카드 번호 형태를 마스킹한다(`MEMENTO_SENSITIVE_SCAN`).
 - 300자(episode는 1000자)를 넘는 본문은 잘라 저장한다.
 - 지정한 키워드는 소문자로 정규화하고 본문에서 추출한 키워드와 합친다.
-- 같은 본문이 이미 있으면 새 행을 만들지 않고 기존 파편 id를 출력한다.
+- 중복 판정 범위(`MEMENTO_DEDUP_SCOPE`, 기본은 같은 workspace 또는 전역 파편)에 같은 본문이 이미 있으면 새 행을 만들지 않고 기존 파편 id를 출력한다.
 - importance는 서버 저장과 같은 유형별 상한을 적용해 저장한다(출력은 요청 값).
 - content_hash는 서버 저장과 같은 본문 전체 sha256(64자 16진수)이다.
 - PolicyRules 경고가 있으면 `--json` 출력에 `validation_warnings`를 싣는다.
@@ -421,7 +421,7 @@ node bin/memento.js import --input full.jsonl --restore
 
 - 이메일, 비밀번호 필드, 휴대전화 번호, API 키와 토큰, 개인 키, 주민등록번호, 카드 번호 형태를 마스킹하고, 300자(episode는 1000자)를 넘는 본문은 잘라 저장한다. 키워드는 소문자로 정규화한다.
 - 기록 키는 `--key`가 정하며 파일 행의 `key_id`는 읽지 않는다(`ignored.key_id`로 센다). CLI는 서버 호스트의 DB 계정으로 실행하는 소유자 경로이므로 `is_anchor`는 파일 값을 따른다.
-- 집계는 imported(새로 기록), duplicates(같은 본문이 이미 있음), rejected(유형이 있는 사유), errors(행 문제가 아닌 실패)이고 한 행은 하나에만 들어간다. `--json`의 `skipped`는 `duplicates`와 같은 값이다.
+- 집계는 imported(새로 기록), duplicates(중복 판정 범위(`MEMENTO_DEDUP_SCOPE`)에 같은 본문이 이미 있음), rejected(유형이 있는 사유), errors(행 문제가 아닌 실패)이고 한 행은 하나에만 들어간다. `--json`의 `skipped`는 `duplicates`와 같은 값이다.
 - 관문이 받아들이지 않은 행(본문 누락이나 품질 미달, 4000자 초과, 형식이 잘못된 키워드, hard gate 키의 정책 위반)과 행의 값 때문에 DB가 거부한 행(type, assertion_status CHECK 제약 등)은 `rejected_by_reason`의 사유별로 세고 다음 줄을 계속 가져온다.
 - 같은 id가 이미 있고 본문이 다른 행은 `id_conflict`로 거부한다. `--idempotent`는 같은 키 소속의 같은 id만 duplicates로 세고 다른 키 소속의 id는 `id_conflict`다. 다른 행이 쓰는 `idempotency_key`는 `idempotency_conflict`로 거부한다. 동시에 같은 행을 가져온 경우에는 한 번 다시 확인해 같은 본문이면 duplicates로 센다.
 - 머리 줄도 끝 줄도 없고 모든 줄이 JSON이 아니거나 기록이 아니면 아무것도 기록하지 않고 종료 코드 1로 끝난다.

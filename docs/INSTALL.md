@@ -37,7 +37,7 @@
 위 프롬프트를 받은 AI가 정상적으로 처리했다면 다음이 모두 충족되어야 한다.
 
 - `.env` 파일이 생성되고 `MEMENTO_ACCESS_KEY`·`POSTGRES_*`·`REDIS_*` 키가 모두 채워져 있다
-- `npm run migrate`가 `migration-049`까지 통과한다
+- `npm run migrate`가 `migration-050`까지 통과한다
 - `node bin/memento.js health`가 DB/Redis/임베딩 제공자 모두 OK를 반환한다
 - AI 클라이언트 도구 목록에 `mcp__*__remember`·`recall`·`reflect`가 노출된다
 - `context` 호출이 기억 0건이라도 정상 응답을 반환한다 (master 키의 `memory_stats`도 같다)
@@ -169,10 +169,13 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-045-fragment-rls.sql      
 psql $DATABASE_URL -f lib/memory/migrations/migration-047-agent-scope-audit.sql                     # search_events 검색 범위 컬럼 + fragment_versions agent snapshot 컬럼
 psql $DATABASE_URL -f lib/memory/migrations/migration-048-case-events-case-closed.sql               # case_events.event_type에 case_closed 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-049-align-synthetic-query-embedding.sql       # synthetic query 임베딩 정합 마커 (DDL은 scripts/migrate.js가 적용)
+psql $DATABASE_URL -f lib/memory/migrations/migration-050-dedup-scope-workspace.sql                 # 키와 workspace 단위 content_hash 유일 색인 (운영 DB는 online-index로 먼저 생성)
 psql $DATABASE_URL -f lib/memory/migrations/migration-054-outbox-events.sql                         # outbox_events 표 추가
 ```
 
 migration-046은 결번이다. 수동 적용보다 `npm run migrate`를 권장한다(적용 이력과 opclass 치환을 자동 처리).
+
+migration-050 뒤에도 키 단위 content_hash 색인(`uq_frag_hash_per_key`, `uq_frag_hash_master`)이 남아 있어 중복 판정은 키 단위로 동작한다. workspace 단위 판정(`MEMENTO_DEDUP_SCOPE=workspace`, 기본)으로 전환하는 절차와 되돌리기는 [operations/online-migration.md](operations/online-migration.md#중복-판정-범위-전환)에 있다.
 
 > **migration-007 재실행**: `EMBEDDING_DIMENSIONS`를 변경하거나 임베딩 제공자를 전환한 경우, `scripts/post-migrate-flexible-embedding-dims.js`를 재실행하면 `fragments`, `morpheme_dict`, `fragment_synthetic_query` 테이블의 벡터 차원이 동시에 갱신된다.
 

@@ -39,7 +39,7 @@ server.js  (HTTP 서버)
             │   ├── ReflectProcessor.js   reflect() 로직 전담. summary→파편 변환, episode 생성, Working Memory 정리
             │   ├── AutoReflect.js        세션 종료 시 자동 reflect 오케스트레이터
             │   ├── EpisodeContinuityService.js reflect() 호출 후 case_events milestone_reached + preceded_by 엣지 연결 (idempotency_key 기반 중복 방지)
-            │   ├── RememberDuplicate.js  remember 중복 적중 판정과 분류(`same_scope`, `other_workspace`, `closed`, `unknown`), `MEMENTO_REMEMBER_DUPLICATE_GUARD`일 때 기존 파편 상태 응답 조립
+            │   ├── RememberDuplicate.js  remember 중복 적중 판정과 분류(`same_scope`, `other_workspace`, `closed`, `unknown`), 같은 범위 적중의 `duplicate_of`, `MEMENTO_REMEMBER_DUPLICATE_GUARD`일 때 기존 파편 상태 응답 조립
             │   └── SessionActivityTracker.js 세션별 도구 호출/파편 활동 추적 (Redis)
             ├── read/                     검색 레이어 모듈
             │   ├── FragmentSearch.js     3계층 검색 조율 (구조적: L1→L2, 시맨틱: L1→L2‖L3 RRF 병합). `_executeSearch`는 `_buildTextRRF` (text 파라미터 있을 때 L2+L3 병렬 RRF) / `_buildFallbackCombined` (text 없을 때 L1+L2, keywords 존재 시 합성 텍스트 L3 시맨틱 보조를 병렬 결합해 `L3kw:N` 세그먼트로 병합) 두 내부 메서드로 분해
@@ -58,6 +58,7 @@ server.js  (HTTP 서버)
             │   ├── WriteGate.js          의미 쓰기 단일 관문. normalize, sensitive, length, policy, workspace, anchor 단계를 순서대로 적용하고 위반을 경고로 남기거나 hard gate 키에서 거부한다. `MEMENTO_WRITE_GATE`
             │   ├── write-gate-metrics.js 관문 판정 지표 `memento_write_gate_total{entry,outcome}`
             │   ├── FragmentImporter.js   가져오기 행을 관문에 통과시켜 FragmentWriter로 기록. 대상 키 프로필(owner, restore)을 적용한다 (admin 가져오기와 CLI 가져오기 공용)
+            │   ├── DedupScope.js         content_hash 중복 판정 범위(`MEMENTO_DEDUP_SCOPE`). 유효 판정 색인을 읽어 판정 범위, ON CONFLICT 대상, 사전 조회, batch 접기 키를 정한다
             │   ├── FragmentWriter.js     파편 쓰기. 의미 메서드(insert, update)는 관문을 거친 값만 받고, 내부 메타데이터는 updateInternal로 쓰며 의미 열 9개는 쓸 수 없다 (delete, incrementAccess, touchLinked 포함)
             │   ├── FragmentFactory.js    파편 생성, 유효성 검증, PII 마스킹 진입점(`maskSensitiveText`, 규칙은 `lib/security`의 표)과 유형별 절삭(`limitContentLength`)
             │   ├── affect.js             정서 태그 허용값 집합과 `sanitizeAffect` 정규화 (FragmentFactory, FragmentWriter가 공유)
@@ -112,7 +113,7 @@ server.js  (HTTP 서버)
             ├── keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` 공유 헬퍼. key_id 범위 WHERE 절 생성. FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js에서 공유 사용
             ├── CaseEventStore.js         semantic milestone 로그 (case_events CRUD, DAG 엣지, 증거 조인)
             ├── memory-schema.sql         PostgreSQL 스키마 정의
-            └── migrations/               DB 마이그레이션 SQL 48개 (migration-001 ~ migration-049, 046 결번, schema_migrations 테이블 기준 순차 적용). `scripts/migrate.js`·`scripts/lint-migrations.js`가 이 경로를 사용
+            └── migrations/               DB 마이그레이션 SQL 49개 (migration-001 ~ migration-050, 046 결번, schema_migrations 테이블 기준 순차 적용). `scripts/migrate.js`·`scripts/lint-migrations.js`가 이 경로를 사용
 ```
 
 지원 모듈:
@@ -496,7 +497,7 @@ erDiagram
 | keywords | TEXT[] | NOT NULL DEFAULT '{}' | 검색용 키워드 배열 (GIN 인덱스) |
 | type | TEXT | NOT NULL, CHECK | fact / decision / error / preference / procedure / relation / episode |
 | importance | REAL | 0.0~1.0 CHECK | 중요도. type별 기본값, MemoryConsolidator에 의해 감쇠 |
-| content_hash | TEXT | NOT NULL | SHA 해시 기반 중복 방지. 전역 UNIQUE가 아니라 테넌트별 partial unique index 2종(`uq_frag_hash_master`, `uq_frag_hash_per_key`, migration-031)으로 강제 |
+| content_hash | TEXT | NOT NULL | SHA 해시 기반 중복 방지. 전역 UNIQUE가 아니라 키와 workspace 단위 partial unique index 2종(`uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`, migration-050)으로 강제. 키 단위 색인(`uq_frag_hash_per_key`, `uq_frag_hash_master`, migration-031)은 운영 단계로 지우며, 남아 있는 동안은 키 단위로 판정한다(`MEMENTO_DEDUP_SCOPE`) |
 | source | TEXT | | 출처 식별자 (세션 ID, 도구명 등) |
 | linked_to | TEXT[] | DEFAULT '{}' | 연결 파편 ID 목록 (GIN 인덱스) |
 | agent_id | TEXT | NOT NULL DEFAULT 'default' | 에이전트 구분용 ID |
@@ -535,7 +536,7 @@ erDiagram
 | inference_confidence | REAL | CHECK | 추론 근거의 신뢰도 0.0~1.0 (migration-041) |
 | backfill_batch_id | TEXT | | 추론을 만든 배치 실행 식별자. 배치 단위 롤백에 사용 (migration-041) |
 
-인덱스 목록: content_hash 테넌트별 partial UNIQUE 2종(`uq_frag_hash_master`, `uq_frag_hash_per_key`), topic(B-tree), type(B-tree), keywords(GIN), importance DESC(B-tree), created_at DESC(B-tree), agent_id(B-tree), linked_to(GIN), (ttl_tier, created_at)(B-tree), source(B-tree), verified_at(B-tree), is_anchor WHERE TRUE(부분 인덱스), valid_from(B-tree), (topic, type) WHERE valid_to IS NULL(부분 인덱스), id WHERE valid_to IS NULL(부분 UNIQUE). `idx_fragments_key_workspace` (key_id, workspace) WHERE valid_to IS NULL (복합 부분 인덱스 — API 키 + workspace 동시 필터 최적화), `idx_fragments_workspace` (workspace) WHERE workspace IS NOT NULL AND valid_to IS NULL (workspace 단독 전체 조회용 부분 인덱스).
+인덱스 목록: content_hash 키와 workspace 단위 partial UNIQUE 2종(`uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`, 전환 전에는 키 단위 `uq_frag_hash_per_key`, `uq_frag_hash_master`), topic(B-tree), type(B-tree), keywords(GIN), importance DESC(B-tree), created_at DESC(B-tree), agent_id(B-tree), linked_to(GIN), (ttl_tier, created_at)(B-tree), source(B-tree), verified_at(B-tree), is_anchor WHERE TRUE(부분 인덱스), valid_from(B-tree), (topic, type) WHERE valid_to IS NULL(부분 인덱스), id WHERE valid_to IS NULL(부분 UNIQUE). `idx_fragments_key_workspace` (key_id, workspace) WHERE valid_to IS NULL (복합 부분 인덱스: API 키 + workspace 동시 필터 최적화), `idx_fragments_workspace` (workspace) WHERE workspace IS NOT NULL AND valid_to IS NULL (workspace 단독 전체 조회용 부분 인덱스).
 
 HNSW 벡터 인덱스는 `embedding IS NOT NULL` 조건부 인덱스로 생성된다. 파라미터: m=16(이웃 연결 수), ef_construction=128(인덱스 구축 탐색 깊이), 거리 함수 vector_cosine_ops. ef_search=80 (세션 레벨 SET LOCAL 적용). 벡터 검색 실행 직전 `SET LOCAL enable_seqscan = off`, `SET LOCAL enable_bitmapscan = off`, `SET LOCAL hnsw.iterative_scan = relaxed_order`를 세션 단위로 강제하여 HNSW 인덱스 경로를 보장한다 (`lib/tools/db.js` queryWithAgentVector).
 
@@ -1385,13 +1386,13 @@ migration-035(`lib/memory/migrations/migration-035-morpheme-indexed.sql`): `frag
 lib/memory/
 ├── read/          FragmentSearch, FragmentReader, ContextBuilder, GraphNeighborSearch, HistoryReconstructor, Reranker, CaseRecall, LinkedFragmentLoader, RecallSuggestionEngine, SearchScope, SearchSideEffects
 ├── transfer/      exportFormat, FragmentExporter, ImportRunner, ImportReport, importRecords, importErrors, importRuntime
-├── write/         WriteGate, FragmentImporter, FragmentWriter, FragmentFactory, FragmentStore, RememberPostProcessor, ConflictResolver, BatchRememberProcessor, BatchRememberWorker
+├── write/         WriteGate, DedupScope, FragmentImporter, FragmentWriter, FragmentFactory, FragmentStore, RememberPostProcessor, ConflictResolver, BatchRememberProcessor, BatchRememberWorker
 ├── link/          ReconsolidationEngine, GraphLinker, LinkStore, SessionLinker, TemporalLinker, ContradictionDetector
 ├── consolidate/   MemoryConsolidator, ConsolidatorGC, FragmentGC, decay, UtilityBaseline
 ├── embedding/     EmbeddingWorker, EmbeddingCache, MorphemeIndex, MorphemeTokenizer
 ├── signals/       SpreadingActivation, CaseRewardBackprop, NLIClassifier, MemoryEvaluator, SearchMetrics, SearchEventAnalyzer, SearchEventRecorder, EvaluationMetrics, SearchParamAdaptor
 ├── processors/    MemoryRememberer, MemoryRecaller, MemoryReflector, MemoryLinker, ReflectProcessor, AutoReflect, EpisodeContinuityService, SessionActivityTracker
-└── migrations/    마이그레이션 SQL 48개 (001 ~ 049, 046 결번)
+└── migrations/    마이그레이션 SQL 49개 (001 ~ 050, 046 결번)
 ```
 
 루트 직속으로 유지되는 모듈은 MemoryManager, ModeRegistry, keyId, keyScope, QuotaChecker, CaseEventStore, FragmentIndex, contentGuard이다. 위 서브디렉토리로 이동한 모듈에 대한 재-export 심(re-export shim)은 존재하지 않는다 — 임포트 경로는 실제 파일 위치를 그대로 따른다.

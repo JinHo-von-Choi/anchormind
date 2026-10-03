@@ -274,6 +274,132 @@ ALTER TABLE agent_memory.fragments VALIDATE CONSTRAINT chk_example;
 
 ---
 
+## 중복 판정 범위 전환
+
+migration-050은 같은 본문(content_hash)을 하나로 보는 범위를 키 단위에서 키와 workspace 단위로 바꾸는 유일 색인 두 개를 더한다. 키 범위 색인(migration-031)은 이 파일에서 지우지 않고 아래 운영 단계로 지운다. 쓰기 경로(`lib/memory/write/DedupScope.js`)는 실행 시점의 유효 색인을 읽어 판정 범위와 `ON CONFLICT` 대상을 고르므로 세 상태 어느 쪽에서도 동작하고, 배포와 색인 단계의 순서에 묶이지 않는다.
+
+|상태|유효 색인|판정 범위|ON CONFLICT 대상|
+|-|-|-|-|
+|키 범위만|`uq_frag_hash_per_key`, `uq_frag_hash_master`|키|키 범위 색인|
+|둘 다|위 둘과 `uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`|키(키 범위 색인이 다른 workspace의 같은 본문을 막는다)|키 범위 색인|
+|workspace 범위만|`uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`|`MEMENTO_DEDUP_SCOPE`(기본 `workspace`)|workspace 범위 색인|
+
+판정은 키 경로(키 보유, 마스터)마다 따로 한다. 판정 색인이 하나도 없으면 `ON CONFLICT` 없이 저장하고 사전 조회만으로 판정한다.
+
+색인 정의는 다음과 같다. workspace NULL과 `''`는 같은 칸이다. 유일성은 열 순서와 무관하며, 사전 조회(`key_id`, `content_hash`)가 색인 앞부분을 쓰도록 `content_hash`를 workspace 앞에 둔다.
+
+```sql
+CREATE UNIQUE INDEX uq_frag_hash_ws_per_key
+    ON agent_memory.fragments (key_id, content_hash, (COALESCE(workspace, ''))) WHERE key_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_frag_hash_ws_master
+    ON agent_memory.fragments (content_hash, (COALESCE(workspace, ''))) WHERE key_id IS NULL;
+```
+
+판정 범위 workspace에서 전역 파편(workspace NULL)은 모든 workspace에서 보이므로 workspace 요청도 같은 본문의 전역 파편 id를 돌려받는다. 반대로 전역 요청은 workspace 파편과 별개로 저장한다.
+
+색인 상태는 프로세스마다 60초 동안 기억한다. 기억한 상태와 실제가 달라 `ON CONFLICT` 대상 색인이 없거나(42P10) 대상이 아닌 판정 색인이 저장을 막으면(23505) 그 쓰기는 색인 상태를 다시 읽고 한 번 더 판정한다. remember는 같은 트랜잭션 안에서 저장점으로 되돌린 뒤, batch_remember는 트랜잭션 전체를 되돌린 뒤 다시 실행한다. amend는 오류를 돌려주고 다음 호출이 다시 읽은 상태로 판정한다. 키 범위 색인을 지운 뒤 최대 60초(또는 새 본문의 저장이 42P10을 받을 때까지) 같은 본문 판정은 키 범위로 남는다.
+
+### 운영 순서
+
+1. `scripts/ops/backup.sh --label pre-migration`으로 백업을 완료한다.
+2. 영향 범위를 확인한다. 둘 이상 workspace를 쓰는 키가 전환 뒤 같은 본문을 workspace마다 따로 저장하게 되는 대상이다. `mcp_remember_duplicate_total{kind="other_workspace"}`의 증가 속도가 전환 뒤 늘어날 저장 건수의 추정치다.
+
+   ```sql
+   SELECT key_id, count(DISTINCT COALESCE(workspace, '')) AS workspaces, count(*) AS fragments
+     FROM agent_memory.fragments
+    WHERE valid_to IS NULL
+    GROUP BY key_id
+   HAVING count(DISTINCT COALESCE(workspace, '')) > 1
+    ORDER BY workspaces DESC;
+   ```
+
+3. 새 색인을 만든다. 키 범위 색인이 있는 표에는 새 색인 기준의 중복이 있을 수 없다(키 범위 유일성이 더 좁다).
+
+   ```bash
+   node scripts/ops/online-index.mjs --dry-run --index uq_frag_hash_ws_per_key --index uq_frag_hash_ws_master
+   PGHOST=<호스트> PGPORT=<포트> PGDATABASE=<DB> PGUSER=<사용자> PGPASSWORD=<비밀번호> \
+     node scripts/ops/online-index.mjs --confirm --index uq_frag_hash_ws_per_key --index uq_frag_hash_ws_master --data-dir <데이터 디렉터리>
+   ```
+
+   스크립트가 실행하는 문장은 다음과 같다.
+
+   ```sql
+   SET lock_timeout = '3s';
+   SET statement_timeout = 0;
+   CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uq_frag_hash_ws_per_key
+       ON agent_memory.fragments (key_id, content_hash, (COALESCE(workspace, ''))) WHERE key_id IS NOT NULL;
+   CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uq_frag_hash_ws_master
+       ON agent_memory.fragments (content_hash, (COALESCE(workspace, ''))) WHERE key_id IS NULL;
+   ```
+
+4. 무효 색인 질의(위 「유효성 확인」)가 0행이고, 판정 색인 네 개가 모두 유효한지 확인한다.
+
+   ```sql
+   SELECT c.relname, i.indisvalid
+     FROM pg_index i
+     JOIN pg_class c ON c.oid = i.indexrelid
+    WHERE c.relnamespace = 'agent_memory'::regnamespace
+      AND c.relname IN ('uq_frag_hash_per_key', 'uq_frag_hash_master', 'uq_frag_hash_ws_per_key', 'uq_frag_hash_ws_master');
+   ```
+
+5. 배포하고 `npm run migrate`를 실행한다. migration-050의 `IF NOT EXISTS` 문은 이미 만든 색인을 건너뛴다. 이 시점은 「둘 다」 상태라 판정은 키 범위 그대로이고, `MEMENTO_DEDUP_SCOPE=workspace`이면 첫 쓰기 때 `[DedupScope] 키 범위 색인(...)이 있어 해당 경로의 중복 판정은 키 범위로 동작한다` 경고가 한 번 남는다.
+6. 동작을 확인한 뒤 키 범위 색인을 지운다. 이 단계부터 workspace 범위로 판정한다. `DROP INDEX CONCURRENTLY`는 트랜잭션 블록 밖에서 한 문장씩 실행한다(psql 기본 자동 커밋). 잠금 대기 초과(55P03)이면 열린 트랜잭션을 확인하고 같은 문장을 다시 실행한다.
+
+   ```sql
+   SET lock_timeout = '3s';
+   DROP INDEX CONCURRENTLY IF EXISTS agent_memory.uq_frag_hash_per_key;
+   DROP INDEX CONCURRENTLY IF EXISTS agent_memory.uq_frag_hash_master;
+   ```
+
+7. 자료 정합을 확인한다. 결과가 0행이어야 한다.
+
+   ```sql
+   SELECT key_id, COALESCE(workspace, '') AS ws, content_hash, count(*) AS n
+     FROM agent_memory.fragments
+    GROUP BY 1, 2, 3
+   HAVING count(*) > 1;
+   ```
+
+새 설치는 `npm run migrate`가 네 색인을 모두 만든다(「둘 다」 상태). 6단계 문장을 실행하면 workspace 범위로 판정한다.
+
+전환 뒤에는 같은 키의 전역 파편과 workspace 파편이 같은 본문을 가질 수 있다. 전역 파편의 workspace를 채우는 운영 스크립트(`scripts/backfill-reflect-workspace.js` 등)는 대상 workspace에 같은 본문이 이미 있으면 `uq_frag_hash_ws_per_key` 위반(23505)으로 그 묶음이 실패한다.
+
+### 되돌리기
+
+|상황|방법|
+|-|-|
+|판정 범위만 되돌린다|`MEMENTO_DEDUP_SCOPE=key`. 호출 시점에 읽으므로 재시작하지 않아도 된다. insert, amend, batch_remember의 사전 조회가 키 범위로 판정하므로 키 범위 색인을 다시 만들 필요가 없다. 이미 workspace마다 저장된 같은 본문 행은 그대로 남는다|
+|6단계 전에 코드를 되돌린다|키 범위 색인이 남아 있으므로 이전 버전을 그대로 배포한다. 이전 버전은 키 범위 색인을 `ON CONFLICT` 대상으로 쓰고, 새 색인이 막는 행은 키 범위 색인도 막으므로 함께 있어도 된다. 새 색인을 치우려면 아래 첫 묶음을 실행한다|
+|6단계 뒤에 코드를 되돌린다|이전 버전은 키 범위 색인이 없으면 저장이 42P10으로 실패하므로 먼저 키 범위 색인을 다시 만든다. (1) `MEMENTO_DEDUP_SCOPE=key`로 새 중복 생성을 멈춘다. (2) 아래 둘째 묶음으로 키 범위 중복을 찾는다. (3) 0행이 될 때까지 운영자가 정리한다(같은 키의 같은 본문 중 남길 파편을 정하고 나머지를 forget 또는 amend). (4) 아래 셋째 묶음으로 키 범위 색인을 만든다. 실패해 무효 색인이 남으면 `DROP INDEX CONCURRENTLY IF EXISTS`로 지우고 (2)부터 다시 한다. (5) 이전 버전을 배포한다|
+
+```sql
+-- 새 색인 치우기
+SET lock_timeout = '3s';
+DROP INDEX CONCURRENTLY IF EXISTS agent_memory.uq_frag_hash_ws_per_key;
+DROP INDEX CONCURRENTLY IF EXISTS agent_memory.uq_frag_hash_ws_master;
+
+-- 키 범위 중복 찾기
+SELECT key_id, content_hash, count(*) AS n, array_agg(id ORDER BY created_at) AS ids
+  FROM agent_memory.fragments
+ WHERE key_id IS NOT NULL
+ GROUP BY key_id, content_hash
+HAVING count(*) > 1;
+SELECT content_hash, count(*) AS n, array_agg(id ORDER BY created_at) AS ids
+  FROM agent_memory.fragments
+ WHERE key_id IS NULL
+ GROUP BY content_hash
+HAVING count(*) > 1;
+
+-- 키 범위 색인 다시 만들기
+SET lock_timeout = '3s';
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uq_frag_hash_per_key
+    ON agent_memory.fragments (key_id, content_hash) WHERE key_id IS NOT NULL;
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uq_frag_hash_master
+    ON agent_memory.fragments (content_hash) WHERE key_id IS NULL;
+```
+
+---
+
 ## 배포 점검표
 
 1. `scripts/ops/backup.sh --label pre-migration`으로 백업을 완료하고 복원 가능 여부를 확인한다([backup-restore.md](backup-restore.md#마이그레이션-전-백업)).
@@ -293,6 +419,7 @@ ALTER TABLE agent_memory.fragments VALIDATE CONSTRAINT chk_example;
 |-|-|
 |lint 규칙, 스크립트 계획과 실행 논리, 백필 도우미|`npm test`(`tests/unit/lint-migrations.test.js`, `tests/unit/online-index.test.js`, `tests/unit/resumable-backfill.test.js`)|
 |스크립트 실서버 동작, 백필 이어하기|`npm run test:db`(`tests/db-concurrency/online-index.test.js`, `tests/db-concurrency/resumable-backfill.test.js`)|
+|중복 판정 범위의 세 색인 상태, 실행 중 색인 제거|`npm test`(`tests/unit/dedup-scope.test.js`, `tests/unit/fragment-writer-dedup-scope.test.js`, `tests/unit/batch-remember-dedup-scope.test.js`), `npm run test:db`(`tests/db-concurrency/dedup-scope.test.js`)|
 
 DB 레인 시험은 일회용 시험 서버(포트 35433)의 전용 데이터베이스에서만 실행한다. 운영 데이터베이스에는 실행하지 않는다.
 

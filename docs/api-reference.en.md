@@ -740,7 +740,9 @@ A `scope=session` response reports the storage path in `working_memory`. `redis`
 
 Fragments also record the resolution source of their workspace as `workspace_source`: `explicit` (workspace given in the request), `key_default` (the API key's default_workspace was applied), or `unscoped` (neither was available).
 
-With `MEMENTO_REMEMBER_DUPLICATE_GUARD=true` (default `false`), a `remember` that receives the same body as an existing fragment in the same key scope does not run post-processing, TTL adjustment or reindexing on the existing fragment and only reports its state through `existing: true` and `duplicate` (`same_scope`, `other_workspace`, `closed`, `unknown`). Duplicate hits are counted in `mcp_remember_duplicate_total{kind}` regardless of the flag.
+The duplicate detection scope for the same body is set by `MEMENTO_DEDUP_SCOPE` (default `workspace`). With `workspace`, the same key writing the same body to another workspace stores a separate fragment, and an existing fragment with the same body in the same workspace or a global (no workspace) fragment returns that id. With `key`, detection is per key. A response that hit an existing fragment carries the existing fragment id in `id`, and a same-scope hit (`same_scope`: same workspace or a global fragment) also carries it in `duplicate_of`.
+
+With `MEMENTO_REMEMBER_DUPLICATE_GUARD=true` (default `false`), a `remember` that receives the same body as an existing fragment in the detection scope does not run post-processing, TTL adjustment or reindexing on the existing fragment and only reports its state through `existing: true` and `duplicate` (`same_scope`, `other_workspace`, `closed`, `unknown`). `other_workspace` only occurs under per-key detection. Duplicate hits are counted in `mcp_remember_duplicate_total{kind}` regardless of the flag.
 
 ### Feedback sampling hint
 
