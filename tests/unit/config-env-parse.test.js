@@ -208,6 +208,7 @@ describe("호출 시점에 읽는 변수의 기동 검사", () => {
         cwd     : new URL("../../", import.meta.url),
         env     : {
           PATH: process.env.PATH, DOTENV_CONFIG_PATH: "/nonexistent.env", PORT: "19201",
+          POSTGRES_HOST: "127.0.0.1", POSTGRES_PORT: "1",
           MEMENTO_ACCESS_KEY: "scratch", REDIS_ENABLED: "false", CACHE_ENABLED: "false",
           MEMENTO_METRICS_DEFAULT: "off", LOG_DIR: logDir, ...GARBAGE, ...extra
         },
