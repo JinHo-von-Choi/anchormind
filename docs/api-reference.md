@@ -40,7 +40,7 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | PUT | /v1/internal/model/nothing/keys/:id | API 키 상태 변경 (active ↔ inactive) |
 | GET | /v1/internal/model/nothing/keys/:id/stats | API 키별 사용 통계 |
 | PUT | /v1/internal/model/nothing/keys/:id/daily-limit | API 키 일일 호출 제한 변경. 마스터 키 인증 필요 |
-| PUT | /v1/internal/model/nothing/keys/:id/permissions | API 키 권한 변경. 허용 값은 POST와 같다(`read`, `write` 중 하나 이상, 선택 `trusted_origin`). `trusted_origin`이 있는 키는 remember의 `origin` 주장으로 신뢰 등급 3까지 쓸 수 있고, 없는 키는 2가 상한이다(`MEMENTO_PROVENANCE`) |
+| PUT | /v1/internal/model/nothing/keys/:id/permissions | API 키 권한 변경. 허용 값은 POST와 같다(`read`, `write` 중 하나 이상, 선택 `trusted_origin`). 빈 배열과 `trusted_origin`만 있는 배열은 400이다. `trusted_origin`이 있는 키는 remember의 `origin` 주장으로 신뢰 등급 3까지 쓸 수 있고, 없는 키는 2가 상한이다(`MEMENTO_PROVENANCE`) |
 | PUT | /v1/internal/model/nothing/keys/:id/fragment-limit | API 키 파편 할당량 변경 |
 | PATCH | /v1/internal/model/nothing/keys/:id/workspace | API 키의 default_workspace 변경. `{ workspace: "name" }` 또는 `{ workspace: null }` (null=해제) |
 | PATCH | /v1/internal/model/nothing/keys/:id/policy | API 키 정책 열 변경. 본문은 `default_mode`, `allowed_workspaces`, `symbolic_hard_gate` 중 하나 이상. 아래 절 참조 |
@@ -294,7 +294,7 @@ Content-Type: application/json
 
 `tools/call`의 인자는 해당 도구의 `inputSchema`와 대조된다. 점검은 최상위 필드와 배열 항목에 대해 타입, `enum`, 범위, `maxLength`, `maxItems`, `pattern`, `oneOf`, 필수 필드, 스키마에 없는 필드를 본다. `MEMENTO_TOOL_ARGS_VALIDATION`(`off`, `warn`, `enforce`, 기본 `warn`)이 동작을 정한다. `warn`은 경고 로그만 남기고 호출을 진행하며, `enforce`는 위반 시 JSON-RPC `-32602`와 `Invalid arguments for <tool>: <사유>` 메시지로 거절한다. `MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN=true`이면 스키마에 없는 필드를 위반으로 보지 않는다.
 
-도구 처리 중 내부 예외(DB 드라이버, 런타임 오류)는 응답에 `Internal error`로 나가고 원문은 서버 로그와 감사 기록에만 남는다. `remember`, `batch_remember`(항목의 `type`), `amend`, `link`, `tool_feedback`의 열거형 인자 값이 저장소 제약에 맞지 않으면 `{ "success": false, "error": "Invalid arguments for <tool>: <param>: must be one of a|b|c", "code": "INVALID_ARGUMENT" }`를 돌려준다. 정의에 해당 파라미터를 선언하지 않은 도구는 `Internal error`를 돌려준다. 제약 위반에서 나온 인자 오류는 도구 결과(`isError`)에 문자열 코드 `INVALID_ARGUMENT`를 싣고, `enforce` 모드의 스키마 검증은 JSON-RPC `-32602`를 쓴다.
+도구 처리 중 내부 예외(DB 드라이버, 런타임 오류)는 응답에 `Internal error`로 나가고 원문은 서버 로그와 감사 기록에만 남는다. `remember`, `batch_remember`(항목의 `type`), `amend`, `link`, `tool_feedback`의 열거형 인자 값이 저장소 제약에 맞지 않으면 `{ "success": false, "error": "Invalid arguments for <tool>: <param>: must be one of a|b|c", "code": "INVALID_ARGUMENT" }`를 돌려준다. 정의에 해당 파라미터를 선언하지 않은 도구는 `Internal error`를 돌려준다. 제약 위반에서 나온 인자 오류는 도구 결과(`isError`)에 문자열 코드 `INVALID_ARGUMENT`를 싣고, `enforce` 모드의 스키마 검증은 JSON-RPC `-32602`를 쓴다. `MEMENTO_PROVENANCE=on`(기본)이면 `remember`의 `origin`과 `batch_remember` 항목의 `origin`이 허용 값(user_stated, agent_inferred, tool_output, external_content, consolidation, import) 밖이면 `MEMENTO_TOOL_ARGS_VALIDATION`과 관계없이 쓰기 관문이 `-32602`로 거부한다(일괄 저장은 그 항목만 실패).
 
 내부 작업 전용 agentId(`system`, `admin`)는 `MEMENTO_RESERVED_AGENT_IDS`(`warn`, `enforce`, 기본 `warn`)로 다룬다. `warn`은 API 키 요청에서 쓰면 경고 로그(키 앞 8자 포함)만 남기고, `enforce`는 FORBIDDEN(`-32001`)으로 거부한다. master 키는 두 방식 모두 허용한다.
 
@@ -719,7 +719,7 @@ reason code 목록 (최대 3개):
 | assertionStatus | string | - | 파편의 신뢰도 수준 (observed, inferred, verified, rejected). 기본값: observed |
 | affect | string | - | 기억 당시의 정서 상태 태그. 기본값: neutral. 유효값: neutral, frustration, confidence, surprise, doubt, satisfaction |
 | idempotencyKey | string | - | 재시도 안전 식별자 (최대 128자). 같은 key_id 범위에서 동일 값으로 remember를 반복 호출하면 새 파편을 생성하지 않고 기존 파편 id를 반환한다. 클라이언트 재시도·네트워크 중복 방지 목적. |
-| origin | string | - | 기억의 출처 주장: user_stated, agent_inferred, tool_output, external_content, consolidation, import. 서버는 이 값과 initialize의 `clientInfo.name`, 키 상한으로 `trust_tier`(0~3)를 정한다. 등급은 출처 등급(user_stated 3, external_content 1, 그 밖 2)과 키 상한(권한 `trusted_origin` 또는 마스터 키 3, 그 밖 2) 중 작은 값이고, 1 이하는 context의 ANCHOR와 CORE 주입에서 빠진다. 허용 밖의 값은 `-32602`. 미지정이면 출처 없음(등급 2). `MEMENTO_PROVENANCE=off`이면 무시된다 |
+| origin | string | - | 기억의 출처 주장: user_stated, agent_inferred, tool_output, external_content, consolidation, import. 서버는 이 값과 initialize의 `clientInfo.name`, 키 상한으로 `trust_tier`(0~3)를 정한다. 등급은 출처 등급(user_stated 3, external_content 1, 그 밖 2)과 키 상한(권한 `trusted_origin` 또는 마스터 키 3, 그 밖 2) 중 작은 값이고, 1 이하는 context의 ANCHOR와 CORE 주입에서 빠진다. `consolidation`과 `import`도 주장할 수 있으며 다른 출처와 같이 출처 등급(2)과 키 상한 중 작은 값을 받는다. 허용 밖의 값은 `-32602`. 미지정이면 출처 없음(등급 2). `MEMENTO_PROVENANCE=off`이면 무시된다 |
 | dryRun | boolean | - | true 설정 시 변경을 실제 적용하지 않고 실행 계획만 반환. 할당량·충돌 검사 결과를 파편 생성 없이 미리 확인할 수 있다. |
 
 `affect` 사용 예:
@@ -1094,9 +1094,9 @@ Anchor + Core + Learning + Working Memory와 session_reflect를 분리 로드한
 
 ### 주입 줄 주석
 
-`MEMENTO_CONTEXT_ANNOTATE=on`(기본)이면 `injectionText`의 기억 줄 끝에 ` (YYYY-MM-DD, assertion)`이 붙는다. 예: `- nginx 설정은 sites-available 카테고리 파일에 둔다 (2026-09-30, verified)`. 날짜는 UTC 기준 저장일이고, assertion은 저장된 값이 `observed`, `inferred`, `verified`, `rejected` 중 하나일 때만 실리며 없으면 날짜만 붙는다. 헤더 문자열(`[ANCHOR MEMORY]` 등)과 줄 머리 `- `는 바뀌지 않으므로 줄 단위로 읽는 훅은 줄 끝 괄호만 무시하면 된다. 날짜는 UTC 기준이므로 UTC 자정(한국 시각 09:00)에 바뀌고, 한국 시각 00:00부터 08:59 사이에 저장한 기억은 전날 날짜로 표시된다. 시간대 설정은 없다. `on`이면 선택 단계가 기억 줄마다 주석 고정 비용 6(문자 수 / 4 단위)을 더해 `tokenBudget` 안에서 고르므로 같은 예산에서 고르는 파편이 줄 수 있다. 파편과 structured 응답의 필드 형태, `totalTokens`(본문만 센다)의 계산 방식은 스위치와 관계없이 같다. `off`이면 줄이 본문으로 끝나고 선택도 주석 비용 없이 한다.
+`MEMENTO_CONTEXT_ANNOTATE=on`(기본)이면 `injectionText`의 기억 줄 끝에 ` (YYYY-MM-DD, assertion)`이 붙는다. 예: `- nginx 설정은 sites-available 카테고리 파일에 둔다 (2026-09-30, verified)`. 날짜는 UTC 기준 저장일이고, assertion은 저장된 값이 `observed`, `inferred`, `verified`, `rejected` 중 하나일 때만 실리며 없으면 날짜만 붙는다. 헤더 문자열(`[ANCHOR MEMORY]` 등)과 줄 머리 `- `는 바뀌지 않으므로 줄 단위로 읽는 훅은 줄 끝 괄호만 무시하면 된다. 날짜는 UTC 기준이므로 UTC 자정(한국 시각 09:00)에 바뀌고, 한국 시각 00:00부터 08:59 사이에 저장한 기억은 전날 날짜로 표시된다. 시간대 설정은 없다. `on`이면 선택 단계가 기억 줄마다 주석 고정 비용 6(문자 수 / 4 단위, `MEMENTO_PROVENANCE=on`이면 출처까지 세어 11)을 더해 `tokenBudget` 안에서 고르므로 같은 예산에서 고르는 파편이 줄 수 있다. 파편과 structured 응답의 필드 형태, `totalTokens`(본문만 센다)의 계산 방식은 스위치와 관계없이 같다. `off`이면 줄이 본문으로 끝나고 선택도 주석 비용 없이 한다.
 
-`MEMENTO_PROVENANCE=on`(기본)이면 앵커와 core 줄의 괄호 끝에 저장된 출처가 붙는다. 예: `- 배포 전 스테이징 확인 (2026-09-30, observed, user_stated)`. 출처가 없거나 허용 값이 아니면 붙지 않는다. 같은 스위치에서 신뢰 등급 1 이하 파편(예: `origin=external_content`)은 `[ANCHOR MEMORY]`와 `[CORE MEMORY]`에 주입되지 않고 `fragments`와 structured 응답의 앵커, core에서도 빠진다. 앵커는 조회 술어(`trust_tier IS NULL OR trust_tier >= 2`)로, core는 회상 결과의 등급을 따로 조회해 거른다. 등급 조회가 실패하면 경고를 남기고 core를 거르지 않는다. learning과 working 구획은 거르지 않는다.
+`MEMENTO_PROVENANCE=on`(기본)이면 앵커와 core 줄의 괄호 끝에 저장된 출처가 붙는다. 예: `- 배포 전 스테이징 확인 (2026-09-30, observed, user_stated)`. 출처가 없거나 허용 값이 아니면 붙지 않는다. 같은 스위치에서 신뢰 등급 1 이하 파편(예: `origin=external_content`)은 `[ANCHOR MEMORY]`와 `[CORE MEMORY]`에 주입되지 않고 `fragments`와 structured 응답의 앵커, core에서도 빠진다. 앵커는 조회 술어(`trust_tier IS NULL OR trust_tier >= 2`)로, core는 회상 결과의 등급을 따로 조회해 거른다. core는 등급을 확인하지 못한 파편도 뺀다: 등급 조회가 실패하면 core 후보를 모두 빼고, 조회 결과에 없는 파편도 뺀다. 결과는 `_meta.coreSelection`(`partial`, `loadStatus.trust`, `excluded.lowTrust`, `excluded.missing`)과 지표 `memento_context_core_trust_excluded_total{reason}`(`low_trust`, `missing`, `lookup_failed`)에 남는다. learning과 working 구획은 거르지 않는다. 출처를 싣는 동안 주석 고정 비용은 가장 긴 출처(`, external_content`)까지 센 11이다.
 
 ---
 

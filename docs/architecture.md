@@ -49,7 +49,8 @@ server.js  (HTTP 서버)
             │   ├── AnswerPack.js         recall `format:"pack"` 답 꾸러미 v0 렌더러(순수 함수). 고정 정책 문단, `<<<MEMORY ...>>>` 구분자 블록, 본문 이스케이프와 1000자 상한, UTC 날짜, caseId/topic 묶음
             │   ├── AnswerPackLoader.js   답 꾸러미 출처(source)와 대체 체인(superseded_by 링크) 조회. recall과 같은 agent, 키, workspace 술어. 기본 형식 recall 응답에 `origin`, `trust_tier`를 싣는다(`MEMENTO_PROVENANCE`)
             │   ├── ProvenanceLoader.js   파편 id의 출처 열(source, origin, trust_tier) 조회와 recall 범위 술어. 꾸러미, recall 응답, context core 거르기가 함께 쓴다. 풀은 호출자가 넘긴다
-            │   ├── ContextTrust.js       context 주입 제외(신뢰 등급 1 이하)의 앵커 SQL 조각, core 후보 거르기, 주석 출처 필드(순수 함수)
+            │   ├── ContextTrust.js       context 주입 제외(신뢰 등급 1 이하, core는 등급을 확인하지 못한 파편 포함)의 앵커 SQL 조각, core 후보 거르기와 결과 메타, 주석 출처 필드(순수 함수)
+            │   ├── provenance-metrics.js core 신뢰 등급 제외 지표 `memento_context_core_trust_excluded_total{reason}`
             │   ├── GraphNeighborSearch.js L2.5 그래프 이웃 검색 (fragment_links 1-hop 양방향 UNION, tanh 포화 스코어링 + 관계 유형별 부스트)
             │   ├── HistoryReconstructor.js case_id/entity 기반 서사 재구성 (ordered_timeline, causal_chains, unresolved_branches)
             │   ├── BudgetSelector.js     recall 토큰 예산 선택(`MEMENTO_RANK_BEFORE_BUDGET`). 검색 순서 절단(`trimInSearchOrder`)과 최종 점수 기반 선택(`selectWithinBudget`)을 순수 함수로 둔다
@@ -91,6 +92,7 @@ server.js  (HTTP 서버)
             │   ├── LinkStore.js          파편 링크 관리 (fragment_links CRUD + RCA 체인)
             │   ├── SessionLinker.js      세션 파편 통합, 자동 링크, 사이클 감지
             │   ├── TemporalLinker.js     시간 기반 자동 링크 (동일 topic ±24h, weight=max(0.3, 1-hours/24), 최대 5건)
+            │   ├── AuditProvenance.js    모순 감사 파편의 키 상한(두 원본 중 낮은 등급, 확인하지 못하면 1)
             │   └── ContradictionDetector.js 모순 감지, 대체 관계 감지, 보류 큐 처리
             ├── consolidate/              통합/GC 레이어 모듈
             │   ├── MemoryConsolidator.js 22단계 선언형 유지보수 파이프라인 (stageDefs 배열, TOTAL_STAGES = stageDefs.length). NLI + Gemini 하이브리드
@@ -219,6 +221,7 @@ lib/tools/
 ├── tool-head.js  모든 도구의 name, title, MCP 힌트(`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)
 ├── recall-response-params.js recall 응답 형태 파라미터(`fields`, `format`) 스키마 조각
 ├── origin-param.js remember와 batch_remember 항목의 `origin` 파라미터 스키마 조각
+├── context-response.js context 도구 응답 조립. 내부 필드(`_anchorSelection`, `_coreSelection` 등)를 `_meta`로 옮긴다
 ├── tool-error.js 도구 응답의 오류 문구 변환. 의도한 업무 오류는 그대로, 드라이버·운영체제·실행 오류는 고정 문구로 바꾸고, 저장소 CHECK 제약 위반은 파라미터 이름과 허용 값을 담은 `INVALID_ARGUMENT` 안내로 바꾼다
 ├── db.js        PostgreSQL 연결 풀, 에이전트 세션 변수 설정 쿼리 헬퍼 (MCP 미노출). getPrimaryPool(), getBatchPool(), queryWithAgentVector(). `opts.lock`을 주면 같은 트랜잭션에서 잠금 문장을 먼저 실행하고 잠근 id를 $1로 갱신 문장을 실행한다
 ├── lock-retry.js 교착(40P01)과 잠금 대기 상한(55P03)으로 끝난 트랜잭션의 재실행(`MEMENTO_DB_LOCK_RETRY_MAX`)과 `memento_db_deadlock_retries_total`, `memento_db_write_failures_total` 지표

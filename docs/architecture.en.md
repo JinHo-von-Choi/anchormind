@@ -46,7 +46,8 @@ server.js  (HTTP server)
             |   +-- AnswerPack.js         recall `format:"pack"` answer pack v0 renderer (pure functions). Fixed policy paragraph, `<<<MEMORY ...>>>` delimiter blocks, content escaping and 1000 character cap, UTC dates, caseId/topic groups
             |   +-- AnswerPackLoader.js   Answer pack source and supersession chain (superseded_by links) lookup with the same agent, key and workspace predicates as recall. Adds `origin` and `trust_tier` to default recall responses (`MEMENTO_PROVENANCE`)
             |   +-- ProvenanceLoader.js   Provenance column lookup (source, origin, trust_tier) by fragment id and the recall scope predicate. Shared by the pack, recall responses and the context core filter. The caller passes the pool
-            |   +-- ContextTrust.js       Anchor SQL fragment, core candidate filter and annotation origin field for the context injection exclusion (trust tier 1 or lower) (pure functions)
+            |   +-- ContextTrust.js       Anchor SQL fragment, core candidate filter with its result meta and annotation origin field for the context injection exclusion (trust tier 1 or lower; for core also fragments whose tier could not be confirmed) (pure functions)
+            |   +-- provenance-metrics.js Core trust exclusion metric `memento_context_core_trust_excluded_total{reason}`
             |   +-- GraphNeighborSearch.js L2.5 graph neighbor search (fragment_links 1-hop bidirectional UNION, tanh-saturated scoring + relation-type boosts)
             |   +-- HistoryReconstructor.js case_id/entity-based narrative reconstruction (ordered_timeline, causal_chains, unresolved_branches)
             |   +-- BudgetSelector.js     recall token budget selection (`MEMENTO_RANK_BEFORE_BUDGET`). Pure functions for the search-order cut (`trimInSearchOrder`) and the final-score selection (`selectWithinBudget`)
@@ -88,6 +89,7 @@ server.js  (HTTP server)
             |   +-- LinkStore.js          Fragment link management (fragment_links CRUD + RCA chains)
             |   +-- SessionLinker.js      Session fragment consolidation, auto-linking, cycle detection
             |   +-- TemporalLinker.js     Time-based auto-linking (same topic +-24h, weight=max(0.3, 1-hours/24), max 5 links)
+            |   +-- AuditProvenance.js    Key cap of contradiction audit fragments (the lower tier of the two source fragments, 1 when it cannot be confirmed)
             |   +-- ContradictionDetector.js Contradiction detection, supersede relation detection, pending queue processing
             +-- consolidate/              Consolidation/GC layer modules
             |   +-- MemoryConsolidator.js 22-stage declarative maintenance pipeline (stageDefs array, TOTAL_STAGES = stageDefs.length). NLI + Gemini hybrid
@@ -216,6 +218,7 @@ lib/tools/
 +-- tool-head.js  name, title and MCP hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) of every tool
 +-- recall-response-params.js recall response shape parameters (`fields`, `format`) schema fragments
 +-- origin-param.js `origin` parameter schema fragment of remember and batch_remember items
++-- context-response.js context tool response assembly. Moves the internal fields (`_anchorSelection`, `_coreSelection` and so on) into `_meta`
 +-- tool-error.js Converts error text in tool responses. Intended business errors pass through, driver/OS/runtime errors become fixed text, and storage CHECK constraint violations become an `INVALID_ARGUMENT` message naming the parameter and allowed values
 +-- db.js        PostgreSQL connection pool, agent session variable query helper (not exposed via MCP). getPrimaryPool(), getBatchPool(), queryWithAgentVector(). With `opts.lock` it runs the lock statement first in the same transaction and then the write statement with the locked ids as $1
 +-- lock-retry.js Re-runs transactions that ended in a deadlock (40P01) or lock timeout (55P03) (`MEMENTO_DB_LOCK_RETRY_MAX`), and the `memento_db_deadlock_retries_total` and `memento_db_write_failures_total` metrics
