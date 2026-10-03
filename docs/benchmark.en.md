@@ -329,3 +329,41 @@ The follow-up item is score normalization. Making similarity relative within the
 ### Reproducibility
 
 Before key-scope isolation and the post-seed settle step, two consecutive runs of identical code produced 68% and 57% Recall@5. Competing against the production corpus means the corpus keeps changing, and asynchronous link creation right after seeding means the graph layer injects different neighbours at each evaluation. With both in place the spread across runs is zero.
+
+## Evaluation set v2 measurement (metric JSON)
+
+`scripts/measure/recall-metrics.mjs` runs the queries in `tests/fixtures/recall-eval-v2` against a target database and prints metrics as JSON. Unlike the goldset measurement above, which seeds stored text to define the answers, the answers are ids of fragments that already exist in the target database with a relevance grade (1 related, 2 useful, 3 direct answer). It is run by hand and is not part of CI.
+
+### What it measures
+
+| Item | Content |
+|-|-|
+| Subsets | human-written Korean (`human_ko`, target 150 or more), exact identifier, time holdout, blind paraphrase, hard negative, synthetic (auxiliary, left out of the overall figures and reported separately) |
+| Stratification | tags for spacing, particle variants, English identifier, Korean-English mixture, and per-domain figures (research, coding, ops, schedule) |
+| Metrics | R@1/5/10, MRR, nDCG within the token budget, share of queries where a distractor outranks the answer (hard negative) |
+| nDCG | gain 2^grade - 1, position discount 1/log2(2 + x) where x is the tokens used by earlier items divided by a 100-token unit, items past the budget earn nothing. With 100 tokens per item it equals the usual nDCG |
+| Latency | p50, p95 and max for three passes: cold, warm at concurrency 1, warm at concurrency 8. Cold is the first pass after process start and no cache is flushed |
+| Embeddings | `--embeddings off` (default) disables the query embedding channel. `on` uses the provider from the environment |
+
+The file format and the procedure for adding human-written queries are in `tests/fixtures/recall-eval-v2/README.md`. The structure of the set is checked with `node --test tests/unit/recall-eval-set.test.js`.
+
+### Running
+
+```bash
+node scripts/measure/recall-metrics.mjs --target localhost:35433/<restored_db> --out run-a.json
+```
+
+`--target` must be a database on a disposable test server (the test container on port 35433, or one place named with `DB_LANE_SERVER_ALLOW=<host:port>`). Any other target is refused with exit code 3 before a connection is opened. The connection settings come from `--target` alone, and Redis, caching and metrics collection are off. The production database is never contacted. Recall records access on the restored copy, so each run starts from a fresh restore.
+
+In the output JSON, `metrics`, `rows`, `coverage` and `labels` hold the same values for the same database and the same set, while timestamps and latency sit under `volatile`. Sending only the query sentence leaves the lexical channel empty with embeddings off, so `--query-keywords whitespace` (default) also sends the query split on spaces as keywords. A `keywords` field in an entry takes precedence.
+
+### Comparison rules
+
+- Nothing is compared against fixed strings or fixed expected values. The script does not judge pass or fail.
+- Two runs are compared with a paired bootstrap 95% interval over queries. For each group (overall, subset, tag, domain) and metric it reports the mean difference candidate - baseline and the interval. A difference counts only when the interval excludes zero.
+- The random generator takes a seed, so the same input and seed give the same interval. Default seed 20261003, 2000 resamples.
+- Identical values outside `volatile` across two runs on the same database confirm reproducibility and are not a quality criterion.
+
+```bash
+node scripts/measure/recall-metrics.mjs --compare run-a.json run-b.json --out compare.json
+```

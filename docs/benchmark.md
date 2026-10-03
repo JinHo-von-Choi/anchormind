@@ -233,6 +233,44 @@ bge-m3는 값이 높은 대역에 몰려 있어 선형 가중 합에서 변별�
 
 키 스코프 격리와 적재 후 안정화 대기를 넣기 전에는 동일 코드로 연속 실행해도 Recall@5가 68%와 57%로 갈렸다. 원인은 두 가지였다. 운영 코퍼스와 경쟁시키면 코퍼스가 계속 변하고, 적재 직후 자동 링크 생성이 비동기로 진행되어 평가 시점마다 그래프 레이어가 다른 이웃을 주입한다. 두 장치를 넣은 뒤로는 회차 간 편차가 0이다.
 
+## 평가 세트 v2 측정 (지표 JSON)
+
+`scripts/measure/recall-metrics.mjs`는 `tests/fixtures/recall-eval-v2`의 질의를 대상 DB에 실행해 지표를 JSON으로 출력한다. 위의 골드셋 계측이 저장문을 적재해 정답을 만드는 것과 달리, 정답은 대상 DB에 이미 있는 파편의 id와 관련도 등급(1 관련, 2 유용, 3 직접 답)이다. 수동 실행이며 CI에 포함하지 않는다.
+
+### 측정 대상
+
+| 항목 | 내용 |
+|-|-|
+| 부분집합 | 사람 작성 한국어(`human_ko`, 목표 150건 이상), 식별자 정확 일치, 시간 holdout, 원문 비열람 paraphrase, hard negative, 합성(보조, 전체 수치에서 제외하고 따로 보고) |
+| 층화 | 띄어쓰기, 조사 변형, 영문 식별자, 한영 혼용 태그와 영역(research, coding, ops, schedule)별 집계 |
+| 지표 | R@1/5/10, MRR, 토큰 예산 내 nDCG, 오답 후보 선행 비율(hard negative) |
+| nDCG | 이득은 2^등급 - 1, 위치 할인은 앞선 항목이 쓴 토큰 수를 단위 100토큰으로 나눈 값으로 1/log2(2 + x), 예산을 넘는 항목은 지급하지 않는다. 항목마다 100토큰이면 통상의 nDCG와 같다 |
+| 지연 | cold, warm 동시성 1, warm 동시성 8 세 단계의 p50, p95, 최대. cold는 프로세스 시작 뒤 첫 실행이며 캐시를 비우지 않는다 |
+| 임베딩 | `--embeddings off`(기본)는 질의 임베딩 채널을 끈다. `on`은 환경 설정의 provider를 쓴다 |
+
+파일 형식과 사람 작성 질의를 추가하는 절차는 `tests/fixtures/recall-eval-v2/README.md`에 있다. 세트의 구조는 `node --test tests/unit/recall-eval-set.test.js`로 검사한다.
+
+### 실행
+
+```bash
+node scripts/measure/recall-metrics.mjs --target localhost:35433/<복구본_DB> --out run-a.json
+```
+
+`--target`은 일회용 시험 서버(포트 35433의 시험 컨테이너, 또는 `DB_LANE_SERVER_ALLOW=<host:port>`로 명시한 한 곳)의 데이터베이스여야 하며, 그렇지 않으면 접속 전에 종료 코드 3으로 거부한다. 연결 설정은 `--target`만으로 정해지고 Redis, 캐시, 지표 수집은 꺼진다. 운영 DB에는 접속하지 않는다. 복구본에서 recall이 접근 기록을 남기므로 실행마다 새 복구본에서 시작한다.
+
+출력 JSON에서 `metrics`, `rows`, `coverage`, `labels`는 같은 DB와 같은 세트에서 같은 값이고, 시각과 지연은 `volatile` 아래에 있다. 질의 문장만 보내면 임베딩 off에서 어휘 채널이 비므로 `--query-keywords whitespace`(기본)는 질의를 공백으로 나눈 키워드를 함께 보낸다. 항목의 `keywords` 필드는 이 값보다 우선한다.
+
+### 비교 규칙
+
+- 고정 문자열이나 고정 기대값과 대조하지 않는다. 스크립트는 합격 여부를 판정하지 않는다.
+- 두 실행의 비교는 질의별 짝지은 부트스트랩 95% 구간으로 한다. 묶음(전체, 부분집합, 태그, 영역)과 지표마다 후보 - 기준의 평균 차이와 구간을 낸다. 구간이 0을 제외할 때만 차이가 있다고 본다.
+- 난수는 시드를 받으므로 같은 입력과 시드는 같은 구간을 낸다. 기본 시드 20261003, 재표집 2000회.
+- 같은 DB에서 두 번 실행한 `volatile` 밖의 값이 같은지는 재현성 확인일 뿐 품질 기준이 아니다.
+
+```bash
+node scripts/measure/recall-metrics.mjs --compare run-a.json run-b.json --out compare.json
+```
+
 ## Ablation 연구
 
 동일 검색 결과(round_direct, K=5, recall_any@5=0.883)에 대해 세 가지 리더 조건을 테스트했다.
