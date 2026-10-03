@@ -92,6 +92,21 @@ const POSITIVE = {
     "카드 4111111111111111", "4111 1111 1111 1111", "5555-5555-5555-4444", `card: ${luhnNumber("37", 15)}`,
     "3782 822463 10005", `visa ${luhnNumber("65", 16)} amex`, `신용 ${luhnNumber("35", 16)}`, `${luhnNumber("2223", 16)} mastercard`, `cvv ${luhnNumber("62", 19)}`
   ],
+  url_credentials: [
+    `postgres://admin:p#ss!w@db.example.com:5432/app`, `mysql://root:${rep("Zx9", 4)}@192.0.2.10:3306/db`,
+    `redis://default:pa@ss${rep("7", 6)}@cache.example.net:6379`, `https://deploy:tok${rep("Q1", 8)}@git.example.org/repo.git`
+  ],
+  stripe_key: [`sk_live_${rep("a1B2", 6)}`, `rk_test_${rep("Z9y8", 5)}`, `sk_test_${rep("q", 24)}`],
+  gitlab_token: [`glpat-${rep("x1Y2z3", 4)}`, `gldt-${rep("A_b-", 6)}`, `glrt-${rep("9", 22)}`],
+  npm_token: [`npm_${rep("a1B2c3", 6)}`, `NPM_TOKEN npm_${rep("Zz09", 9)}`],
+  aws_secret_key: [
+    `aws_secret_access_key=${rep("wJalrXUt", 5)}`, `AWS_SECRET_ACCESS_KEY = "${rep("K7MDENG/", 5)}"`,
+    `SecretAccessKey: ${rep("bPxR+", 8)}`
+  ],
+  secret_assignment: [
+    "OPENAI_API_KEY=abc123def456", "export GITHUB_TOKEN=supersecretvalue123", "client_secret: 9f8e7d6c5b4a",
+    `SECRET_KEY_BASE=${rep("abcdefgh", 3)}`, "\"refresh_token\": \"r1-abcdef-998877\"", "AUTH_TOKEN='Tr0ub4dor&3x'"
+  ],
   email: ["ops-team@example.com", "a.b+c@sub.example.co.kr"],
   password_field: ["password: hunter2", "비밀번호=abc123!", "PWD : s3cret"],
   phone_kr: ["010-1234-5678", "01012345678", "011 123 4567"]
@@ -135,6 +150,13 @@ const NEGATIVE = {
     "4111111111111112", "1700000000000", "0000000000000000", rep("4", 20), "1234 5678 9012 3456", "9999999999999995",
     "4111111111111111", "주문번호 4111111111111111 접수", `결제 ${luhnAndEan13()}`, "카드 8801234567890", `${rep("a", 40)} 4111111111111111`
   ],
+  url_credentials: ["http://localhost:57332/mcp", "https://user@example.com/path", "ssh://git@host.example.com:22/repo", "postgres://db.example.com/app"],
+  stripe_key: ["sk_learn_pipeline_model", "pk_live_" + rep("a1", 12), "sk_live_short"],
+  gitlab_token: ["glpat-short", "glpat_" + rep("a", 24), "my-glpat-config"],
+  npm_token: ["npm_install_script", "npm_" + rep("a", 20), "npm_" + rep("b1", 20)],
+  aws_secret_key: [`aws_secret_access_key=${rep("a", 20)}`, "aws_secret_access_key=${AWS_SECRET}", "SecretAccessKeyLoader"],
+  secret_assignment: ["tokenBudget=2000", "API_KEY=${API_KEY}", "max_tokens=4096", "token=short", "password_policy_validator",
+    "SECRET_KEY=<your-secret>", "access_token=[REDACTED_TOKEN]"],
   email: ["user@localhost", "@example.com", "name@", "no-at-sign.example.com"],
   password_field: ["password", "passwords are rotated", "비밀번호 정책"],
   phone_kr: ["02-1234-5678", "0101234", "1010-12"]
@@ -159,10 +181,21 @@ describe("규칙 표 구조", () => {
     }
   });
 
-  it("저장 경로의 레거시 규칙이 앞에 있다", () => {
+  it("저장 경로는 URL 자격 증명 규칙 다음에 레거시 규칙이 온다", () => {
     const store = patternsFor("store").map((e) => e.id);
-    assert.deepEqual(store.slice(0, 4), ["api_key_legacy", "email", "password_field", "phone_kr"]);
-    assert.deepEqual(SENSITIVE_PATTERNS.filter((e) => e.legacy).map((e) => e.id), store.slice(0, 4));
+    assert.deepEqual(store.slice(0, 5), ["url_credentials", "api_key_legacy", "email", "password_field", "phone_kr"]);
+    assert.deepEqual(SENSITIVE_PATTERNS.filter((e) => e.legacy).map((e) => e.id), store.slice(1, 5));
+  });
+
+  it("URL 자격 증명 규칙이 이메일 규칙보다 먼저 적용되어 비밀번호 앞부분이 남지 않는다", () => {
+    const out = maskText("postgres://admin:p#ss!w@db.example.com:5432/app");
+    assert.equal(out, "postgres://admin:[REDACTED_PWD]@db.example.com:5432/app");
+  });
+
+  it("비밀 이름 대입식은 이름과 구분자를 남기고 값만 가리며 다른 규칙이 가린 값은 다시 세지 않는다", () => {
+    assert.equal(maskText("export OPENAI_API_KEY=abc123def456"), "export OPENAI_API_KEY=[REDACTED_SECRET]");
+    const ids = scanText(`api_key=mmcp_${rep("Ab1", 10)}`).rules.map((r) => r.id);
+    assert.deepEqual(ids, ["mmcp_key"]);
   });
 
   it("양성과 음성 표본이 저장 경로의 모든 규칙을 덮는다", () => {
@@ -557,7 +590,14 @@ describe("적대적 입력의 처리 시간", () => {
     "숫자 하이픈 교대"     : rep("1-", SIZE / 2),
     "주민번호 접두 반복"   : rep("900101-", SIZE / 7),
     "카드 군집 반복"       : rep("4111 1111 1111 1111 ", SIZE / 20),
-    "전화 접두 반복"       : rep("010-", SIZE / 4)
+    "전화 접두 반복"       : rep("010-", SIZE / 4),
+    "URL 스킴 반복"        : rep("postgres://", SIZE / 11),
+    "URL 사용자 콜론 반복" : `postgres://${rep("u:", SIZE / 2)}`,
+    "URL 비밀번호 꼬리"    : `postgres://u:${rep("p", SIZE)}`,
+    "대입 이름 반복"       : rep("TOKEN=", SIZE / 6),
+    "대입 이름 단어 반복"  : rep("a_secret_", SIZE / 9),
+    "대입 값 꼬리"         : `API_KEY=${rep("x", SIZE)}`,
+    "AWS 비밀 이름 반복"   : rep("aws_secret_access_key=", SIZE / 22)
   };
 
   for (const [name, text] of Object.entries(inputs)) {
