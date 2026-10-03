@@ -471,7 +471,7 @@ migration-053은 `fragments.content_tokens tsvector` 열만 더한다(nullable, 
 |상태|저장 경로|어휘 채널|
 |-|-|-|
 |열 없음(배포 전)|열을 쓰지 않는다|참여하지 않는다|
-|열만 있음|본문 토큰을 같은 문장으로 쓴다|색인 없이 참여한다(경고 한 번)|
+|열만 있음(색인 없음)|본문 토큰을 같은 문장으로 쓴다|참여하지 않는다(경고 한 번)|
 |색인을 만드는 중이거나 실패(`indisvalid=false`)|쓴다|참여하지 않는다(경고 한 번)|
 |유효한 색인|쓴다|참여한다|
 
@@ -480,8 +480,8 @@ migration-053은 `fragments.content_tokens tsvector` 열만 더한다(nullable, 
 ### 운영 순서
 
 1. `scripts/ops/backup.sh --label pre-migration`으로 백업을 완료한다.
-2. 배포하고 `npm run migrate`를 실행한다. 새로 쓰는 파편부터 `content_tokens`가 채워진다.
-3. 색인을 만든다. 기존 행의 값이 NULL인 동안 만들면 색인이 작다.
+2. 배포하고 `npm run migrate`를 실행한다. 새로 쓰는 파편부터 `content_tokens`가 채워진다. 색인이 생기기 전에는 어휘 채널이 참여하지 않는다.
+3. 색인을 만든다. 기존 행의 값이 NULL인 동안 만들면 색인이 작다. 색인이 유효해지면 60초 안에 채널이 참여한다.
 
    ```bash
    node scripts/ops/online-index.mjs --dry-run --index idx_fragments_content_tokens
@@ -498,9 +498,9 @@ migration-053은 `fragments.content_tokens tsvector` 열만 더한다(nullable, 
      node scripts/backfill-content-tokens.mjs --confirm
    ```
 
-   스크립트는 규칙 3의 재개형 백필로 id 순 묶음(기본 200행)마다 후보의 본문을 읽어 토큰 문서를 만들고(`prepareBatch`), 잠근 행 가운데 `content_hash`가 읽은 값과 같은 행만 갱신한다. 그 사이 본문이 바뀐 행은 저장 경로가 토큰을 썼거나(대상에서 빠진다) 다음 실행의 대상으로 남는다. 중단되면 같은 명령을 다시 실행해 이어 간다(작업 이름 기본 `content-tokens`). 접속 대상은 online-index.mjs와 같고 환경 파일은 읽지 않는다.
+   스크립트는 규칙 3의 재개형 백필로 id 순 묶음(기본 200행)마다 후보의 본문을 읽어 토큰 문서를 만들고(`prepareBatch`), 준비한 행 가운데 아직 NULL이고 `content_hash`가 읽은 값과 같은 행만 잠가 갱신한다. watermark는 준비한 마지막 id까지 나아가므로 그 사이 지워지거나 채워진 행 때문에 다른 행을 건너뛰지 않는다. 본문이 바뀐 행, 작업이 지나간 뒤 NULL로 저장된 행(스위치 `off`), 토큰화하지 않는 본문은 NULL로 남고, 끝에 `remainingNull`(현행 행과 전체)로 출력된다. 완료된 작업은 다시 실행해도 아무것도 하지 않으므로 남은 행을 채우려면 `--restart`로 실행한다. 중단되면 같은 명령을 다시 실행해 이어 간다(작업 이름 기본 `content-tokens`). 접속 대상은 online-index.mjs와 같고 환경 파일은 읽지 않는다.
 
-5. 키별 채움 비율을 확인한다. `/metrics`의 `memento_lexical_tokens_coverage_ratio{key_id}`가 1, `memento_lexical_tokens_missing{key_id}`가 0이면 끝난 것이다(10분마다 다시 센다). 같은 값을 SQL로 보려면 다음을 실행한다.
+5. 채움 비율을 확인한다. `/metrics`의 `memento_lexical_tokens_coverage_ratio`가 1, `memento_lexical_tokens_missing`(남은 NULL 현행 행 수)이 0이면 끝난 것이다(라벨 없음, 10분마다 다시 센다). 키별 수는 스크립트 미리보기나 다음 SQL로 본다.
 
    ```sql
    SELECT key_id, count(*) AS total, count(*) FILTER (WHERE content_tokens IS NULL) AS missing
@@ -514,7 +514,7 @@ migration-053은 `fragments.content_tokens tsvector` 열만 더한다(nullable, 
 |상황|방법|
 |-|-|
 |채널만 끈다|`MEMENTO_LEXICAL_CHANNEL=off`. 호출 시점에 읽으므로 재시작하지 않아도 된다. 검색 참여와 토큰 기록이 함께 멈춘다. 다시 켤 때는 off 동안 저장하거나 본문을 바꾼 행을 위해 `backfill-content-tokens.mjs --confirm --restart`를 실행한다|
-|색인을 치운다|`DROP INDEX CONCURRENTLY IF EXISTS agent_memory.idx_fragments_content_tokens`. 채널은 색인 없이 동작한다|
+|색인을 치운다|`DROP INDEX CONCURRENTLY IF EXISTS agent_memory.idx_fragments_content_tokens`. 채널은 참여하지 않고 저장 경로는 토큰을 계속 쓴다|
 |코드를 되돌린다|이전 버전은 `content_tokens`를 읽거나 쓰지 않으므로 열과 색인이 남아 있어도 된다|
 
 ---

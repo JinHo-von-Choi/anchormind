@@ -56,7 +56,7 @@ server.js  (HTTP 서버)
             │   ├── GraphNeighborSearch.js L2.5 그래프 이웃 검색 (fragment_links 1-hop 양방향 UNION, tanh 포화 스코어링 + 관계 유형별 부스트)
             │   ├── HistoryReconstructor.js case_id/entity 기반 서사 재구성 (ordered_timeline, causal_chains, unresolved_branches)
             │   ├── BudgetSelector.js     recall 토큰 예산 선택(`MEMENTO_RANK_BEFORE_BUDGET`). 검색 순서 절단(`trimInSearchOrder`)과 최종 점수 기반 선택(`selectWithinBudget`)을 순수 함수로 둔다
-            │   ├── LexicalSearch.js      본문 어휘 채널(L2b, `MEMENTO_LEXICAL_CHANNEL`). 질의를 저장 경로와 같은 토큰화의 OR tsquery로 바꿔 키, workspace, agent 범위 후보 200건을 `ts_rank_cd` 순으로 돌려준다
+            │   ├── LexicalSearch.js      본문 어휘 채널(L2b, `MEMENTO_LEXICAL_CHANNEL`). recall이 연 검색에서만 질의를 저장 경로와 같은 토큰화의 OR tsquery로 바꿔 키, workspace, agent 범위 일치 행 400건 안에서 `ts_rank_cd` 상위 200건을 돌려준다(질의 시간 상한 `MEMENTO_LEXICAL_TIMEOUT_MS`)
             │   ├── RankFusion.js         계층 결과의 RRF 병합(`mergeRRF`)과 캐시 수화 후보 정렬(`mergeHydratedCandidates`)
             │   ├── Reranker.js           Cross-Encoder 재정렬 (기본 비활성; MEMENTO_RERANKER_ENABLED 또는 RERANKER_URL로 활성)
             │   ├── CaseRecall.js         caseMode: true 경로 전담. case_id별 (goal, events[], outcome) 트리플 반환
@@ -145,8 +145,8 @@ server.js  (HTTP 서버)
             ├── WorkingMemorySql.js       작업 기억 행 식별 값과 조회, 집계에서 그 행을 빼는 SQL 조건
             ├── provenance.js             파편 출처와 신뢰 등급 판정(순수 함수). 허용 origin, 출처별 등급, 키 상한(`trusted_origin` 권한 또는 마스터 키 3, 그 밖 2), NULL을 2로 보는 주입 제외 술어와 같은 문턱의 SQL 조각, 관측 클라이언트 표기, INSERT 열 조각
             ├── reviewState.js            검토 상태(pending, approved, rejected), 검토 방식(off, flagged, all), 키 권한 목록의 검토 방식 표지(review_off, review_all)
-            ├── LexicalSchema.js          본문 어휘 채널의 스키마 상태. content_tokens 열과 그 열의 GIN 색인(정의로 찾는다)을 60초마다 읽고 채널 참여 여부를 정한다
-            ├── LexicalCoverage.js        키별 content_tokens 채움 지표 `memento_lexical_tokens_coverage_ratio{key_id}`, `memento_lexical_tokens_missing{key_id}`
+            ├── LexicalSchema.js          본문 어휘 채널의 스키마 상태. content_tokens 열과 그 열의 GIN 색인(정의로 찾는다)을 60초마다 읽고, 유효한 색인이 있을 때만 채널이 참여한다
+            ├── LexicalCoverage.js        content_tokens 채움 지표 `memento_lexical_tokens_coverage_ratio`, `memento_lexical_tokens_missing`(라벨 없음)
             ├── keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` 공유 헬퍼. key_id 범위 WHERE 절 생성. FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js에서 공유 사용
             ├── anchorPolicy.js           앵커 판정 순수 함수. 앵커 변경 종류(set, clear), 권한과 키별 상한 판정, context 주입 줄의 비식별 주체 표지(`k:` + 키 id sha256 앞 4자)
             ├── CaseEventStore.js         semantic milestone 로그 (case_events CRUD, DAG 엣지, 증거 조인)
@@ -1017,7 +1017,7 @@ recall에 `includeLinks: true`(기본값)가 설정되어 있으면 결과 파�
 
 **예산 선택 (`BudgetSelector`).** `MEMENTO_RANK_BEFORE_BUDGET=on`(기본)이면 FragmentSearch는 토큰 예산으로 자르지 않은 후보를 돌려주고, `MemoryRecaller`가 연결 파편을 합쳐 `computeRecallScore`로 점수를 매긴 뒤 `selectWithinBudget`이 `tokenBudget` 안에서 고른다. 후보 전체가 예산 안이면 전부 고르고, 연결 파편도 같은 예산을 쓴다. `off`이면 검색 계층이 검색 순서대로 예산을 자른 뒤(`trimInSearchOrder`) 연결 파편을 예산 밖에서 더한다. 선택 규칙과 상한은 [Configuration](configuration.md)의 `MEMENTO_RANK_BEFORE_BUDGET` 행에 있다.
 
-**본문 어휘 채널 (`LexicalSearch`, L2b).** text가 있는 검색은 L2, L3와 함께 어휘 채널을 병렬로 부른다. 저장 경로(remember, batch_remember, 본문을 바꾸는 amend, reflect, 가져오기, 분할)는 본문의 형태소 토큰(`LexicalTokens`)을 공백으로 이어 `fragments.content_tokens`(`to_tsvector('simple', ...)`, 마이그레이션 053)에 같은 문장으로 기록한다. 검색은 질의를 같은 방법으로 토큰화한 OR tsquery로 키, workspace, agent 범위와 검색 필터를 통과한 후보 200건을 `ts_rank_cd` 순으로 읽는다. `ts_rank_cd`는 문서 하나와 질의만 보므로 다른 키의 자료가 순위에 영향을 주지 않는다. 임베딩이 켜져 있으면 후보는 RRF의 `lexical` 계층(가중 `lexicalWeightFactor`)으로 합류하고, 꺼져 있으면 대체 경로의 결과 뒤에 붙는다. 후보의 상대 점수(그 검색의 최고 `ts_rank_cd` 대비 0~1, `_lexicalScore`)는 검색 계층의 순서 점수와 recall 최종 점수의 lexical 가산에 들어가고 응답에서는 지운다. `content_tokens`가 NULL인 행은 채널에서 빠지며 `scripts/backfill-content-tokens.mjs`가 채운다. 참여 여부는 `LexicalSchema`가 정한다: 열이 없거나 GIN 색인이 무효이면 참여하지 않고, 색인이 없으면 색인 없이 검색한다(각 경고 한 번).
+**본문 어휘 채널 (`LexicalSearch`, L2b).** recall이 연 text 검색은 L2, L3와 함께 어휘 채널을 병렬로 부른다(검색 질의의 `lexicalChannel: true`는 recall 진입점만 켠다. 충돌 탐지, 자동 링크 같은 저장 경로의 내부 검색은 채널을 부르지 않는다). 저장 경로(remember, batch_remember, 본문을 바꾸는 amend, reflect, 가져오기, 분할)는 본문의 형태소 토큰과 3자리 이상 숫자(`LexicalTokens`, 앞 2000자, 공백 없는 긴 연속은 토큰화하지 않음)를 공백으로 이어 `fragments.content_tokens`(`to_tsvector('simple', ...)`, 마이그레이션 053)에 같은 문장으로 기록한다. 검색은 질의를 같은 방법으로 토큰화한 OR tsquery로 키, workspace, agent 범위와 검색 필터를 통과한 일치 행을 400건까지 읽고 그 안에서 `ts_rank_cd` 순 상위 200건을 돌려준다. 질의 하나는 `MEMENTO_LEXICAL_TIMEOUT_MS`(기본 120ms)를 넘으면 취소되고 그 요청에서만 채널이 빠진다. `ts_rank_cd`는 문서 하나와 질의만 보므로 다른 키의 자료가 순위에 영향을 주지 않는다. 임베딩이 켜져 있으면 후보는 RRF의 `lexical` 계층(가중 `lexicalWeightFactor`)으로 합류하고, 꺼져 있으면 다른 계층에 없는 후보만 대체 경로의 결과 뒤에 붙는다. 채널은 RRF 입력으로만 순위에 기여하고 recall 최종 점수(`computeRecallScore`)는 바꾸지 않는다. 그 검색의 최고 `ts_rank_cd` 대비 점수(`_lexicalScore`)는 다른 점수가 없는 어휘 전용 후보의 검색 계층 순서에만 쓰고 응답에서 지운다. `content_tokens`가 NULL인 행은 채널에서 빠지며 `scripts/backfill-content-tokens.mjs`가 채운다. 참여 여부는 `LexicalSchema`가 정한다: 유효한 GIN 색인이 있을 때만 참여하고, 열이 없거나 색인이 없거나 무효이면 참여하지 않는다(각 경고 한 번).
 
 > **참고:** L1 Redis 인덱스는 현재 API 키(keyId) 기반 네임스페이스만 지원한다. agentId 기반 격리는 L2/L3에서 적용되므로 최종 결과 정확도에는 영향 없으나, multi-agent 운영 시 L1 후보 집합에 다른 에이전트 파편이 포함될 수 있다.
 

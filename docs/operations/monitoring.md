@@ -128,8 +128,10 @@ outbox 게이지는 작업자를 돌리는 프로세스만 갱신한다. 작업�
 
 | 지표 | 라벨 | 의미 |
 |-|-|-|
-| `memento_lexical_tokens_coverage_ratio` | `key_id`(마스터 파편은 `master`) | 현행 파편 가운데 `content_tokens`를 채운 비율. 1보다 작으면 그 키의 일부 파편이 어휘 채널에서 빠진다(`scripts/backfill-content-tokens.mjs`) |
-| `memento_lexical_tokens_missing` | `key_id` | `content_tokens`를 채우지 않은 현행 파편 수 |
+| `memento_lexical_tokens_coverage_ratio` | 없음 | 현행 파편 가운데 `content_tokens`를 채운 비율. 1보다 작으면 일부 파편이 어휘 채널에서 빠진다(`scripts/backfill-content-tokens.mjs`, 키별 수는 그 미리보기) |
+| `memento_lexical_tokens_missing` | 없음 | `content_tokens`를 채우지 않은 현행 파편 수. 완료된 백필 작업 뒤에 생긴 NULL 행도 여기에 남는다 |
+| `memento_lexical_channel_skipped_total` | `reason`(timeout, error) | 어휘 질의를 그 요청에서 뺀 횟수. timeout은 `MEMENTO_LEXICAL_TIMEOUT_MS` 초과다 |
+| `memento_lexical_tokenize_skipped_total` | `reason`(long_run, probe_error) | 저장 경로가 `content_tokens`를 채우지 못한 횟수. long_run은 공백 없이 200자를 넘게 이어진 한글, 한자, 가나 연속, probe_error는 열 확인 질의 실패다 |
 
 두 게이지는 `/metrics` 수집 시점에 10분이 지났을 때만 현행 파편을 키로 묶어 다시 센다. `MEMENTO_LEXICAL_CHANNEL=off`이거나 열이 없으면(마이그레이션 053 이전) 값을 내보내지 않는다.
 
