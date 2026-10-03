@@ -490,6 +490,17 @@ describe("OutboxWorker 정리와 통계", () => {
     }
   });
 
+  it("처리기가 하나도 등록되지 않은 프로세스는 처리기 없는 topic 판정을 하지 않는다", async () => {
+    const clock = manualClock();
+    const store = new MemoryStore(clock);
+    store.unhandledResults = [5];
+    const worker = makeWorker(store, clock, { cleanupIntervalMs: 1000 });
+    await worker._processBatch();
+    assert.equal(store.ops("cleanup").length, 1);
+    assert.equal(store.ops("unhandled").length, 0);
+    assert.equal(worker.snapshot().totals.unhandled, 0);
+  });
+
   it("보존 일수는 MEMENTO_OUTBOX_RETENTION_DAYS를 따른다", async () => {
     process.env.MEMENTO_OUTBOX_RETENTION_DAYS = "3";
     try {
