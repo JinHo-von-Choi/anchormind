@@ -96,6 +96,7 @@ server.js  (HTTP server)
             |   +-- TemporalLinker.js     Time-based auto-linking (same topic +-24h, weight=max(0.3, 1-hours/24), max 5 links)
             |   +-- AuditProvenance.js    Key cap of contradiction audit fragments (the lower tier of the two source fragments, 1 when it cannot be confirmed)
             |   +-- ContradictionDetector.js Contradiction detection, supersede relation detection, pending queue processing
+            |   +-- contradictionAudit.js    Contradiction resolution record content (fragment ids only with `MEMENTO_FORGET_CASCADE=on`) and topic
             +-- consolidate/              Consolidation/GC layer modules
             |   +-- MemoryConsolidator.js 22-stage declarative maintenance pipeline (stageDefs array, TOTAL_STAGES = stageDefs.length). NLI + Gemini hybrid
             |   +-- ConsolidatorGC.js     Feedback reports, stale fragment collection/cleanup, long fragment splitting, feedback-based correction

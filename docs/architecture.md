@@ -98,7 +98,8 @@ server.js  (HTTP 서버)
             │   ├── SessionLinker.js      세션 파편 통합, 자동 링크, 사이클 감지
             │   ├── TemporalLinker.js     시간 기반 자동 링크 (동일 topic ±24h, weight=max(0.3, 1-hours/24), 최대 5건)
             │   ├── AuditProvenance.js    모순 감사 파편의 키 상한(두 원본 중 낮은 등급, 확인하지 못하면 1)
-            │   └── ContradictionDetector.js 모순 감지, 대체 관계 감지, 보류 큐 처리
+            │   ├── ContradictionDetector.js 모순 감지, 대체 관계 감지, 보류 큐 처리
+            │   └── contradictionAudit.js 모순 해소 기록의 본문(`MEMENTO_FORGET_CASCADE=on`이면 파편 id만)과 topic
             ├── consolidate/              통합/GC 레이어 모듈
             │   ├── MemoryConsolidator.js 22단계 선언형 유지보수 파이프라인 (stageDefs 배열, TOTAL_STAGES = stageDefs.length). NLI + Gemini 하이브리드
             │   ├── ConsolidatorGC.js     피드백 리포트, stale 파편 수집/정리, 긴 파편 분할, 피드백 기반 보정

@@ -42,6 +42,30 @@ const USAGE = [
   `  --batch <n>          한 문장에서 바꾸는 행 수(기본 ${ORPHAN_PURGE_BATCH}, 1~${MAX_BATCH})`,
 ].join("\n");
 
+/** 값을 받지 않는 옵션과 opts 필드 */
+const SWITCH_FLAGS = Object.freeze({ "--execute": "execute", [BACKUP_FLAG]: "backupConfirmed", "--help": "help" });
+
+/** 값을 받는 옵션과 opts 필드, 값 변환 */
+const VALUE_FLAGS = Object.freeze({
+  "--url"  : ["url", value => value],
+  "--batch": ["batch", value => checkedBatch(value)],
+});
+
+/** `--name=value`이면 이름과 인라인 값으로 나눈다. */
+function splitArg(arg) {
+  const eq = arg.startsWith("--") ? arg.indexOf("=") : -1;
+  return eq > 2 ? { name: arg.slice(0, eq), inline: arg.slice(eq + 1) } : { name: arg, inline: undefined };
+}
+
+/** 값을 받는 옵션의 값과 다음 인덱스. */
+function takeValue(name, inline, argv, i) {
+  const value = inline ?? argv[i + 1];
+  if (value === undefined || value === "" || (inline === undefined && value.startsWith("--"))) {
+    throw new OnlineIndexUsageError(`${name} 에 값이 필요하다`);
+  }
+  return { value, next: inline === undefined ? i + 1 : i };
+}
+
 /**
  * 명령행 인자를 읽는다. 오류 메시지는 옵션 이름만 담고 값(주소)은 담지 않는다.
  *
@@ -51,25 +75,17 @@ const USAGE = [
 export function parsePurgeArgs(argv) {
   const opts = { execute: false, backupConfirmed: false, help: false, batch: ORPHAN_PURGE_BATCH, url: undefined };
   for (let i = 0; i < argv.length; i++) {
-    const arg    = argv[i];
-    const eq     = arg.startsWith("--") ? arg.indexOf("=") : -1;
-    const name   = eq > 2 ? arg.slice(0, eq) : arg;
-    const inline = eq > 2 ? arg.slice(eq + 1) : undefined;
+    const { name, inline } = splitArg(argv[i]);
     if (!name.startsWith("--")) throw new OnlineIndexUsageError("알 수 없는 인자: (위치 인자)");
 
-    if (name === "--execute" || name === BACKUP_FLAG || name === "--help") {
+    if (Object.hasOwn(SWITCH_FLAGS, name)) {
       if (inline !== undefined) throw new OnlineIndexUsageError(`${name} 은 값을 받지 않는다`);
-      if (name === "--execute") opts.execute = true;
-      else if (name === "--help") opts.help = true;
-      else opts.backupConfirmed = true;
-    } else if (name === "--url" || name === "--batch") {
-      const value = inline ?? argv[i + 1];
-      if (value === undefined || value === "" || (inline === undefined && value.startsWith("--"))) {
-        throw new OnlineIndexUsageError(`${name} 에 값이 필요하다`);
-      }
-      if (inline === undefined) i += 1;
-      if (name === "--url") opts.url = value;
-      else opts.batch = checkedBatch(value);
+      opts[SWITCH_FLAGS[name]] = true;
+    } else if (Object.hasOwn(VALUE_FLAGS, name)) {
+      const [field, convert] = VALUE_FLAGS[name];
+      const taken            = takeValue(name, inline, argv, i);
+      opts[field]            = convert(taken.value);
+      i                      = taken.next;
     } else {
       throw new OnlineIndexUsageError(`알 수 없는 인자: ${name}`);
     }
