@@ -4,7 +4,7 @@
     "lib/admin/admin-keys.js": 39,
     "lib/admin/admin-logs.js": 41,
     "lib/admin/admin-memory.js": 26,
-    "lib/admin/admin-routes.js": 55,
+    "lib/admin/admin-routes.js": 48,
     "lib/admin/admin-sessions.js": 45,
     "lib/cli/anchor-scope.js": 25,
     "lib/cli/benchmark.js": 23,
@@ -51,7 +51,7 @@
   },
   "max-lines-per-function": {
     "lib/admin/admin-logs.js": 162,
-    "lib/admin/admin-routes.js": 157,
+    "lib/admin/admin-routes.js": 149,
     "lib/admin/admin-sessions.js": 188,
     "lib/cli/inspect.js": 142,
     "lib/cli/stats.js": 128,
@@ -69,7 +69,7 @@
   "max-lines": {
     "lib/memory/consolidate/MemoryConsolidator.js": 845,
     "lib/memory/read/FragmentSearch.js": 885,
-    "lib/tools/memory-schemas.js": 1322
+    "lib/tools/memory-schemas.js": 1310
   },
   "max-depth": {
     "lib/llm/util/retry-hints.js": 6,
