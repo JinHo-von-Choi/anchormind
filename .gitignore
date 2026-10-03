@@ -81,3 +81,6 @@ docs/superpowers/
 GATES.md
 .unlazy/
 .unlazy-hook-state.json
+
+# 검색 평가 세트의 실제 질의와 라벨(저장소에 올리지 않는다)
+tests/fixtures/recall-eval-v2/private/*.jsonl

@@ -9,16 +9,19 @@
 
 import { test, describe }                 from "node:test";
 import assert                             from "node:assert/strict";
-import { mkdtemp, writeFile, rm, readdir, readFile } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, readdir, readFile, mkdir } from "node:fs/promises";
+import { execFile }                   from "node:child_process";
+import { promisify }                  from "node:util";
 import { tmpdir }                         from "node:os";
 import path                               from "node:path";
 import { fileURLToPath }                  from "node:url";
 
 import {
-  SUBSETS, TAGS, EXAMPLE_FILE, HUMAN_QUERY_TARGET, EvalSetError,
+  SUBSETS, TAGS, EXAMPLE_FILE, PRIVATE_DIR, HUMAN_QUERY_TARGET, EvalSetError,
   parseJsonl, validateEvalEntry, validateEvalSet, splitLabeled, coverageReport, loadEvalDir
 } from "../../lib/memory/signals/RecallEvalSet.js";
 
+const execFileAsync = promisify(execFile);
 const here       = path.dirname(fileURLToPath(import.meta.url));
 const fixtureDir = path.resolve(here, "../fixtures/recall-eval-v2");
 
@@ -190,11 +193,55 @@ describe("loadEvalDir", () => {
     });
   });
 
+  test("private 하위 디렉터리의 부분집합 파일도 읽고 id 중복은 두 위치를 가로질러 잡는다", async () => {
+    await withDir({ "identifier.jsonl": [{ id: "i1", subset: "identifier", query: "FOO" }] }, async (dir) => {
+      await mkdir(path.join(dir, PRIVATE_DIR));
+      await writeFile(path.join(dir, PRIVATE_DIR, "human_ko.jsonl"), JSON.stringify(human()) + "\n");
+      const { entries, files } = await loadEvalDir(dir);
+      assert.deepEqual(entries.map(e => e.id).sort(), ["hk-1", "i1"]);
+      assert.ok(files.includes(path.join(PRIVATE_DIR, "human_ko.jsonl")));
+
+      await writeFile(path.join(dir, PRIVATE_DIR, "identifier.jsonl"), JSON.stringify({ id: "i1", subset: "identifier", query: "BAR" }) + "\n");
+      await assert.rejects(loadEvalDir(dir), /id 중복/);
+    });
+  });
+
+  test("private 파일에도 형식 검사가 적용된다", async () => {
+    await withDir({}, async (dir) => {
+      await mkdir(path.join(dir, PRIVATE_DIR));
+      await writeFile(path.join(dir, PRIVATE_DIR, "human_ko.jsonl"), JSON.stringify(human({ domain: undefined })) + "\n");
+      await assert.rejects(loadEvalDir(dir), EvalSetError);
+    });
+  });
+
   test("예시 파일은 includeExamples일 때만 읽는다", async () => {
     await withDir({ [EXAMPLE_FILE]: [human({ example: true })] }, async (dir) => {
       assert.equal((await loadEvalDir(dir)).entries.length, 0);
       assert.equal((await loadEvalDir(dir, { includeExamples: true })).entries.length, 1);
     });
+  });
+});
+
+describe("실제 질의 경로", () => {
+  test("private 아래의 jsonl은 git이 무시하고 README는 무시하지 않는다", async () => {
+    const root = path.resolve(here, "../..");
+    const ignored = async (rel) => {
+      try {
+        await execFileAsync("git", ["check-ignore", "-q", rel], { cwd: root });
+        return true;
+      } catch (err) {
+        if (err.code === 1) return false;
+        throw err;
+      }
+    };
+    for (const subset of SUBSETS) assert.equal(await ignored(`tests/fixtures/recall-eval-v2/${PRIVATE_DIR}/${subset}.jsonl`), true, subset);
+    assert.equal(await ignored("tests/fixtures/recall-eval-v2/example.jsonl"), false);
+    assert.equal(await ignored("tests/fixtures/recall-eval-v2/README.md"), false);
+  });
+
+  test("추적되는 디렉터리 최상위에는 예시 파일만 둔다", async () => {
+    const present = (await readdir(fixtureDir)).filter(f => f.endsWith(".jsonl"));
+    assert.deepEqual(present, [EXAMPLE_FILE]);
   });
 });
 
@@ -237,7 +284,7 @@ describe("동봉 평가 세트 구조", () => {
 
   test("README가 파일 형식과 질의 추가 절차를 담는다", async () => {
     const readme = await readFile(path.join(fixtureDir, "README.md"), "utf-8");
-    for (const word of ["human_ko.jsonl", "relevant", "referenceDate", "example.jsonl", "150"]) {
+    for (const word of ["human_ko.jsonl", "relevant", "referenceDate", "example.jsonl", "150", "private/", "never with the system under test"]) {
       assert.ok(readme.includes(word), word);
     }
   });
