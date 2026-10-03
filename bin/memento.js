@@ -99,6 +99,14 @@ async function main() {
 
   const args = parseArgs(rest);
 
+  /**
+   * 명령 결과를 표준 출력으로 내는 CLI 명령은 서버 로그를 표준 오류로 보낸다. 로거가 처음
+   * 불릴 때 이 값을 읽으므로 명령 모듈을 불러오기 전에 정한다. serve는 서버 로그를 그대로 둔다.
+   */
+  if (cmd !== "serve" && process.env.MEMENTO_LOG_STDERR === undefined) {
+    process.env.MEMENTO_LOG_STDERR = "true";
+  }
+
   /** --remote 지정 시 로컬 전용 명령은 즉시 거부 */
   const remoteUrl = args.remote || process.env.MEMENTO_CLI_REMOTE;
   if (remoteUrl && LOCAL_ONLY_COMMANDS.has(cmd)) {
