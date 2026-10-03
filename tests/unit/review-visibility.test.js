@@ -59,11 +59,14 @@ const VISIBILITY_TABLE = [
   ["pending",  null,    "key-a", false]
 ];
 
-const saved = process.env.MEMENTO_REVIEW_QUEUE;
+const saved           = process.env.MEMENTO_REVIEW_QUEUE;
+const savedProvenance = process.env.MEMENTO_PROVENANCE;
 beforeEach(() => { captured.length = 0; delete process.env.MEMENTO_REVIEW_QUEUE; });
 afterEach(() => {
   if (saved === undefined) delete process.env.MEMENTO_REVIEW_QUEUE;
   else process.env.MEMENTO_REVIEW_QUEUE = saved;
+  if (savedProvenance === undefined) delete process.env.MEMENTO_PROVENANCE;
+  else process.env.MEMENTO_PROVENANCE = savedProvenance;
 });
 
 describe("가시성 술어", () => {
@@ -224,6 +227,9 @@ function makeBuilder(queries) {
 }
 
 describe("ANCHOR와 CORE 주입", () => {
+  /** 출처 등급 판정과 떼어 검토 대기 판정만 본다(출처 판정은 provenance-read 시험). */
+  beforeEach(() => { process.env.MEMENTO_PROVENANCE = "off"; });
+
   it("앵커 조회는 검토 대기 파편을 빼고 core 후보에서도 쓴 키의 검토 대기 파편을 뺀다", async () => {
     const queries = [];
     const result  = await makeBuilder(queries).build({ types: ["error"], _keyId: "own" });

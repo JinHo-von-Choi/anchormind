@@ -304,13 +304,13 @@ describe("기록 문장의 검토 열", () => {
 });
 
 describe("키의 검토 방식 표지", () => {
-  it("호출 문맥이 권한 목록의 표지에서 검토 방식을 읽는다", () => {
+  it("호출 문맥이 권한 목록의 표지에서 검토 방식을 읽고 표지가 없으면 싣지 않는다", () => {
     assert.equal(provenanceContext({ _permissions: ["write", "review_off"] }).reviewMode, "off");
     assert.equal(provenanceContext({ _permissions: ["write", "review_all"] }).reviewMode, "all");
-    assert.equal(provenanceContext({ _permissions: ["write"] }).reviewMode, null);
-    assert.equal(provenanceContext({ _permissions: ["write", "review_all"], _isMaster: true }).reviewMode, null);
+    assert.equal(Object.hasOwn(provenanceContext({ _permissions: ["write"] }), "reviewMode"), false);
+    assert.equal(Object.hasOwn(provenanceContext({ _permissions: ["write", "review_all"], _isMaster: true }), "reviewMode"), false);
     assert.equal(provenanceContext({ _provenance: { reviewMode: "all" } }).reviewMode, "all");
-    assert.equal(provenanceContext({ _provenance: { reviewMode: "bogus" } }).reviewMode, null);
+    assert.equal(Object.hasOwn(provenanceContext({ _provenance: { reviewMode: "bogus" } }), "reviewMode"), false);
   });
 
   it("권한 목록은 검토 방식 표지를 read 또는 write와 함께 하나만 받는다", () => {

@@ -39,7 +39,7 @@ describe("권한 목록 검증", () => {
   });
 
   it("표지 권한을 뺀 목록이 기존 규칙(read, write로만 이뤄진 비어 있지 않은 배열)을 통과할 때만 받는다", () => {
-    assert.deepEqual([...MARKER_PERMISSION_VALUES], ["trusted_origin"]);
+    assert.deepEqual([...MARKER_PERMISSION_VALUES], ["trusted_origin", "review_off", "review_all"]);
     const baseRule = list => list.length > 0 && list.every(p => p === "read" || p === "write");
     const lists = [
       [], ["read"], ["write"], ["read", "write"], ["trusted_origin"], ["trusted_origin", "trusted_origin"],
