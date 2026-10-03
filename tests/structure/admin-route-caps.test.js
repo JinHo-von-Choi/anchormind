@@ -34,7 +34,8 @@ const MARKERS   = new Set([CAP_PUBLIC, CAP_AUTHENTICATED]);
 const NON_ROUTE_MODULES = new Set([
   "admin-route-table", "admin-audit-actions", "capabilities", "AdminAuthz", "ScopeFilter", "admin-auth",
   "admin-login-guard", "admin-metrics", "ApiKeyStore", "OAuthClientStore", "key-policy", "key-state-cache",
-  "admin-principal", "admin-redact"
+  "admin-principal", "admin-redact", "AdminUserStore", "admin-password", "admin-totp", "admin-seal",
+  "admin-session-policy", "admin-user-rules"
 ]);
 
 const sampleOf = (p) => p.split("/").map((seg) => (seg.startsWith(":") ? SAMPLE : seg)).join("/");
@@ -54,8 +55,8 @@ describe("관리 라우트 표 항목 형식", () => {
     }
   });
 
-  it("인증 없이 부르는 라우트는 로그인 하나뿐이고 표지 능력 라우트는 주체 자신이 대상이다", () => {
-    assert.deepEqual(ADMIN_ROUTES.filter((r) => r.cap === CAP_PUBLIC).map((r) => `${r.method} ${r.path}`), ["POST /auth"]);
+  it("인증 없이 부르는 라우트는 로그인과 TOTP 등록 완료뿐이고 표지 능력 라우트는 주체 자신이 대상이다", () => {
+    assert.deepEqual(ADMIN_ROUTES.filter((r) => r.cap === CAP_PUBLIC).map((r) => `${r.method} ${r.path}`), ["POST /auth", "POST /auth/totp"]);
     for (const r of ADMIN_ROUTES.filter((x) => MARKERS.has(x.cap))) assert.equal(r.scope, "self", r.path);
     for (const r of ADMIN_ROUTES.filter((x) => !MARKERS.has(x.cap))) assert.notEqual(r.scope, "self", r.path);
   });

@@ -62,6 +62,7 @@ export const SWITCHES = Object.freeze([
   boolOn("MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE", "인증", "agent 식별 결합 이전 키의 agentId 주장을 허용한다"),
   enumOf("MEMENTO_RESERVED_AGENT_IDS", ["warn", "enforce"], "warn", "인증", "예약 agentId 사용을 경고로 두거나 거부한다"),
   enumOf("MEMENTO_ADMIN_AUTH_BACKOFF", ["on", "off"], "off", "인증", "관리 인증 연속 실패 뒤 응답을 지연한다", { off: ["off"] }),
+  enumOf("MEMENTO_ADMIN_USERS", ["on", "off"], "on", "인증", "관리자 계정(비밀번호, TOTP, DB 세션) 로그인과 계정 관리 API를 연다(계정이 없으면 마스터 키만)", { off: ["off"] }),
   boolOn("MEMENTO_API_KEY_DELETE_GUARD", "인증", "저장 자료가 있는 API 키의 삭제를 막는다"),
   boolOff("MEMENTO_REDIS_SESSION_FAIL_CLOSED", "인증", "Redis 세션 저장 실패 시 메모리 대체 없이 요청을 실패시킨다"),
   enumOf("MEMENTO_SESSION_ID_POLICY", ["warn", "enforce"], "warn", "인증", "세션 ID 수신 규칙 위반을 기록만 하거나 거부한다"),

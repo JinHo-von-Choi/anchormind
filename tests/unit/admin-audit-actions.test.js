@@ -32,12 +32,13 @@ const MUTATING  = ["POST", "PUT", "PATCH", "DELETE"];
 
 const source = (name) => readFileSync(path.join(ADMIN_DIR, `${name}.js`), "utf8");
 
-/** admin-keys.js 라우트 표의 (메서드, 대표 경로) */
-function keyRoutes() {
+/** 표 형식 라우트 모듈(admin-keys.js, admin-users.js) 라우트 표의 (메서드, 대표 경로) */
+function keyRoutes(name = "admin-keys") {
   const line = /\{\s*method:\s*"([A-Z]+)",\s*match:\s*(?:exact|regex)\((?:new RegExp\()?`([^`]+)`\)?\)/g;
-  return [...source("admin-keys").matchAll(line)].map(([, method, raw]) => ({
+  return [...source(name).matchAll(line)].map(([, method, raw]) => ({
     method,
-    sample: raw.replace(BASE, "").replace(/^\^/, "").replace(/\$$/, "").replace(/\(\[\^\/\]\+\)/g, SAMPLE_ID)
+    sample: raw.replace(BASE, "").replace(/^\^/, "").replace(/\$$/, "")
+      .replace(/\(\[\^\/\]\+\)/g, SAMPLE_ID).replace(/\(\[0-9a-f-\]\{36\}\)/g, SAMPLE_ID)
   }));
 }
 
@@ -78,14 +79,26 @@ describe("비GET 관리 라우트의 감사 행위 선언", () => {
     assert.equal(ADMIN_AUDIT_ACTIONS.filter(a => a.module === "admin-keys" && MUTATING.includes(a.method)).length, table);
   });
 
-  for (const name of ["admin-memory", "admin-sessions", "admin-export", "admin-routes", "admin-audit"]) {
+  it("admin-users 라우트 표의 비GET 항목마다 admin-users 선언이 있고 수가 같다", () => {
+    const routes = keyRoutes("admin-users").filter(r => MUTATING.includes(r.method));
+    assert.ok(routes.length >= 7, `추출된 비GET 라우트가 ${routes.length}건뿐이다`);
+    for (const r of routes) {
+      const found = findAdminAuditAction(r.method, r.sample);
+      assert.ok(found, `${r.method} ${r.sample} 선언 없음`);
+      assert.equal(found.entry.module, "admin-users", `${r.method} ${r.sample}`);
+    }
+    assert.equal(ADMIN_AUDIT_ACTIONS.filter(a => a.module === "admin-users" && MUTATING.includes(a.method)).length, routes.length);
+  });
+
+  for (const name of ["admin-memory", "admin-sessions", "admin-export", "admin-routes", "admin-audit", "admin-user-auth"]) {
     it(`${name}의 비GET 메서드 비교 수와 선언 수가 메서드별로 같다`, () => {
       assert.deepEqual(methodComparisons(name), declaredMethods(name));
     });
   }
 
   it("비GET 라우트를 판정하는 관리 모듈은 모두 위 검사 대상이다", () => {
-    const covered = new Set(["admin-keys", "admin-memory", "admin-sessions", "admin-export", "admin-routes", "admin-audit"]);
+    const covered = new Set(["admin-keys", "admin-memory", "admin-sessions", "admin-export", "admin-routes", "admin-audit",
+      "admin-users", "admin-user-auth"]);
     for (const file of readdirSync(ADMIN_DIR).filter(f => f.endsWith(".js") && f !== "admin-audit-actions.js" && f !== "admin-route-table.js")) {
       const name = file.replace(/\.js$/, "");
       const text = source(name);

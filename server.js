@@ -251,12 +251,12 @@ const server = http.createServer(async (req, res) => {
 
   /* Admin UI */
   if (req.method === "GET" && (url.pathname === ADMIN_BASE || url.pathname === `${ADMIN_BASE}/`)) {
-    handleAdminUi(req, res);
+    await handleAdminUi(req, res);
     return;
   }
 
   if (req.method === "GET" && url.pathname.startsWith(`${ADMIN_BASE}/images/`)) {
-    handleAdminImage(req, res);
+    await handleAdminImage(req, res);
     return;
   }
 
