@@ -51,6 +51,7 @@ const ALLOWED = {
   "memory/link/TemporalLinker.js": 1,
   "memory/processors/EpisodeContinuityService.js": 1,
   "memory/processors/MemoryRecaller.js": 1,
+  "memory/read/AnswerPackLoader.js": 1, // 답 꾸러미 항목의 source만 대체 체인 조회와 같은 범위 절로 읽는다. getByIds는 본문을 포함한 전체 열을 읽는다
   "memory/read/CaseRecall.js": 2,
   "memory/CaseEventStore.js": 1,
   "memory/read/ContextBuilder.js": 1,
