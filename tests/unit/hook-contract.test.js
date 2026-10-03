@@ -192,6 +192,13 @@ describe("validateHookBody", () => {
     assert.throws(() => validateHookBody("Stop", { session_id: sid, excerpt: 12 }), inputError("excerpt_required", 422));
   });
 
+  it("발췌의 NUL 문자는 400이고 짝 없는 서로게이트는 U+FFFD로 바꾼다", () => {
+    assert.throws(() => validateHookBody("Stop", { session_id: sid, excerpt: "a\u0000b" }), inputError("invalid_excerpt", 400));
+    const out = validateHookBody("Stop", { session_id: sid, excerpt: "앞\ud800뒤\udc00끝" });
+    assert.equal(out.excerpt, "앞\ufffd뒤\ufffd끝");
+    assert.equal(out.excerpt.isWellFormed(), true);
+  });
+
   it("잘못된 cwd와 git 원격은 거부하지 않고 버린다", () => {
     const out = validateHookBody("Stop", { session_id: sid, excerpt: "e", cwd: 3, git_remote: "file:///x" });
     assert.equal(out.cwd, null);

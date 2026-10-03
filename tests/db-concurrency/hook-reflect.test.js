@@ -27,7 +27,6 @@ const { SchedulerRegistry }                  = await import("../../lib/scheduler
 const { createHookHandler }                  = await import("../../lib/handlers/hook-handler.js");
 const { registerHookReflectConsumer }        = await import("../../lib/hooks/hook-reflect-consumer.js");
 const { HOOK_REFLECT_TOPIC }                 = await import("../../lib/hooks/hook-contract.js");
-const { DualRateLimiter }                    = await import("../../lib/rate-limiter.js");
 const { MemoryManager }                      = await import("../../lib/memory/MemoryManager.js");
 const { WRITE_ENTRIES }                      = await import("../../lib/memory/write/WriteGate.js");
 
@@ -53,10 +52,25 @@ function laneWorker(pool) {
   return worker;
 }
 
-let server;
-let baseUrl;
+let servers = [];
 let unregister;
 let reflectCalls = 0;
+
+/** 서버 프로세스 하나를 흉내 낸 처리기(프로세스마다 최근 키 목록과 요청 한도기가 따로 있다) */
+async function startHookServer() {
+  const handler = createHookHandler({
+    authenticate     : async () => ({ valid: true, keyId: null, groupKeyIds: null, permissions: null, isMaster: true }),
+    allowedWorkspaces: async () => null
+  });
+  const server = http.createServer((req, res) => {
+    handler(req, res, { pathname: new URL(req.url, "http://localhost").pathname });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  servers.push(server);
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
+let baseUrls;
 
 before(async () => {
   /** 실제 reflect를 부르되 호출 수를 센다. 같은 서사는 content_hash로 접히므로 파편 수만으로는 중복 호출을 가릴 수 없다. */
@@ -66,22 +80,13 @@ before(async () => {
       return MemoryManager.getInstance().reflect(params, { writeEntry: WRITE_ENTRIES.REFLECT });
     }
   });
-  const handler = createHookHandler({
-    authenticate     : async () => ({ valid: true, keyId: null, groupKeyIds: null, permissions: null, isMaster: true }),
-    allowedWorkspaces: async () => null
-  });
-  const limiter = new DualRateLimiter({ windowMs: 60_000, perIp: 1000, perKey: 1000 });
-  server = http.createServer((req, res) => {
-    handler(req, res, { rateLimiter: limiter, pathname: new URL(req.url, "http://localhost").pathname });
-  });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  baseUrl = `http://127.0.0.1:${server.address().port}`;
+  baseUrls = [await startHookServer(), await startHookServer(), await startHookServer()];
 });
 
 after(async () => {
   try {
     unregister?.();
-    await new Promise((resolve) => server.close(resolve));
+    await Promise.all(servers.map(server => new Promise((resolve) => server.close(resolve))));
     await Promise.all(pools.map(p => p.end()));
     await shutdownPool();
   } finally {
@@ -89,9 +94,9 @@ after(async () => {
   }
 });
 
-/** 훅 요청 하나 */
-async function postHook(client, event, body) {
-  const res = await fetch(`${baseUrl}/hooks/${client}/${event}`, {
+/** 훅 요청 하나. instance는 요청을 받을 서버 번호다. */
+async function postHook(client, event, body, instance = 0) {
+  const res = await fetch(`${baseUrls[instance]}/hooks/${client}/${event}`, {
     method : "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer lane" },
     body   : JSON.stringify(body)
@@ -120,17 +125,24 @@ async function episodeCount(client, sessionId) {
 }
 
 describe("훅 회고 기록과 소비", () => {
-  it("같은 세션과 이벤트를 두 번 보내면 행은 둘이고 두 작업자가 처리해도 reflect는 한 번이다", async () => {
+  it("두 프로세스가 같은 세션과 이벤트를 접수하면 행은 둘이고 두 작업자가 처리해도 reflect는 한 번이며, 그 뒤 접수는 기록하지 않는다", async () => {
     const sid     = `lane-${crypto.randomBytes(4).toString("hex")}`;
-    const excerpt = `[user]\n토큰 ${SECRET} 로 배포해 줘\n\n[assistant]\n배포 파이프라인의 캐시 경로를 고치고 재배포를 마쳤다`;
-    assert.equal(await postHook("codex", "SessionEnd", { session_id: sid, excerpt }), 202);
-    assert.equal(await postHook("codex", "SessionEnd", { session_id: sid, excerpt }), 202);
+    const excerpt = `[user]\n토큰 ${SECRET} 로 배포해 줘\n\n[assistant]\n토큰 ${SECRET} 로 배포 파이프라인의 캐시 경로를 고치고 재배포를 마쳤다`;
+    const statuses = await Promise.all([
+      postHook("codex", "SessionEnd", { session_id: sid, excerpt }, 0),
+      postHook("codex", "SessionEnd", { session_id: sid, excerpt }, 1)
+    ]);
+    assert.deepEqual(statuses, [202, 202]);
+    assert.equal(await postHook("codex", "SessionEnd", { session_id: sid, excerpt }, 0), 202, "같은 프로세스의 재전송은 기록 없이 202");
 
     const { rows } = await directQuery(`SELECT aggregate_id, payload::text AS body FROM ${TABLE} WHERE topic = $1 AND payload->>'sessionId' = $2`,
       [HOOK_REFLECT_TOPIC, sid]);
     assert.equal(rows.length, 2);
     assert.equal(rows[0].aggregate_id, rows[1].aggregate_id);
-    for (const row of rows) assert.ok(!row.body.includes(SECRET), "outbox 행에 비밀 원문이 있다");
+    for (const row of rows) {
+      assert.ok(!row.body.includes(SECRET), "outbox 행에 비밀 원문이 있다");
+      assert.ok(!row.body.includes("[user]"), "outbox 행에 발췌 전체가 있다");
+    }
 
     const callsBefore = reflectCalls;
     await drain([laneWorker(processPool()), laneWorker(processPool())]);
@@ -141,6 +153,28 @@ describe("훅 회고 기록과 소비", () => {
       `SELECT response->>'state' AS state FROM agent_memory.idempotency_records WHERE tool = 'hook_reflect' AND idempotency_key = $1`,
       [rows[0].aggregate_id]);
     assert.deepEqual(claims.rows.map(r => r.state), ["done"]);
+
+    assert.equal(await postHook("codex", "SessionEnd", { session_id: sid, excerpt }, 2), 202);
+    const after = await directQuery(`SELECT count(*)::int AS n FROM ${TABLE} WHERE topic = $1 AND payload->>'sessionId' = $2`,
+      [HOOK_REFLECT_TOPIC, sid]);
+    assert.equal(after.rows[0].n, 2, "회고가 끝난 세션과 이벤트를 다시 기록했다");
+  });
+
+  it("접수 확인 질의는 키별 대기 회고 이벤트를 상한에서 멈춰 세고 다른 키의 행은 세지 않는다", async () => {
+    await directQuery(`
+      INSERT INTO ${TABLE} (topic, aggregate_id, payload, available_at)
+      SELECT $1, 'hook:cap-' || g, jsonb_build_object('keyId', 'cap-key'), now() + interval '1 day'
+        FROM generate_series(1, 500) AS g`, [HOOK_REFLECT_TOPIC]);
+    try {
+      const { hookAdmissionState } = await import("../../lib/hooks/hook-store.js");
+      const { getPrimaryPool }     = await import("../../lib/tools/db.js");
+      const state = await hookAdmissionState(getPrimaryPool(), { keyId: "cap-key", idempotencyKey: "hook:none", limit: 500 });
+      assert.deepEqual(state, { seen: false, pending: 500 });
+      const other = await hookAdmissionState(getPrimaryPool(), { keyId: null, idempotencyKey: "hook:none", limit: 500 });
+      assert.ok(other.pending < 500);
+    } finally {
+      await directQuery(`DELETE FROM ${TABLE} WHERE aggregate_id LIKE 'hook:cap-%'`);
+    }
   });
 
   it("이벤트가 다르면 각각 reflect한다", async () => {

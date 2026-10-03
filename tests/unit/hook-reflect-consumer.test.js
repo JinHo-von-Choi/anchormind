@@ -24,7 +24,7 @@ const SID = "0b8f6c4e-1d2a-4c51-9a77-3f1e2d4c5b6a";
 function outboxEvent(id, overrides = {}) {
   const payload = {
     v: HOOK_PAYLOAD_VERSION, client: "codex", event: "SessionEnd", sessionId: SID, keyId: "key-1", workspace: "proj",
-    excerpt: "[user]\n질문\n\n[assistant]\n배포 스크립트의 경로 오류를 고치고 시험을 통과시켰다", ...overrides
+    summary: "배포 스크립트의 경로 오류를 고치고 시험을 통과시켰다", ...overrides
   };
   return {
     id, topic: HOOK_REFLECT_TOPIC, attempts: 1, payload,
@@ -81,7 +81,7 @@ describe("validateHookReflectPayload", () => {
   it("형식이 맞지 않는 payload는 재시도 없는 오류다", () => {
     const base = outboxEvent(1).payload;
     for (const change of [{ v: 2 }, { client: "cursor" }, { event: "SessionStart" }, { sessionId: "a b" }, { keyId: 3 },
-      { workspace: 5 }, { excerpt: "" }, { excerpt: "x".repeat(70_000) }]) {
+      { workspace: 5 }, { summary: "" }, { summary: "x".repeat(1001) }, { summary: 3 }]) {
       assert.throws(() => validateHookReflectPayload({ ...base, ...change }), OutboxPermanentError, JSON.stringify(change).slice(0, 40));
     }
     assert.throws(() => validateHookReflectPayload(null), OutboxPermanentError);
@@ -89,8 +89,8 @@ describe("validateHookReflectPayload", () => {
 });
 
 describe("buildHookReflectArgs", () => {
-  it("마지막 응답 블록으로 1000자 이하 서사를 만들고 키 범위와 workspace를 싣는다", () => {
-    const payload = validateHookReflectPayload(outboxEvent(1, { excerpt: `[assistant]\n${"단어 ".repeat(800)}` }).payload);
+  it("요약 후보로 1000자 이하 서사를 만들고 키 범위와 workspace를 싣는다", () => {
+    const payload = validateHookReflectPayload(outboxEvent(1, { summary: "단어 ".repeat(250).trim() }).payload);
     const args    = buildHookReflectArgs(payload, { keyId: "key-1", groupKeyIds: ["key-1"], defaultWorkspace: "dflt" });
     assert.ok(args.narrative_summary.startsWith("Codex SessionEnd 세션 기록: "));
     assert.ok(args.narrative_summary.length <= 1000);

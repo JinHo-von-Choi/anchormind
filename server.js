@@ -244,7 +244,7 @@ const server = http.createServer(async (req, res) => {
 
   /* POST /hooks/{client}/{event}: 하네스 훅(SessionStart context, Stop과 SessionEnd 회고 접수) */
   if (req.method === "POST" && url.pathname.startsWith("/hooks/")) {
-    await handleHookPost(req, res, startTime, rateLimiter, url.pathname);
+    await handleHookPost(req, res, startTime, url.pathname);
     return;
   }
 
