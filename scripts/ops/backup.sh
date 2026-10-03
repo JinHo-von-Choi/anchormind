@@ -14,6 +14,8 @@
 # 바꾸지 않는다. 이미 있는 디렉터리를 그룹이나 다른 사용자가 접근할 수 있으면 거부하며
 # --allow-open-dir 로 허용한다. 저장 위치의 다른 파일은 지우지 않는다.
 # 보관: --keep 또는 MEMENTO_BACKUP_KEEP_DAYS. 기본 14. 날짜별 가장 늦은 한 벌을 최근 N일치 남긴다.
+# 이번 실행이 쓴 벌과 그보다 늦은 시각의 벌은 보관 정리에서 지우지 않는다. 관리 대상 이름이
+# 심볼릭 링크이거나 쓸 이름이 이미 있으면 아무것도 쓰거나 지우지 않고 멈춘다(종료 코드 2).
 # 라벨: --label NAME([a-z0-9-] 1자 이상 32자 이하)을 주면 이름이 memento-<시각>-NAME 이 되고
 # 보관 일수 정리에서 제외된다. 라벨 벌은 --prune-labelled DAYS 로만 지워진다(기본은 지우지 않음).
 #
@@ -55,6 +57,11 @@ with_roles=1
 allow_open=0
 label=""
 prune_days=""
+dbname=""
+snapshot=""
+roles_status=0
+SNAP_PID=""
+partial_files=()
 conn=()
 
 usage() {
@@ -67,8 +74,9 @@ die() {
   exit "$code"
 }
 
+# 값이 필요한 옵션: 값이 없거나 비었거나 다른 옵션처럼 보이면(--로 시작) 거부한다.
 need_value() {
-  [[ $# -ge 2 && -n "$2" ]] || die 2 "$1 에 값이 필요하다"
+  [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || die 2 "$1 에 값이 필요하다 (비어 있거나 다른 옵션으로 시작하는 값은 받지 않는다)"
 }
 
 # 접속 문자열(conninfo, URI)은 비밀번호가 프로세스 목록과 출력에 드러나므로 받지 않는다.
@@ -82,7 +90,12 @@ check_dbname() {
 # 정책 계산(node)을 실행하고 출력 줄을 POLICY_LINES 에 담는다. 실패하면 멈춘다.
 policy_lines() {
   local out
-  out=$(node "$POLICY" "$@") || die 1 "정책 계산이 실패했다: $1"
+  local status=0
+  out=$(node "$POLICY" "$@") || status=$?
+  if [[ "$status" -ne 0 ]]; then
+    [[ "$status" -eq 2 ]] && die 2 "정책 검사가 진행을 거부했다: $1"
+    die 1 "정책 계산이 실패했다: $1"
+  fi
   POLICY_LINES=()
   if [[ -n "$out" ]]; then mapfile -t POLICY_LINES <<< "$out"; fi
 }
@@ -116,16 +129,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ "$keep" =~ ^[0-9]+$ && "$keep" -ge 1 ]] || die 2 "보관 일수는 1 이상의 정수여야 한다: $keep"
+[[ "$keep" =~ ^[1-9][0-9]{0,3}$ ]] || die 2 "보관 일수는 앞에 0이 없는 1 이상 9999 이하의 정수여야 한다: $keep"
 [[ -n "$dest" ]] || die 2 "저장 위치를 정할 수 없다 (--dir 또는 MEMENTO_BACKUP_DIR)"
 [[ -z "$label" || "$label" =~ ^[a-z0-9-]{1,32}$ ]] || die 2 "라벨은 [a-z0-9-] 1자 이상 32자 이하여야 한다: $label"
-[[ -z "$prune_days" || "$prune_days" =~ ^[0-9]+$ && "$prune_days" -ge 1 ]] || die 2 "--prune-labelled 는 1 이상의 정수여야 한다: $prune_days"
+[[ -z "$prune_days" || "$prune_days" =~ ^[1-9][0-9]{0,3}$ ]] || die 2 "--prune-labelled 는 앞에 0이 없는 1 이상 9999 이하의 정수여야 한다: $prune_days"
 
 command -v node >/dev/null || die 1 "node 가 필요하다"
 dest=$(node "$POLICY" guard "$dest") || die 2 "저장 위치 검사에 실패했다"
 check_existing_dest
 
-if [[ -z "${dbname:-}" && -z "${PGDATABASE:-}" ]]; then
+if [[ -z "$dbname" && -z "${PGDATABASE:-}" ]]; then
   die 2 "데이터베이스 이름이 필요하다 (--dbname 또는 PGDATABASE)"
 fi
 [[ -z "${PGDATABASE:-}" ]] || check_dbname "$PGDATABASE"
@@ -159,10 +172,29 @@ done
 # 새로 만드는 디렉터리는 umask 077 에 따라 700 이다. 이미 있는 디렉터리의 권한은 건드리지 않는다.
 mkdir -p -m 700 -- "$dest"
 
-exec 9>"$dest/.backup.lock"
+# 잠금은 저장 위치 디렉터리 자체에 건다. 잠금 파일을 만들지 않으므로 심볼릭 링크를 따라가 쓸 일이 없다.
+exec 9< "$dest"
 flock -n 9 || die 1 "다른 백업이 같은 저장 위치에서 실행 중이다"
 
-partial_files=()
+# 이후 리다이렉션은 이미 있는 파일을 덮어쓰지 않는다.
+set -C
+
+# 쓸 경로가 이미 있거나 심볼릭 링크이면 거부한다.
+refuse_existing() {
+  local path
+  for path in "$@"; do
+    if [[ -e "$path" || -L "$path" ]]; then
+      die 2 "쓸 경로가 이미 있거나 심볼릭 링크라 진행하지 않는다: ${path##*/}"
+    fi
+  done
+}
+
+# 이름 없는 빈 파일을 배타적으로 만든다(이미 있으면 실패한다).
+create_exclusive() {
+  refuse_existing "$1"
+  : > "$1" || die 2 "파일을 만들지 못했다: ${1##*/}"
+}
+
 cleanup() {
   local file
   for file in "${partial_files[@]}"; do rm -f -- "$file"; done
@@ -182,12 +214,16 @@ for stale in "${POLICY_LINES[@]}"; do
 done
 
 [[ ! -e "$dest/$dump_name" ]] || die 1 "같은 시각의 덤프가 이미 있다: $dump_name"
+refuse_existing "$dest/$dump_name" "$dest/$sha_name" "$dest/$counts_name" "$dest/$roles_name"
 
 dump_part="$dest/$dump_name.partial"
 counts_part="$dest/$counts_name.partial"
 roles_part="$dest/$roles_name.partial"
 sha_part="$dest/$sha_name.partial"
+refuse_existing "$dump_part" "$counts_part" "$roles_part" "$sha_part"
 partial_files=("$dump_part" "$counts_part" "$roles_part" "$sha_part")
+create_exclusive "$dump_part"
+[[ "$with_roles" -eq 0 ]] || create_exclusive "$roles_part"
 
 # 덤프와 행 수가 같은 시점을 보도록 스냅숏을 내보낸 읽기 전용 트랜잭션을 덤프가 끝날 때까지 연다.
 coproc SNAP { psql "${conn[@]}" -X -q -A -t -v ON_ERROR_STOP=1; }
@@ -241,7 +277,7 @@ printf '%s  %s\n' "$hash" "$dump_name" > "$sha_part"
 roles_status=0
 if [[ "$with_roles" -eq 1 ]]; then
   dump_all_args=(--roles-only --no-role-passwords)
-  [[ -n "${dbname:-}" ]] && dump_all_args+=(--database "$dbname")
+  [[ -z "$dbname" ]] || dump_all_args+=(--database "$dbname")
   host_args=()
   for ((i = 0; i < ${#conn[@]}; i += 2)); do
     [[ "${conn[i]}" == "--dbname" ]] || host_args+=("${conn[i]}" "${conn[i + 1]}")
@@ -261,10 +297,14 @@ sync_paths "$dump_part" "$counts_part" "$sha_part"
 [[ ! -e "$roles_part" ]] || sync_paths "$roles_part"
 
 # 완결 표지는 덤프 파일의 이름 확정이다. 나머지를 먼저 확정하고 덤프를 마지막에 옮긴다.
-mv -- "$counts_part" "$dest/$counts_name"
-[[ ! -e "$roles_part" ]] || mv -- "$roles_part" "$dest/$roles_name"
-mv -- "$sha_part" "$dest/$sha_name"
-mv -- "$dump_part" "$dest/$dump_name"
+commit_file() {
+  refuse_existing "$2"
+  mv -T -- "$1" "$2"
+}
+commit_file "$counts_part" "$dest/$counts_name"
+[[ ! -e "$roles_part" ]] || commit_file "$roles_part" "$dest/$roles_name"
+commit_file "$sha_part" "$dest/$sha_name"
+commit_file "$dump_part" "$dest/$dump_name"
 partial_files=()
 sync_paths "$dest"
 
@@ -277,8 +317,7 @@ if [[ "$roles_status" -ne 0 ]]; then
   die 3 "역할 정의 덤프가 실패했다. 덤프는 확정됐다. 역할 덤프가 필요 없으면 --no-roles 를 쓴다"
 fi
 
-expire_args=(expire "$dest" "$keep")
-[[ -z "$prune_days" ]] || expire_args+=(--prune-labelled "$prune_days")
+# 드라이런과 같은 계획 함수를 같은 입력(이번 실행이 쓴 벌)으로 부른다. 그 벌은 삭제에서 보호된다.
 policy_lines "${expire_args[@]}"
 expired=("${POLICY_LINES[@]}")
 for name in "${expired[@]}"; do

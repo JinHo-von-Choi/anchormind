@@ -77,6 +77,29 @@ describe("운영 스크립트 구조", () => {
     assert.match(text, /policy_lines partials/);
   });
 
+  it("backup.sh는 잠금 파일 대신 저장 위치 디렉터리에 잠금을 걸고 noclobber 로 쓴다", () => {
+    const text = source("backup.sh");
+    assert.doesNotMatch(text, /\.backup\.lock/);
+    assert.match(text, /exec 9< "\$dest"/);
+    assert.ok(where(text, "set -C") > where(text, "flock -n 9"));
+    assert.ok(where(text, "set -C") < where(text, 'create_exclusive "$dump_part"'));
+    assert.match(text, /mv -T --/);
+  });
+
+  it("backup.sh의 실제 실행과 dry-run은 같은 보관 계획 인자를 쓴다", () => {
+    const text = source("backup.sh");
+    assert.equal((text.match(/expire_args=\(expire/g) || []).length, 1);
+    assert.equal((text.match(/policy_lines "\$\{expire_args\[@\]\}"/g) || []).length, 2);
+  });
+
+  it("backup.sh는 옵션 변수를 맨 위에서 초기화한다", () => {
+    const text = source("backup.sh");
+    for (const v of ["dbname", "label", "prune_days", "snapshot", "SNAP_PID"]) {
+      assert.match(text, new RegExp(`^${v}=""$`, "m"), v);
+    }
+    assert.doesNotMatch(text, /\$\{dbname:-\}/);
+  });
+
   it("backup.sh는 정책 계산을 프로세스 치환으로 읽지 않는다", () => {
     assert.doesNotMatch(source("backup.sh"), /<\(\s*node/);
   });

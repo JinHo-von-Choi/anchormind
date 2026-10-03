@@ -37,12 +37,17 @@ while IFS= read -r line; do
   esac
 done
 `,
+  date: String.raw`#!/usr/bin/env bash
+if [[ -n "\${FAKE_STAMP:-}" && "$*" == *"%Y%m%dT%H%M%SZ"* ]]; then echo "$FAKE_STAMP"; else exec /bin/date "$@"; fi
+`,
   pg_dump: String.raw`#!/usr/bin/env bash
+echo "pg_dump $*" >> "\${STUB_LOG:-/dev/null}"
 for arg in "$@"; do
   case "$arg" in --file=*) printf 'DUMP' > "\${arg#--file=}" ;; esac
 done
 `,
   pg_dumpall: String.raw`#!/usr/bin/env bash
+echo "pg_dumpall $*" >> "\${STUB_LOG:-/dev/null}"
 for arg in "$@"; do
   case "$arg" in --file=*) printf -- '-- roles\n' > "\${arg#--file=}" ;; esac
 done
@@ -305,6 +310,180 @@ describe("backup.sh 전체 경로 (가짜 PostgreSQL 도구)", () => {
       const res = run(["--dir", freshDir(), "--dry-run"], { FAKE_NODE_FAIL_EXPIRE: "1" });
       assert.equal(res.status, 1);
       assert.match(res.stderr, /정책 계산이 실패했다/);
+    });
+  });
+
+  describe("심볼릭 링크와 기존 파일", () => {
+    const STAMP = "20261003T070000Z";
+    const NAMES = ["dump", "dump.sha256", "counts.json", "roles.sql"].map(k => `memento-${STAMP}.${k}`);
+
+    const planted = (dest, outside) => {
+      fs.mkdirSync(dest, { mode: 0o700 });
+      fs.writeFileSync(outside, "precious");
+    };
+
+    it("잠금 파일 이름의 심볼릭 링크를 따라가 바깥 파일을 건드리지 않는다", () => {
+      const dest    = freshDir();
+      const outside = path.join(root, `outside-lock-${seq}.txt`);
+      planted(dest, outside);
+      fs.symlinkSync(outside, path.join(dest, ".backup.lock"));
+      const res = run(["--dir", dest], { FAKE_STAMP: STAMP });
+      assert.equal(res.status, 0, res.stderr);
+      assert.equal(fs.readFileSync(outside, "utf8"), "precious");
+      assert.equal(fs.lstatSync(path.join(dest, ".backup.lock")).isSymbolicLink(), true);
+    });
+
+    for (const [i, name] of [...NAMES, ...NAMES.map(n => `${n}.partial`)].entries()) {
+      for (const target of ["file", "dangling"]) {
+        it(`${name} 이 ${target === "file" ? "바깥 파일" : "없는 대상"}을 가리키는 링크이면 거부하고 아무것도 쓰거나 지우지 않는다 (${i})`, () => {
+          const dest    = freshDir();
+          const outside = path.join(root, `outside-${seq}-${i}-${target}.txt`);
+          planted(dest, outside);
+          fs.symlinkSync(target === "file" ? outside : path.join(root, `no-such-${seq}-${i}`), path.join(dest, name));
+          fs.writeFileSync(path.join(dest, "memento-20200101T000000Z.dump"), "old plain set");
+          const before = fs.readdirSync(dest).sort();
+
+          const res = run(["--dir", dest, "--keep", "1"], { FAKE_STAMP: STAMP });
+          assert.notEqual(res.status, 0, res.stdout);
+          assert.match(res.stderr, /심볼릭 링크|이미 있거나/);
+          assert.equal(fs.readFileSync(outside, "utf8"), "precious");
+          assert.deepEqual(fs.readdirSync(dest).sort(), before);
+          assert.equal(fs.readFileSync(path.join(dest, "memento-20200101T000000Z.dump"), "utf8"), "old plain set");
+          assert.equal(fs.existsSync(path.join(root, `no-such-${seq}-${i}`)), false);
+        });
+      }
+    }
+
+    for (const name of NAMES) {
+      it(`${name} 이 일반 파일로 이미 있으면 덮어쓰지 않고 거부한다`, () => {
+        const dest = freshDir();
+        fs.mkdirSync(dest, { mode: 0o700 });
+        fs.writeFileSync(path.join(dest, name), "existing content");
+        const res = run(["--dir", dest], { FAKE_STAMP: STAMP });
+        assert.notEqual(res.status, 0);
+        assert.equal(fs.readFileSync(path.join(dest, name), "utf8"), "existing content");
+      });
+    }
+
+    it("심볼릭 링크가 있으면 dry-run도 진행하지 않는다", () => {
+      const dest    = freshDir();
+      const outside = path.join(root, `outside-dry-${seq}.txt`);
+      planted(dest, outside);
+      fs.symlinkSync(outside, path.join(dest, "memento-20250102T000000Z.counts.json"));
+      const res = run(["--dir", dest, "--dry-run"], { FAKE_STAMP: STAMP });
+      assert.equal(res.status, 2);
+      assert.equal(fs.readFileSync(outside, "utf8"), "precious");
+    });
+
+    it("보관 정리 단계에서 링크를 만나면 다른 파일을 하나도 지우지 않고 거부한다", () => {
+      const dest    = freshDir();
+      const outside = path.join(root, `outside-ret-${seq}.txt`);
+      planted(dest, outside);
+      for (const name of OLD_SET("20200101T030000Z")) fs.writeFileSync(path.join(dest, name), "old");
+      fs.symlinkSync(outside, path.join(dest, "memento-20200102T030000Z.roles.sql"));
+      const before = fs.readdirSync(dest).sort();
+      const res    = run(["--dir", dest, "--keep", "1"], { FAKE_STAMP: STAMP });
+      assert.equal(res.status, 2);
+      assert.deepEqual(fs.readdirSync(dest).sort(), before);
+      assert.equal(fs.readFileSync(outside, "utf8"), "precious");
+    });
+  });
+
+  describe("방금 쓴 벌의 보호", () => {
+    const NOW_STAMP = "20261003T030000Z";
+    const names     = (stamp) => OLD_SET(stamp);
+    const make      = (dest, stamp) => { for (const n of names(stamp)) fs.writeFileSync(path.join(dest, n), "x"); };
+    const present   = (dest, stamp) => names(stamp).every(n => fs.existsSync(path.join(dest, n)));
+
+    for (const keep of ["1", "14"]) {
+      for (const later of ["20261004T030000Z", "20261003T230000Z"]) {
+        it(`나중 시각의 벌(${later})이 있어도 keep=${keep} 에서 새 벌과 그 벌을 지우지 않는다`, () => {
+          const dest = freshDir();
+          fs.mkdirSync(dest, { mode: 0o700 });
+          make(dest, later);
+          const res = run(["--dir", dest, "--keep", keep], { FAKE_STAMP: NOW_STAMP });
+          assert.equal(res.status, 0, res.stderr);
+          assert.equal(present(dest, NOW_STAMP), true);
+          assert.equal(present(dest, later), true);
+          assert.match(res.stdout, /removed files: 0/);
+        });
+
+        it(`같은 입력의 dry-run은 실제 실행과 같은 삭제 목록을 낸다 (keep=${keep}, ${later})`, () => {
+          const dest = freshDir();
+          fs.mkdirSync(dest, { mode: 0o700 });
+          make(dest, later);
+          make(dest, "20200101T030000Z");
+          const dry  = run(["--dir", dest, "--keep", keep, "--dry-run"], { FAKE_STAMP: NOW_STAMP });
+          const real = run(["--dir", dest, "--keep", keep], { FAKE_STAMP: NOW_STAMP });
+          assert.equal(dry.status, 0, dry.stderr);
+          assert.equal(real.status, 0, real.stderr);
+          const planned = dry.stdout.split("\n").filter(l => l.startsWith("would remove: ")).map(l => l.slice(14)).sort();
+          const removed = real.stdout.split("\n").filter(l => l.startsWith("removed: ")).map(l => l.slice(9)).sort();
+          assert.deepEqual(removed, planned);
+        });
+      }
+    }
+
+    it("복사해 넣은 여러 벌이 새 벌보다 늦어도 새 벌과 늦은 벌은 남고 오래된 벌만 규칙대로 정리된다", () => {
+      const dest = freshDir();
+      fs.mkdirSync(dest, { mode: 0o700 });
+      for (const st of ["20261001T030000Z", "20261005T030000Z", "20261006T030000Z", "20261006T230000Z"]) make(dest, st);
+      const res = run(["--dir", dest, "--keep", "1"], { FAKE_STAMP: NOW_STAMP });
+      assert.equal(res.status, 0, res.stderr);
+      assert.equal(present(dest, NOW_STAMP), true);
+      for (const st of ["20261005T030000Z", "20261006T030000Z", "20261006T230000Z"]) assert.equal(present(dest, st), true, st);
+      assert.equal(present(dest, "20261001T030000Z"), false);
+    });
+  });
+
+  describe("이름이 비슷한 디렉터리", () => {
+    it("관리 대상 이름의 디렉터리가 있어도 실행이 성공하고 디렉터리는 남으며 foreign 으로 알린다", () => {
+      const dest = freshDir();
+      fs.mkdirSync(dest, { mode: 0o700 });
+      fs.mkdirSync(path.join(dest, "memento-20200101T000000Z.roles.sql"));
+      fs.mkdirSync(path.join(dest, "memento-20200101T000000Z.dump.partial"));
+      for (const name of OLD_SET("20200102T030000Z")) fs.writeFileSync(path.join(dest, name), "old");
+      for (let i = 0; i < 2; i++) {
+        const res = run(["--dir", dest, "--keep", "1"], { FAKE_STAMP: `2026100${3 + i}T070000Z` });
+        assert.equal(res.status, 0, res.stderr);
+        assert.match(res.stderr, /foreign entry skipped: memento-20200101T000000Z\.roles\.sql \(directory\)/);
+      }
+      assert.equal(fs.statSync(path.join(dest, "memento-20200101T000000Z.roles.sql")).isDirectory(), true);
+      assert.equal(fs.statSync(path.join(dest, "memento-20200101T000000Z.dump.partial")).isDirectory(), true);
+      assert.equal(fs.existsSync(path.join(dest, OLD_SET("20200102T030000Z")[0])), false);
+    });
+  });
+
+  describe("옵션 값 검증", () => {
+    for (const [flag, value] of [["--keep", "08"], ["--keep", "007"], ["--keep", "0"], ["--keep", "99999"], ["--keep", "abc"], ["--keep", "-1"],
+                                 ["--prune-labelled", "08"], ["--prune-labelled", "0"], ["--prune-labelled", "99999"]]) {
+      it(`${flag} ${value} 은 산술 오류 문구 없이 종료 코드 2로 거부한다`, () => {
+        const res = run(["--dir", freshDir(), flag, value, "--dry-run"]);
+        assert.equal(res.status, 2);
+        assert.doesNotMatch(res.stderr, /syntax|arithmetic|value too great|연산/i);
+        assert.equal(res.stderr.trim().split("\n").length, 1, res.stderr);
+      });
+    }
+
+    it("환경변수 보관 일수의 앞자리 0도 같은 방식으로 거부한다", () => {
+      const res = run(["--dir", freshDir(), "--dry-run"], { MEMENTO_BACKUP_KEEP_DAYS: "08" });
+      assert.equal(res.status, 2);
+      assert.doesNotMatch(res.stderr, /syntax|arithmetic|value too great/i);
+    });
+
+    for (const args of [["--dir", "--keep", "5"], ["--keep", "--dry-run"], ["--label", "--dry-run"], ["--dbname", "--dry-run"], ["--host", "--no-roles"]]) {
+      it(`값 자리에 옵션이 오면(${args.join(" ")}) 거부한다`, () => {
+        const res = run([...args, "--dir", freshDir()]);
+        assert.equal(res.status, 2);
+        assert.match(res.stderr, /값이 필요하다/);
+      });
+    }
+
+    it("상속된 dbname 환경변수로 접속 문자열 검사를 우회하거나 역할 덤프에 새지 않는다", () => {
+      const log = path.join(root, `stub-${seq}.log`);
+      const res = run(["--dir", freshDir()], { dbname: "host=h password=zz", STUB_LOG: log });
+      assert.equal(res.status, 0, res.stderr);
+      assert.ok(!fs.readFileSync(log, "utf8").includes("password=zz"));
     });
   });
 });

@@ -16,7 +16,7 @@ import path                            from "node:path";
 
 import {
   BackupPolicyError, parseBackupFile, selectExpired, assertOutsideRepo, resolveReal, backupSet, main,
-  isOwnPartial, assertLabel, assertNotProtectedDir
+  isOwnPartial, assertLabel, assertNotProtectedDir, scanDirectory
 } from "../../scripts/ops/backup-policy.mjs";
 
 /** 한 번의 백업이 만드는 파일 묶음. */
@@ -158,6 +158,90 @@ describe("라벨이 붙은 벌의 보관", () => {
       assert.throws(() => assertLabel(bad), BackupPolicyError, bad);
     }
     assert.equal(assertLabel("a".repeat(32)), "a".repeat(32));
+  });
+});
+
+describe("방금 쓴 벌의 보호", () => {
+  const protect = (stamp, label = null) => ({ stamp, label });
+
+  it("보호한 벌과 같거나 늦은 벌은 어떤 규칙으로도 삭제 대상이 되지 않는다", () => {
+    const names = [...setOf("20261003T030000Z"), ...setOf("20261003T230000Z"), ...setOf("20261004T030000Z"), ...setOf("20261001T030000Z")];
+    const out   = selectExpired(names, 1, { protect: protect("20261003T030000Z") });
+    assert.deepEqual(out, setOf("20261001T030000Z").sort());
+  });
+
+  it("나중 시각의 벌이 있어 규칙상 밀려나는 새 벌도 보호한다", () => {
+    const names = [...setOf("20261003T030000Z"), ...setOf("20261004T030000Z")];
+    assert.deepEqual(selectExpired(names, 1), setOf("20261003T030000Z").sort());
+    assert.deepEqual(selectExpired(names, 1, { protect: protect("20261003T030000Z") }), []);
+  });
+
+  it("같은 날 더 늦은 벌만 남기는 규칙에서도 새 벌이 지워지지 않는다", () => {
+    const names = [...setOf("20261003T030000Z"), ...setOf("20261003T230000Z")];
+    assert.deepEqual(selectExpired(names, 14, { protect: protect("20261003T030000Z") }), []);
+  });
+
+  it("보호하지 않으면 종전 규칙대로다", () => {
+    const names = [...setOf("20261001T030000Z"), ...setOf("20261002T030000Z")];
+    assert.deepEqual(selectExpired(names, 1), setOf("20261001T030000Z").sort());
+    assert.deepEqual(selectExpired(names, 1, { protect: null }), setOf("20261001T030000Z").sort());
+  });
+
+  it("라벨 벌 정리에서도 보호한 시각 이후 벌은 지우지 않는다", () => {
+    const labelled = ["dump", "dump.sha256"].map(k => `memento-20200101T000000Z-x.${k}`);
+    const out = selectExpired(labelled, 1, { pruneLabelledDays: 1, now: new Date("2026-10-03T00:00:00Z"), protect: protect("20190101T000000Z") });
+    assert.deepEqual(out, []);
+  });
+
+  it("보호할 벌의 시각 형식이 틀리면 거부한다", () => {
+    assert.throws(() => selectExpired(setOf("20261003T030000Z"), 1, { protect: protect("bad") }), BackupPolicyError);
+  });
+});
+
+describe("저장 위치 훑기", () => {
+  let dir;
+  before(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "ops-scan-")); });
+  after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  it("관리 대상 일반 파일만 돌려주고 이름이 다른 파일은 무시한다", () => {
+    const d = path.join(dir, "plain");
+    fs.mkdirSync(d);
+    fs.writeFileSync(path.join(d, "memento-20261003T031500Z.dump"), "x");
+    fs.writeFileSync(path.join(d, "memento-20261003T031500Z.dump.partial"), "x");
+    fs.writeFileSync(path.join(d, "notes.txt"), "x");
+    const notes = [];
+    assert.deepEqual(scanDirectory(d, (l) => notes.push(l)), ["memento-20261003T031500Z.dump", "memento-20261003T031500Z.dump.partial"]);
+    assert.deepEqual(notes, []);
+  });
+
+  it("관리 대상 이름의 디렉터리는 계획에서 빼고 foreign 으로 알린다", () => {
+    const d = path.join(dir, "dirs");
+    fs.mkdirSync(d);
+    fs.mkdirSync(path.join(d, "memento-20261003T031500Z.roles.sql"));
+    fs.mkdirSync(path.join(d, "memento-20261003T031500Z.dump.partial"));
+    const notes = [];
+    assert.deepEqual(scanDirectory(d, (l) => notes.push(l)), []);
+    assert.equal(notes.length, 2);
+    assert.match(notes[0], /foreign entry skipped: memento-20261003T031500Z\.dump\.partial \(directory\)/);
+    assert.deepEqual(selectExpired(scanDirectory(d, () => {}), 1), []);
+  });
+
+  it("관리 대상 이름이 심볼릭 링크이면 이름을 담아 거부한다", () => {
+    const d = path.join(dir, "links");
+    fs.mkdirSync(d);
+    fs.symlinkSync(path.join(dir, "nowhere"), path.join(d, "memento-20261003T031500Z.counts.json.partial"));
+    assert.throws(() => scanDirectory(d, () => {}), (e) => e instanceof BackupPolicyError && e.message.includes("counts.json.partial"));
+  });
+
+  it("관리 대상이 아닌 이름의 심볼릭 링크는 무시한다", () => {
+    const d = path.join(dir, "otherlinks");
+    fs.mkdirSync(d);
+    fs.symlinkSync(path.join(dir, "nowhere"), path.join(d, "other-link"));
+    assert.deepEqual(scanDirectory(d, () => {}), []);
+  });
+
+  it("없는 저장 위치는 빈 결과다", () => {
+    assert.deepEqual(scanDirectory(path.join(dir, "missing"), () => {}), []);
   });
 });
 
@@ -325,6 +409,38 @@ describe("명령줄 진입점", () => {
       assert.deepEqual(withPrune.lines, labelledFiles.sort());
     } finally {
       for (const name of labelledFiles) fs.rmSync(path.join(tmp, name));
+    }
+  });
+
+  it("expire는 앞자리 0이 있는 일수를 거부한다", () => {
+    for (const bad of ["08", "007", "0"]) {
+      assert.throws(() => main(["expire", tmp, bad], collect().io), BackupPolicyError, bad);
+      assert.throws(() => main(["expire", tmp, "1", "--prune-labelled", bad], collect().io), BackupPolicyError, bad);
+    }
+  });
+
+  it("expire에 --with 를 주면 그 벌을 보호하고 이미 디스크에 있어도 이름이 중복되지 않는다", () => {
+    const extra = setOf("20261003T030000Z");
+    for (const name of extra) fs.writeFileSync(path.join(tmp, name), "x");
+    try {
+      const { lines, io } = collect();
+      main(["expire", tmp, "1", "--with", "20261003T030000Z"], io);
+      assert.deepEqual(lines, [...setOf("20261001T030000Z"), ...setOf("20261002T030000Z")].sort());
+    } finally {
+      for (const name of extra) fs.rmSync(path.join(tmp, name));
+    }
+  });
+
+  it("expire는 관리 대상 심볼릭 링크를 만나면 아무것도 내지 않고 거부한다", () => {
+    const link = path.join(tmp, "memento-20260101T000000Z.dump.sha256");
+    fs.symlinkSync(path.join(tmp, "nowhere"), link);
+    try {
+      const { lines, io } = collect();
+      assert.throws(() => main(["expire", tmp, "1"], io), BackupPolicyError);
+      assert.throws(() => main(["partials", tmp], io), BackupPolicyError);
+      assert.deepEqual(lines, []);
+    } finally {
+      fs.rmSync(link);
     }
   });
 

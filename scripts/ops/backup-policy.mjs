@@ -12,8 +12,9 @@
  * 명령줄:
  *   node scripts/ops/backup-policy.mjs guard <저장 위치>        저장소 안쪽, 루트, 홈 디렉터리 자체면 종료 코드 2
  *   node scripts/ops/backup-policy.mjs expire <저장 위치> <일수> [--with <시각>[:<라벨>]] [--prune-labelled <일수>]
- *                                                             삭제 대상 파일 이름을 한 줄씩 출력. --with 는 그 시각의
- *                                                             새 벌이 있는 것으로 보고 고른다
+ *                                                             삭제 대상 파일 이름을 한 줄씩 출력. --with 는 이번 실행이
+ *                                                             쓰는(쓴) 벌이며 목록에 넣고 삭제에서 보호한다. 관리 대상
+ *                                                             이름이 심볼릭 링크이면 종료 코드 2
  *   node scripts/ops/backup-policy.mjs partials <저장 위치>      이 스크립트가 남긴 미확정 파일 이름을 한 줄씩 출력
  *   node scripts/ops/backup-policy.mjs set <시각> [라벨]         한 번의 백업 파일 이름을 출력
  */
@@ -118,17 +119,14 @@ function stampToDate(stamp) {
  *
  * @param {string[]} names 저장 위치의 파일 이름 목록
  * @param {number} keepDays 남길 날짜 수(1 이상의 정수)
- * @param {{pruneLabelledDays?: number|null, now?: Date}} [options]
+ * @param {{pruneLabelledDays?: number|null, now?: Date, protect?: {stamp: string, label: string|null}|null}} [options]
+ *   protect: 이번 실행이 쓴 벌. 이 벌과 시각이 같거나 더 늦은 벌은 어떤 규칙으로도 삭제 대상에 넣지 않는다
+ *   (시계가 뒤로 갔거나 나중 시각의 벌이 복사돼 있어도 새 벌이 지워지지 않는다)
  * @returns {string[]} 정렬된 삭제 대상 파일 이름
  */
 export function selectExpired(names, keepDays, options = {}) {
-  const { pruneLabelledDays = null, now = new Date() } = options;
-  if (!Number.isInteger(keepDays) || keepDays < 1) {
-    throw new BackupPolicyError(`보관 일수는 1 이상의 정수여야 한다: ${String(keepDays)}`);
-  }
-  if (pruneLabelledDays !== null && (!Number.isInteger(pruneLabelledDays) || pruneLabelledDays < 1)) {
-    throw new BackupPolicyError(`라벨 벌 정리 일수는 1 이상의 정수여야 한다: ${String(pruneLabelledDays)}`);
-  }
+  const { pruneLabelledDays = null, now = new Date(), protect = null } = options;
+  assertSelectArguments(keepDays, pruneLabelledDays, protect);
 
   const plain    = [];
   const labelled = [];
@@ -138,17 +136,8 @@ export function selectExpired(names, keepDays, options = {}) {
     (info.label === null ? plain : labelled).push({ name, ...info });
   }
 
-  const newestByDay = new Map();
-  for (const item of plain) {
-    if (item.kind !== "dump") continue;
-    const current = newestByDay.get(item.day);
-    if (current === undefined || item.stamp > current) newestByDay.set(item.day, item.stamp);
-  }
-
-  const keptDays   = [...newestByDay.keys()].sort().reverse().slice(0, keepDays);
-  const keptStamps = new Set(keptDays.map(day => newestByDay.get(day)));
-
-  const expired = plain.filter(item => !keptStamps.has(item.stamp)).map(item => item.name);
+  const keptStamps = keptPlainStamps(plain, keepDays);
+  const expired    = plain.filter(item => !keptStamps.has(item.stamp)).map(item => item.name);
 
   if (pruneLabelledDays !== null) {
     const cutoff = now.getTime() - pruneLabelledDays * DAY_MS;
@@ -156,7 +145,46 @@ export function selectExpired(names, keepDays, options = {}) {
       if (stampToDate(item.stamp).getTime() < cutoff) expired.push(item.name);
     }
   }
-  return expired.sort();
+  const allowed = protect === null ? expired : expired.filter(name => parseBackupFile(name).stamp < protect.stamp);
+  return allowed.sort();
+}
+
+/**
+ * selectExpired 인자를 검사한다.
+ *
+ * @param {number} keepDays
+ * @param {number|null} pruneLabelledDays
+ * @param {{stamp: string}|null} protect
+ * @returns {void}
+ */
+function assertSelectArguments(keepDays, pruneLabelledDays, protect) {
+  if (!Number.isInteger(keepDays) || keepDays < 1) {
+    throw new BackupPolicyError(`보관 일수는 1 이상의 정수여야 한다: ${String(keepDays)}`);
+  }
+  if (pruneLabelledDays !== null && (!Number.isInteger(pruneLabelledDays) || pruneLabelledDays < 1)) {
+    throw new BackupPolicyError(`라벨 벌 정리 일수는 1 이상의 정수여야 한다: ${String(pruneLabelledDays)}`);
+  }
+  if (protect !== null && !STAMP_PATTERN.test(String(protect.stamp))) {
+    throw new BackupPolicyError(`보호할 벌의 시각 형식이 아니다: ${JSON.stringify(protect.stamp)}`);
+  }
+}
+
+/**
+ * 라벨 없는 완결된 벌 중 날짜별 가장 늦은 벌을 최근 keepDays개 날짜만큼 고른다.
+ *
+ * @param {{stamp: string, day: string, kind: string}[]} plain
+ * @param {number} keepDays
+ * @returns {Set<string>} 남길 시각
+ */
+function keptPlainStamps(plain, keepDays) {
+  const newestByDay = new Map();
+  for (const item of plain) {
+    if (item.kind !== "dump") continue;
+    const current = newestByDay.get(item.day);
+    if (current === undefined || item.stamp > current) newestByDay.set(item.day, item.stamp);
+  }
+  const keptDays = [...newestByDay.keys()].sort().reverse().slice(0, keepDays);
+  return new Set(keptDays.map(day => newestByDay.get(day)));
 }
 
 /**
@@ -220,38 +248,88 @@ export function assertNotProtectedDir(dest, home, resolve = resolveReal) {
 }
 
 /**
+ * 저장 위치의 관리 대상 이름을 훑는다. 일반 파일만 계획 대상이다. 관리 대상 이름이
+ * 심볼릭 링크이면 링크를 따라가 파일을 쓰거나 지우게 되므로 오류로 멈추고, 디렉터리나 그 밖의
+ * 특수 파일은 계획에서 빼고 foreign 으로 알린다.
+ *
+ * @param {string} dir 저장 위치(없으면 빈 결과)
+ * @param {(line: string) => void} note foreign 알림 출력
+ * @returns {string[]} 관리 대상 일반 파일 이름(정렬됨)
+ */
+export function scanDirectory(dir, note) {
+  if (!fs.existsSync(dir)) return [];
+  const files = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!parseBackupFile(entry.name) && !isOwnPartial(entry.name)) continue;
+    if (entry.isSymbolicLink()) {
+      throw new BackupPolicyError(`관리 대상 이름이 심볼릭 링크라 진행하지 않는다: ${entry.name}`);
+    }
+    if (entry.isFile()) {
+      files.push(entry.name);
+    } else {
+      note(`foreign entry skipped: ${entry.name} (${entry.isDirectory() ? "directory" : "not a regular file"})`);
+    }
+  }
+  return files.sort();
+}
+
+/**
+ * guard 명령: 저장 위치 검사.
+ *
+ * @param {string} dest
+ * @param {{out: (line: string) => void}} io
+ * @returns {void}
+ */
+function runGuard(dest, io) {
+  const resolved = assertOutsideRepo(dest, REPO_ROOT);
+  assertNotProtectedDir(resolved, process.env.HOME ?? os.homedir());
+  io.out(resolved);
+}
+
+/**
+ * expire 명령: 삭제 대상 이름 출력. 이번 실행이 쓴 벌(--with)은 목록에 넣고 보호한다.
+ *
+ * @param {string} dir
+ * @param {string[]} args 보관 일수와 선택 인자
+ * @param {{out: (line: string) => void}} io
+ * @param {(line: string) => void} note
+ * @returns {void}
+ */
+function runExpire(dir, args, io, note) {
+  const [keep, ...flags] = args;
+  if (!/^[1-9]\d*$/.test(String(keep))) throw new BackupPolicyError(`보관 일수는 1 이상의 정수여야 한다: ${String(keep)}`);
+  const options  = parseExpireFlags(flags);
+  const existing = scanDirectory(dir, note);
+  const planned  = options.planned === null ? [] : Object.values(backupSet(options.planned.stamp, options.planned.label));
+  const names    = [...new Set([...existing, ...planned])];
+  const expired  = selectExpired(names, Number(keep), { pruneLabelledDays: options.pruneLabelledDays, protect: options.planned });
+  for (const name of expired) io.out(name);
+}
+
+/**
  * 명령줄 진입점.
  *
  * @param {string[]} argv
- * @param {{out: (line: string) => void}} [io]
+ * @param {{out: (line: string) => void, err?: (line: string) => void}} [io]
  * @returns {void}
  */
-export function main(argv, io = { out: (line) => process.stdout.write(`${line}\n`) }) {
+export function main(argv, io = { out: (line) => process.stdout.write(`${line}\n`), err: (line) => process.stderr.write(`${line}\n`) }) {
+  const note = io.err ?? (() => {});
   const [command, first, ...rest] = argv;
-  if (command === "guard") {
-    const resolved = assertOutsideRepo(first, REPO_ROOT);
-    assertNotProtectedDir(resolved, process.env.HOME ?? os.homedir());
-    io.out(resolved);
-  } else if (command === "expire") {
-    const [keep, ...flags] = rest;
-    if (!/^\d+$/.test(String(keep))) throw new BackupPolicyError(`보관 일수는 정수여야 한다: ${String(keep)}`);
-    const options = parseExpireFlags(flags);
-    const existing = fs.existsSync(first) ? fs.readdirSync(first) : [];
-    const planned  = options.planned === null ? [] : Object.values(backupSet(options.planned.stamp, options.planned.label));
-    for (const name of selectExpired([...existing, ...planned], Number(keep), { pruneLabelledDays: options.pruneLabelledDays })) {
-      if (!planned.includes(name)) io.out(name);
-    }
-  } else if (command === "partials") {
-    if (!fs.existsSync(first)) return;
-    for (const name of fs.readdirSync(first).sort()) {
+  if (command === "guard") return runGuard(first, io);
+  if (command === "expire") return runExpire(first, rest, io, note);
+  if (command === "partials") {
+    for (const name of scanDirectory(first, note)) {
       if (isOwnPartial(name)) io.out(name);
     }
-  } else if (command === "set") {
+    return undefined;
+  }
+  if (command === "set") {
     const names = backupSet(first, rest[0] ?? null);
     for (const kind of ["dump", "sha256", "counts", "roles"]) io.out(names[kind]);
-  } else {
-    throw new BackupPolicyError("명령은 guard, expire, partials, set 중 하나여야 한다");
+    return undefined;
   }
+  throw new BackupPolicyError("명령은 guard, expire, partials, set 중 하나여야 한다");
 }
 
 /**
@@ -268,7 +346,7 @@ function parseExpireFlags(flags) {
       const [stamp, label] = String(value).split(":");
       out.planned = { stamp, label: label ?? null };
     } else if (flags[i] === "--prune-labelled") {
-      if (!/^\d+$/.test(String(value))) throw new BackupPolicyError(`라벨 벌 정리 일수는 정수여야 한다: ${String(value)}`);
+      if (!/^[1-9]\d*$/.test(String(value))) throw new BackupPolicyError(`라벨 벌 정리 일수는 1 이상의 정수여야 한다: ${String(value)}`);
       out.pruneLabelledDays = Number(value);
     } else {
       throw new BackupPolicyError(`알 수 없는 인자: ${String(flags[i])}`);
