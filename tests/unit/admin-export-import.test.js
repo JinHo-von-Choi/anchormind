@@ -35,7 +35,7 @@ mock.module("../../lib/logging/audit.js", {
 });
 
 const { handleExport, handleImport } = await import("../../lib/admin/admin-export.js");
-const { ImportAbortedError }         = await import("../../lib/memory/transfer/importErrors.js");
+const { ImportAbortedError, ImportInputError } = await import("../../lib/memory/transfer/importErrors.js");
 const { UnsupportedFormatVersionError, RECORD } = await import("../../lib/memory/transfer/exportFormat.js");
 const { ImportReport }               = await import("../../lib/memory/transfer/ImportReport.js");
 
@@ -163,7 +163,7 @@ describe("POST /import", () => {
     await handleImport(req("POST", { body: { fragments: [{ content: "본문 하나", topic: "t" }, { content: "본문 둘", topic: "t" }] } }),
       res, url(`${BASE}/import`), h.deps);
     assert.equal(res.statusCode, 200, res.body);
-    assert.equal(h.seen.records.length, 2);
+    assert.equal(h.seen.records.filter(r => r.kind === "fragment").length, 2);
     assert.equal(JSON.parse(res.body).imported, 2);
     assert.equal(JSON.parse(res.body).skipped, 1);
   });
@@ -245,6 +245,46 @@ describe("POST /import", () => {
     assert.equal(JSON.parse(res.body).restore, true);
     assert.equal(audits.length, 1);
     assert.match(audits[0].fields.details, /restore=trusted/);
+  });
+
+  it("되살리기가 대상 DB 실패로 중단되면 그때까지의 집계를 aborted로 감사에 남긴다", async () => {
+    const report = new ImportReport();
+    report.imported("fragments");
+    report.imported("fragments");
+    const h   = importHarness({ throwError: new ImportAbortedError(report, new Error("down")) });
+    h.deps.run = async (records, deps) => {
+      deps.report.imported("fragments");
+      deps.report.imported("fragments");
+      throw new ImportAbortedError(deps.report, new Error("down"));
+    };
+    const res = fakeRes();
+    await handleImport(req("POST", { body: { fragments: [] } }), res, url(`${BASE}/import?restore=trusted`), h.deps);
+    assert.equal(res.statusCode, 500);
+    assert.equal(audits.length, 1);
+    assert.match(audits[0].fields.details, /outcome=aborted .*imported=2/);
+    assert.equal(audits[0].fields.success, false);
+  });
+
+  it("되살리기가 그 밖의 오류로 멈춰도 감사를 남기고 정상 종료는 completed다", async () => {
+    const h = importHarness({ throwError: new Error("unexpected") });
+    await handleImport(req("POST", { body: { fragments: [] } }), fakeRes(), url(`${BASE}/import?restore=trusted`), h.deps);
+    assert.match(audits[0].fields.details, /outcome=failed/);
+
+    audits.length = 0;
+    await handleImport(req("POST", { body: { fragments: [] } }), fakeRes(), url(`${BASE}/import?restore=trusted`), importHarness().deps);
+    assert.match(audits[0].fields.details, /outcome=completed/);
+  });
+
+  it("알아볼 수 있는 기록이 없는 입력은 400 no_valid_records이고 집계를 담는다", async () => {
+    const report = new ImportReport();
+    report.reject("fragments", "invalid_json");
+    const h   = importHarness({ throwError: new ImportInputError(report) });
+    const res = fakeRes();
+    await handleImport(req("POST", { body: { fragments: [] } }), res, url(`${BASE}/import`), h.deps);
+    assert.equal(res.statusCode, 400);
+    const body = JSON.parse(res.body);
+    assert.equal(body.error, "no_valid_records");
+    assert.equal(body.partial.rejected, 1);
   });
 
   it("restore에 다른 값을 주면 400이다", async () => {

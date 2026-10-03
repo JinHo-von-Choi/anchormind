@@ -12,7 +12,7 @@ import { describe, it, mock, beforeEach } from "node:test";
 import assert                             from "node:assert/strict";
 
 const statements = [];
-let   insertRows = [{ id: "f1", created: true }];
+let   insertRows = [{ id: "f1", importance: 0.6, created: true }];
 let   twin       = null;
 
 const fakeClient = {
@@ -36,7 +36,7 @@ const { WriteGate }                                 = await import("../../lib/me
 
 beforeEach(() => {
   statements.length = 0;
-  insertRows        = [{ id: "f1", created: true }];
+  insertRows        = [{ id: "f1", importance: 0.6, created: true }];
   twin              = null;
 });
 
@@ -57,7 +57,7 @@ describe("insertDetailed", () => {
 
   it("새 행이면 created가 true다", async () => {
     const result = await writer.insertDetailed(await approved(), { client: fakeClient });
-    assert.deepEqual(result, { id: "f1", created: true });
+    assert.deepEqual(result, { id: "f1", created: true, importance: 0.6 });
   });
 
   it("같은 본문이 이미 있으면 기존 id와 created=false를 돌려주고 쓰지 않는다", async () => {
@@ -68,9 +68,9 @@ describe("insertDetailed", () => {
   });
 
   it("충돌로 기존 행이 갱신되면 created=false다", async () => {
-    insertRows = [{ id: "other", created: false }];
+    insertRows = [{ id: "other", importance: 0.6, created: false }];
     const result = await writer.insertDetailed(await approved(), { client: fakeClient });
-    assert.deepEqual(result, { id: "other", created: false });
+    assert.deepEqual(result, { id: "other", created: false, importance: 0.6 });
   });
 
   it("insert는 id만 돌려준다", async () => {
@@ -93,6 +93,23 @@ describe("insertDetailed", () => {
     statements.length = 0;
     await writer.insertDetailed(await approved(), { client: fakeClient });
     assert.equal(insertStatement().params[28], null);
+  });
+
+  it("되살린 품질 판정 열을 INSERT 바인딩에 넣고 없으면 null을 넣는다", async () => {
+    await writer.insertDetailed(await approved({ quality_verified: true, quality_rationale: "근거" }), { client: fakeClient });
+    const withQuality = insertStatement();
+    assert.match(withQuality.sql, /quality_verified, quality_rationale/);
+    assert.deepEqual(withQuality.params.slice(29, 31), [true, "근거"]);
+
+    statements.length = 0;
+    await writer.insertDetailed(await approved(), { client: fakeClient });
+    assert.deepEqual(insertStatement().params.slice(29, 31), [null, null]);
+  });
+
+  it("같은 id의 키 소속을 조회한다", async () => {
+    const found = await writer.findKeyOfId("f1", { client: { query: async () => ({ rows: [{ key_id: "k9" }] }) } });
+    assert.deepEqual(found, { key_id: "k9" });
+    assert.equal(await writer.findKeyOfId("none", { client: { query: async () => ({ rows: [] }) } }), null);
   });
 
   it("importance는 기본으로 유형 상한을 적용하고 exactImportance이면 그대로 기록한다", async () => {

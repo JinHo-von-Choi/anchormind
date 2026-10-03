@@ -44,6 +44,8 @@
 2. 그 기간 동안 영향을 받는 응답에 `Deprecation` 헤더를 싣고, 폐기 예정일을 `Sunset` 헤더로 알린다.
 3. 유예가 끝난 뒤의 첫 주 버전에서 기존 동작을 제거한다.
 
+예외: 호출자가 `format_version`이나 `Accept`로 낮은 export 형식 버전을 명시하면 그 버전의 구조로 응답하므로, 낮은 버전에 없는 열이 빠지는 것은 호환을 깨는 변경이 아니라 요청한 형식이다(아래 「협상과 다운그레이드」).
+
 ## 데이터베이스 스키마
 
 마이그레이션은 확장 후 축소(expand/contract)로 나눈다.
@@ -104,14 +106,16 @@
 | 앵커 | `is_anchor`는 소유자 경로(관리 API, 서버 호스트의 CLI)에서만 파일 값을 따른다. 그 밖의 경로는 무시하고 `ignored.is_anchor`로 센다 |
 | 쓰기 관문 | 모든 파편 줄은 의미 쓰기 관문(민감 정보 마스킹, 저장 길이 절삭, 최소 품질, 정책 판정, workspace 허가)을 거쳐 기록한다 |
 | 보통 가져오기 | 관문이 본문을 바꾸거나 거부한다. 바뀐 행은 응답의 `transformed`로 센다. importance는 유형별 상한을 적용하고 `ttl_tier`는 `warm`으로 둔다 |
-| 되살리기(`restore=trusted`, `--restore`) | 소유자 경로에서 형식 버전 2 파일에만 쓸 수 있다. 최소 품질 검사와 저장 길이 절삭을 건너뛰고 `importance`, `ttl_tier`, `workspace_source`를 파일 값 그대로 기록한다. 민감 정보 마스킹은 그대로 적용한다. 관리 API와 CLI는 감사 로그에 한 줄을 남긴다 |
+| 되살리기(`restore=trusted`, `--restore`) | 소유자 경로에서 형식 버전 2 파일에만 쓸 수 있다. 최소 품질 검사와 저장 길이 절삭을 건너뛰고 `importance`, `ttl_tier`, `workspace_source`를 파일 값 그대로 기록한다. 민감 정보 마스킹은 `MEMENTO_WRITE_GATE`가 켜져 있는 동안 그대로 적용한다(끄면 가져오기 줄에는 관문 단계가 없어 본문을 다듬지도 가리지도 않는다). 파일의 `quality_verified`와 `quality_rationale`도 되살린다. 본문은 앞뒤 공백을 자르므로 바이트까지 같지는 않다. 관리 API와 CLI는 끝나든 중단되든 오류로 멈추든 감사 로그에 한 줄(`outcome`: completed, aborted, failed, 그때까지의 집계)을 남긴다 |
 | 시각 | `created_at`과 `valid_from`은 파일 값을 쓴다. 해석할 수 없거나 내일 이후의 값은 무시하고 서버 시각을 쓴다 |
-| 초기화되는 열 | `access_count`, `accessed_at`, `verified_at`, `utility_score`는 가져온 시점의 서버 값이 된다. 임베딩은 다시 만들고(관리 API는 임베딩 큐에 올린다), `linked_to`는 링크 줄에서 다시 만든다 |
+| 열별 처리 | 파일 값을 따르는 열: `id`, `content`(관문 규칙을 거친 값), `topic`, `type`, `keywords`(소문자 정규화), `importance`(보통 가져오기는 유형별 상한), `source`, `agent_id`, `is_anchor`(소유자 경로), `ttl_tier`(보통 가져오기는 `warm`), `created_at`, `valid_from`, `case_id`, `goal`, `outcome`, `phase`, `resolution_status`, `assertion_status`, `context_summary`, `session_id`(문자열일 때), `workspace`, `workspace_source`(보통 가져오기는 `workspace`가 있으면 `explicit`, 없으면 `unscoped`), `idempotency_key`, `affect`. 다시 계산하는 열: `content_hash`, `estimated_tokens`, `validation_warnings`(관문이 판정하며 파일 값은 믿지 않는다). 대상이 정하는 열: `key_id`. 되살리기에서만 따르는 열: `quality_verified`, `quality_rationale`(보통 가져오기는 비운다). 가져온 시점의 서버 값이 되는 열: `access_count`, `accessed_at`, `verified_at`, `utility_score`. 가져오지 않는 열: `valid_to`(닫힌 행은 내보내지 않는다). 임베딩은 다시 만들고(관리 API는 임베딩 큐에 올린다), `linked_to`는 링크 줄에서 다시 만든다 |
 | 순서 | 링크와 이력은 파편 줄 뒤에 와야 한다. 링크는 양 끝 파편이 같은 실행에서 처리된 경우에만 기록한다 |
-| dryRun | 같은 경로로 처리하고 끝에 트랜잭션을 되돌린다. 집계는 실제 실행과 같다 |
+| dryRun | 같은 경로로 처리하고 끝에 트랜잭션을 되돌린다. 집계는 실제 실행과 같고 관문 지표는 남기지 않는다. 하나의 트랜잭션이라 기록한 행의 잠금을 실행이 끝날 때까지 쥐고 있으므로, 같은 파편을 쓰는 다른 작업과 겹치지 않는 시간에 파일당 파편 줄을 5000개 안팎으로 나누어 실행한다 |
+| 중복과 충돌 | 같은 본문이 이미 있으면 duplicates다. 같은 id에 다른 본문이면 `id_conflict`로 거부한다. 동시에 같은 행을 가져온 경우에는 한 번 다시 확인해 같은 본문이면 duplicates로 센다. `--idempotent`는 같은 키 소속의 같은 id만 duplicates로 세고 다른 키 소속의 id는 `id_conflict`다. 다른 행이 쓰는 `idempotency_key`는 `idempotency_conflict`로 거부한다 |
+| 알아볼 수 없는 입력 | 머리 줄도 끝 줄도 없고 모든 줄이 JSON이 아니거나 기록이 아니면 아무것도 기록하지 않고 거부한다(관리 API 400 `no_valid_records`, CLI 종료 코드 1) |
 
 집계는 imported(새로 기록), duplicates(같은 본문이 이미 있음), rejected(유형이 있는 사유), errors(행 문제가 아닌 실패)로 나뉘며 한 행은 하나에만 들어간다. 응답 형식은 [API 레퍼런스](api-reference.md)의 가져오기 절을 따른다.
 
 ### 왕복 성질
 
-저장 규칙(마스킹, 유형별 길이 상한, 최소 품질)을 이미 지킨 행은 내보낸 뒤 빈 데이터베이스에 가져와도 `content_hash`, 열 값, 링크가 같다. 보통 가져오기는 이 성질을 보장하지 않는 행(길이 상한을 넘기거나 최소 품질에 못 미치는 기존 행)을 `transformed`나 `rejected`로 드러낸다. 그런 행까지 저장된 값 그대로 되살려야 하면 소유자 경로에서 되살리기를 쓴다.
+저장 규칙(마스킹, 유형별 길이 상한, 최소 품질)을 이미 지킨 행은 내보낸 뒤 빈 데이터베이스에 가져와도 `content_hash`와 링크가 같고, 내보내기 열 전체 중 위 「열별 처리」의 다시 계산하는 열(`validation_warnings`), 서버 값이 되는 열(`access_count`, `accessed_at`, `verified_at`, `utility_score`), 되살리기에서만 따르는 열(`quality_verified`, `quality_rationale`)을 뺀 나머지 열의 값이 같다. 되살리기는 되살리기에서만 따르는 열도 같게 만든다. 보통 가져오기는 이 성질을 보장하지 않는 행(길이 상한을 넘기거나 최소 품질에 못 미치는 기존 행, 유형별 importance 상한에 걸리는 행)을 `transformed`(사유 `content`, `importance`)나 `rejected`로 드러낸다. 그런 행까지 저장된 값 그대로 되살려야 하면 소유자 경로에서 되살리기를 쓴다.

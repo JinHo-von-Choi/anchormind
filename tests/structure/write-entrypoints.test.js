@@ -105,8 +105,8 @@ const ALLOWED_SEMANTIC_CALLS = Object.freeze({
     "FragmentStore 파사드가 FragmentWriter.insert로 위임한다. 파사드의 호출자를 검사한다",
   "lib/memory/write/FragmentStore.js::update":
     "FragmentStore 파사드가 FragmentWriter.update로 위임한다. 파사드의 호출자를 검사한다",
-  [`${FI}::writeImportRow`]:
-    "checkImportRow가 만든 관문 통과 후보만 받는다. ImportRunner가 checkImportRow 결과로만 부르고 FragmentWriter가 관문 표식을 실행 시 확인한다",
+  [`${FI}::insertGuarded`]:
+    "writeImportRow가 checkImportRow가 만든 관문 통과 후보만 넘긴다. ImportRunner가 checkImportRow 결과로만 부르고 FragmentWriter가 관문 표식을 실행 시 확인한다",
   [`${MR}::normalizeFragmentAgentToDefault`]:
     "승인 목록 CLI의 agent_id 공유 전환이다. 의미 열을 넘기지 않고 이력 보관 트랜잭션이 필요해 update를 쓴다",
   "lib/memory/processors/MemoryLinker.js::link":

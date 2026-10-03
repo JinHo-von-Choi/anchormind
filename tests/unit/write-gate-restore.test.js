@@ -12,6 +12,7 @@ import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
 import { WriteGate, WriteInputError, RESTORE_STEPS, STEP_ORDER } from "../../lib/memory/write/WriteGate.js";
+import { writeGateTotal }                                        from "../../lib/memory/write/write-gate-metrics.js";
 
 const check = (gate, content, extra = {}) => gate.check({
   entry: "cli_import", op: "create", mode: "production",
@@ -48,5 +49,26 @@ describe("RESTORE_STEPS", () => {
 
   it("본문이 비어 있으면 되살리기도 거부한다", async () => {
     await assert.rejects(() => check(restore, "   "), WriteInputError);
+  });
+});
+
+describe("check의 metrics 옵션", () => {
+  const entry = "metrics_option_probe";
+  const total = async () => {
+    const { values } = await writeGateTotal.get();
+    return values.filter(v => v.labels.entry === entry).reduce((sum, v) => sum + v.value, 0);
+  };
+  const run = (metrics) => new WriteGate().check({
+    entry, op: "create", mode: "production", metrics,
+    fields: { content: "Redis 포트는 6380으로 운영한다", topic: "ops", type: "fact" },
+    build : (input) => ({ ...input })
+  });
+
+  it("none은 지표를 남기지 않고 all은 통과를 센다", async () => {
+    const before = await total();
+    await run("none");
+    assert.equal(await total(), before);
+    await run("all");
+    assert.equal(await total(), before + 1);
   });
 });

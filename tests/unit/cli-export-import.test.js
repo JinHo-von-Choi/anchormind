@@ -118,7 +118,7 @@ describe("M6: import.js", () => {
   it("--idempotent 플래그: 같은 id로 거부된 행은 duplicates, 플래그가 없으면 id_conflict로 거부한다", async () => {
     const conflict = Object.assign(new Error("duplicate key value violates unique constraint"), { code: "23505" });
     const lines    = [JSON.stringify({ id: "test-1", content: "Redis on 6380 for cache", topic: "infra" })];
-    const writer   = { insertDetailed: async () => { throw conflict; } };
+    const writer   = { insertDetailed: async () => { throw conflict; }, findKeyOfId: async () => ({ key_id: null }) };
 
     const skipped = (await runLines(lines, { idempotent: true, writer })).report.toJSON();
     assert.deepEqual([skipped.imported, skipped.duplicates, skipped.rejected], [0, 1, 0]);
@@ -132,12 +132,35 @@ describe("M6: import.js", () => {
     const { auditRestoreImport } = await import("../../lib/cli/import.js");
     const calls = [];
     await auditRestoreImport(
-      { imported: 4, duplicates: 1, rejected: 0, transformed: 2 },
-      { keyId: null, dryRun: false, audit: async (operation, fields) => { calls.push({ operation, fields }); } }
+      { imported: 4, duplicates: 1, rejected: 0, errors: 0, transformed: 2 },
+      { keyId: null, dryRun: false, outcome: "failed", audit: async (operation, fields) => { calls.push({ operation, fields }); } }
     );
     assert.equal(calls.length, 1);
     assert.equal(calls[0].operation, "cli import restore");
-    assert.match(calls[0].fields.details, /restore=trusted .*key=master imported=4 duplicates=1 rejected=0 transformed=2/);
+    assert.match(calls[0].fields.details, /restore=trusted outcome=failed .*key=master imported=4 duplicates=1 rejected=0 errors=0 transformed=2/);
+    assert.equal(calls[0].fields.success, false);
+  });
+
+  it("되살리기 실행이 오류로 멈춰도 그때까지의 집계를 failed로 감사에 남긴다", async () => {
+    const { runAudited }   = await import("../../lib/cli/import.js");
+    const { ImportReport } = await import("../../lib/memory/transfer/ImportReport.js");
+    const calls  = [];
+    const report = new ImportReport({ restore: true });
+    report.imported("fragments");
+    report.imported("fragments");
+    const audit  = async (operation, fields) => { calls.push({ operation, fields }); };
+
+    await assert.rejects(runAudited(report, { keyId: "k", dryRun: false, restore: true, audit }, async () => { throw new Error("boom"); }), /boom/);
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].fields.details, /outcome=failed .*key=k imported=2/);
+
+    calls.length = 0;
+    await runAudited(report, { keyId: null, dryRun: false, restore: true, audit }, async () => {});
+    assert.match(calls[0].fields.details, /outcome=completed/);
+
+    calls.length = 0;
+    await runAudited(report, { keyId: null, dryRun: false, restore: false, audit }, async () => {});
+    assert.equal(calls.length, 0);
   });
 
   it("임시 JSONL 파일 생성/파싱 기능 정상 동작 확인", () => {

@@ -96,10 +96,10 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | 질의 매개변수 | 설명 |
 |-|-|
 | `key_id` | 기록 대상 키. 없으면 마스터 범위(`key_id` NULL). 없는 키는 404. 파일 행의 `key_id`는 읽지 않는다 |
-| `dryRun` | `true`이면 같은 경로로 처리하고 끝에 되돌린다. 집계는 실제 실행과 같다 |
+| `dryRun` | `true`이면 같은 경로로 처리하고 끝에 되돌린다. 집계는 실제 실행과 같고 관문 지표는 남기지 않는다. 하나의 트랜잭션이라 기록한 행의 잠금을 끝날 때까지 쥐므로 같은 파편을 쓰는 작업과 겹치지 않을 때 파일당 파편 줄 5000개 안팎으로 나누어 실행한다 |
 | `restore` | `trusted`이면 저장된 값을 되살리는 가져오기(형식 버전 2 파일만, 감사 로그에 기록). 다른 값은 400 |
 
-본문은 JSON `{"fragments": [...], "links": [...], "versions": [...]}`(`links`와 `versions`는 선택, 있으면 버전 2 파일로 본다) 이거나, `Content-Type`이 `application/x-ndjson` 또는 `application/jsonl`인 export 파일 그대로다. 줄 단위 본문은 64 MiB, JSON 본문은 2 MiB까지 받는다. 파편 줄은 `content`와 `topic`이 필요하고 `type`은 생략하면 `fact`다. 줄마다 의미 쓰기 관문을 거쳐 FragmentWriter로 기록하며 파편 줄마다 트랜잭션을 연다. 새로 기록한 파편은 임베딩 큐에 올린다.
+본문은 JSON `{"fragments": [...], "links": [...], "versions": [...]}`(`links`와 `versions`는 선택, 있으면 버전 2 파일로 본다) 이거나, `Content-Type`이 `application/x-ndjson` 또는 `application/jsonl`인 export 파일 그대로다. JSON 본문 상한은 2 MiB이고 더 큰 가져오기는 64 MiB까지 받는 ndjson 본문을 쓴다. ndjson 본문은 전부 읽은 뒤 줄로 나누어 처리하므로 최대 크기에서 메모리를 본문 크기의 3배 안팎까지 쓴다. 응답은 가져오기가 끝난 뒤에 나가므로 앞단 프록시(nginx 등)의 읽기 제한 시간(`proxy_read_timeout`)을 파일 크기에 맞게 늘리거나 파일을 나누어 보낸다. 파편 줄은 `content`와 `topic`이 필요하고 `type`은 생략하면 `fact`다. 줄마다 의미 쓰기 관문을 거쳐 FragmentWriter로 기록하며 파편 줄마다 트랜잭션을 연다. 새로 기록한 파편은 임베딩 큐에 올린다.
 
 응답 예(필드 구조):
 
@@ -115,6 +115,7 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
   "links": { "imported": 5, "duplicates": 0, "rejected": 0, "errors": 0 },
   "versions": { "imported": 0, "duplicates": 0, "rejected": 0, "errors": 0 },
   "transformed": 0,
+  "transformed_by_reason": {},
   "ignored": { "key_id": 0, "is_anchor": 0 },
   "embedding_queued": 9,
   "warnings": [],
@@ -124,12 +125,12 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 ```
 
 - 최상위 `imported`, `duplicates`, `rejected`, `errors`는 파편 집계이고 `skipped`는 `duplicates`와 같은 값이다. 한 행은 imported, duplicates, rejected, errors 중 하나에만 들어간다.
-- `rejected_by_reason`의 사유: `invalid_json`(줄이 JSON이 아님), `invalid_record`(알 수 없는 줄 종류나 버전 1 파일의 링크, 이력 줄), `invalid_row`(`content`나 `topic` 없음), `input_invalid`(관문 거부: 최소 품질 미달, 4000자 초과, 형식이 잘못된 키워드), `policy_violation`(hard gate 키의 정책 위반), `id_conflict`(같은 id에 다른 본문), `database_rejected`(값 때문에 DB가 거부), `link_invalid`, `link_endpoint_missing`, `version_fragment_missing`. 거부 건수는 모두 세고 `rejected_samples`에는 최대 20건만 싣는다.
+- `rejected_by_reason`의 사유: `invalid_json`(줄이 JSON이 아님), `invalid_record`(알 수 없는 줄 종류나 버전 1 파일의 링크, 이력 줄), `invalid_row`(`content`나 `topic` 없음), `input_invalid`(관문 거부: 최소 품질 미달, 4000자 초과, 형식이 잘못된 키워드), `policy_violation`(hard gate 키의 정책 위반), `id_conflict`(같은 id에 다른 본문, 동시 가져오기로 방금 만들어진 같은 본문은 다시 확인해 duplicates로 센다), `idempotency_conflict`(다른 행이 쓰는 `idempotency_key`), `database_rejected`(값 때문에 DB가 거부), `link_invalid`, `link_endpoint_missing`, `version_fragment_missing`. 거부 건수는 모두 세고 `rejected_samples`에는 최대 20건만 싣는다.
 - `duplicates`는 같은 본문이 이미 있는 행(키 범위)이다. 같은 파일을 다시 가져오면 모든 행이 `duplicates`다.
 - `errors`는 행 문제가 아닌 DB 실패다. 이 경우 요청은 500이며 그때까지의 집계가 `partial`에 담긴다.
-- `transformed`는 관문이 본문을 바꿔 파일의 `content_hash`와 달라진 행 수다.
+- `transformed`는 새로 기록한 행 중 값이 파일과 달라진 행 수이고 `transformed_by_reason`이 사유별 건수다. `content`는 관문이 본문을 바꾼 경우(저장 길이 절삭, 마스킹, 공백 제거), `importance`는 저장 시 유형별 상한이 값을 낮춘 경우다. 한 행이 두 사유에 해당하면 `transformed`에는 한 번, 사유마다 한 번 센다.
 - `ignored`는 파일에 있었지만 반영하지 않은 `key_id`와 `is_anchor`(소유자 경로가 아닌 경우) 행 수다.
-- 읽을 수 없는 형식 버전은 400 `unsupported_format_version`, 깨진 JSON 본문은 400, 크기 초과는 413이다.
+- 읽을 수 없는 형식 버전은 400 `unsupported_format_version`, 머리 줄도 끝 줄도 없고 알아볼 수 있는 기록이 하나도 없는 입력은 400 `no_valid_records`(집계는 `partial`), 깨진 JSON 본문은 400, 크기 초과는 413이다. `{"fragments": [...]}` 형태의 JSON 본문은 파일이 아니라 버전 2 구조의 요청 본문으로 처리하며 버전 1 폐지 표시를 붙이지 않고 `restore=trusted`는 받지 않는다.
 
 ### /health 엔드포인트 정책
 

@@ -93,10 +93,10 @@ Import `POST /import`
 | Query parameter | Description |
 |-|-|
 | `key_id` | Target key. Without it the scope is master (`key_id` NULL). An unknown key gets 404. The `key_id` of a file row is never read |
-| `dryRun` | `true` processes through the same path and rolls back at the end. The counts equal those of a real run |
+| `dryRun` | `true` processes through the same path and rolls back at the end. The counts equal those of a real run and no gate metrics are recorded. It is one transaction and holds the locks of the rows it wrote until it ends, so run it when no other work writes the same fragments and split files into about 5000 fragment lines each |
 | `restore` | `trusted` restores stored values (format version 2 files only, recorded in the audit log). Any other value gets 400 |
 
-The body is JSON `{"fragments": [...], "links": [...], "versions": [...]}` (`links` and `versions` are optional and make it a version 2 file) or an export file as is with `Content-Type` `application/x-ndjson` or `application/jsonl`. Line bodies are accepted up to 64 MiB and JSON bodies up to 2 MiB. A fragment line needs `content` and `topic`; `type` defaults to `fact`. Every line goes through the semantic write gate and is written by FragmentWriter, with one transaction per fragment line. Newly written fragments are queued for embedding.
+The body is JSON `{"fragments": [...], "links": [...], "versions": [...]}` (`links` and `versions` are optional and make it a version 2 file) or an export file as is with `Content-Type` `application/x-ndjson` or `application/jsonl`. The JSON body limit is 2 MiB; larger imports use ndjson bodies, accepted up to 64 MiB. An ndjson body is read completely and then split into lines, so memory use at the maximum size is about 3 times the body size. The response is sent after the import ends, so raise the read timeout of the proxy in front (`proxy_read_timeout` in nginx and similar) to fit the file size or split the file. A fragment line needs `content` and `topic`; `type` defaults to `fact`. Every line goes through the semantic write gate and is written by FragmentWriter, with one transaction per fragment line. Newly written fragments are queued for embedding.
 
 Response (field structure):
 
@@ -112,6 +112,7 @@ Response (field structure):
   "links": { "imported": 5, "duplicates": 0, "rejected": 0, "errors": 0 },
   "versions": { "imported": 0, "duplicates": 0, "rejected": 0, "errors": 0 },
   "transformed": 0,
+  "transformed_by_reason": {},
   "ignored": { "key_id": 0, "is_anchor": 0 },
   "embedding_queued": 9,
   "warnings": [],
@@ -121,12 +122,12 @@ Response (field structure):
 ```
 
 - Top level `imported`, `duplicates`, `rejected` and `errors` are the fragment counts, and `skipped` equals `duplicates`. A row falls in exactly one of imported, duplicates, rejected and errors.
-- Reasons in `rejected_by_reason`: `invalid_json` (the line is not JSON), `invalid_record` (unknown record kind, or a link or version line in a version 1 file), `invalid_row` (no `content` or `topic`), `input_invalid` (gate rejection: below minimum quality, over 4000 characters, malformed keywords), `policy_violation` (policy violation on a hard-gate key), `id_conflict` (same id with different content), `database_rejected` (the database rejected the values), `link_invalid`, `link_endpoint_missing`, `version_fragment_missing`. Every rejection is counted and `rejected_samples` holds at most 20.
+- Reasons in `rejected_by_reason`: `invalid_json` (the line is not JSON), `invalid_record` (unknown record kind, or a link or version line in a version 1 file), `invalid_row` (no `content` or `topic`), `input_invalid` (gate rejection: below minimum quality, over 4000 characters, malformed keywords), `policy_violation` (policy violation on a hard-gate key), `id_conflict` (same id with different content; the same content created a moment ago by a concurrent import is checked once more and counted as a duplicate), `idempotency_conflict` (an `idempotency_key` used by another row), `database_rejected` (the database rejected the values), `link_invalid`, `link_endpoint_missing`, `version_fragment_missing`. Every rejection is counted and `rejected_samples` holds at most 20.
 - `duplicates` are rows whose content is already stored (within the key scope). Importing the same file again makes every row a duplicate.
 - `errors` are database failures that are not about the row. The request then gets 500 and the counts so far are in `partial`.
-- `transformed` is the number of rows the gate changed so that they no longer match the file's `content_hash`.
+- `transformed` is the number of newly written rows whose values differ from the file, and `transformed_by_reason` counts them per reason. `content` is the gate changing the content (storage length cut, masking, trimming) and `importance` is the per-type cap lowering the value on storage. A row with both reasons counts once in `transformed` and once per reason.
 - `ignored` counts the `key_id` values in the file that were not applied and the `is_anchor` values ignored when the path is not the owner path.
-- A format version that cannot be read gets 400 `unsupported_format_version`, a malformed JSON body gets 400, and an oversized body gets 413.
+- A format version that cannot be read gets 400 `unsupported_format_version`, input with no header line, no end line and no recognizable record gets 400 `no_valid_records` (counts in `partial`), a malformed JSON body gets 400, and an oversized body gets 413. A JSON body of the form `{"fragments": [...]}` is handled as a version 2 structured request body and not as a file: it carries no version 1 deprecation marker and does not accept `restore=trusted`.
 
 ### /health Endpoint Policy
 

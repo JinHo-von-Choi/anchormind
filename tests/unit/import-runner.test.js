@@ -16,13 +16,16 @@ import crypto            from "node:crypto";
 import { runImport }                       from "../../lib/memory/transfer/ImportRunner.js";
 import { recordsFromLines, recordsFromJsonBody } from "../../lib/memory/transfer/importRecords.js";
 import { ImportReport, MAX_REJECT_SAMPLES } from "../../lib/memory/transfer/ImportReport.js";
-import { ImportAbortedError, ImportOptionError } from "../../lib/memory/transfer/importErrors.js";
+import { ImportAbortedError, ImportOptionError, ImportInputError } from "../../lib/memory/transfer/importErrors.js";
 import { UnsupportedFormatVersionError, V1_ACCEPTED_UNTIL } from "../../lib/memory/transfer/exportFormat.js";
 import { importProfile, IMPORT_DEFAULTS }  from "../../lib/memory/write/FragmentImporter.js";
 import { WriteGate, RESTORE_STEPS }        from "../../lib/memory/write/WriteGate.js";
 import { SymbolicPolicyViolationError }    from "../../lib/symbolic/errors.js";
 
 const sha = (text) => crypto.createHash("sha256").update(text, "utf8").digest("hex");
+
+/** 저장 시 importance 상한을 흉내 낸다(짧은 본문 0.2, 그 밖에 0.7). */
+const cap = (draft) => Math.min(draft.importance, draft.content.length < 20 ? 0.2 : 0.7);
 
 /** 메모리 안 저장소. 같은 키 범위의 같은 본문 해시는 중복, 같은 id는 고유 제약 위반이다. */
 function makeStore() {
@@ -39,9 +42,10 @@ function makeStore() {
       if (rows.has(draft.id)) throw Object.assign(new Error("duplicate key"), { code: "23505" });
       if (draft.content === "__db_error__") throw Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
       rows.set(draft.id, { draft, hash });
-      return { id: draft.id, created: true };
+      return { id: draft.id, created: true, importance: opts.exactImportance ? draft.importance : cap(draft) };
     },
-    async restoreVersion(row) { versions.push(row); }
+    async restoreVersion(row) { versions.push(row); },
+    async findKeyOfId(id) { return rows.has(id) ? { key_id: rows.get(id).draft.key_id } : null; }
   };
   const linkStore = {
     async restoreLink(_client, link) {
@@ -392,5 +396,213 @@ describe("임베딩 큐", () => {
     assert.ok(batches.length >= 2);
     assert.equal(batches.flat().length, 120);
     assert.equal(summary.embedding_queued, 120 - batches.length);
+  });
+});
+
+describe("값이 바뀐 행의 집계", () => {
+  it("머리 줄 없는 버전 1 행도 본문이 잘리면 content로 센다", async () => {
+    const long = "라".repeat(600);
+    const { summary, store } = await run([line({ id: "v1", content: long, topic: "ops" })]);
+    assert.ok(store.rows.get("v1").draft.content.length < long.length);
+    assert.equal(summary.transformed, 1);
+    assert.deepEqual(summary.transformed_by_reason, { content: 1 });
+  });
+
+  it("본문이 그대로이면 transformed가 아니다", async () => {
+    const { summary } = await run([line({ id: "same", content: "Redis 포트는 6380으로 운영한다", topic: "ops" })]);
+    assert.equal(summary.transformed, 0);
+    assert.deepEqual(summary.transformed_by_reason, {});
+  });
+
+  it("저장 시 importance 상한이 값을 낮추면 importance로 센다", async () => {
+    const { summary } = await run([header(), frag("cap", "짧은 본문 열두 자 넘김", { importance: 0.9 })]);
+    assert.deepEqual(summary.transformed_by_reason, { importance: 1 });
+    assert.equal(summary.transformed, 1);
+  });
+
+  it("본문과 importance가 함께 바뀌어도 행은 한 번, 사유는 각각 센다", async () => {
+    const { summary } = await run([header(), frag("both", `긴 본문 ${"마".repeat(500)}`, { importance: 0.95 })]);
+    assert.equal(summary.transformed, 1);
+    assert.deepEqual(summary.transformed_by_reason, { content: 1, importance: 1 });
+  });
+
+  it("되살리기는 importance 상한이 없어 importance로 세지 않는다", async () => {
+    const { summary } = await run([header(), frag("cap", "짧은 본문 열두 자 넘김", { importance: 0.9 })], {
+      profile: importProfile(IMPORT_DEFAULTS.cli, { owner: true, restore: true }), steps: RESTORE_STEPS
+    });
+    assert.equal(summary.transformed, 0);
+  });
+
+  it("파일에 importance가 없으면 기본값이 낮아져도 세지 않는다", async () => {
+    const { summary } = await run([header(), frag("noimp", "짧은 본문 열두 자 넘김")]);
+    assert.equal(summary.transformed, 0);
+  });
+});
+
+describe("고유 제약 위반 분류", () => {
+  const dup = (constraint) => Object.assign(new Error("duplicate key"), { code: "23505", constraint });
+
+  it("동시에 같은 행을 가져온 경우 다시 확인해 같은 본문이면 duplicates로 센다", async () => {
+    let attempts = 0;
+    const store  = makeStore();
+    store.writer.insertDetailed = async (draft) => {
+      attempts++;
+      if (attempts === 1) throw dup("fragments_pkey");
+      return { id: draft.id, created: false, importance: draft.importance };
+    };
+    const { summary } = await run([frag("a", "Redis 포트는 6380으로 운영한다")], { store });
+    assert.deepEqual([summary.imported, summary.duplicates, summary.rejected], [0, 1, 0]);
+    assert.equal(attempts, 2);
+  });
+
+  it("다시 시도해도 같은 id가 다른 본문이면 id_conflict다", async () => {
+    const store = makeStore();
+    store.writer.insertDetailed = async () => { throw dup("fragments_pkey"); };
+    const { summary } = await run([frag("a", "Redis 포트는 6380으로 운영한다")], { store });
+    assert.deepEqual(summary.rejected_by_reason, { id_conflict: 1 });
+  });
+
+  it("idempotency_key 고유 제약 위반은 id_conflict가 아니라 idempotency_conflict이고 다시 시도하지 않는다", async () => {
+    let attempts = 0;
+    const store  = makeStore();
+    store.writer.insertDetailed = async () => { attempts++; throw dup("idx_fragments_idempotency_tenant"); };
+    const { summary } = await run([frag("a", "Redis 포트는 6380으로 운영한다", { idempotency_key: "k1" })], { store });
+    assert.deepEqual(summary.rejected_by_reason, { idempotency_conflict: 1 });
+    assert.equal(attempts, 1);
+  });
+
+  it("--idempotent는 같은 키 소속의 같은 id만 duplicates로 세고 다른 키 소속이면 id_conflict다", async () => {
+    const make = (ownerKey) => {
+      const store = makeStore();
+      store.writer.insertDetailed = async () => { throw dup("fragments_pkey"); };
+      store.writer.findKeyOfId    = async () => ({ key_id: ownerKey });
+      return store;
+    };
+    const sameKey  = await run([frag("a", "Redis 포트는 6380으로 운영한다")], { store: make(null), idempotent: true });
+    assert.deepEqual([sameKey.summary.duplicates, sameKey.summary.rejected], [1, 0]);
+
+    const otherKey = await run([frag("a", "Redis 포트는 6380으로 운영한다")], { store: make("other-key"), idempotent: true });
+    assert.deepEqual([otherKey.summary.duplicates, otherKey.summary.rejected], [0, 1]);
+    assert.deepEqual(otherKey.summary.rejected_by_reason, { id_conflict: 1 });
+  });
+
+  it("삽입은 SAVEPOINT 안에서 실행해 실패 뒤에도 같은 트랜잭션을 쓸 수 있다", async () => {
+    const db    = makeDb();
+    const store = makeStore();
+    store.writer.insertDetailed = async () => { throw dup("fragments_pkey"); };
+    await run([frag("a", "Redis 포트는 6380으로 운영한다")], { store, db });
+    assert.ok(db.statements.filter(s => s === "ROLLBACK TO").length >= 2);
+  });
+});
+
+describe("알아볼 수 없는 입력", () => {
+  it("모든 줄이 JSON이 아니거나 기록이 아니면 ImportInputError로 거부하고 집계를 담는다", async () => {
+    const err = await run(["{broken", "[1,2]", line({ foo: 1 })]).catch(e => e);
+    assert.ok(err instanceof ImportInputError);
+    assert.equal(err.report.toJSON().rejected, 3);
+  });
+
+  it("알아볼 수 있는 줄이 하나라도 있으면 거부하지 않는다", async () => {
+    const { summary } = await run(["{broken", frag("a", "Redis 포트는 6380으로 운영한다")]);
+    assert.deepEqual([summary.imported, summary.rejected], [1, 1]);
+    const short = await run([frag("b", "짧음")]);
+    assert.equal(short.summary.rejected, 1);
+  });
+
+  it("머리 줄만 있는 파일과 빈 입력은 거부하지 않는다", async () => {
+    await run([header(), trailer({ fragments: 0, links: 0, versions: 0 })]);
+    await run([]);
+  });
+
+  it("JSON 본문의 쓰레기 항목만 있어도 거부한다", async () => {
+    const report = new ImportReport();
+    const store  = makeStore();
+    const db     = makeDb();
+    await assert.rejects(runImport(recordsFromJsonBody({ fragments: [1, "x", null] }), {
+      report, profile: importProfile(IMPORT_DEFAULTS.admin, { owner: true }), entry: "admin_import", gate: new WriteGate(),
+      writer: store.writer, linkStore: store.linkStore, pool: db.pool, withTransaction: db.withTransaction
+    }), ImportInputError);
+  });
+});
+
+describe("JSON 본문", () => {
+  const runBody = async (body, profile = importProfile(IMPORT_DEFAULTS.admin, { owner: true })) => {
+    const report = new ImportReport({ restore: profile.restore });
+    const store  = makeStore();
+    const db     = makeDb();
+    await runImport(recordsFromJsonBody(body), {
+      report, profile, entry: "admin_import", gate: new WriteGate(),
+      writer: store.writer, linkStore: store.linkStore, pool: db.pool, withTransaction: db.withTransaction
+    });
+    return report.toJSON();
+  };
+
+  it("버전 1 폐지 표시를 붙이지 않고 끝 줄 경고도 내지 않는다", async () => {
+    const summary = await runBody({ fragments: [{ content: "Redis 포트는 6380으로 운영한다", topic: "ops" }] });
+    assert.equal(summary.format.deprecated, undefined);
+    assert.equal(summary.format.version, 2);
+    assert.deepEqual(summary.warnings, []);
+  });
+
+  it("되살리기는 머리 줄이 있는 파일에만 쓸 수 있어 JSON 본문은 거부한다", async () => {
+    await assert.rejects(
+      runBody({ fragments: [{ content: "Redis 포트는 6380으로 운영한다", topic: "ops" }] }, importProfile(IMPORT_DEFAULTS.admin, { owner: true, restore: true })),
+      ImportOptionError
+    );
+  });
+
+  it("실제 머리 줄을 담은 본문은 끝 줄을 기대한다", async () => {
+    const summary = await runBody({
+      header   : { format: "memento-fragments", version: 2 },
+      fragments: [{ content: "Redis 포트는 6380으로 운영한다", topic: "ops" }]
+    });
+    assert.ok(summary.warnings.some(w => w.code === "trailer_missing"));
+  });
+});
+
+describe("dryRun 지표", () => {
+  it("관문에 지표를 남기지 않도록 요청하고 실제 실행은 남기도록 요청한다", async () => {
+    const seen = [];
+    const spy  = { check: async (req) => { seen.push(req.metrics); return new WriteGate().check(req); } };
+    await run([frag("a", "Redis 포트는 6380으로 운영한다")], { dryRun: true, gate: spy });
+    await run([frag("b", "Nginx는 3999 포트에서 받는다")], { gate: spy });
+    assert.deepEqual(seen, ["none", "all"]);
+  });
+});
+
+describe("파일의 보조 열", () => {
+  const extra = { session_id: "sess-1", quality_verified: true, quality_rationale: "근거 문장", validation_warnings: ["policyX"] };
+
+  it("session_id는 두 모드 모두 따르고 validation_warnings는 파일 값을 믿지 않는다", async () => {
+    const normal = await run([header(), frag("a", "Redis 포트는 6380으로 운영한다", extra)]);
+    const draft  = normal.store.calls[0].draft;
+    assert.equal(draft.session_id, "sess-1");
+    assert.equal(draft.validation_warnings, undefined);
+
+    const restored = await run([header(), frag("a", "Redis 포트는 6380으로 운영한다", extra)], {
+      profile: importProfile(IMPORT_DEFAULTS.cli, { owner: true, restore: true }), steps: RESTORE_STEPS
+    });
+    assert.equal(restored.store.calls[0].draft.session_id, "sess-1");
+    assert.equal(restored.store.calls[0].draft.validation_warnings, undefined);
+  });
+
+  it("quality_verified와 quality_rationale은 되살리기에서만 따른다", async () => {
+    const normal = await run([header(), frag("a", "Redis 포트는 6380으로 운영한다", extra)]);
+    assert.equal(normal.store.calls[0].draft.quality_verified, undefined);
+    assert.equal(normal.store.calls[0].draft.quality_rationale, undefined);
+
+    const restored = await run([header(), frag("a", "Redis 포트는 6380으로 운영한다", extra)], {
+      profile: importProfile(IMPORT_DEFAULTS.cli, { owner: true, restore: true }), steps: RESTORE_STEPS
+    });
+    assert.equal(restored.store.calls[0].draft.quality_verified, true);
+    assert.equal(restored.store.calls[0].draft.quality_rationale, "근거 문장");
+  });
+
+  it("형식이 맞지 않는 값은 따르지 않는다", async () => {
+    const restored = await run([header(), frag("a", "Redis 포트는 6380으로 운영한다", { session_id: 7, quality_verified: "yes", quality_rationale: 3 })], {
+      profile: importProfile(IMPORT_DEFAULTS.cli, { owner: true, restore: true }), steps: RESTORE_STEPS
+    });
+    const draft = restored.store.calls[0].draft;
+    assert.deepEqual([draft.session_id, draft.quality_verified, draft.quality_rationale], [null, undefined, undefined]);
   });
 });

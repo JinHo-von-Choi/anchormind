@@ -31,6 +31,7 @@ const { recordsFromLines }             = await import("../../lib/memory/transfer
 const { loadImportRuntime }            = await import("../../lib/memory/transfer/importRuntime.js");
 const { handleExport, handleImport }   = await import("../../lib/admin/admin-export.js");
 const { Readable }                     = await import("node:stream");
+const { V2_FRAGMENT_COLUMNS }          = await import("../../lib/memory/transfer/exportFormat.js");
 
 const sha = (text) => crypto.createHash("sha256").update(text, "utf8").digest("hex");
 
@@ -39,12 +40,14 @@ const T1 = "2026-02-06T04:05:06.000Z";
 
 /** 저장 규칙을 이미 지킨 행. 같은 입력을 관문에 다시 통과시켜도 값이 바뀌지 않는다. */
 const COMPLIANT = [
-  { id: "fr-01", content: "Redis 포트는 6380으로 운영한다", topic: "infra", type: "fact", keywords: ["redis", "port"], importance: 0.6, created_at: T0 },
+  { id: "fr-01", content: "Redis 포트는 6380으로 운영한다", topic: "infra", type: "fact", keywords: ["redis", "port"], importance: 0.6, created_at: T0,
+    session_id: "sess-1", quality_verified: true, quality_rationale: "검증을 마친 사실이다", access_count: 5, idempotency_key: "idem-fr01" },
   { id: "fr-02", content: "배포 직후 캐시가 비어 응답이 느려졌다", topic: "infra", type: "error", importance: 0.5, created_at: T1,
-    case_id: "case-1", goal: "응답 지연 해소", outcome: "캐시 예열 추가", phase: "debugging", resolution_status: "open", assertion_status: "inferred" },
+    case_id: "case-1", goal: "응답 지연 해소", outcome: "캐시 예열 추가", phase: "debugging", resolution_status: "open", assertion_status: "inferred",
+    utility_score: 0.4 },
   { id: "fr-03", content: "응답 언어는 항상 한국어로 쓴다", topic: "style", type: "preference", importance: 0.9, created_at: T0, is_anchor: true },
   { id: "fr-04", content: "스테이징에서 먼저 검증한 뒤 운영에 반영한다", topic: "ops", type: "decision", importance: 0.7, created_at: T1,
-    workspace: "ws-a", workspace_source: "explicit", context_summary: "배포 순서 결정", affect: "frustration" },
+    workspace: "ws-a", workspace_source: "explicit", context_summary: "배포 순서 결정", affect: "frustration", session_id: "sess-2" },
   { id: "fr-05", content: `긴 회고 기록 ${"나".repeat(780)}`, topic: "retro", type: "episode", importance: 0.5, created_at: T0 }
 ];
 
@@ -72,13 +75,16 @@ async function seedSource(client, rows, { keyId = null } = {}) {
       `INSERT INTO ${SCHEMA}.fragments
               (id, content, topic, keywords, type, importance, content_hash, source, agent_id, ttl_tier,
                created_at, valid_from, is_anchor, case_id, goal, outcome, phase, resolution_status, assertion_status,
-               context_summary, workspace, workspace_source, affect, key_id)
+               context_summary, workspace, workspace_source, affect, key_id,
+               session_id, quality_verified, quality_rationale, access_count, utility_score, estimated_tokens, idempotency_key)
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'seed', 'default', $8, $9, $9, $10, $11, $12, $13, $14, $15, $16,
-               $17, $18, $19, $20, $21)`,
+               $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)`,
       [r.id, r.content, r.topic, r.keywords ?? [], r.type, r.importance, sha(r.content), r.ttl_tier ?? "warm",
        r.created_at, r.is_anchor === true, r.case_id ?? null, r.goal ?? null, r.outcome ?? null, r.phase ?? null,
        r.resolution_status ?? null, r.assertion_status ?? "observed", r.context_summary ?? null, r.workspace ?? null,
-       r.workspace_source ?? "unscoped", r.affect ?? "neutral", keyId]
+       r.workspace_source ?? "unscoped", r.affect ?? "neutral", keyId,
+       r.session_id ?? null, r.quality_verified ?? null, r.quality_rationale ?? null, r.access_count ?? 0,
+       r.utility_score ?? 1.0, Math.ceil(r.content.length / 4), r.idempotency_key ?? null]
     );
   }
 }
@@ -154,11 +160,39 @@ async function exportLines(options = {}) {
 }
 
 /** 대상 데이터베이스(앱 풀)로 가져온다. */
-async function importInto(lines, { restore = false, keyId = null, dryRun = false } = {}) {
+async function importInto(lines, { restore = false, keyId = null, dryRun = false, idempotent = false } = {}) {
   const runtime = await loadImportRuntime("cli", { keyId, restore });
   const report  = new ImportReport({ dryRun, restore });
-  await runImport(recordsFromLines(lines), { ...runtime, report, pool: getPrimaryPool(), dryRun });
+  await runImport(recordsFromLines(lines), { ...runtime, report, pool: getPrimaryPool(), dryRun, idempotent });
   return report.toJSON();
+}
+
+/**
+ * 내보내기 열 전체를 읽는다. 가져오기가 되살리지 않는 열은 문서에 적힌 목록(아래 상수)이다.
+ */
+const V2_SELECT = V2_FRAGMENT_COLUMNS.join(", ");
+
+/** 서버 값으로 다시 정해지는 열: 접근 기록과 점수는 초기화, 검증 경고는 관문이 다시 계산한다. */
+const RESET_ON_IMPORT = Object.freeze(["access_count", "accessed_at", "verified_at", "utility_score", "validation_warnings"]);
+
+/** 되살리기에서만 따르는 열. 보통 가져오기에서는 비운다. */
+const RESTORE_ONLY = Object.freeze(["quality_verified", "quality_rationale"]);
+
+async function v2Rows(query) {
+  const { rows } = await query(`SELECT ${V2_SELECT} FROM ${SCHEMA}.fragments ORDER BY id`);
+  return rows;
+}
+
+/** 내보내기 열 전체를 예외 목록을 뺀 나머지에서 값까지 비교한다. */
+function assertV2ColumnsEqual(from, to, exceptions) {
+  assert.equal(to.length, from.length);
+  const compared = V2_FRAGMENT_COLUMNS.filter(c => !exceptions.includes(c));
+  assert.ok(compared.length >= 25, `비교하는 열이 너무 적다: ${compared.length}`);
+  for (let i = 0; i < from.length; i++) {
+    for (const column of compared) {
+      assert.deepEqual(to[i][column], from[i][column], `${from[i].id}.${column}`);
+    }
+  }
 }
 
 const FRAGMENT_COLUMNS = `id, content, content_hash, topic, type, keywords, importance, source, agent_id, ttl_tier,
@@ -212,6 +246,15 @@ describe("저장 규칙을 지킨 데이터의 왕복", () => {
         assert.deepEqual(to[i][column], from[i][column], `${from[i].id}.${column}`);
       }
     }
+
+    /** 내보내기 열 전체: 초기화 열과 되살리기 전용 열만 예외다. */
+    const fromV2 = await v2Rows((sql) => sourceClient.query(sql));
+    const toV2   = await v2Rows((sql) => directQuery(sql));
+    assertV2ColumnsEqual(fromV2, toV2, [...RESET_ON_IMPORT, ...RESTORE_ONLY]);
+    const first = toV2.find(r => r.id === "fr-01");
+    assert.equal(first.access_count, 0, "접근 수는 초기화된다");
+    assert.equal(first.quality_verified, null, "보통 가져오기는 quality_verified를 따르지 않는다");
+    assert.equal(first.session_id, "sess-1");
 
     const targetLinks = await linkSet((sql) => directQuery(sql));
     assert.deepEqual(targetLinks, await linkSet((sql) => sourceClient.query(sql)));
@@ -336,6 +379,9 @@ describe("저장 규칙 이전의 행", () => {
     const from = await sourceFragments();
     const to   = await targetFragments();
     assert.deepEqual(hashSet(to), hashSet(from));
+    assertV2ColumnsEqual(await v2Rows((sql) => sourceClient.query(sql)), await v2Rows((sql) => directQuery(sql)), RESET_ON_IMPORT);
+    const restoredFirst = (await v2Rows((sql) => directQuery(sql))).find(r => r.id === "fr-01");
+    assert.deepEqual([restoredFirst.quality_verified, restoredFirst.quality_rationale], [true, "검증을 마친 사실이다"]);
     const long = to.find(r => r.id === "leg-long");
     assert.equal(long.importance, 0.95);
     assert.equal(long.ttl_tier, "permanent");
@@ -396,5 +442,74 @@ describe("대상 키", () => {
     const to = await targetFragments();
     assert.ok(to.every(r => r.key_id === null));
     assert.equal(to.find(r => r.id === "fr-03").is_anchor, true);
+  });
+});
+
+describe("충돌과 동시 실행", () => {
+  it("같은 내용을 동시에 가져와도 모든 행이 한 번만 기록되고 거부와 오류가 없다", async () => {
+    await reseedSource({ rows: COMPLIANT });
+    const lines = await exportLines();
+    const [a, b] = await Promise.all([importInto(lines), importInto(lines)]);
+
+    assert.equal(a.imported + b.imported, COMPLIANT.length);
+    assert.equal(a.duplicates + b.duplicates, COMPLIANT.length);
+    assert.deepEqual([a.rejected + b.rejected, a.errors + b.errors], [0, 0]);
+    assert.equal(a.links.imported + b.links.imported, LINKS.length);
+    assert.equal((await targetFragments()).length, COMPLIANT.length);
+  });
+
+  it("다른 행이 쓰는 idempotency_key는 id_conflict가 아니라 idempotency_conflict로 거부한다", async () => {
+    await reseedSource({ rows: COMPLIANT.slice(0, 1), links: [], versions: [], deletedPair: null });
+    await directQuery(
+      `INSERT INTO ${SCHEMA}.fragments (id, content, topic, type, importance, content_hash, idempotency_key)
+       VALUES ('pre-1', '이미 같은 멱등 키를 쓰는 다른 행이다', 't', 'fact', 0.5, $1, 'idem-fr01')`,
+      [sha("이미 같은 멱등 키를 쓰는 다른 행이다")]
+    );
+    const summary = await importInto(await exportLines());
+    assert.deepEqual(summary.rejected_by_reason, { idempotency_conflict: 1 });
+    assert.equal(summary.imported, 0);
+  });
+
+  it("--idempotent는 같은 키 소속의 같은 id를 duplicates로 세고 다른 키 소속이면 id_conflict로 거부한다", async () => {
+    await reseedSource({ rows: COMPLIANT.slice(1, 2), links: [], versions: [], deletedPair: null });
+    const lines = await exportLines();
+
+    await directQuery(
+      `INSERT INTO ${SCHEMA}.fragments (id, content, topic, type, importance, content_hash)
+       VALUES ('fr-02', '같은 id를 쓰는 마스터 소속의 다른 본문이다', 't', 'fact', 0.5, $1)`,
+      [sha("같은 id를 쓰는 마스터 소속의 다른 본문이다")]
+    );
+    const same = await importInto(lines, { idempotent: true });
+    assert.deepEqual([same.duplicates, same.rejected], [1, 0]);
+
+    const strict = await importInto(lines);
+    assert.deepEqual(strict.rejected_by_reason, { id_conflict: 1 });
+
+    await directQuery(`TRUNCATE ${SCHEMA}.fragments CASCADE`);
+    await directQuery(`INSERT INTO ${SCHEMA}.api_keys (id, name, key_hash, key_prefix) VALUES ('owner-key', 'owner', 'h-owner', 'ownerkey')`);
+    await directQuery(
+      `INSERT INTO ${SCHEMA}.fragments (id, content, topic, type, importance, content_hash, key_id)
+       VALUES ('fr-02', '다른 키 소속이 가진 같은 id의 본문이다', 't', 'fact', 0.5, $1, 'owner-key')`,
+      [sha("다른 키 소속이 가진 같은 id의 본문이다")]
+    );
+    const cross = await importInto(lines, { idempotent: true });
+    assert.deepEqual([cross.duplicates, cross.rejected], [0, 1]);
+    assert.deepEqual(cross.rejected_by_reason, { id_conflict: 1 });
+  });
+
+  it("머리 줄 없는 버전 1 파일의 긴 본문도 잘림을 transformed로 센다", async () => {
+    const long    = `긴 본문 ${"바".repeat(600)}`;
+    const summary = await importInto([JSON.stringify({ id: "v1-long", content: long, topic: "ops", type: "fact" })]);
+    assert.equal(summary.format.version, 1);
+    assert.deepEqual([summary.imported, summary.transformed], [1, 1]);
+    assert.deepEqual(summary.transformed_by_reason, { content: 1 });
+  });
+
+  it("저장 시 importance 상한이 낮추면 importance로 센다", async () => {
+    const lines = [JSON.stringify({ record: "header", format: "memento-fragments", version: 2 }),
+      JSON.stringify({ record: "fragment", id: "cap-1", content: "Redis 포트는 6380으로 운영한다", topic: "ops", type: "error", importance: 0.95 }),
+      JSON.stringify({ record: "end", counts: { fragments: 1, links: 0, versions: 0 } })];
+    const summary = await importInto(lines);
+    assert.deepEqual(summary.transformed_by_reason, { importance: 1 });
   });
 });

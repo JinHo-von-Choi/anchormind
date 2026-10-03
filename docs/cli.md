@@ -423,10 +423,12 @@ node bin/memento.js import --input full.jsonl --restore
 - 기록 키는 `--key`가 정하며 파일 행의 `key_id`는 읽지 않는다(`ignored.key_id`로 센다). CLI는 서버 호스트의 DB 계정으로 실행하는 소유자 경로이므로 `is_anchor`는 파일 값을 따른다.
 - 집계는 imported(새로 기록), duplicates(같은 본문이 이미 있음), rejected(유형이 있는 사유), errors(행 문제가 아닌 실패)이고 한 행은 하나에만 들어간다. `--json`의 `skipped`는 `duplicates`와 같은 값이다.
 - 관문이 받아들이지 않은 행(본문 누락이나 품질 미달, 4000자 초과, 형식이 잘못된 키워드, hard gate 키의 정책 위반)과 행의 값 때문에 DB가 거부한 행(type, assertion_status CHECK 제약 등)은 `rejected_by_reason`의 사유별로 세고 다음 줄을 계속 가져온다.
-- 같은 id가 이미 있고 본문이 다른 행은 `--idempotent`이면 duplicates, 아니면 `id_conflict`로 거부한다.
+- 같은 id가 이미 있고 본문이 다른 행은 `id_conflict`로 거부한다. `--idempotent`는 같은 키 소속의 같은 id만 duplicates로 세고 다른 키 소속의 id는 `id_conflict`다. 다른 행이 쓰는 `idempotency_key`는 `idempotency_conflict`로 거부한다. 동시에 같은 행을 가져온 경우에는 한 번 다시 확인해 같은 본문이면 duplicates로 센다.
+- 머리 줄도 끝 줄도 없고 모든 줄이 JSON이 아니거나 기록이 아니면 아무것도 기록하지 않고 종료 코드 1로 끝난다.
+- 새로 기록한 행의 값이 파일과 달라지면 `transformed`로 센다(사유 `content`: 관문이 본문을 바꿈, `importance`: 유형별 상한이 값을 낮춤).
 - 링크 줄은 양 끝 파편이 같은 실행에서 처리된 경우에만 기록한다. 본문이 같아 기존 파편으로 대응된 끝점은 기존 파편의 id로 건다. 수정 이력 줄은 이 실행에서 새로 만든 파편에만 붙인다.
-- `--dry-run`은 같은 경로로 처리하고 끝에 트랜잭션을 되돌린다. 집계는 실제 실행과 같고 DB에 연결한다(관문에서 모두 거부되는 입력은 연결하지 않는다).
-- `--restore`는 저장된 값을 되살린다. 형식 버전 2 파일에만 쓸 수 있으며 최소 품질 검사와 저장 길이 절삭을 건너뛰고 `importance`, `ttl_tier`, `workspace_source`를 파일 값 그대로 기록한다. 민감 정보 마스킹은 그대로 적용하고 감사 로그에 요약 한 줄을 남긴다. 보통 가져오기가 바꾸거나 거부하는 기존 행까지 같은 `content_hash`로 되살릴 때 쓴다.
+- `--dry-run`은 같은 경로로 처리하고 끝에 트랜잭션을 되돌린다. 집계는 실제 실행과 같고 관문 지표는 남기지 않는다. 하나의 트랜잭션이라 기록한 행의 잠금을 끝날 때까지 쥐므로 파일당 파편 줄 5000개 안팎으로 나누어 실행한다. DB에 연결한다(관문에서 모두 거부되는 입력은 연결하지 않는다).
+- `--restore`는 저장된 값을 되살린다. 형식 버전 2 파일에만 쓸 수 있으며 최소 품질 검사와 저장 길이 절삭을 건너뛰고 `importance`, `ttl_tier`, `workspace_source`를 파일 값 그대로 기록한다. 민감 정보 마스킹은 `MEMENTO_WRITE_GATE`가 켜져 있는 동안 그대로 적용하고(끄면 본문을 다듬지도 가리지도 않는다), 끝나든 오류로 멈추든 감사 로그에 `outcome`(completed, failed)과 그때까지의 집계 한 줄을 남긴다. 본문은 앞뒤 공백을 자르므로 바이트까지 같지는 않다. 보통 가져오기가 바꾸거나 거부하는 기존 행까지 같은 `content_hash`로 되살릴 때 쓴다.
 - `created_at`과 `valid_from`은 파일 값을 쓰고, 접근 수와 검증 시각은 가져온 시점 값이 된다. 임베딩은 서버의 임베딩 백필이 만든다.
 
 도움말:
