@@ -66,6 +66,7 @@ import { checkEmbeddingConsistency } from "./scripts/check-embedding-consistency
 
 /** 미적용 migration 검사 */
 import { warnPendingMigrations } from "./lib/memory/admin/PendingMigrations.js";
+import { isRateLimitedAdminRequest } from "./lib/admin/admin-route-table.js";
 
 /** OpenAPI */
 import { validateAuthentication } from "./lib/auth.js";
@@ -264,12 +265,9 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  /* Admin API (auth 포함 주요 POST 경로에 rate limit 적용) */
+  /* Admin API (라우트 표의 ipLimit 항목: 인증, 키 생성, 가져오기, 자기 정보에 IP별 rate limit 적용) */
   if (url.pathname.startsWith(`${ADMIN_BASE}/`)) {
-    const isRateLimitedAdminPath =
-      (req.method === "POST" && url.pathname === `${ADMIN_BASE}/auth`) ||
-      (req.method === "POST" && url.pathname === `${ADMIN_BASE}/keys`) ||
-      (req.method === "POST" && url.pathname === `${ADMIN_BASE}/import`);
+    const isRateLimitedAdminPath = isRateLimitedAdminRequest(req.method, url.pathname.slice(ADMIN_BASE.length));
 
     if (isRateLimitedAdminPath) {
       const clientIp = resolveClientIp(req);
