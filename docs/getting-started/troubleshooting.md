@@ -239,3 +239,51 @@ curl -s http://localhost:57332/health/live
 
 해결 방법:
 - DB 연결 설정과 DB 부하를 점검한다. `/health/live`는 DB와 무관하게 200이므로 프로세스 재시작 판정에는 `/health/live`만 쓴다.
+
+## 15. 관리자 계정 로그인이나 TOTP 등록이 503 `totp_seal_key_missing`
+
+문제:
+owner, admin 역할 계정의 로그인 또는 TOTP 등록이 503 `totp_seal_key_missing`으로 끝난다.
+
+원인:
+TOTP 비밀을 봉인하는 `MEMENTO_ADMIN_SEAL_KEY`가 없거나 형식이 틀렸다(32바이트, base64 또는 64자 hex). 형식이 틀린 값은 기동 시 설정 문제 목록에 오르고 미설정으로 동작한다.
+
+확인 방법:
+
+```bash
+openssl rand -hex 32   # 새 봉인 키 예시. 출력값을 서버 환경 변수에 설정한다
+```
+
+해결 방법:
+- 서버 환경 변수에 `MEMENTO_ADMIN_SEAL_KEY`를 설정하고 재시작한다. 마스터 키 로그인은 이 값과 무관하게 동작한다.
+- TOTP를 잃은 계정은 서버 호스트에서 `anchormind admin recover --confirm`으로 초기화한 뒤 다시 등록한다([cli.md](../cli.md)).
+
+## 16. `recall`이 본문 단어로 찾지 못함(어휘 채널 미참여)
+
+문제:
+임베딩이 꺼져 있거나 키워드가 없는 질의에서 `text`의 본문 단어로 파편을 찾지 못한다.
+
+원인:
+본문 어휘 채널은 `fragments.content_tokens`의 GIN 색인(`idx_fragments_content_tokens`)이 유효할 때만 참여한다. 색인을 만들지 않았거나 만드는 중이거나 `MEMENTO_LEXICAL_CHANNEL=off`다. 기존 행의 `content_tokens`가 비어 있으면 그 행은 이 채널에서 빠진다.
+
+확인 방법:
+
+```bash
+curl -s -H "Authorization: Bearer $MEMENTO_ACCESS_KEY" http://localhost:57332/metrics | grep memento_lexical
+```
+
+해결 방법:
+- `scripts/ops/online-index.mjs --index idx_fragments_content_tokens`로 색인을 만들고 `scripts/backfill-content-tokens.mjs --confirm`으로 기존 행을 채운다([online-migration.md](../operations/online-migration.md#본문-어휘-채널)).
+- `memento_lexical_tokens_coverage_ratio`가 1이면 채움이 끝난 것이다.
+
+## 17. `remember`한 파편이 `recall`에 보이지 않거나 `pending_review`로 나옴
+
+문제:
+저장한 파편이 다른 키의 `recall`이나 `context`에 보이지 않고, 쓴 키의 `recall`에는 `pending_review: true`로 나온다.
+
+원인:
+에이전트 지시를 덮어쓰는 문구, 신뢰 등급 1 이하의 앵커나 preference나 procedure, `anchor` 권한이 없는 앵커 요청은 거부하지 않고 검토 대기로 저장된다(`MEMENTO_REVIEW_QUEUE=on`). 검토 대기 파편은 승인 전까지 다른 키와 context 주입에 나타나지 않는다.
+
+해결 방법:
+- 관리 API `GET /v1/internal/model/nothing/review`로 대기 목록을 보고 `POST .../review/:id/approve` 또는 `.../reject`로 결정한다. 30일 동안 결정이 없으면 자동 거절된다.
+- 앵커를 쓰는 키에는 `scripts/grant-anchor-permission.js --apply`로 `anchor` 권한을 준다. 사용자가 직접 말한 내용을 신뢰 등급 3으로 저장하려면 키에 `trusted_origin` 권한을 주고 `origin: "user_stated"`를 보낸다.

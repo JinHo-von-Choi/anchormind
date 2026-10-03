@@ -10,16 +10,18 @@ https://{도메인}/v1/internal/model/nothing/
 
 마스터 키 입력 화면이 나타나면 `MEMENTO_ACCESS_KEY` 환경변수에 설정한 키를 입력한다. 인증에 성공하면 HttpOnly 세션 쿠키가 발급되어 24시간 동안 유지된다.
 
+관리자 계정이 하나 이상 있으면 로그인 화면에 ADMIN ACCOUNT 경로가 함께 나온다. 계정 이름, 비밀번호, TOTP 6자리(또는 복구 코드 한 개)를 입력한다. 세션은 절대 만료 12시간, 유휴 만료 30분이며 쿠키는 SameSite=Strict다. owner와 admin 역할 계정이 TOTP를 등록하기 전에는 비밀과 등록 URI가 나오고, 인증 앱의 코드를 입력하면 등록이 끝나며 복구 코드 10개가 한 번만 표시된다. 복구 코드는 이때 저장해 둔다. TOTP 비밀을 봉인하는 `MEMENTO_ADMIN_SEAL_KEY`가 없으면 등록을 시작하지 않는다. 마스터 키 로그인은 계정이 있어도 owner로 계속 동작한다. 계정 로그인의 설정과 규칙은 [configuration.md](configuration.md#관리자-계정)에 있다.
+
 ---
 
 ## Admin UI 아키텍처
 
-Admin UI는 얇은 진입점(82줄) + 16개 ESM 모듈로 구성된다. Consolidator는 22개 stage(stageDefs 배열)를 순차 실행하며, 진행률 표시는 `stageDefs.length`(22)를 분모로 계산된다.
+Admin UI는 얇은 진입점 + 18개 ESM 모듈로 구성된다. Consolidator는 22개 stage(stageDefs 배열)를 순차 실행하며, 진행률 표시는 `stageDefs.length`(22)를 분모로 계산된다.
 
 ```
 assets/admin/
 ├── index.html          # <script type="module"> 로 로드
-├── admin.js            # 진입점 (82줄), 모듈 초기화 오케스트레이션
+├── admin.js            # 진입점, 모듈 초기화 오케스트레이션
 ├── vendor/             # Tailwind CSS 3.4.17, d3 7.9.0 사본과 PROVENANCE.md
 └── modules/
     ├── state.js        # 전역 상태 관리
@@ -35,6 +37,8 @@ assets/admin/
     ├── graph.js        # 지식 그래프
     ├── logs.js         # 로그 뷰어
     ├── audit.js        # 감사 로그
+    ├── admin-users.js  # 관리자 계정
+    ├── key-lifecycle.js # API 키 수명 카드
     ├── memory.js       # 메모리 운영
     ├── metrics.js      # 메트릭 대시보드
     └── metrics-sparkline.js # 메트릭 스파크라인
@@ -48,7 +52,7 @@ Tailwind CSS와 d3 스크립트는 외부 CDN이 아니라 서버가 `assets/adm
 
 ## 화면 구성
 
-좌측 사이드바에 9개 메뉴가 있다. 각 메뉴의 역할과 읽는 법을 설명한다.
+좌측 사이드바에 10개 메뉴가 있다. 각 메뉴의 역할과 읽는 법을 설명한다.
 
 상단 커맨드바:
 - MASTER KEY 배지 -- 현재 세션이 master key 인증임을 표시한다.
@@ -250,6 +254,15 @@ API 키를 논리적 단위로 묶어 관리한다. 같은 그룹의 키들은 �
 - MORE -- 쪽이 가득 차면 나타나며 더 오래된 50건을 이어 붙인다.
 - EXPORT JSONL -- 지금 조건의 행을 seq 오름차순 `audit-events.jsonl`로 내려받는다. 줄마다 `prevHash`, `rowHash`가 있다.
 - VERIFY -- 체인 전체를 다시 계산해 결과를 위쪽 띠에 적는다(온전하면 확인한 행 수와 기준점, 끊겼으면 첫 끊긴 seq와 사유). 같은 검사는 `memento-mcp audit verify`로도 실행한다.
+
+#### 관리자 계정
+
+사이드바의 관리자 계정 메뉴(감사 로그 아래)는 계정을 관리한다. 능력 `admin_user.manage`가 필요하며 owner 역할만 가진다.
+
+- 표 -- USERNAME, ROLES(`owner`, `viewer@team-a`처럼 역할과 workspace), STATUS(`active`, `disabled`), TOTP(`on`, `off`), LAST LOGIN. 비밀번호 해시와 TOTP 비밀은 어느 화면에도 나오지 않는다.
+- 행 단추 -- ROLES(역할 바인딩 교체), DISABLE과 ENABLE, RESET TOTP(TOTP와 복구 코드를 초기화하고 그 계정의 세션을 폐기), REVOKE SESSIONS(계정의 모든 세션 폐기), DELETE(확인 뒤 삭제). 활성 owner가 하나뿐이면 그 계정의 삭제, 비활성화, owner 제거는 409 `last_owner`로 거절된다.
+- 만들기 -- USERNAME, PASSWORD(12자 이상), ROLES(쉼표로 구분)를 넣고 CREATE를 누른다. 계정이 0개이면 BOOTSTRAP OWNER 양식이 나오며 첫 owner는 마스터 키로 로그인한 상태에서만 만들 수 있다.
+- 모든 변경은 감사 로그의 `admin.user.*` 행위로 남는다. 계정 세션이 TOTP 코드를 잃었을 때의 비상 복구는 서버 호스트에서 `anchormind admin recover --confirm`을 쓴다([cli.md](cli.md)).
 
 ---
 

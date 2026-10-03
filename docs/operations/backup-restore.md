@@ -226,7 +226,11 @@ node scripts/ops/restore-verify.mjs --dump <저장 위치>/memento-<시각>.dump
 
 삭제된 파편 id를 보존하는 표나 기록은 현재 이 저장소에 없다. `forget`은 행을 지우고 id를 따로 남기지 않는다. 그러므로 삭제한 id의 목록을 데이터베이스 바깥에서 유지하고(한 줄에 id 하나인 파일), 아래 단일 파편 복구에서 복원 전에 대조한다. 목록이 없으면 단일 파편 복구를 하지 않는다.
 
-`case_events`는 `fragments`에 대한 외래 키가 없어(`source_fragment_id`는 일반 열) 파편을 지워도 행이 남고, 요약 문장에 삭제한 내용이 인용돼 있을 수 있다. 삭제 요청 처리에서 함께 확인한다.
+`case_events`는 `fragments`에 대한 외래 키가 없어(`source_fragment_id`는 일반 열) 파편을 지워도 행이 남는다. `MEMENTO_FORGET_CASCADE=on`(기본)이면 `forget`이 같은 트랜잭션에서 지운 파편을 출처로 한 요약을 `[삭제됨]`으로 바꾸고 응답의 `purged`가 건수를 알린다. 연쇄 삭제가 적용되지 않은 채 지운 파편(스위치 `off` 포함)의 요약은 `scripts/purge-orphan-case-summaries.js`(기본 미리보기, `--execute --i-have-a-backup`)로 정리한다. 백업 벌에 든 요약은 그대로이므로 삭제 요청 처리에서 라벨 벌과 원격 사본을 함께 확인한다.
+
+### 비밀 값과 봉인 키
+
+덤프의 `agent_memory` 스키마에는 `api_keys`, `api_key_secrets`(키 해시), `admin_users`(비밀번호 해시와 봉인된 TOTP 비밀), 관리자 세션 표가 들어 있다. 백업 저장 위치는 이 값들을 담는 자료로 다루고 접근을 제한한다. TOTP 비밀은 `MEMENTO_ADMIN_SEAL_KEY`로 봉인되어 있으므로 복구본에서 TOTP 로그인을 쓰려면 같은 봉인 키가 필요하다. 봉인 키는 덤프와 다른 곳(서버 환경 변수와 오프라인 사본)에 둔다. 키를 잃으면 복구 뒤 `anchormind admin recover --confirm`으로 TOTP를 초기화하고 다시 등록한다. 감사 해시 체인(`admin_audit_events`)은 복구 뒤 `anchormind audit verify`로 검증한다.
 
 ---
 

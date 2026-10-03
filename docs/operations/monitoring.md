@@ -135,6 +135,27 @@ outbox 게이지는 작업자를 돌리는 프로세스만 갱신한다. 작업�
 
 두 게이지는 `/metrics` 수집 시점에 10분이 지났을 때만 현행 파편을 키로 묶어 다시 센다. `MEMENTO_LEXICAL_CHANNEL=off`이거나 열이 없으면(마이그레이션 053 이전) 값을 내보내지 않는다.
 
+### 감사, 검토, 외부 전송, 훅 지표
+
+경보 규칙 없이 추세와 이상을 보는 계수기다. 감사 이벤트의 승격 지연과 실패는 `memento_outbox_*{topic="audit.record"}`로 본다.
+
+| 지표 | 라벨 | 의미 |
+|-|-|-|
+| `memento_audit_enqueue_failed_total` | 없음 | 기록하지 못한 감사 이벤트 수. 0이 아니면 감사 행이 빠졌다 |
+| `memento_audit_recorded_total` | 없음 | `admin_audit_events`에 새로 기록한 행 수 |
+| `memento_audit_cleaned_total` | 없음 | 보존 기간(`MEMENTO_AUDIT_RETENTION_DAYS`)이 지나 지운 감사 행 수 |
+| `memento_review_flag_total` | `entry`, `reason` | 검토 대기열 표지를 단 쓰기의 진입점과 사유별 건수 |
+| `memento_review_decisions_total` | `decision` | 검토 대기열의 승인, 거절, 30일 미결정 자동 거절 건수 |
+| `memento_anchor_decision_total` | `outcome`, `reason` | `remember`와 `amend`의 앵커 지정 판정 건수. `downgraded`와 `permission`이 `warn`에서 일반 파편으로 낮춰진 요청이다 |
+| `memento_workspace_read_authz_total` | `surface`, `reason`, `outcome` | 읽기 경로 workspace 허가와 master 전용 preset 판정에서 허가 밖으로 판정된 요청 수. `would_deny`는 `warn`에서 통과시킨 요청이다 |
+| `memento_context_core_trust_excluded_total` | `reason` | context의 ANCHOR와 CORE 주입에서 신뢰 등급 판정으로 뺀 파편 수 |
+| `memento_llm_egress_calls_total` | `stage`, `provider`, `provider_class`, `outcome` | 외부 전송 정책을 거친 LLM 제공자 호출 건수 |
+| `memento_llm_egress_bytes_total` | `stage`, `provider_class` | LLM 제공자에게 보낸 프롬프트 바이트 |
+| `memento_llm_egress_skipped_total` | `stage`, `reason` | 외부 전송 정책 때문에 건너뛴 LLM 단계 호출 건수 |
+| `memento_llm_egress_masked_total` | `stage` | 외부 전송 전 마스킹에서 일치한 민감 정보 규칙 종류 수 |
+| `memento_hook_calls_total` | `client`, `event`, `outcome` | 훅 엔드포인트 요청 수 |
+| `memento_hook_reflect_total` | `outcome` | 훅 회고 소비자가 처리한 outbox 이벤트 수 |
+
 ---
 
 ## 반영과 검증
