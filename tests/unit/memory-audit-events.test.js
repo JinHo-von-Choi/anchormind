@@ -28,7 +28,9 @@ mock.module("../../lib/memory/MemoryManager.js", {
   namedExports: { ...realManager, MemoryManager: { getInstance: () => manager } }
 });
 
-const { tool_remember, tool_amend, tool_forget, tool_link } = await import("../../lib/tools/memory.js");
+const {
+  tool_remember, tool_amend, tool_forget, tool_link, tool_batchRemember, tool_reflect, tool_memoryConsolidate
+} = await import("../../lib/tools/memory.js");
 const { WriteGate, gateBlockAuditEvent, WRITE_ENTRIES }    = await import("../../lib/memory/write/WriteGate.js");
 const { SymbolicPolicyViolationError }                     = await import("../../lib/symbolic/errors.js");
 const { buildAuditPayload }                                = await import("../../lib/logging/audit-event.js");
@@ -152,3 +154,38 @@ describe("관문 거부", () => {
     assert.deepEqual(gateBlockAuditEvent({ ...base, entry: WRITE_ENTRIES.REMEMBER }, "r").actor, { keyId: "master" });
   });
 });
+
+describe("batch_remember, reflect, memory_consolidate", () => {
+  it("batch_remember는 한 묶음에 이벤트 하나로 항목 수, 기록 수, 앵커 수를 남기고 본문은 남기지 않는다", async () => {
+    manager.batchRemember = async () => ({ inserted: 2, skipped: 1 });
+    await tool_batchRemember(args({ fragments: [
+      { content: CONTENT, topic: "a", type: "fact", isAnchor: true },
+      { content: "둘째 본문 내용입니다", topic: "a", type: "fact" },
+      { content: "셋째 본문 내용입니다", topic: "a", type: "fact", is_anchor: true }
+    ] }));
+    assert.deepEqual(actions(), ["memory.batch_remember"]);
+    assert.deepEqual(recorded[0].detail, { total: 3, inserted: 2, skipped: 1, anchors: 2, async: false });
+    assert.ok(!JSON.stringify(buildAuditPayload(recorded[0])).includes(CONTENT));
+  });
+
+  it("batch_remember 실패는 failure로 남긴다", async () => {
+    manager.batchRemember = async () => { throw new Error("quota"); };
+    await tool_batchRemember(args({ fragments: [{ content: CONTENT, topic: "a", type: "fact" }] }));
+    assert.equal(recorded[0].action, "memory.batch_remember");
+    assert.equal(recorded[0].outcome, "failure");
+  });
+
+  it("reflect는 저장 수를 남긴다", async () => {
+    manager.reflect = async () => ({ count: 4 });
+    await tool_reflect(args({ summary: ["s"] }));
+    assert.deepEqual(recorded.map(e => [e.action, e.detail.count]), [["memory.reflect", 4]]);
+  });
+
+  it("memory_consolidate는 결과의 수치만 남긴다", async () => {
+    manager.consolidate = async () => ({ expiredDeleted: 3, duplicatesMerged: 1, summary: "본문 요약 문장" });
+    await tool_memoryConsolidate(args({}));
+    assert.equal(recorded[0].action, "memory.consolidate");
+    assert.deepEqual(recorded[0].detail, { expiredDeleted: 3, duplicatesMerged: 1 });
+  });
+});
+
