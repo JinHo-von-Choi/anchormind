@@ -935,11 +935,13 @@ The call result falls into one of three cases.
 
 | Situation | Response | isError |
 |-|-|-|
-| Deleted | `{success: true, deleted: 1}` | false |
+| Deleted | `{success: true, deleted: 1, protected: 0, purged: {case_summaries: 2, audit_fragments: 1}}` | false |
 | Permanent tier without `force` | `{success: true, deleted: 0, protected: 1, reason: "..."}` | false |
 | Target missing or not permitted | `{success: true, deleted: 0, error: "Fragment not found or no permission"}` | true |
 
 In the third case the payload reports `success: true` while carrying an `error` key, and that key flips the MCP envelope to `isError: true`. Retrying a delete that already succeeded lands here, so clients should read `deleted` rather than treating the envelope as authoritative.
+
+`purged` is the deletion cascade receipt (`MEMENTO_FORGET_CASCADE=on`, the default). In the same transaction as the fragment deletion, `case_summaries` counts the `case_events` summaries of the deleted fragments that were replaced with `[삭제됨]`, and `audit_fragments` counts the server-written contradiction resolution records that pointed at a deleted fragment and were deleted with it (they are not counted in `deleted`). It appears on responses that reached the deletion step (a topic delete with no targets included), and not on responses that ended because the id target is missing, not permitted or permanent-protected. With `off` the response has no `purged`.
 
 ---
 

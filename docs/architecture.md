@@ -72,6 +72,7 @@ server.js  (HTTP 서버)
             │   ├── serverWriteGate.js    서버 쓰기 경로의 관문 생성. 키의 workspace 허가 집합과 hard gate 설정을 ApiKeyStore에서 읽어 주입한다
             │   ├── FragmentImporter.js   가져오기 행을 관문에 통과시켜 FragmentWriter로 기록. 대상 키 프로필(owner, restore)을 적용한다 (admin 가져오기와 CLI 가져오기 공용)
             │   ├── DedupScope.js         content_hash 중복 판정 범위(`MEMENTO_DEDUP_SCOPE`). 유효 판정 색인을 읽어 판정 범위, ON CONFLICT 대상, 사전 조회, batch 접기 키를 정한다
+            │   ├── ForgetCascade.js      forget 삭제 연쇄(`MEMENTO_FORGET_CASCADE`). 잠금 문장, 삭제와 case_events 요약 갱신 문장, 영수증(`purged`), 고아 요약 정리
             │   ├── FragmentWriter.js     파편 쓰기. 의미 메서드(insert, update)는 관문을 거친 값만 받고, 내부 메타데이터는 updateInternal로 쓰며 의미 열 9개는 쓸 수 없다 (delete, incrementAccess, touchLinked 포함)
             │   ├── rowLock.js            여러 파편 행 쓰기의 id 순 잠금 문장(`fragmentRowLock`)과 잠근 행 삭제 문장
             │   ├── FragmentFactory.js    파편 생성, 유효성 검증, PII 마스킹 진입점(`maskSensitiveText`, 규칙은 `lib/security`의 표)과 유형별 절삭(`limitContentLength`)
@@ -137,7 +138,7 @@ server.js  (HTTP 서버)
             ├── keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` 공유 헬퍼. key_id 범위 WHERE 절 생성. FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js에서 공유 사용
             ├── CaseEventStore.js         semantic milestone 로그 (case_events CRUD, DAG 엣지, 증거 조인)
             ├── memory-schema.sql         PostgreSQL 스키마 정의
-            └── migrations/               DB 마이그레이션 SQL 51개 (migration-001 ~ migration-052, 046 결번, schema_migrations 테이블 기준 순차 적용). `scripts/migrate.js`·`scripts/lint-migrations.js`가 이 경로를 사용
+            └── migrations/               DB 마이그레이션 SQL 52개 (migration-001 ~ migration-054, 046, 053 결번, schema_migrations 테이블 기준 순차 적용). `scripts/migrate.js`·`scripts/lint-migrations.js`가 이 경로를 사용
 ```
 
 지원 모듈:
@@ -281,6 +282,7 @@ scripts/
 ├── post-migrate-flexible-embedding-dims.js      임베딩 차원 마이그레이션
 ├── cleanup-noise.js                             저품질/노이즈 파편 일괄 정리 (1회성)
 ├── purge-oauth-clients.js                       한 번도 쓰이지 않은 오래된 동적 등록 OAuth 클라이언트 정리 (기본 미리보기, `--execute`로 삭제)
+├── purge-orphan-case-summaries.js               원본 파편이 없는 case_events 요약을 `[삭제됨]`으로 정리 (기본 미리보기, `--execute`로 변경)
 ├── lint-migrations.js                           마이그레이션 파일 규약 검사 (`npm run lint:migrations`)
 ├── lint-ratchet.js                              무처리 catch 처리기, 복잡도, 파일 길이, 직접 환경 변수 읽기 수치를 `scripts/lint-baseline.json`과 비교 (`npm run lint:ratchet`)
 ├── import-cycles.js                             `lib`, `config`, `server.js`의 상대 경로 import 순환 검사 (정적 import만 본 결과와 동적 import를 포함한 결과를 따로 출력)
@@ -1437,7 +1439,7 @@ lib/memory/
 ├── embedding/     EmbeddingWorker, EmbeddingCache, MorphemeIndex, MorphemeTokenizer
 ├── signals/       SpreadingActivation, CaseRewardBackprop, NLIClassifier, MemoryEvaluator, SearchMetrics, SearchEventAnalyzer, SearchEventRecorder, EvaluationMetrics, SearchParamAdaptor
 ├── processors/    MemoryRememberer, MemoryRecaller, MemoryReflector, MemoryLinker, ReflectProcessor, AutoReflect, EpisodeContinuityService, SessionActivityTracker
-└── migrations/    마이그레이션 SQL 51개 (001 ~ 052, 046 결번)
+└── migrations/    마이그레이션 SQL 52개 (001 ~ 054, 046, 053 결번)
 ```
 
 루트 직속으로 유지되는 모듈은 MemoryManager, ModeRegistry, keyId, keyScope, QuotaChecker, CaseEventStore, FragmentIndex, contentGuard이다. 위 서브디렉토리로 이동한 모듈에 대한 재-export 심(re-export shim)은 존재하지 않는다 — 임포트 경로는 실제 파일 위치를 그대로 따른다.

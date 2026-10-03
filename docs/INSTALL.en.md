@@ -37,7 +37,7 @@ The fastest path for someone new to this repository is to hand the work to an AI
 After the assistant finishes, all of the following must hold:
 
 - `.env` exists, with `MEMENTO_ACCESS_KEY`, `POSTGRES_*`, and `REDIS_*` populated
-- `npm run migrate` succeeds through `migration-052`
+- `npm run migrate` succeeds through `migration-054`
 - `node bin/memento.js health` returns OK for DB, Redis, and the embedding provider
 - The AI client lists `mcp__*__remember`, `recall`, and `reflect`
 - A `context` call returns a valid response (zero fragments is fine; so does `memory_stats` with a master key)
@@ -280,6 +280,8 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-051-search-events-budget.s
 # outbox_events table
 psql $DATABASE_URL -f lib/memory/migrations/migration-052-outbox-events.sql
 
+# case_events source fragment index (production databases create it first with online-index)
+psql $DATABASE_URL -f lib/memory/migrations/migration-054-case-events-source-fragment.sql
 # Fragment provenance, trust tier and review state columns
 psql $DATABASE_URL -f lib/memory/migrations/migration-057-fragment-provenance.sql
 

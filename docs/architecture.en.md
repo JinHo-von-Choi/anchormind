@@ -69,6 +69,7 @@ server.js  (HTTP server)
             |   +-- serverWriteGate.js    Builds the gate for server write paths, injecting the key's allowed workspace set and hard gate setting from ApiKeyStore
             |   +-- FragmentImporter.js   Passes import rows through the gate and writes them with FragmentWriter. Applies the target key profile (owner, restore) (shared by admin import and CLI import)
             |   +-- DedupScope.js         content_hash duplicate detection scope (`MEMENTO_DEDUP_SCOPE`). Reads the valid detection indexes to choose the detection scope, ON CONFLICT target, pre-insert lookup and batch fold key
+            |   +-- ForgetCascade.js      forget deletion cascade (`MEMENTO_FORGET_CASCADE`). Lock statement, deletion and case_events summary statement, receipt (`purged`), orphan summary cleanup
             |   +-- FragmentWriter.js     Fragment writes. The semantic methods (insert, update) accept only gated values; internal metadata goes through updateInternal, which cannot write the 9 semantic columns (also delete, incrementAccess, touchLinked)
             |   +-- rowLock.js            Id-ordered lock statement (`fragmentRowLock`) and locked-row delete statement shared by multi-row fragment writes
             |   +-- FragmentFactory.js    Fragment creation, validation, PII masking entry point (`maskSensitiveText`, rules come from the `lib/security` table) and per-type truncation (`limitContentLength`)
@@ -134,7 +135,7 @@ server.js  (HTTP server)
             +-- keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` shared helper. Generates key_id-scoped WHERE clauses. Used by FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js
             +-- CaseEventStore.js         Semantic milestone log (case_events CRUD, DAG edges, evidence join)
             +-- memory-schema.sql         PostgreSQL schema definition
-            +-- migrations/               51 DB migration SQL files (migration-001 through migration-052; 046 is unused), applied sequentially against the schema_migrations table. Used by `scripts/migrate.js` and `scripts/lint-migrations.js`
+            +-- migrations/               52 DB migration SQL files (migration-001 through migration-054; 046 and 053 are unused), applied sequentially against the schema_migrations table. Used by `scripts/migrate.js` and `scripts/lint-migrations.js`
 ```
 
 Supporting modules:
@@ -278,6 +279,7 @@ scripts/
 +-- post-migrate-flexible-embedding-dims.js      Embedding dimension migration
 +-- cleanup-noise.js                             Bulk cleanup of low-quality/noise fragments (one-time)
 +-- purge-oauth-clients.js                       Removes old dynamically registered OAuth clients that were never used (preview by default, `--execute` deletes)
++-- purge-orphan-case-summaries.js               Replaces case_events summaries whose source fragment no longer exists with `[삭제됨]` (preview by default, `--execute` changes)
 +-- lint-migrations.js                           Migration file convention check (`npm run lint:migrations`)
 +-- lint-ratchet.js                              Compares silent catch handlers, complexity, file length and direct environment reads against `scripts/lint-baseline.json` (`npm run lint:ratchet`)
 +-- import-cycles.js                             Import cycle check over relative imports in `lib`, `config` and `server.js` (static-only and static+dynamic results printed separately)
@@ -1343,7 +1345,7 @@ lib/memory/
 +-- embedding/     EmbeddingWorker, EmbeddingCache, MorphemeIndex, MorphemeTokenizer
 +-- signals/       SpreadingActivation, CaseRewardBackprop, NLIClassifier, MemoryEvaluator, SearchMetrics, SearchEventAnalyzer, SearchEventRecorder, EvaluationMetrics, SearchParamAdaptor
 +-- processors/    MemoryRememberer, MemoryRecaller, MemoryReflector, MemoryLinker, ReflectProcessor, AutoReflect, EpisodeContinuityService, SessionActivityTracker
-+-- migrations/    51 migration SQL files (001 through 052; 046 unused)
++-- migrations/    52 migration SQL files (001 through 054; 046 and 053 unused)
 ```
 
 Modules kept directly at the root are MemoryManager, ModeRegistry, keyId, keyScope, QuotaChecker, CaseEventStore, FragmentIndex, and contentGuard. No re-export shim exists for modules moved into the subdirectories above — import paths follow the actual file locations directly.

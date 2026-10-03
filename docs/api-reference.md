@@ -952,11 +952,13 @@ violations 있는 경우 (soft gate — 저장됨):
 
 | 상황 | 응답 | isError |
 |-|-|-|
-| 삭제 성공 | `{success: true, deleted: 1}` | false |
+| 삭제 성공 | `{success: true, deleted: 1, protected: 0, purged: {case_summaries: 2, audit_fragments: 1}}` | false |
 | permanent 계층 파편에 force 미지정 | `{success: true, deleted: 0, protected: 1, reason: "permanent 파편은 force 옵션 필요"}` | false |
 | 대상이 없거나 접근 권한 없음 | `{success: true, deleted: 0, error: "Fragment not found or no permission"}` | true |
 
 세 번째 경우는 페이로드의 `success`가 true인데 `error` 키가 함께 실리고, 그 키 때문에 MCP 봉투가 `isError: true`로 뒤집힌다. 이미 삭제된 대상을 재시도로 다시 지우면 이 응답을 받으므로, 클라이언트는 삭제 실패로 오인하지 않도록 `deleted` 값을 함께 봐야 한다.
+
+`purged`는 삭제 연쇄의 영수증이다(`MEMENTO_FORGET_CASCADE=on`, 기본). 파편 삭제와 같은 트랜잭션에서 `case_summaries`는 지운 파편을 출처로 한 `case_events` 요약을 `[삭제됨]`으로 바꾼 수, `audit_fragments`는 지운 파편을 가리키던 서버 기록 모순 해소 파편을 함께 지운 수다(`deleted`에는 세지 않는다). 삭제 단계까지 간 응답(대상이 없는 topic 삭제 포함)에 실리고, id 대상이 없거나 권한이 없거나 permanent 보호로 끝난 응답에는 없다. `off`이면 `purged`가 없다.
 
 ---
 

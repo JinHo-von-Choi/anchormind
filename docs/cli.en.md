@@ -628,6 +628,18 @@ node scripts/purge-oauth-clients.js --execute               # delete
 
 Deletion cannot be undone, so keep a copy of the table with `pg_dump -t agent_memory.oauth_clients` before running it.
 
+### Orphan case_events summary cleanup
+
+Replaces the `summary` of `case_events` rows whose `source_fragment_id` has no row in `fragments` with `[삭제됨]`. Event rows, types, order and edges remain. Closed fragments (`valid_to` set) still have their row and are not targets. With `MEMENTO_FORGET_CASCADE=on` (the default) `forget` replaces the summaries in the same transaction, so this script cleans up summaries left by `forget` while the switch is off and by other deletion paths (expiry cleanup, merges). The default is a preview that prints the target count and an `event_id` sample (summaries are not printed); `--execute` changes them in batches of 500 (`--batch`, 1 to 10000) and skips rows locked by other transactions. The database connection uses the server settings (`POSTGRES_*`, `DOTENV_CONFIG_PATH`).
+
+```bash
+node scripts/purge-orphan-case-summaries.js                      # preview
+node scripts/purge-orphan-case-summaries.js --execute            # change
+node scripts/purge-orphan-case-summaries.js --execute --batch 200
+```
+
+The change cannot be undone, so keep a copy of the table with `pg_dump -t agent_memory.case_events` before running it.
+
 ### Import cycle check
 
 ```bash

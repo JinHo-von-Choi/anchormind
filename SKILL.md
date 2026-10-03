@@ -943,6 +943,8 @@ async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기�
 
 타 테넌트(다른 API 키) 소유 파편을 삭제 시도하면 `"Fragment not found or no permission"` 오류가 반환된다. master key는 전체 파편에 접근 가능하다.
 
+삭제한 파편의 본문 사본(케이스 이벤트 요약, 모순 해소 기록)은 같은 트랜잭션에서 지워지고, 응답의 `purged`(`case_summaries`, `audit_fragments`)가 그 건수를 알린다(`MEMENTO_FORGET_CASCADE=on`, 기본).
+
 ### link
 
 | 이름 | 타입 | 필수 | 설명 |

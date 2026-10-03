@@ -629,6 +629,18 @@ node scripts/purge-oauth-clients.js --execute               # 실제 삭제
 
 삭제는 되돌릴 수 없으므로 실행 전에 `pg_dump -t agent_memory.oauth_clients`로 표를 보관한다.
 
+### 고아 case_events 요약 정리
+
+`source_fragment_id`의 파편 행이 `fragments`에 없는 `case_events`의 요약(`summary`)을 `[삭제됨]`으로 바꾼다. 이벤트 행, 유형, 순서, 엣지는 그대로 둔다. 닫힌(`valid_to` 지정) 파편은 행이 남아 있으므로 대상이 아니다. `MEMENTO_FORGET_CASCADE=on`(기본)이면 `forget`이 같은 트랜잭션에서 요약을 바꾸므로, 이 스크립트는 스위치가 꺼진 동안의 `forget`과 다른 삭제 경로(만료 정리, 병합)가 남긴 요약을 정리한다. 기본은 대상 수와 `event_id` 표본(요약 본문은 출력하지 않는다)만 출력하는 미리보기이며 `--execute`를 주면 500건씩(`--batch`, 1~10000) 바꾸고, 다른 트랜잭션이 잠근 행은 건너뛴다. DB 접속은 서버와 같은 설정(`POSTGRES_*`, `DOTENV_CONFIG_PATH`)을 쓴다.
+
+```bash
+node scripts/purge-orphan-case-summaries.js                      # 미리보기
+node scripts/purge-orphan-case-summaries.js --execute            # 실제 변경
+node scripts/purge-orphan-case-summaries.js --execute --batch 200
+```
+
+변경은 되돌릴 수 없으므로 실행 전에 `pg_dump -t agent_memory.case_events`로 표를 보관한다.
+
 ### import 순환 검사
 
 ```bash

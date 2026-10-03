@@ -48,6 +48,7 @@ write 경로별 lock 종류·격리 수준·재시도 정책을 한 페이지로
 |링크 일괄 생성의 linked_to|`LinkStore.createLinks`|쌍의 양 끝 id|NO KEY UPDATE|linked_to 합집합|link_sync|
 |forget의 linked_to 정리|`FragmentWriter.delete`, `deleteMany`|linked_to에 지울 id를 가진 행|NO KEY UPDATE|linked_to 제거|unlink|
 |일괄 삭제|`FragmentWriter.deleteMany`, `deleteByAgent`|id 목록(키 범위), agent_id|UPDATE|DELETE|delete|
+|forget 삭제 연쇄|`FragmentWriter.deleteWithCascade`|id 목록(키 범위)과 그 id를 linked_to에 가진 서버 기록 모순 해소 파편|UPDATE|DELETE와 같은 문장의 case_events.summary 갱신, 커밋 뒤 linked_to 정리(unlink)|delete|
 |GC 삭제|`FragmentGC.deleteExpired`(청크 100건 반복, 청크마다 별도 트랜잭션과 `lock_timeout` 3초), `ConsolidatorGC.purgeStaleReflections`|후보 CTE의 id|UPDATE|DELETE ... RETURNING|gc_delete|
 |감쇠, utility 묶음|`idOrderedUpdate.updateOneBatch`|조건 + `id > 마지막 id` + LIMIT 묶음 크기|NO KEY UPDATE|호출자가 넘긴 SET|score_batch|
 |활성화 확산|`SpreadingActivation` 큐 처리|`id = ANY(ids)`, 키와 workspace 범위|NO KEY UPDATE|EMA, accessed_at, access_count|activation|
