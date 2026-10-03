@@ -18,8 +18,14 @@ import {
   normalizeLexicalTokens,
   lexicalDocument,
   lexicalTokens,
+  lexicalInput,
+  contentTokenResult,
+  contentTokenDocument,
   QUERY_TERM_LIMIT,
-  MAX_LEXEME_CHARS
+  MAX_LEXEME_CHARS,
+  TOKENIZE_MAX_CHARS,
+  MAX_RUN_CHARS,
+  SKIP_REASONS
 } from "../../lib/memory/embedding/LexicalTokens.js";
 
 const ESCAPE_TABLE = [
@@ -134,5 +140,42 @@ describe("lexicalTokens", () => {
   it("빈 본문과 문자열이 아닌 값은 빈 배열", async () => {
     assert.deepEqual(await lexicalTokens(""), []);
     assert.deepEqual(await lexicalTokens(null), []);
+  });
+});
+
+describe("숫자 토큰과 입력 상한", () => {
+  it("3자리 이상 숫자 연속을 본문과 질의 양쪽 토큰으로 남긴다", async () => {
+    const doc   = await lexicalTokens("MCP 서버 포트는 53535이고 공유기는 443을 3999로 보낸다. 버전 12는 짧다");
+    const query = await lexicalTokens("포트 53535");
+    for (const n of ["53535", "443", "3999"]) assert.ok(doc.includes(n), n);
+    assert.ok(!doc.includes("12"));
+    assert.ok(query.includes("53535"));
+  });
+
+  it("앞 TOKENIZE_MAX_CHARS자만 토큰화한다", () => {
+    const text = "가나 ".repeat(TOKENIZE_MAX_CHARS);
+    assert.equal(lexicalInput(text).text.length, TOKENIZE_MAX_CHARS);
+    assert.equal(lexicalInput(text).skip, null);
+  });
+
+  it("공백 없이 MAX_RUN_CHARS자를 넘는 한글 연속은 토큰화하지 않는다", async () => {
+    const run = "운영서버재시작".repeat(Math.ceil((MAX_RUN_CHARS + 1) / 7)).slice(0, MAX_RUN_CHARS + 1);
+    assert.deepEqual(lexicalInput(`앞 ${run} 뒤`), { text: "", skip: SKIP_REASONS.LONG_RUN });
+    assert.deepEqual(await contentTokenResult(run), { doc: null, skip: SKIP_REASONS.LONG_RUN });
+    assert.equal(await contentTokenDocument(run), null);
+    assert.deepEqual(await lexicalTokens(run), []);
+  });
+
+  it("상한 이하의 한글 연속과 긴 영문 식별자는 토큰화한다", async () => {
+    const run = "가".repeat(MAX_RUN_CHARS);
+    assert.equal(lexicalInput(run).skip, null);
+    const latin = "a".repeat(MAX_RUN_CHARS * 2);
+    assert.equal(lexicalInput(latin).skip, null);
+  });
+
+  it("토큰화하는 본문은 문서 문자열과 사유 없음을 돌려준다", async () => {
+    const result = await contentTokenResult("운영 서버 재시작");
+    assert.equal(result.skip, null);
+    assert.ok(result.doc.split(" ").includes("서버"));
   });
 });
