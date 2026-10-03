@@ -18,6 +18,9 @@ import {
 } from "../../lib/memory/read/ContextLines.js";
 import { ContextBuilder, buildRankedInjection } from "../../lib/memory/read/ContextBuilder.js";
 
+/** 앵커 줄 주체 표지는 별도 시험이 본다. 여기서는 주석만 보도록 앵커 권한 집행을 끈다. */
+process.env.MEMENTO_ANCHOR_PERMISSION = "off";
+
 const ANNOTATION_TAIL = /\(\d{4}-\d{2}-\d{2}(, (observed|inferred|verified|rejected))?\)$/;
 
 describe("formatUtcDate", () => {

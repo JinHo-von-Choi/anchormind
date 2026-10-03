@@ -147,7 +147,8 @@ describe("WriteGate.check 앵커 판정", () => {
       getHardGate         : async () => hardGate,
       getAnchorState      : async () => state,
       auditAnchor         : (event) => { audits.push(event); },
-      anchorPermissionMode: () => mode
+      anchorPermissionMode: () => mode,
+      reviewQueue         : () => false
     });
     return { gate, audits };
   }
@@ -262,7 +263,8 @@ describe("WriteGate.check 앵커 상한 표식", () => {
       getAnchorState      : async () => state,
       auditAnchor         : (event) => { audits.push(event); },
       anchorPermissionMode: () => mode,
-      anchorLimit         : () => 3
+      anchorLimit         : () => 3,
+      reviewQueue         : () => false
     });
     return { gate, audits };
   }

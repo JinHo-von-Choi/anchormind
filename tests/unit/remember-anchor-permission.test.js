@@ -23,6 +23,7 @@ const { SERVER_ANCHOR_DEPS }    = await import("../../lib/memory/write/serverAnc
 const { getAnchorState }        = await import("../../lib/admin/ApiKeyStore.js");
 const { auditAnchorDecision }   = await import("../../lib/memory/write/anchorAudit.js");
 const { handleMemory }          = await import("../../lib/admin/admin-memory.js");
+const { requireCapability, masterPrincipal } = await import("../../lib/admin/AdminAuthz.js");
 const { teardownTestResources } = await import("../_lifecycle.js");
 
 after(async () => { await teardownTestResources(); });
@@ -140,7 +141,7 @@ describe("amend 앵커 지정", () => {
     assert.equal(result.updated, true);
     assert.equal(Object.hasOwn(updated[0], "is_anchor"), false);
     assert.equal(updated[0].importance, 0.7);
-    assert.deepEqual(result.validation_warnings, ["anchorPermissionRequired"]);
+    assert.deepEqual(result.validation_warnings, ["anchorPermissionRequired", "review.anchor_unauthorized"]);
   });
 
   it("앵커 표시를 내리는 amend는 권한 조회 없이 반영하고 cleared로 감사한다", async () => {
@@ -169,7 +170,9 @@ describe("admin 기억 PATCH", () => {
     const { rememberer, updated, lookups } = makeRememberer({ existing: { ...EXISTING } });
     managerHolder.instance = { amend: (p) => rememberer.amend(p) };
     const res = fakeRes();
-    await handleMemory(jsonReq("PATCH", { is_anchor: true }), res,
+    const req = jsonReq("PATCH", { is_anchor: true });
+    requireCapability(req, fakeRes(), { principal: masterPrincipal(), cap: "mem.write" });
+    await handleMemory(req, res,
       new URL(`http://localhost/v1/internal/model/nothing/memory/fragments/${EXISTING.id}?key_ids=${KEY}`));
     assert.equal(res.statusCode, 200, res.body);
     assert.equal(updated[0].is_anchor, true);

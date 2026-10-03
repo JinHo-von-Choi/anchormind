@@ -248,7 +248,7 @@ describe("batch_remember", () => {
     const { results } = await processor().process({ fragments: items, agentId: "default", _keyId: null });
     assert.ok(results.every(r => r.success));
     const [stmt] = inserts();
-    assert.match(stmt.sql, /embedding, content_tokens\)/);
+    assert.match(stmt.sql, /embedding(, \w+)*, content_tokens\)/);
     const refs = [...stmt.sql.matchAll(/to_tsvector\('simple', \$(\d+)::text\)/g)].map(m => Number(m[1]));
     assert.equal(refs.length, 2);
     assert.ok(stmt.params[refs[0] - 1].split(" ").includes("서버"));

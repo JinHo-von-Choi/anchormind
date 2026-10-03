@@ -16,6 +16,8 @@ process.env.DOTENV_CONFIG_PATH      ??= ".env.test";
 process.env.MEMENTO_METRICS_DEFAULT ??= "off";
 process.env.REDIS_ENABLED           ??= "false";
 process.env.CACHE_ENABLED           ??= "false";
+/** 앵커 줄 주체 표지는 별도 시험이 본다. 여기서는 출처 주석만 보도록 앵커 권한 집행을 끈다. */
+process.env.MEMENTO_ANCHOR_PERMISSION = "off";
 
 const state = { result: null, queries: [], provenanceRows: [], failProvenance: false };
 

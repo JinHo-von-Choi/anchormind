@@ -59,7 +59,8 @@ describe("가져오기 폐포", () => {
     const bin = readFileSync(path.join(ROOT, "bin", "memento.js"), "utf8");
     assert.match(bin, /DOTENV_EXEMPT_COMMANDS = new Set\(\[[^\]]*"admin"[^\]]*\]\)/);
     assert.doesNotMatch(bin, /^import\s+["']dotenv\/config["']/m);
-    assert.match(bin, /mod\.default\(args, \{ env: process\.env \}\)/);
+    assert.match(bin, /if \(cmd === "admin"\)\s+return \{ env: process\.env \};/);
+    assert.match(bin, /mod\.default\(args, commandOverrides\(cmd\)\)/);
   });
 });
 

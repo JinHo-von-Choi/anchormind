@@ -16,6 +16,9 @@ import { anchorPrincipalLabel } from "../../lib/memory/anchorPolicy.js";
 
 const KEY = "c0ffee00-1234-4abc-8def-001122334455";
 
+/** 저장일 주석은 별도 시험이 본다. 여기서는 주체 표지만 보도록 주석을 끈다. */
+process.env.MEMENTO_CONTEXT_ANNOTATE = "off";
+
 function anchorRow(id, keyId, content) {
   return {
     id, type: "fact", topic: "synthetic-anchor", content, importance: 0.9,

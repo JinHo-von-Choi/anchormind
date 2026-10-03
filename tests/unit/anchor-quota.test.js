@@ -184,7 +184,7 @@ describe("applyAnchorQuotaToBatch", () => {
 });
 
 describe("BatchRememberProcessor 앵커 판정", () => {
-  /** 일괄 저장 트랜잭션 대역. INSERT 행의 is_anchor 값(행마다 15번째 열)을 모은다. */
+  /** 일괄 저장 트랜잭션 대역. INSERT 행의 is_anchor 값(행마다 15번째 열, 행 길이는 VALUES 묶음 수로 나눈다)을 모은다. */
   function batchPool(anchors, insertedAnchors) {
     return {
       connect: async () => ({
@@ -192,8 +192,9 @@ describe("BatchRememberProcessor 앵커 판정", () => {
           const text = String(sql);
           if (/COUNT\(\*\)::int AS count FROM .*fragments/.test(text)) return { rows: [{ count: anchors }] };
           if (text.includes("INSERT INTO")) {
-            const rows = [];
-            for (let i = 0; i < params.length; i += 24) {
+            const rows   = [];
+            const stride = params.length / (text.split("VALUES")[1].match(/\(\$\d+/g) ?? []).length;
+            for (let i = 0; i < params.length; i += stride) {
               insertedAnchors.push(params[i + 14]);
               rows.push({ id: params[i] });
             }
@@ -212,7 +213,8 @@ describe("BatchRememberProcessor 앵커 판정", () => {
       getAnchorState      : async () => ({ permissions, anchorCount: anchors }),
       auditAnchor         : () => {},
       anchorPermissionMode: () => mode,
-      anchorLimit         : () => 3
+      anchorLimit         : () => 3,
+      reviewQueue         : () => false
     });
     const proc = new BatchRememberProcessor({
       store: {}, index: { index: async () => {} }, factory: new FragmentFactory(), writeGate: gate

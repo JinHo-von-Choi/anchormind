@@ -40,12 +40,13 @@ const SECRET   = `sk-ant-api03-${"A1b2".repeat(20)}`;
 /** 대역 의존성 위의 관문 */
 function gate({ review = true, provenance = true, hardGate = false, scan = "mask", steps = {} } = {}) {
   return new WriteGate({
-    policyGatingEnabled: false,
-    enabled            : () => true,
-    provenance         : () => provenance,
-    reviewQueue        : () => review,
-    sensitiveScanMode  : () => scan,
-    getHardGate        : async () => hardGate,
+    policyGatingEnabled : false,
+    enabled             : () => true,
+    provenance          : () => provenance,
+    reviewQueue         : () => review,
+    sensitiveScanMode   : () => scan,
+    getHardGate         : async () => hardGate,
+    anchorPermissionMode: () => "off",
     steps
   });
 }
