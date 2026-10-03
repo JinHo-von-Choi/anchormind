@@ -18,6 +18,8 @@ import { readFileSync }   from "node:fs";
 import { fileURLToPath }  from "node:url";
 import path               from "node:path";
 
+import { DEFAULT_DB_STATEMENT_TIMEOUT_MS } from "../../lib/config.js";
+
 const HERE   = path.dirname(fileURLToPath(import.meta.url));
 const ROOT   = path.resolve(HERE, "..", "..");
 const SERVER = readFileSync(path.join(ROOT, "server.js"), "utf8");
@@ -54,10 +56,16 @@ describe("질의 시간 상한", () => {
   });
 
   test("실측 기반 기본값이 회상 최대 소요보다 크다", () => {
-    const m = DB.match(/envInt\("DB_STATEMENT_TIMEOUT_MS",\s*(\d+)/);
-    assert.ok(m, "기본값을 찾지 못했다");
     /** recall 최대 소요는 임베딩 콜드스타트 포함 약 5초다. */
-    assert.ok(Number(m[1]) >= 15000, `기본값 ${m[1]}ms가 정상 요청을 끊을 수 있다`);
+    assert.ok(DEFAULT_DB_STATEMENT_TIMEOUT_MS >= 15000, `기본값 ${DEFAULT_DB_STATEMENT_TIMEOUT_MS}ms가 정상 요청을 끊을 수 있다`);
+  });
+
+  test("질의 시간 상한 기본값은 설정 모듈의 상수 하나를 읽는다", () => {
+    const CONFIG = readFileSync(path.join(ROOT, "lib", "config.js"), "utf8");
+    assert.match(DB, /envInt\("DB_STATEMENT_TIMEOUT_MS",\s*DEFAULT_DB_STATEMENT_TIMEOUT_MS/);
+    assert.match(CONFIG, /envInt\("DB_STATEMENT_TIMEOUT_MS",\s*DEFAULT_DB_STATEMENT_TIMEOUT_MS/);
+    assert.doesNotMatch(DB, /DB_STATEMENT_TIMEOUT_MS",\s*\d/);
+    assert.doesNotMatch(CONFIG, /DB_STATEMENT_TIMEOUT_MS",\s*\d/);
   });
 
   test("0을 주면 상한을 걸지 않는다", () => {
