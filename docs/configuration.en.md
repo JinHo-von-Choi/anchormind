@@ -1281,6 +1281,8 @@ Locks the session operation scope to a preset. Three configuration paths are ava
 2. **initialize parameter**: `{ "method": "initialize", "params": { "mode": "<preset>" } }`
 3. **Per-key default** (the ACCESS POLICY card in the admin console key detail, or `PATCH /v1/internal/model/nothing/keys/:id/policy`): `api_keys.default_mode` column (migration-034). Master-only presets (`audit`) cannot be assigned to an API key. Applies to sessions opened after the change
 
+When a non-master session requests a master-only preset through any of the three paths, `MEMENTO_WORKSPACE_READ_AUTHZ` decides. `warn` (default) ignores the preset, lists all tools and records `memento_workspace_read_authz_total{surface="mode_preset",outcome="would_deny"}` and a warning log (key id, preset, source). `enforce` rejects with HTTP 403 and `-32001` without creating a session.
+
 | Preset | Description | Representative excluded_tools | Recommended context |
 |--------|-------------|-------------------------------|---------------------|
 | `recall-only` | Read-only. Write tools blocked | remember, batch_remember, amend, forget, link, reflect, memory_consolidate | Shared API keys with read-only grants; read-only dashboard integrations |

@@ -58,7 +58,10 @@ server.js  (HTTP server)
             |   +-- LinkedFragmentLoader.js Bulk linked fragment load (1-hop neighbor batch query)
             |   +-- RecallSuggestionEngine.js Analyzes recall results and generates _suggestion meta field
             |   +-- assistant-query.js    Assistant-side query helper
-            |   +-- SearchScope.js        Search coherence filter contract. Encapsulates workspace/caseId/resolutionStatus/phase/affect/type/topic/isAnchor/keyId. applyTo(fragment) -> boolean. L1 HotCache, L2, L3, and Graph prefilters are backed by a final common filter in search()
+            |   +-- SearchScope.js        Search coherence filter contract. Encapsulates workspace/caseId/resolutionStatus/phase/affect/type/topic/isAnchor/keyId. applyTo(fragment) -> boolean. L1 HotCache, L2, L3, and Graph prefilters are backed by a final common filter in search(). With a read authorization range (readRange), fragments in workspaces outside the range are excluded
+            |   +-- workspace-read-policy.js Pure read-path workspace authorization (decideWorkspaceRead, isWorkspaceReadable), the gated tool table and the exempt table, and the decision errors (WorkspaceReadDeniedError, ModePresetRejectedError)
+            |   +-- WorkspaceReadAuthz.js Single read authorization gate. tools/call read tools and resources/read call it before the handler; it also checks master-only preset requests. `MEMENTO_WORKSPACE_READ_AUTHZ`
+            |   +-- read-authz-metrics.js Metric for decisions outside the allowed set `memento_workspace_read_authz_total{surface,reason,outcome}`
             |   +-- SearchSideEffects.js  Search side-effect isolation module. commitSearchSideEffects() synchronously returns searchEventId; fire-and-forgets SearchParamAdaptor.recordOutcome()
             +-- write/                    Write layer modules
             |   +-- WriteGate.js          Single semantic write gate. Applies the normalize, sensitive, length, policy, workspace and anchor steps in order and records violations as warnings or rejects them on hard-gate keys. `MEMENTO_WRITE_GATE`

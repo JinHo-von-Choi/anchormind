@@ -1356,6 +1356,8 @@ EMBEDDING_DIMENSIONS=768
 2. **initialize 파라미터**: `{ "method": "initialize", "params": { "mode": "<preset>" } }`
 3. **키 단위 기본값** (admin console 키 상세의 ACCESS POLICY 또는 `PATCH /v1/internal/model/nothing/keys/:id/policy`): `api_keys.default_mode` 컬럼 (migration-034). 마스터 전용 preset(`audit`)은 API 키에 지정할 수 없다. 변경 이후 열린 세션부터 적용된다
 
+master가 아닌 세션이 세 경로 어디로든 master 전용 preset을 요청하면 `MEMENTO_WORKSPACE_READ_AUTHZ`가 판정한다. `warn`(기본)은 preset을 무시해 전체 도구를 노출하고 `memento_workspace_read_authz_total{surface="mode_preset",outcome="would_deny"}`와 경고 로그(키 id, preset, 출처)를 남긴다. `enforce`는 세션을 만들지 않고 HTTP 403과 `-32001`로 거부한다.
+
 | Preset | 설명 | excluded_tools 대표 예 | 권장 사용 맥락 |
 |--------|------|------------------------|----------------|
 | `recall-only` | 읽기 전용. 쓰기 도구 차단 | remember, batch_remember, amend, forget, link, reflect, memory_consolidate | 읽기 권한만 부여된 공유 API 키, 조회 전용 대시보드 연동 |

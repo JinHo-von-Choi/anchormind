@@ -401,6 +401,7 @@ docs/
 - MEMENTO_SSE_QUERY_KEY: Legacy SSE의 `?accessKey=` 쿼리 키 처리. 기본 `allow`는 master 키에 한해 받고, `deny`는 받지 않고 401로 `Authorization` 헤더 사용을 안내한다.
 - MEMENTO_OAUTH_REDIRECT_CHECK: `/authorize` 오류 응답의 리다이렉트 대상 확인. 기본 `warn`은 등록되지 않은 `redirect_uri`로도 이동시키고 경고를 남기며, `enforce`는 400 JSON으로 응답한다.
 - MEMENTO_FRAME_OPTIONS: `deny`일 때만 `X-Frame-Options: DENY`를 붙인다.
+- MEMENTO_WORKSPACE_READ_AUTHZ: API 키 `allowed_workspaces` 밖 읽기(recall, context 등과 resources/read)와 master가 아닌 세션의 master 전용 preset 요청 판정. 기본 `warn`은 처리하고 `memento_workspace_read_authz_total`과 경고 로그로 남기며, `enforce`는 `-32001`로 거부한다. `enforce` 전에 warn 기간의 키별 기록을 확인한다.
 
 ## 기술 스택
 

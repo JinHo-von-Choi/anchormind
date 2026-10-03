@@ -373,6 +373,7 @@ AnchorMind is optimized for fact caching. When narrative context matters:
 - MEMENTO_SSE_QUERY_KEY: Legacy SSE `?accessKey=` handling. Default `allow` accepts it for the master key only; `deny` rejects it with 401 pointing to the `Authorization` header.
 - MEMENTO_OAUTH_REDIRECT_CHECK: Redirect target check for `/authorize` error responses. Default `warn` still redirects to an unregistered `redirect_uri` and logs a warning; `enforce` answers with 400 JSON.
 - MEMENTO_FRAME_OPTIONS: Adds `X-Frame-Options: DENY` only when set to `deny`.
+- MEMENTO_WORKSPACE_READ_AUTHZ: Check of reads outside an API key's `allowed_workspaces` (recall, context and the other read tools, resources/read) and of master-only preset requests from non-master sessions. Default `warn` processes them and records `memento_workspace_read_authz_total` and a warning log; `enforce` rejects with `-32001`. Review the per-key records from the warn period before switching to `enforce`.
 
 ## Tech Stack
 

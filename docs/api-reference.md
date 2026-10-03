@@ -278,13 +278,14 @@ X-RateLimit-Resource: fragments
 - `TOOL_PERMISSIONS` 맵에 등록된 도구만 호출할 수 있다. 맵에 없는 도구명은 master key를 포함한 모든 호출에서 거부된다. 새 도구는 `TOOL_PERMISSIONS`에 반드시 등록해야 한다.
 - 권한 레벨은 세 가지다: `read`(recall/context 등), `write`(remember/forget/amend 등), `admin`(memory_consolidate/apply_update 등). `admin` 권한만으로 master 전용 도구를 우회할 수는 없다.
 - 권한이 없는 도구를 호출하면 JSON-RPC 오류 `-32001`이 반환되며 `message`에 사유(`Permission denied: '<도구>' requires '<레벨>' permission`)가 담긴다. master 전용 도구(memory_stats, memory_consolidate, check_update, apply_update)를 일반 키로 호출하면 `-32001`과 `Permission denied: '<도구>' requires master authentication`이 반환되며, 이 도구들은 일반 키의 tools/list에도 나타나지 않는다.
+- API 키에 `allowed_workspaces`가 있으면 읽기 도구(recall, context, graph_explore, fragment_history, reconstruct_history, search_traces)와 resources/read는 목록의 workspace와 전역(workspace 없음) 파편만 읽는다. 판정 대상은 요청의 effective workspace(명시 `workspace`, 없으면 키 기본 workspace, 둘 다 없으면 전역)이다. `MEMENTO_WORKSPACE_READ_AUTHZ=enforce`에서 목록 밖 요청은 처리되지 않고 `-32001`과 `Permission denied: the requested workspace is outside the key's allowed_workspaces`(키 기본 workspace가 목록 밖이면 `the key's default workspace is outside ...`, 목록 조회 실패면 `... could not be determined`)로 끝난다. 기본 `warn`은 요청을 처리하고 `memento_workspace_read_authz_total{outcome="would_deny"}`와 경고 로그만 남긴다.
 - 타 테넌트(다른 API 키)가 소유한 파편에 forget/amend/link 요청 시 `"Fragment not found or no permission"` 에러가 반환된다. SQL 레벨에서 `key_id` 조건으로 격리되므로 존재 여부조차 노출되지 않는다.
 
 보호된 리소스에 인증 없이 접근하면 `401 Unauthorized`와 함께 `WWW-Authenticate: Bearer resource_metadata="</.well-known/oauth-protected-resource URL>"` 헤더가 반환된다.
 
 ### Mode Preset
 
-`X-Memento-Mode` 헤더 또는 `initialize` 요청의 `params.mode`로 세션 동작 모드를 지정할 수 있다. `PATCH /v1/internal/model/nothing/keys/:id/policy`(admin console의 키 상세 ACCESS POLICY 카드)로 `api_keys.default_mode`를 설정하면 키 단위 기본값을 고정할 수 있다. 마스터 전용 preset(`audit`)은 API 키에 지정할 수 없다.
+`X-Memento-Mode` 헤더 또는 `initialize` 요청의 `params.mode`로 세션 동작 모드를 지정할 수 있다. `PATCH /v1/internal/model/nothing/keys/:id/policy`(admin console의 키 상세 ACCESS POLICY 카드)로 `api_keys.default_mode`를 설정하면 키 단위 기본값을 고정할 수 있다. 마스터 전용 preset(`audit`)은 API 키에 지정할 수 없다. master가 아닌 세션이 master 전용 preset을 헤더, `params.mode`, 키 `default_mode`로 요청하면 `MEMENTO_WORKSPACE_READ_AUTHZ=enforce`에서 세션을 만들지 않고 HTTP 403과 `-32001`(`Permission denied: mode preset 'audit' requires master authentication`)로 거부한다. 기본 `warn`은 preset을 무시해 전체 도구를 노출하고 would_deny로 기록한다.
 
 | Preset | 설명 | tools/list에서 제외되는 도구 |
 |--------|------|----------|
@@ -521,7 +522,7 @@ API 키의 정책 열을 변경한다. 마스터 키 인증 필요. 전달한 �
 | 필드 | 값 | 설명 |
 |-|-|-|
 | `default_mode` | `recall-only`, `write-only`, `onboarding` 또는 `null` | 키 단위 기본 mode preset. `null`은 해제(전체 도구 노출). 등록되지 않은 이름과 마스터 전용 preset(`audit`)은 400 |
-| `allowed_workspaces` | 문자열 배열 또는 `null` | `null`은 제한 없음. 빈 배열은 모든 workspace 주장을 허가 집합 밖으로 판정해 `workspaceNotAllowed` 경고를 남기고, `MEMENTO_WORKSPACE_GATE=true`이며 hard gate가 켜진 키에서만 저장을 거부한다. workspace가 없는 쓰기는 항상 통과한다. 항목은 최대 64개(중복 제거 후), 항목당 128자 이하이며 빈 문자열, 앞뒤 공백, 제어 문자는 400 |
+| `allowed_workspaces` | 문자열 배열 또는 `null` | `null`은 제한 없음. 빈 배열은 모든 workspace 주장을 허가 집합 밖으로 판정해 `workspaceNotAllowed` 경고를 남기고, `MEMENTO_WORKSPACE_GATE=true`이며 hard gate가 켜진 키에서만 저장을 거부한다. workspace가 없는 쓰기는 항상 통과한다. 읽기는 목록의 workspace와 전역 파편으로 제한된다(`MEMENTO_WORKSPACE_READ_AUTHZ`, 기본 `warn`은 기록만). 항목은 최대 64개(중복 제거 후), 항목당 128자 이하이며 빈 문자열, 앞뒤 공백, 제어 문자는 400 |
 | `symbolic_hard_gate` | boolean | `true`면 PolicyRules 위반 파편의 `remember`를 거부한다 |
 | `egress_policy` | 객체 또는 `null` | LLM 외부 전송 정책 `{ "local_only": boolean, "approved_providers": [제공자 이름] 또는 null, "workspaces": { "<workspace>": { "local_only", "approved_providers" } } }`. 필드는 모두 생략할 수 있고 `null`은 정책 없음이다. 제공자 이름은 등록된 이름만(최대 32개), workspace 재정의는 최대 64개다. 알 수 없는 필드와 형식 오류는 400이며 오류 문구에 위치(예: `egress_policy.workspaces.a.local_only`)를 싣는다. 판정은 [configuration.md](configuration.md) 「외부 전송 정책」 |
 

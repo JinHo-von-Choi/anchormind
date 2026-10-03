@@ -61,7 +61,10 @@ server.js  (HTTP 서버)
             │   ├── LinkedFragmentLoader.js 연결 파편 일괄 로드 (1-hop 이웃 배치 조회)
             │   ├── RecallSuggestionEngine.js recall 결과 분석 후 _suggestion 메타 생성
             │   ├── assistant-query.js    보조 조회 헬퍼
-            │   ├── SearchScope.js        검색 정합 필터 계약. workspace/caseId/resolutionStatus/phase/affect/type/topic/isAnchor/keyId 캡슐화. applyTo(fragment) → boolean. L1 HotCache·L2·L3·Graph 사전 필터와 search() 최종 공통 필터에서 fragment 단위 정합성을 보장한다
+            │   ├── SearchScope.js        검색 정합 필터 계약. workspace/caseId/resolutionStatus/phase/affect/type/topic/isAnchor/keyId 캡슐화. applyTo(fragment) → boolean. L1 HotCache·L2·L3·Graph 사전 필터와 search() 최종 공통 필터에서 fragment 단위 정합성을 보장한다. 읽기 허가 범위(readRange)가 있으면 범위 밖 workspace 파편을 제외한다
+            │   ├── workspace-read-policy.js 읽기 경로 workspace 허가의 순수 판정(decideWorkspaceRead, isWorkspaceReadable), 허가 도구 표와 제외 표, 판정 오류 형식(WorkspaceReadDeniedError, ModePresetRejectedError)
+            │   ├── WorkspaceReadAuthz.js 읽기 허가 단일 관문. tools/call 읽기 도구와 resources/read가 처리기 전에 부르며 master 전용 preset 요청도 판정한다. `MEMENTO_WORKSPACE_READ_AUTHZ`
+            │   ├── read-authz-metrics.js 허가 밖 판정 지표 `memento_workspace_read_authz_total{surface,reason,outcome}`
             │   └── SearchSideEffects.js  검색 부작용 격리 모듈. commitSearchSideEffects()가 searchEventId를 동기 반환하고 SearchParamAdaptor.recordOutcome()을 fire-and-forget으로 호출. FragmentSearch는 검색 파이프라인에만 집중
             ├── write/                    쓰기 레이어 모듈
             │   ├── WriteGate.js          의미 쓰기 단일 관문. normalize, sensitive, length, policy, workspace, anchor 단계를 순서대로 적용하고 위반을 경고로 남기거나 hard gate 키에서 거부한다. `MEMENTO_WRITE_GATE`
