@@ -211,3 +211,33 @@ describe("변조 검출과 보존 정리", () => {
     assert.equal(result.checked, 1);
   });
 });
+
+describe("유니코드 경계 값의 저장과 검증", () => {
+  it("경계에 그림 문자가 있거나 서로게이트가 홀로 남은 값도 기록되고 검증이 끊기지 않는다", async () => {
+    const EMOJI  = "\u{1F600}";
+    const values = [];
+    for (let at = 197; at <= 201; at++) values.push("a".repeat(at) + EMOJI);
+    values.push("\uD83D", "x\uDE00y", "\uDE00\uD83D");
+    for (const [i, v] of values.entries()) {
+      assert.ok(await recordAudit({
+        action   : "memory.forget",
+        actor    : { keyId: KEY_ID, sessionId: `abcdefg${v}`, clientIp: v },
+        target   : { type: "topic", id: v },
+        workspace: v,
+        detail   : { note: v, list: [v], after: { name: v }, n: i }
+      }));
+    }
+    await drain(laneWorker(processPool()));
+    assert.equal(await pendingAudit(), 0);
+    const { rows: dead } = await directQuery(`SELECT count(*)::int AS n FROM ${OUTBOX} WHERE topic = $1 AND dead_at IS NOT NULL`, [AUDIT_TOPIC]);
+    assert.equal(dead[0].n, 0);
+
+    const rows = await auditRows();
+    assert.equal(rows.length, values.length);
+    for (const r of rows) assert.ok(r.target_id.isWellFormed() && r.detail.note.isWellFormed());
+    assert.equal(rows[2].target_id, "a".repeat(199) + EMOJI);
+    const result = await new AuditStore(getPrimaryPool()).verify();
+    assert.equal(result.ok, true, JSON.stringify(result.broken));
+    assert.equal(result.checked, values.length);
+  });
+});
