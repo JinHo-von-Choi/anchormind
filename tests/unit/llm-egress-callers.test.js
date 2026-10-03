@@ -34,10 +34,10 @@ describe("MemoryEvaluator 외부 전송 문맥", () => {
   beforeEach(() => { llmCalls.length = 0; });
 
   it("파편 행의 키와 workspace를 문맥으로 싣는다", async () => {
-    dbImpl  = async (_agent, sql, params) => {
-      assert.match(sql, /SELECT key_id, workspace FROM/);
-      assert.deepEqual(params, ["f1"]);
-      return { rows: [{ key_id: "k1", workspace: "team" }] };
+    dbImpl  = async (agent, _sql, params) => {
+      assert.equal(agent, "a");
+      assert.equal(params[0], "f1");
+      return { rows: [{ id: "f1", key_id: "k1", workspace: "team" }] };
     };
     llmImpl = async () => { throw new EgressSkippedError("evaluate", "local_only"); };
     await new MemoryEvaluator().evaluate({ fragmentId: "f1", agentId: "a", type: "fact", content: "c" });
@@ -46,7 +46,7 @@ describe("MemoryEvaluator 외부 전송 문맥", () => {
   });
 
   it("master 키 파편은 keyId null로 싣는다", async () => {
-    dbImpl  = async () => ({ rows: [{ key_id: null, workspace: null }] });
+    dbImpl  = async () => ({ rows: [{ id: "f2", key_id: null, workspace: null }] });
     llmImpl = async () => { throw new EgressSkippedError("evaluate", "local_only"); };
     await new MemoryEvaluator().evaluate({ fragmentId: "f2", agentId: "a", type: "fact", content: "c" });
     assert.deepEqual(llmCalls[0].options.egress, { stage: "evaluate", keyId: null, workspace: null });
