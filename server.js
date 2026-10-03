@@ -25,6 +25,7 @@ import { resolveClientIp, applyBaseResponseHeaders, recommendedSettingsGap } fro
 import { PORT, ACCESS_KEY, AUTH_DISABLED, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI, SHUTDOWN_DEADLINE_MS, envInt, CONFIG_STRICT, getConfigIssues } from "./lib/config.js";
 import { MEMORY_CONFIG }          from "./config/memory.js";
 import { validateMemoryConfig }   from "./config/validate-memory-config.js";
+import { currentSwitchLine }      from "./config/switches.js";
 
 /** Rate Limiting */
 import { DualRateLimiter } from "./lib/rate-limiter.js";
@@ -344,6 +345,7 @@ if (configIssues.length > 0) {
     process.exit(78);
   }
 }
+logInfo(currentSwitchLine());
 setAnchorAutoPromotionEnabled(MEMORY_CONFIG.consolidate?.autoPromoteAnchors !== false);
 
 server.listen(PORT, () => {
