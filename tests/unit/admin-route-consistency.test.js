@@ -132,6 +132,8 @@ function collectServerRoutes() {
 
     for (const m of flat.matchAll(/url\.pathname\s*(?:!==|===)\s*[`"]([^`"]+)[`"]/g)) found.add(canonicalize(m[1]));
     for (const m of flat.matchAll(/url\.pathname\s*===\s*(SESSION_PREFIX|MEMORY_PREFIX|ADMIN_BASE)\b/g)) found.add(canonicalize(`\${${m[1]}}`));
+    const consts = new Map([...flat.matchAll(/const ([A-Z_]+_PATH)\s*=\s*`\$\{ADMIN_BASE\}([^`]*)`/g)].map((m) => [m[1], `${BASE}${m[2]}`]));
+    for (const m of flat.matchAll(/url\.pathname\s*(?:!==|===)\s*([A-Z_]+_PATH)\b/g)) if (consts.has(m[1])) found.add(consts.get(m[1]));
     for (const m of flat.matchAll(/(url\.pathname|subPath)\.match\(\s*new RegExp\(\s*`([^`]+)`/g)) found.add(memoryPrefix(m[1]) + canonicalize(m[2]));
     for (const m of flat.matchAll(/(url\.pathname|subPath)\.match\(\s*\/((?:\[[^\]]*\]|[^/\\]|\\.)+)\//g)) found.add(memoryPrefix(m[1]) + canonicalize(m[2]));
     for (const m of flat.matchAll(/exact\(\s*`([^`]+)`\s*\)/g)) found.add(canonicalize(m[1]));

@@ -38,6 +38,7 @@ const NAV_ITEMS = [
   { id: "sessions", label: "세션",       icon: "settings_input_component" },
   { id: "logs",     label: "로그",       icon: "terminal" },
   { id: "audit",    label: "감사 로그",   icon: "policy" },
+  { id: "adminUsers", label: "관리자 계정", icon: "admin_panel_settings" },
   { id: "graph",    label: "지식 그래프", icon: "hub" },
   { id: "metrics",  label: "메트릭",     icon: "monitoring" }
 ];

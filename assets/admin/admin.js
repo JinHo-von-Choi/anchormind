@@ -16,6 +16,7 @@ import { renderSessions } from "./modules/sessions.js";
 import { renderGraph } from "./modules/graph.js";
 import { renderLogs } from "./modules/logs.js";
 import { renderAudit } from "./modules/audit.js";
+import { renderAdminUsers } from "./modules/admin-users.js";
 import { renderMemory } from "./modules/memory.js";
 import { mountMetricsView } from "./modules/metrics.js";
 import { api } from "./modules/api.js";
@@ -39,6 +40,7 @@ registerView("sessions", renderSessions);
 registerView("graph",    renderGraph);
 registerView("logs",     renderLogs);
 registerView("audit",    renderAudit);
+registerView("adminUsers", renderAdminUsers);
 registerView("memory",   renderMemory);
 registerView("metrics",  renderMetrics);
 
@@ -75,7 +77,20 @@ function init() {
         }
       });
   } else {
-    renderLogin();
+    /** 관리자 계정 세션 쿠키가 있으면 그 세션으로 들어간다. */
+    api("/me").then(res => {
+      if (res.ok && res.data?.principal?.kind === "admin_session") {
+        state.userSession = true;
+        state.currentUser = res.data.principal;
+        document.getElementById("login-root")?.classList.add("hidden");
+        document.getElementById("app")?.classList.add("visible");
+        renderSidebar();
+        renderCommandBar();
+        renderView();
+      } else {
+        renderLogin();
+      }
+    });
   }
 }
 

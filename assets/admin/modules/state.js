@@ -11,6 +11,9 @@
 
 export const state = {
   masterKey:   sessionStorage.getItem("adminKey") || "",
+  userSession: false,
+  currentUser: null,
+  adminUsers:  [],
   currentView: "overview",
   stats:       null,
   keys:        [],
