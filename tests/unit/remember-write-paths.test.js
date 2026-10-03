@@ -38,7 +38,7 @@ function buildDeps(overrides = {}) {
   };
 
   const index = {
-    addToWorkingMemory : mock.fn(async () => {}),
+    addToWorkingMemory : mock.fn(async () => true),
     index              : mock.fn(async () => {}),
     deindex            : mock.fn(async () => {}),
     ...overrides.index
@@ -137,6 +137,7 @@ describe("scope=session 작업 기억 경로", async () => {
     assert.equal(wmFragment.workspace, "workspace-a");
     assert.strictEqual(result.scope,    "session");
     assert.strictEqual(result.ttl_tier, "session");
+    assert.strictEqual(result.working_memory, "redis");
     assert.deepStrictEqual(result.conflicts, []);
   });
 
