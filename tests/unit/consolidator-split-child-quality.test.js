@@ -39,6 +39,8 @@ mock.module("../../lib/config.js", {
     provenanceEnabled      : () => true,
     reviewQueueEnabled     : () => true,
     sensitiveScanMode      : () => "mask",
+    anchorPermissionMode   : () => "warn",
+    anchorLimitPerKey      : () => 1000,
     sensitiveScanEffectiveMode: () => "mask",
     /** ConsolidatorGC가 배경 쓰기 실패를 세는 lock-retry가 읽는 값 */
     envInt                 : (_name, fallback) => fallback,

@@ -24,7 +24,6 @@ import {
   lengthStep,
   policyStep,
   workspaceStep,
-  anchorStep,
   isGateEligible,
   WriteInputError
 } from "../../lib/memory/write/WriteGate.js";
@@ -345,13 +344,6 @@ describe("workspaceStep", () => {
 
     const unclaimed = await workspaceStep(stateOf({ draft: { workspace: null }, keyId: "k1" }), deps);
     assert.deepEqual(unclaimed.violations, []);
-  });
-});
-
-describe("anchorStep", () => {
-  it("기본 구현은 상태를 그대로 돌려준다", () => {
-    const state = stateOf({ draft: { is_anchor: true } });
-    assert.equal(anchorStep(state), state);
   });
 });
 
