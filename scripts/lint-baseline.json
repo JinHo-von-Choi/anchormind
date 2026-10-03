@@ -88,7 +88,6 @@
     "lib/config.js": 1,
     "lib/handlers/health-handler.js": 2,
     "lib/handlers/mcp-handler.js": 1,
-    "lib/handlers/oauth-handler.js": 1,
     "lib/handlers/session-handler.js": 1,
     "lib/handlers/sse-handler.js": 1,
     "lib/llm/providers/OpenAICompatibleProvider.js": 2,
