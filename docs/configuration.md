@@ -38,7 +38,7 @@
 | true, false (그 밖의 값은 false) | MEMENTO_CONFIG_STRICT |
 | true, false (그 밖의 값은 `MEMORY_CONFIG` 검증에서 기동 실패) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (그 밖의 값은 off) | MEMENTO_ADMIN_AUTH_BACKOFF |
-| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT |
+| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE |
 | mask, reject, off (그 밖의 값은 mask) | MEMENTO_SENSITIVE_SCAN |
 | workspace, key (그 밖의 값은 workspace) | MEMENTO_DEDUP_SCOPE |
 | true, false (false가 아닌 값은 true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
@@ -148,6 +148,7 @@
 | MEMENTO_KEYWORD_SEMANTIC_FALLBACK | true | `false` 설정 시 text 없는 keywords-only recall의 L3 시맨틱 보조 경로를 비활성화. 활성 시 정규화된 keywords 합성 텍스트 임베딩 1회가 L2와 병렬 수행되어 저장 keywords에 없는 용어도 content 기반으로 회수된다 |
 | MEMENTO_KEYWORD_FALLBACK_TIMEOUT_MS | 1500 | keywords 보조 L3 실행 상한(ms, 100~60000 클램프). 초과 시 빈 결과로 대체하고 searchPath에 `L3kw:timeout`을 남긴다 |
 | MEMENTO_CONTEXT_ANCHOR_LIMIT | 20 | context 응답에 항상 포함되는 앵커(isAnchor) 파편의 전체 최대 개수. 종전 기본값 10에서 20으로 변경되었다. 1~30 범위로 클램프되며 파싱 실패 시 20. 앵커는 tokenBudget 절삭 대상이 아니므로 이 개수 상한이 유일한 주입량 제한이다. 종전 주입량이 필요하면 10으로 설정한다 |
+| MEMENTO_CONTEXT_ANNOTATE | on | context 주입 줄 주석 스위치. `on`이면 `injectionText`의 기억 줄(앵커, core, learning, working) 끝에 ` (YYYY-MM-DD, assertion)`을 붙인다. 날짜는 UTC 기준 저장일(`created_at`, 작업 기억 항목은 추가 시각)이고 상대 날짜는 쓰지 않는다. assertion은 저장된 `assertion_status`가 `observed`, `inferred`, `verified`, `rejected` 중 하나일 때만 싣고, 없으면 날짜만 쓴다. 헤더 문자열(`[ANCHOR MEMORY]`, `[CORE MEMORY]` 등)과 줄 머리 `- `는 바뀌지 않는다. 주석은 `totalTokens`와 토큰 예산 계산에 들어가지 않는다. 앵커 응답 파편의 필드는 그대로다. `off`이면 줄이 본문으로 끝난다. 호출 시점에 읽는다 |
 | MEMENTO_CONTEXT_WORKSPACE_ANCHOR_RESERVE | 10 | effective workspace가 있는 context에서 해당 workspace의 importance 상위 anchor에 먼저 예약할 슬롯 수. 미설정 시 total/2를 내림한 값(최대 10)으로 유도되므로 기본 total 20에서는 10, total 10에서는 5다. 명시값은 0 이상 total 이하여야 하며 잘못된 값은 서버 기동 검증에서 실패한다. workspace가 없으면 적용하지 않는다 |
 | MEMENTO_RECALL_MIN_SIM_FLOOR | (없음) | `SearchParamAdaptor.getMinSimilarity`가 반환하는 적응형 임계값에 옵트인 하한을 강제. 예: `0.45` 설정 시 학습값이 0.45 미만이어도 0.45 반환. 미설정 시 기존 동작 그대로 |
 | MIGRATION_LINT_FROM | (없음) | `npm run lint:migrations` 검사 cutoff override. 지정 마이그레이션 번호 이후분만 검사. 미설정 시 전체 검사 |

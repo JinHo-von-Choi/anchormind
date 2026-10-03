@@ -45,6 +45,7 @@ server.js  (HTTP 서버)
             │   ├── FragmentSearch.js     3계층 검색 조율 (구조적: L1→L2, 시맨틱: L1→L2‖L3 RRF 병합). `_executeSearch`는 `_buildTextRRF` (text 파라미터 있을 때 L2+L3 병렬 RRF) / `_buildFallbackCombined` (text 없을 때 L1+L2, keywords 존재 시 합성 텍스트 L3 시맨틱 보조를 병렬 결합해 `L3kw:N` 세그먼트로 병합) 두 내부 메서드로 분해
             │   ├── FragmentReader.js     파편 읽기. `getById(id, agentId, keyId, groupKeyIds)` — groupKeyIds 파라미터로 그룹 소속 키의 파편도 단일 호출로 조회. `getByIds`, `getHistory`, `searchByKeywords`, `searchBySemantic`, `findCaseIdBySessionTopic`, `findErrorFragmentsBySessionTopic`
             │   ├── ContextBuilder.js     context() 로직 전담. effective workspace의 Anchor 예약분을 우선 선택한 뒤 후보를 anchor > core > learning > working 순으로 ID 중복 제거하고, 앵커와 비앵커 최소 슬롯을 보장한 공통 토큰 선택 결과로 flat/structured/injectionText를 조립
+            │   ├── ContextLines.js       context 주입 줄 렌더러(순수 함수). 헤더와 줄 머리 `- `는 고정이고 `MEMENTO_CONTEXT_ANNOTATE=on`이면 기억 줄 끝에 ` (YYYY-MM-DD, assertion)`을 붙인다
             │   ├── GraphNeighborSearch.js L2.5 그래프 이웃 검색 (fragment_links 1-hop 양방향 UNION, tanh 포화 스코어링 + 관계 유형별 부스트)
             │   ├── HistoryReconstructor.js case_id/entity 기반 서사 재구성 (ordered_timeline, causal_chains, unresolved_branches)
             │   ├── BudgetSelector.js     recall 토큰 예산 선택(`MEMENTO_RANK_BEFORE_BUDGET`). 검색 순서 절단(`trimInSearchOrder`)과 최종 점수 기반 선택(`selectWithinBudget`)을 순수 함수로 둔다

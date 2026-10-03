@@ -1059,6 +1059,11 @@ Anchor + Core + Learning + Working Memory와 session_reflect를 분리 로드한
 
 응답의 `_meta.anchorSelection`은 `totalLimit`, `workspaceReserve`, `reserveApplied`와 함께 `candidates`, `selected`, `excluded`의 workspace/global/unscoped/total 수를 제공한다. `selected.reservedWorkspace`는 예약 단계에서 먼저 포함된 workspace anchor 수다. `loadStatus`는 각 후보 범위의 조회 성공 여부(적용하지 않은 범위는 `null`)를 나타내고, 하나라도 실패하면 `partial=true`이며 알 수 없는 후보·제외 수는 `null`이다. effective workspace가 있으면 workspace 상위 예약분을 먼저 선택한 뒤, 남은 슬롯을 잔여 workspace와 전역 anchor의 통합 importance 순으로 채운다. effective workspace가 없으면 reserve 없이 현재 허용된 단일 후보 범위의 상위 anchor를 선택하고 그 수를 `unscoped`로 보고한다. 일반 호출에서는 전역(NULL) anchor만 해당하며, 서버가 인증한 master의 `allWorkspaces=true` 호출에서만 전체 workspace 후보를 포함한다.
 
+
+### 주입 줄 주석
+
+`MEMENTO_CONTEXT_ANNOTATE=on`(기본)이면 `injectionText`의 기억 줄 끝에 ` (YYYY-MM-DD, assertion)`이 붙는다. 예: `- nginx 설정은 sites-available 카테고리 파일에 둔다 (2026-09-30, verified)`. 날짜는 UTC 기준 저장일이고, assertion은 저장된 값이 `observed`, `inferred`, `verified`, `rejected` 중 하나일 때만 실리며 없으면 날짜만 붙는다. 헤더 문자열(`[ANCHOR MEMORY]` 등)과 줄 머리 `- `는 바뀌지 않으므로 줄 단위로 읽는 훅은 줄 끝 괄호만 무시하면 된다. `fragments`와 structured 응답의 필드, `totalTokens`는 스위치와 관계없이 같다. `off`이면 줄이 본문으로 끝난다.
+
 ---
 
 ## MCP 도구 — tool_feedback

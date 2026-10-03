@@ -1042,6 +1042,11 @@ Loads Anchor, Core, Learning, and Working Memory plus session_reflect separately
 
 `_meta.anchorSelection` reports `totalLimit`, `workspaceReserve`, and `reserveApplied`, plus workspace/global/unscoped/total counts under `candidates`, `selected`, and `excluded`. `selected.reservedWorkspace` is the number of workspace anchors admitted during the reservation phase. `loadStatus` reports whether each candidate scope loaded successfully (or `null` when not applicable). If any load fails, `partial=true` and unknown candidate/excluded counts are `null`. With an effective workspace, its top reserved anchors are selected first and the remaining slots are filled by a combined importance ranking of leftover workspace and global anchors. Without an effective workspace, it applies no reserve, selects the top anchors from the single permitted candidate scope, and reports that count as `unscoped`. Normal calls include only global (NULL) anchors; candidates across all workspaces are included only for a server-authenticated master request with `allWorkspaces=true`.
 
+
+### Injection line annotation
+
+With `MEMENTO_CONTEXT_ANNOTATE=on` (the default), each memory line of `injectionText` ends with ` (YYYY-MM-DD, assertion)`. Example: `- nginx settings live in the sites-available category files (2026-09-30, verified)`. The date is the UTC storage date. The assertion is shown only when the stored value is one of `observed`, `inferred`, `verified`, `rejected`; otherwise only the date is added. Header strings (`[ANCHOR MEMORY]` and so on) and the `- ` line prefix do not change, so hooks that read lines only need to ignore the trailing parentheses. The fields of `fragments`, the structured response and `totalTokens` are the same with either value. With `off`, lines end with the content.
+
 ---
 
 ## MCP Tool — tool_feedback

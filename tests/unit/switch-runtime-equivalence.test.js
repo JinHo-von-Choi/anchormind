@@ -47,6 +47,7 @@ const RUNTIME = {
   MEMENTO_DEDUP_SCOPE:                      "cfg.dedupScope()",
   MEMENTO_RANK_BEFORE_BUDGET:               "cfg.rankBeforeBudgetEnabled() ? 'on' : 'off'",
   MEMENTO_GC_THROUGHPUT:                    "cfg.gcThroughputEnabled() ? 'on' : 'off'",
+  MEMENTO_CONTEXT_ANNOTATE:                 "cfg.contextAnnotateEnabled() ? 'on' : 'off'",
   MEMENTO_LOG_STDERR:                       "cfg.logToStderr()",
   MEMENTO_OUTBOX:                           "cfg.outboxEnabled() ? 'on' : 'off'",
   MEMENTO_OUTBOX_WORKER:                    "cfg.outboxWorkerEnabled() ? 'on' : 'off'",
