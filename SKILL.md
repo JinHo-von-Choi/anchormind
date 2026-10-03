@@ -429,7 +429,7 @@ Symbolic Verification Layer는 확률론적 검색 파이프라인 위에 추가
 | `MEMENTO_SESSION_KEY_RECHECK_MS` | number | `30000` | API 키 세션의 키 상태 재확인 주기(ms). `0`이면 끈다. |
 | `MEMENTO_SESSION_ID_POLICY` | string | `warn` | 쿼리스트링 세션 ID와 UUID가 아닌 ID의 복구 처리(`warn`, `enforce`). |
 | `MEMENTO_RESERVED_AGENT_IDS` | string | `warn` | 예약 agentId(`system`, `admin`) 처리(`warn`, `enforce`: API 키 요청은 -32001로 거부, master 키 허용). |
-| `MEMENTO_DCR_MAX_PER_HOUR` | number | `100` | `/register`의 시간당 등록 상한(프로세스 단위, `0`은 상한 없음). 초과 시 429와 `Retry-After: 3600`. |
+| `MEMENTO_DCR_MAX_PER_HOUR` | number | `100` | `/register`의 시간당 등록 상한(프로세스 단위, `0`은 상한 없음). 키에 묶인 등록은 따로 센다. 초과 시 429와 `Retry-After`(현재 창의 남은 초). |
 | `MEMENTO_ADMIN_AUTH_BACKOFF` | string | `off` | `on`이면 관리 인증 연속 5회 실패 뒤 최대 60초까지 다음 시도를 늦춘다. |
 | `MEMENTO_LLM_CLI_TOOL_APPROVAL` | string | `none` | gemini-cli, copilot-cli, opencode-cli의 도구 실행 승인 방식. `none`은 제한된 승인과 빈 임시 디렉터리에서 실행하고, `all`은 gemini `-y`, copilot `--allow-all-tools`를 쓰고 서버 작업 디렉터리에서 실행한다. |
 

@@ -147,7 +147,7 @@ Common setup: Server URL `http://localhost:57332/mcp`, Authorization header `Bea
 
 For Claude.ai Web and ChatGPT, AnchorMind uses OAuth. Enter your API key (`mmcp_xxx`) as the `client_id` -- no Dynamic Client Registration (RFC 7591) flow required. Redirect URIs from trusted domains (claude.ai, chatgpt.com) are auto-approved.
 
-A client registered through `POST /register` with the API key in an `Authorization: Bearer` header (a key-bound client) always passes through the consent screen on authorization, and must present the same key as `client_secret` (or through Basic authentication) at token exchange. Without it, `POST /token` returns 401 `invalid_client`. `/register` accepts up to `MEMENTO_DCR_MAX_PER_HOUR` registrations per hour per process (default 100, 0 means no cap) and answers 429 (`Retry-After: 3600`) above that.
+A client registered through `POST /register` with the API key in an `Authorization: Bearer` header (a key-bound client) always passes through the consent screen on authorization, and must present the same key as `client_secret` (or through Basic authentication) at token exchange. Without it, `POST /token` returns 401 `invalid_client`. `/register` accepts up to `MEMENTO_DCR_MAX_PER_HOUR` registrations per hour per process (default 100, 0 means no cap) and answers 429 (`Retry-After` is the seconds remaining in the current window) above that. Key-bound registrations are counted separately.
 
 See [integration guides](docs/getting-started/) for platform-specific setup.
 

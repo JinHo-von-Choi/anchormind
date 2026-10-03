@@ -26,7 +26,7 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | GET | /authorize | OAuth 2.0 인가 엔드포인트. PKCE code_challenge 필요 |
 | POST | /token | OAuth 2.0 토큰 엔드포인트. authorization_code 교환과 refresh_token 갱신 |
 | POST | /authorize | OAuth 2.0 동의 화면 폼 제출 (allow/deny) |
-| POST | /register | RFC 7591 동적 클라이언트 등록. IP 기준 rate limit과 프로세스당 시간당 등록 상한(`MEMENTO_DCR_MAX_PER_HOUR`, 기본 100, 0은 상한 없음)을 적용한다. 상한 초과 시 429와 `Retry-After: 3600` |
+| POST | /register | RFC 7591 동적 클라이언트 등록. IP 기준 rate limit과 프로세스당 시간당 등록 상한(`MEMENTO_DCR_MAX_PER_HOUR`, 기본 100, 0은 상한 없음)을 적용한다. 키에 묶인 등록과 그 밖의 등록은 따로 센다. 상한 초과 시 429와 `Retry-After`(현재 창의 남은 초) |
 | POST | /session/rotate | 세션 ID 재발급. 아래 절 참조 |
 | GET | /v1/internal/model/nothing | Admin SPA. 마스터 키 인증 후 app shell HTML 제공. 미인증 요청은 401과 로그인 페이지를 반환. 데이터 API는 마스터 키 인증 필요 |
 | GET | /v1/internal/model/nothing/assets/* | Admin 정적 파일 (admin.css, admin.js). 인증 불필요 |
@@ -260,7 +260,7 @@ RFC 7591 동적 클라이언트 등록. 인증 불필요.
 
 > **API 키 바인딩**: `Authorization: Bearer <API 키>` 헤더를 함께 전송하면 `client_id = "<name>_<keyIdHex8>"` 형식의 URL-safe 이름으로 자동 등록되고 응답의 `token_endpoint_auth_method`는 `client_secret_post`다. 이후 `/authorize`에서 해당 API 키의 tenant 격리 컨텍스트가 복원된다. 헤더 없이 등록하면 랜덤 `client_id` 방식으로 fallback되고 `token_endpoint_auth_method`는 `none`이다. API 키 원문 형식의 `client_id`는 클라이언트 행으로 등록하지 않는다.
 >
-> `/register`는 `redirect_uris`가 없으면 400 `invalid_client_metadata`, 시간당 등록 상한(`MEMENTO_DCR_MAX_PER_HOUR`)을 넘으면 429 `too_many_requests`와 `Retry-After: 3600`을 돌려준다.
+> `/register`는 `redirect_uris`가 없으면 400 `invalid_client_metadata`, 시간당 등록 상한(`MEMENTO_DCR_MAX_PER_HOUR`)을 넘으면 429 `too_many_requests`와 `Retry-After`(현재 창이 끝나기까지 남은 초, 올림, 최소 1)를 돌려준다.
 
 ### GET /authorize
 

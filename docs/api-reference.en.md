@@ -23,7 +23,7 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | GET | /authorize | OAuth 2.0 authorization endpoint. PKCE code_challenge required |
 | POST | /token | OAuth 2.0 token endpoint. authorization_code exchange and refresh_token renewal |
 | POST | /authorize | OAuth 2.0 consent form submission (allow/deny) |
-| POST | /register | RFC 7591 dynamic client registration. A per-IP rate limit and a per-process hourly registration cap (`MEMENTO_DCR_MAX_PER_HOUR`, default 100, 0 means no cap) apply. Above the cap the server answers 429 with `Retry-After: 3600` |
+| POST | /register | RFC 7591 dynamic client registration. A per-IP rate limit and a per-process hourly registration cap (`MEMENTO_DCR_MAX_PER_HOUR`, default 100, 0 means no cap) apply. Key-bound registrations and other registrations are counted separately. Above the cap the server answers 429 with `Retry-After` set to the seconds remaining in the current window |
 | POST | /session/rotate | Reissue the session ID. See the section below |
 | GET | /v1/internal/model/nothing | Admin SPA. Serves app shell HTML after master key authentication; unauthenticated requests receive 401 and the login page. Data APIs require master key authentication |
 | GET | /v1/internal/model/nothing/assets/* | Admin static files (admin.css, admin.js). No authentication required |
@@ -258,7 +258,7 @@ Response 201:
 
 > API key binding: sending `Authorization: Bearer <API key>` with the registration registers the client under a URL-safe `client_id = "<name>_<keyIdHex8>"`, and the response reports `token_endpoint_auth_method` as `client_secret_post`. `/authorize` later restores that key's tenant context. Without the header a random `client_id` is issued and `token_endpoint_auth_method` is `none`. A `client_id` in the raw API key format is never registered as a client row.
 >
-> `/register` answers 400 `invalid_client_metadata` when `redirect_uris` is missing, and 429 `too_many_requests` with `Retry-After: 3600` above the hourly cap (`MEMENTO_DCR_MAX_PER_HOUR`).
+> `/register` answers 400 `invalid_client_metadata` when `redirect_uris` is missing, and 429 `too_many_requests` with `Retry-After` (seconds remaining in the current window, rounded up, at least 1) above the hourly cap (`MEMENTO_DCR_MAX_PER_HOUR`).
 
 ### GET /authorize
 

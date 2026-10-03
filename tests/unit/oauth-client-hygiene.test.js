@@ -108,9 +108,13 @@ describe("/register 시간당 상한", () => {
   });
   beforeEach(() => _resetDcrWindowForTest());
 
-  const register = () => fetch(`${base}/register`, {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ redirect_uris: ["http://localhost:1/cb"] })
-  }).then((r) => r.status);
+  const registerResponse = (rawKey) => fetch(`${base}/register`, {
+    method : "POST",
+    headers: { "content-type": "application/json", ...(rawKey ? { authorization: `Bearer ${rawKey}` } : {}) },
+    body   : JSON.stringify({ redirect_uris: ["http://localhost:1/cb"] })
+  });
+  const register      = () => registerResponse().then((r) => r.status);
+  const registerBound = (rawKey = RAW_KEY) => registerResponse(rawKey).then((r) => r.status);
 
   it("상한을 넘으면 429", async () => {
     process.env.MEMENTO_DCR_MAX_PER_HOUR = "2";
@@ -120,6 +124,41 @@ describe("/register 시간당 상한", () => {
   it("0이면 상한이 없다", async () => {
     process.env.MEMENTO_DCR_MAX_PER_HOUR = "0";
     for (let i = 0; i < 5; i++) assert.equal(await register(), 201);
+  });
+
+  it("키에 묶인 등록은 무인증 등록과 별도 집계라 무인증 상한이 차도 통과한다", async () => {
+    process.env.MEMENTO_DCR_MAX_PER_HOUR = "2";
+    assert.deepEqual([await register(), await register(), await register()], [201, 201, 429]);
+    assert.equal(await registerBound(), 201);
+    assert.equal(await registerBound(), 201);
+    assert.equal(await registerBound(), 429);
+    assert.equal(await register(), 429);
+  });
+
+  it("유효하지 않은 Bearer는 무인증 집계에 들어간다", async () => {
+    process.env.MEMENTO_DCR_MAX_PER_HOUR = "1";
+    assert.equal(await registerBound("mmcp_owner_" + "e".repeat(32)), 201);
+    assert.equal(await register(), 429);
+  });
+
+  it("429의 Retry-After는 현재 창의 남은 초를 올림한 값이다", async (t) => {
+    process.env.MEMENTO_DCR_MAX_PER_HOUR = "1";
+    t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 9, 3) });
+    assert.equal(await register(), 201);
+    t.mock.timers.tick(1_000_500);
+    const res = await registerResponse();
+    assert.equal(res.status, 429);
+    assert.equal(res.headers.get("retry-after"), "2600");
+  });
+
+  it("창 끝 직전의 Retry-After는 1 이상이다", async (t) => {
+    process.env.MEMENTO_DCR_MAX_PER_HOUR = "1";
+    t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 9, 3) });
+    assert.equal(await register(), 201);
+    t.mock.timers.tick(3_600_000 - 1);
+    const res = await registerResponse();
+    assert.equal(res.status, 429);
+    assert.equal(res.headers.get("retry-after"), "1");
   });
 });
 
