@@ -536,6 +536,110 @@ migration-053은 `fragments.content_tokens tsvector` 열만 더한다(nullable, 
 
 ---
 
+## migration-053 ~ 060 배포 순서
+
+운영 DB의 색인과 제약 이름은 마이그레이션 파일과 다르고, 운영에는 `fragments.key_id` 외래 키가 없다. 아래 단계는 이름이 아니라 정의로 확인한다(`online-index.mjs`와 코드는 정의로 찾는다).
+
+배포 전
+
+1. `scripts/ops/backup.sh --label pre-migration`으로 백업을 완료한다.
+2. 앵커 권한을 먼저 부여한다. 옵션 없이 실행해 최근 90일에 앵커를 만든 키 목록을 보고, `--apply`로 활성이고 write가 있는 대상 키에 `anchor`를 더한다. 배포 뒤에 부여하면 그 사이 대상 키의 앵커 지정이 일반 파편으로 낮춰진다.
+
+   ```bash
+   PGHOST=<호스트> PGDATABASE=<DB> PGUSER=<사용자> PGPASSWORD=<비밀번호> node scripts/grant-anchor-permission.js
+   PGHOST=<호스트> PGDATABASE=<DB> PGUSER=<사용자> PGPASSWORD=<비밀번호> node scripts/grant-anchor-permission.js --apply
+   ```
+
+3. case_events 원본 파편 색인을 마이그레이션 전에 만든다(`--dry-run` 먼저, 무효 색인 0행 확인).
+
+   ```bash
+   node scripts/ops/online-index.mjs --dry-run --index idx_ce_source_fragment_id
+   PGHOST=<호스트> PGDATABASE=<DB> PGUSER=<사용자> PGPASSWORD=<비밀번호> \
+     node scripts/ops/online-index.mjs --confirm --index idx_ce_source_fragment_id --data-dir <데이터 디렉터리>
+   ```
+
+배포
+
+4. 배포하고 `npm run migrate`로 053 ~ 060을 적용한다.
+
+배포 뒤
+
+5. 본문 토큰 GIN 색인은 열(053)이 생긴 뒤 만들 수 있으므로 마이그레이션 뒤, 백필 전에 만든다(`--dry-run` 먼저). 이어서 `scripts/backfill-content-tokens.mjs`를 옵션 없이 실행해 키별 미채움 수를 보고 `--confirm`으로 채운다(「본문 어휘 채널」).
+6. `scripts/ops/backfill-key-secrets.mjs`를 옵션 없이 실행해 옮길 건수를 보고 `--confirm`으로 옮긴 뒤 정합 일치를 확인한다(「키 비밀 이관」).
+7. `pg_dump -t agent_memory.case_events`로 case_events를 백업한 뒤 `node scripts/purge-orphan-case-summaries.js`(접속 대상 명시)로 원본 파편이 없는 요약 수를 보고 `--execute --i-have-a-backup`으로 `[삭제됨]`으로 바꾼다.
+8. 관리자 계정을 등록하기 전에 `MEMENTO_ADMIN_SEAL_KEY`를 설정한다. 없으면 TOTP를 쓰는 owner, admin 계정의 로그인이 503이다(마스터 키와 `anchormind admin recover`는 동작한다).
+
+warn에서 enforce로
+
+9. `MEMENTO_ANCHOR_PERMISSION`: warn으로 14일 동안 `memento_anchor_decision_total{outcome="downgraded",reason="permission"}`을 본다. 7일 연속 0이거나 소유자가 대상 키 목록을 확인하면 `enforce`로 바꾼다.
+10. `MEMENTO_WORKSPACE_READ_AUTHZ`: `allowed_workspaces`가 있는 키, 기본 workspace가 목록 밖인 키, 빈 목록 키, 목록 밖에 쓴 파편, `default_mode`가 master 전용 preset인 키를 읽기 전용 질의로 확인하고, 7일 동안 `memento_workspace_read_authz_total`과 `would_deny` 로그에 예상 밖 거부가 없고 `lookup_failed`가 0이면 `enforce`로 바꾼다.
+
+새 스위치
+
+| 스위치 | 기본값 | 끄면(되돌림 값) |
+|-|-|-|
+| MEMENTO_LEXICAL_CHANNEL | on | 어휘 채널 검색과 토큰 기록을 함께 멈춘다. 다시 켤 때 `backfill-content-tokens.mjs --restart` |
+| MEMENTO_FORGET_CASCADE | on | forget이 파편 행과 링크만 지우고 요약과 해소 기록을 남기며 응답에 `purged`가 없다 |
+| MEMENTO_EGRESS_POLICY | on | 정책 조회, 제공자 거르기, 전송 전 마스킹, 전송 감사를 하지 않고 구성된 체인을 그대로 쓴다 |
+| MEMENTO_EGRESS_UNKNOWN_KEY | configured | `local_only`는 키 문맥 없는 호출을 로컬 제공자로만 보낸다(되돌림 값은 기본값) |
+| MEMENTO_CONTEXT_ANNOTATE | on | context 주입 줄 끝의 저장일과 assertion 주석을 붙이지 않는다 |
+| MEMENTO_AUDIT_DB | on | 감사 이벤트를 감사 표에 기록하지 않는다(파일 감사 로그는 계속) |
+| MEMENTO_PROVENANCE | on | 출처 세 열을 쓰지도 읽지도 않는다 |
+| MEMENTO_REVIEW_QUEUE | on | 새 쓰기에 검토 표지를 달지 않는다(이미 대기나 거절인 파편의 가시성 규칙과 자동 거절은 유지) |
+| MEMENTO_ANCHOR_PERMISSION | warn | `off`는 write 권한만으로 앵커를 지정하고 상한, 경고, 감사, 주체 표지를 적용하지 않는다 |
+| MEMENTO_ADMIN_USERS | on | 계정 라우트가 404이고 계정 세션 쿠키를 받지 않는다(마스터 키만) |
+| MEMENTO_WORKSPACE_READ_AUTHZ | warn | `off`는 읽기 경로 workspace 판정을 하지 않는다 |
+| MEMENTO_HOOK_ENDPOINTS | on | `/hooks/` 요청에 인증 전 404(이미 기록된 회고 이벤트는 처리) |
+| MEMENTO_GC_THROUGHPUT | on | 만료 GC가 주기당 50건을 한 문장으로 지운다 |
+
+---
+
+## Rollout order for migrations 053 to 060
+
+Index and constraint names in the production database differ from the migration files, and production has no `fragments.key_id` foreign key. Check each step by definition, not by name (`online-index.mjs` and the code find indexes by definition).
+
+Before deploying
+
+1. Finish a backup with `scripts/ops/backup.sh --label pre-migration`.
+2. Grant the anchor permission first. Run `node scripts/grant-anchor-permission.js` without options to list the keys that created anchors in the last 90 days, then `--apply` adds `anchor` to the active target keys that have write. Granting after the deploy downgrades those keys' anchor requests to normal fragments in between.
+3. Build the case_events source fragment index before migrating: `node scripts/ops/online-index.mjs --dry-run --index idx_ce_source_fragment_id`, then `--confirm` with an explicit target; the invalid index query must return 0 rows.
+
+Deploy
+
+4. Deploy and apply 053 to 060 with `npm run migrate`.
+
+After deploying
+
+5. The content token GIN index needs the column from 053, so build it after migrating and before the backfill (`--dry-run --index idx_fragments_content_tokens` first). Then run `scripts/backfill-content-tokens.mjs` without options to see the missing rows per key and fill them with `--confirm`.
+6. Run `scripts/ops/backfill-key-secrets.mjs` without options to see the rows to copy, copy them with `--confirm` and check that the consistency check matches.
+7. Back up case_events with `pg_dump -t agent_memory.case_events`, run `node scripts/purge-orphan-case-summaries.js` (explicit target) to see the summaries whose source fragment is gone, then replace them with `[삭제됨]` using `--execute --i-have-a-backup`.
+8. Set `MEMENTO_ADMIN_SEAL_KEY` before enrolling admin accounts. Without it, login of owner and admin accounts with TOTP returns 503 (the master key and `anchormind admin recover` keep working).
+
+From warn to enforce
+
+9. `MEMENTO_ANCHOR_PERMISSION`: watch `memento_anchor_decision_total{outcome="downgraded",reason="permission"}` during 14 days of warn and switch to `enforce` after 7 consecutive days at 0 or after the owner confirms the target key list.
+10. `MEMENTO_WORKSPACE_READ_AUTHZ`: check with read-only queries the keys with `allowed_workspaces`, keys whose default workspace is outside their list, keys with an empty list, fragments written outside the list and keys whose `default_mode` is a master-only preset; switch to `enforce` when 7 days of `memento_workspace_read_authz_total` and `would_deny` log lines show no unexpected denial and `lookup_failed` stays 0.
+
+New switches
+
+| Switch | Default | Off (rollback value) |
+|-|-|-|
+| MEMENTO_LEXICAL_CHANNEL | on | Stops the lexical channel search and token writes together. Run `backfill-content-tokens.mjs --restart` when turning it back on |
+| MEMENTO_FORGET_CASCADE | on | forget deletes only fragment rows and links, keeps summaries and resolution records, no `purged` in the response |
+| MEMENTO_EGRESS_POLICY | on | No policy lookup, provider filtering, masking before transfer or transfer audit; the configured chain is used as is |
+| MEMENTO_EGRESS_UNKNOWN_KEY | configured | `local_only` sends calls without key context only to local providers (the rollback value is the default) |
+| MEMENTO_CONTEXT_ANNOTATE | on | No date and assertion annotation at the end of context injection lines |
+| MEMENTO_AUDIT_DB | on | Audit events are not written to the audit table (the file audit log continues) |
+| MEMENTO_PROVENANCE | on | The three provenance columns are neither written nor read |
+| MEMENTO_REVIEW_QUEUE | on | New writes are not flagged (visibility rules for pending or rejected fragments and the automatic rejection stay) |
+| MEMENTO_ANCHOR_PERMISSION | warn | `off` lets the write permission designate anchors with no limit, warning, audit or principal label |
+| MEMENTO_ADMIN_USERS | on | Account routes return 404 and account session cookies are refused (master key only) |
+| MEMENTO_WORKSPACE_READ_AUTHZ | warn | `off` skips the read path workspace check |
+| MEMENTO_HOOK_ENDPOINTS | on | `/hooks/` requests get 404 before authentication (recorded reflect events are still processed) |
+| MEMENTO_GC_THROUGHPUT | on | Expiry GC deletes 50 rows per cycle in one statement |
+
+---
+
 ## 시험
 
 |대상|명령|
