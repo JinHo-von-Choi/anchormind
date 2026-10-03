@@ -22,10 +22,11 @@ import http from "http";
 import { resolveClientIp, applyBaseResponseHeaders, recommendedSettingsGap } from "./lib/http/helpers.js";
 
 /** 설정 */
-import { PORT, ACCESS_KEY, AUTH_DISABLED, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI, SHUTDOWN_DEADLINE_MS, envInt, CONFIG_STRICT, getConfigIssues } from "./lib/config.js";
+import { PORT, ACCESS_KEY, AUTH_DISABLED, REDIS_ENABLED, wmPgFallbackEnabled, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI, SHUTDOWN_DEADLINE_MS, envInt, CONFIG_STRICT, getConfigIssues } from "./lib/config.js";
 import { MEMORY_CONFIG }          from "./config/memory.js";
 import { validateMemoryConfig }   from "./config/validate-memory-config.js";
 import { currentSwitchLine }      from "./config/switches.js";
+import { describeWorkingMemoryBackend } from "./lib/memory/WorkingMemoryRows.js";
 
 /** Rate Limiting */
 import { DualRateLimiter } from "./lib/rate-limiter.js";
@@ -346,6 +347,7 @@ if (configIssues.length > 0) {
   }
 }
 logInfo(currentSwitchLine());
+logInfo(describeWorkingMemoryBackend({ redisEnabled: REDIS_ENABLED, fallbackEnabled: wmPgFallbackEnabled() }));
 setAnchorAutoPromotionEnabled(MEMORY_CONFIG.consolidate?.autoPromoteAnchors !== false);
 
 server.listen(PORT, () => {
