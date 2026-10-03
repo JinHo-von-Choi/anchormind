@@ -263,7 +263,9 @@ printf '{"version":1,"createdAt":"%s","counts":%s}\n' "$(date -u +%Y-%m-%dT%H:%M
 pg_dump "${conn[@]}" --format=custom --schema="$SCHEMA" --snapshot="$snapshot" --file="$dump_part" \
   || die 1 "pg_dump 가 실패했다"
 
-snap_send "COMMIT;" '\q'
+# COMMIT 의 응답을 받은 뒤 입력을 닫아 psql 이 스스로 끝나게 한다. psql 이 끝난 뒤에는 쓰지 않는다.
+snap_send "COMMIT;"
+snap_read || true
 exec {SNAP[1]}>&-
 wait "$SNAP_PID" 2>/dev/null || true
 SNAP_PID=""

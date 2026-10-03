@@ -31,6 +31,7 @@ while IFS= read -r line; do
         echo '{"tables":{"fragments":1,"fragment_links":0,"fragment_versions":0,"api_keys":0},"schemaMigrationsMax":"migration-049.sql","hnsw":{"total":0,"valid":0}}'
       fi
       echo '@@END@@'
+      if [[ -n "\${FAKE_PSQL_EXIT_AFTER_COMMIT:-}" && "$buf" == COMMIT* ]]; then exit 0; fi
       buf="" ;;
     '\q') exit 0 ;;
     *) buf+="$line"$'\n' ;;
@@ -132,6 +133,16 @@ describe("backup.sh 전체 경로 (가짜 PostgreSQL 도구)", () => {
       for (const name of made) assert.equal(modeOf(path.join(dest, name)), "600", name);
       assert.match(res.stdout, /written: memento-\d{8}T\d{6}Z\.dump \d+ bytes/);
       assert.match(res.stdout, /toc entries: 1/);
+    });
+
+    it("스냅숏 세션이 COMMIT 응답 직후 끝나도 새 벌을 만들고 종료 코드 0이다", () => {
+      const dest = freshDir();
+      fs.mkdirSync(dest, { mode: 0o700 });
+
+      const res = run(["--dir", dest], { FAKE_PSQL_EXIT_AFTER_COMMIT: "1" });
+      assert.equal(res.status, 0, `${res.signal} ${res.stderr}`);
+      const made = fs.readdirSync(dest).filter(n => /^memento-\d{8}T\d{6}Z\.(dump|dump\.sha256|counts\.json|roles\.sql)$/.test(n));
+      assert.equal(made.length, 4);
     });
 
     it("보관 정리는 관리 대상 이름만 지우고 이름이 비슷한 다른 파일은 지우지 않는다", () => {
