@@ -7,7 +7,7 @@ updated: 2026-10-03
 
 # Hook Setup (Claude Code, Codex)
 
-This setup makes Claude Code and Codex hooks inject memory at session start and keep the conversation as a reflection at session end. The server opens `POST /hooks/{client}/{event}` (`MEMENTO_HOOK_ENDPOINTS=on`, the default). Server behavior and limits are in [configuration.en.md](../configuration.en.md#hook-endpoints).
+This setup makes Claude Code and Codex hooks inject memory at session start and keep the conversation as a reflection at session end. The server opens `POST /hooks/{client}/{event}` (`MEMENTO_HOOK_ENDPOINTS=on`, the default). Server behavior and limits are in [configuration.en.md](../configuration.en.md#hook-endpoints). To install the same hooks together with the MCP connection and the skill as a plugin, follow [Plugin Install](plugins.en.md).
 
 | Event | What it does | Permission |
 |-|-|-|

@@ -7,7 +7,7 @@ updated: 2026-10-03
 
 # 훅 설정 (Claude Code, Codex)
 
-Claude Code와 Codex의 훅이 세션 시작에 기억을 주입하고 세션 종료에 대화를 회고로 남기게 하는 설정이다. 서버는 `POST /hooks/{client}/{event}`를 연다(`MEMENTO_HOOK_ENDPOINTS=on`, 기본값). 서버 동작과 상한은 [configuration.md](../configuration.md#훅-엔드포인트)에 있다.
+Claude Code와 Codex의 훅이 세션 시작에 기억을 주입하고 세션 종료에 대화를 회고로 남기게 하는 설정이다. 서버는 `POST /hooks/{client}/{event}`를 연다(`MEMENTO_HOOK_ENDPOINTS=on`, 기본값). 서버 동작과 상한은 [configuration.md](../configuration.md#훅-엔드포인트)에 있다. 같은 훅을 MCP 연결, 스킬과 함께 플러그인으로 설치하려면 [플러그인 설치](plugins.md)를 따른다.
 
 | 이벤트 | 하는 일 | 필요한 권한 |
 |-|-|-|

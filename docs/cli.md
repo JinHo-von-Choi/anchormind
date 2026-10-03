@@ -42,6 +42,9 @@ node bin/memento.js stats
 |------|------|
 | `MEMENTO_CLI_REMOTE` | `--remote` 미지정 시 사용할 MCP 서버 URL |
 | `MEMENTO_CLI_KEY` | `--key` 미지정 시 사용할 API 키 |
+| `CLAUDE_PLUGIN_OPTION_SERVER_URL`, `CLAUDE_PLUGIN_OPTION_API_KEY` | `hook` 전용. Claude Code가 플러그인 훅 프로세스에 넘기는 userConfig 값(`server_url`, `api_key`)이다. 있으면 `MEMENTO_CLI_REMOTE`, `MEMENTO_CLI_KEY`보다 앞선다. 직접 설정하지 않는다 |
+
+`init`은 현재 디렉터리의 `.env`를 불러오지 않으며, 만드는 파일은 환경 변수의 영향을 받지 않는다.
 
 ---
 
@@ -56,6 +59,8 @@ node bin/memento.js stats
 `recall`, `remember`, `stats`, `inspect`, `session` 는 `--remote URL --key KEY`로 원격 MCP 서버를 경유하여 실행할 수 있다.
 
 `hook`은 원격 서버 전용이다. `--remote`(또는 `MEMENTO_CLI_REMOTE`)와 `--key`(또는 `MEMENTO_CLI_KEY`)가 반드시 있어야 한다.
+
+`init`은 서버에 접속하지 않고 로컬 파일만 만든다.
 
 ---
 
@@ -80,6 +85,7 @@ node bin/memento.js stats
 | `benchmark [--goldset FILE]` | 골드셋 기반 회상 품질 계측 | 아니오 |
 | `anchor-scope [--execute]` | 승인된 공유 앵커 범위 점검·정규화, snapshot backfill (기본 dry-run) | 아니오 |
 | `hook <event> --client <name>` | Claude Code, Codex command 훅 실행체 (`SessionStart`, `Stop`, `SessionEnd`) | 원격 전용 |
+| `init --target <claude\|codex>` | Claude Code, Codex 플러그인을 로컬 마켓플레이스로 생성 (기본 dry-run, `--write`로 쓰기) | 해당 없음 |
 
 ---
 
@@ -478,6 +484,29 @@ anchormind hook SessionEnd   --client codex --timeout 3000
 - `Stop`, `SessionEnd`: 입력의 `transcript_path` 파일 끝 4 MiB에서 사용자와 응답 메시지(도구 호출과 결과 제외)를 꺼내 최근 메시지부터 65536바이트 안의 발췌를 만들어 보낸다. 파일을 읽지 못하면 `last_assistant_message`를 쓰고, 보낼 내용이 없으면 요청하지 않고 끝낸다. 표준 출력에는 쓰지 않는다.
 - 서버로 보내는 필드는 `hook_event_name`, `session_id`, `cwd`, `source`(SessionStart), `git_remote`, `excerpt`다. `git_remote`는 `cwd` 저장소의 `remote.origin.url`에서 자격 증명과 포트를 지운 값이고, `transcript_path`는 보내지 않는다.
 - 실패(인자 오류, 연결 실패, 2xx가 아닌 응답)는 표준 오류에 `[hook] server responded <상태> (<오류 코드>)` 형식으로 쓰고 종료 코드 1로 끝난다. 두 하네스 모두 1을 비차단 오류로 다룬다(차단을 뜻하는 2는 쓰지 않는다).
+
+### init
+
+`integrations/`의 Claude Code 또는 Codex 플러그인을 로컬 플러그인 마켓플레이스 디렉터리로 만든다. 설치 절차는 [getting-started/plugins.md](getting-started/plugins.md)에 있다.
+
+```bash
+anchormind init --target claude                    # 만들 파일과 diff만 출력(dry-run)
+anchormind init --target claude --write            # ~/.anchormind/claude-code에 쓴다
+anchormind init --target codex --dir ./mk --url https://memento.example.com/mcp --write
+```
+
+| 옵션 | 설명 |
+|-|-|
+| `--target` | `claude`, `codex` |
+| `--dir` | 마켓플레이스 디렉터리. 기본 `~/.anchormind/claude-code`, `~/.anchormind/codex` |
+| `--url` | Codex `config.toml` 안내문에 넣을 MCP 서버 주소. 자격 증명이 든 주소는 거부한다 |
+| `--write` | 파일을 쓴다. 없으면 아무것도 쓰지 않는다 |
+| `--force` | `--write`와 함께 내용이 다른 기존 파일을 바꾼다 |
+
+- 파일마다 상태를 출력한다: `create`(새 파일), `unchanged`(내용이 같아 건너뜀), `conflict`(내용이 다름. `--force` 없이 `--write`하면 아무 파일도 쓰지 않고 종료 코드 1), `blocked`(디렉터리나 심볼릭 링크. 언제나 쓰지 않음). `create`와 `conflict`는 기존 내용과의 줄 단위 diff를 함께 출력한다.
+- 만드는 파일: Claude Code는 `.claude-plugin/marketplace.json`(마켓플레이스 `anchormind-local`)과 `plugins/anchormind/` 아래 `.claude-plugin/plugin.json`, `.mcp.json`, `hooks/hooks.json`, `skills/anchormind/SKILL.md`. Codex는 `.agents/plugins/marketplace.json`과 `plugins/anchormind/` 아래 `plugin.json`, `hooks/hooks.json`.
+- API 키는 어떤 파일에도 쓰지 않고 `--key`도 받지 않는다. Claude Code는 플러그인을 켤 때 `api_key`를 묻고 보안 저장소에 둔다. Codex는 `config.toml`에 환경 변수 이름(`bearer_token_env_var = "MEMENTO_CLI_KEY"`)만 적도록 안내한다.
+- 서버에 접속하지 않고, 현재 디렉터리의 `.env`를 불러오지 않는다.
 
 ---
 

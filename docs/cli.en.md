@@ -41,6 +41,9 @@ Every command except `serve` sends server logs to stderr (the CLI sets `MEMENTO_
 |----------|-------------|
 | `MEMENTO_CLI_REMOTE` | MCP server URL to use when `--remote` is not specified |
 | `MEMENTO_CLI_KEY` | API key to use when `--key` is not specified |
+| `CLAUDE_PLUGIN_OPTION_SERVER_URL`, `CLAUDE_PLUGIN_OPTION_API_KEY` | `hook` only. The userConfig values (`server_url`, `api_key`) that Claude Code passes to plugin hook processes. When present they take precedence over `MEMENTO_CLI_REMOTE` and `MEMENTO_CLI_KEY`. Not set by hand |
+
+`init` does not load the `.env` of the current directory, and the files it creates do not depend on environment variables.
 
 ---
 
@@ -55,6 +58,8 @@ Every command except `serve` sends server logs to stderr (the CLI sets `MEMENTO_
 `recall`, `remember`, `stats`, `inspect`, `session` can be executed through a remote MCP server via `--remote URL --key KEY`.
 
 `hook` works only against a remote server. `--remote` (or `MEMENTO_CLI_REMOTE`) and `--key` (or `MEMENTO_CLI_KEY`) are required.
+
+`init` does not contact a server; it only creates local files.
 
 ---
 
@@ -79,6 +84,7 @@ Every command except `serve` sends server logs to stderr (the CLI sets `MEMENTO_
 | `benchmark [--goldset FILE]` | Measure recall quality against a goldset | No |
 | `anchor-scope [--execute]` | Inventory and normalize approved shared anchors, snapshot backfill (dry-run by default) | No |
 | `hook <event> --client <name>` | Claude Code and Codex command hook runner (`SessionStart`, `Stop`, `SessionEnd`) | Remote only |
+| `init --target <claude\|codex>` | Create the Claude Code or Codex plugin as a local marketplace (dry-run by default, `--write` to write) | Not applicable |
 
 ---
 
@@ -477,6 +483,29 @@ anchormind hook SessionEnd   --client codex --timeout 3000
 - `Stop`, `SessionEnd`: takes user and assistant messages (tool calls and results excluded) from the last 4 MiB of the input's `transcript_path` file and sends an excerpt of up to 65536 bytes, newest messages first. When the file cannot be read it uses `last_assistant_message`; when there is nothing to send it ends without a request. Nothing is written to standard output.
 - The fields sent to the server are `hook_event_name`, `session_id`, `cwd`, `source` (SessionStart), `git_remote` and `excerpt`. `git_remote` is `remote.origin.url` of the `cwd` repository with credentials and port removed; `transcript_path` is not sent.
 - Failures (argument errors, connection failures, non-2xx responses) are written to standard error as `[hook] server responded <status> (<error code>)` and exit with code 1. Both harnesses treat 1 as a non-blocking error (2, which means blocking, is never used).
+
+### init
+
+Creates the Claude Code or Codex plugin from `integrations/` as a local plugin marketplace directory. Installation steps are in [getting-started/plugins.en.md](getting-started/plugins.en.md).
+
+```bash
+anchormind init --target claude                    # print the files and diff only (dry-run)
+anchormind init --target claude --write            # write to ~/.anchormind/claude-code
+anchormind init --target codex --dir ./mk --url https://memento.example.com/mcp --write
+```
+
+| Option | Description |
+|-|-|
+| `--target` | `claude`, `codex` |
+| `--dir` | Marketplace directory. Default `~/.anchormind/claude-code` or `~/.anchormind/codex` |
+| `--url` | MCP server URL shown in the Codex `config.toml` snippet. A URL with credentials is rejected |
+| `--write` | Write the files. Without it nothing is written |
+| `--force` | With `--write`, replace existing files whose content differs |
+
+- Each file is reported with a status: `create` (new file), `unchanged` (same content, skipped), `conflict` (different content; `--write` without `--force` writes no file at all and exits with code 1), `blocked` (a directory or symbolic link; never written). `create` and `conflict` are followed by a line diff against the existing content.
+- Files created: for Claude Code, `.claude-plugin/marketplace.json` (marketplace `anchormind-local`) and, under `plugins/anchormind/`, `.claude-plugin/plugin.json`, `.mcp.json`, `hooks/hooks.json`, `skills/anchormind/SKILL.md`. For Codex, `.agents/plugins/marketplace.json` and, under `plugins/anchormind/`, `plugin.json`, `hooks/hooks.json`.
+- The API key is never written to a file and `--key` is not accepted. Claude Code asks for `api_key` when the plugin is enabled and keeps it in the secure credential store. For Codex, the `config.toml` snippet names only the environment variable (`bearer_token_env_var = "MEMENTO_CLI_KEY"`).
+- It does not contact a server and does not load the `.env` of the current directory.
 
 ---
 
