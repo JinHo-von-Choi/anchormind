@@ -58,7 +58,7 @@ write 경로별 lock 종류·격리 수준·재시도 정책을 한 페이지로
 
 한 트랜잭션에서 여러 문장을 쓰는 병합(`MemoryConsolidator`의 semantic_dedup 병합)은 첫 문장에서 두 행을 id 순으로 `FOR NO KEY UPDATE` 잠근 뒤 같은 두 행만 쓴다. 행 하나만 다루는 문장(amend의 `FOR UPDATE` 재조회와 갱신, supersede의 `valid_to` 설정, 단건 링크와 단건 `linked_to` 갱신, 분할 원본 닫기)은 기다리는 동안 다른 행 잠금을 쥐지 않으므로 순환에 들 수 없다.
 
-남는 경우: 단건 링크 INSERT(`LinkStore.createLink`, `GraphLinker`의 co_retrieved)는 외래키 검사로 두 끝 파편에 키 공유 잠금을 쌍의 순서대로 건다. 키 공유 잠금은 위 표의 NO KEY UPDATE 잠금과 충돌하지 않고 삭제의 UPDATE 잠금과만 충돌하므로, 같은 두 파편을 동시에 지우는 일괄 삭제와만 겹칠 수 있다. `MEMENTO_SCORE_UPDATE_BATCH=0`의 단일 UPDATE 문장 경로는 되돌림용으로 남아 있으며 id 순 잠금을 쓰지 않는다.
+남는 경우: 단건 링크 INSERT(`LinkStore.createLink`, `GraphLinker`의 co_retrieved)와 일괄 링크 INSERT(`LinkStore.createLinks`의 여러 행 INSERT)는 외래키 검사로 끝 파편들에 키 공유 잠금을 행의 순서대로 건다. 키 공유 잠금은 위 표의 NO KEY UPDATE 잠금과 충돌하지 않고 삭제의 UPDATE 잠금과만 충돌하므로, 같은 파편을 동시에 지우는 일괄 삭제와만 겹칠 수 있다. `MEMENTO_SCORE_UPDATE_BATCH=0`의 단일 UPDATE 문장 경로는 되돌림용으로 남아 있으며 id 순 잠금을 쓰지 않는다.
 
 이 규칙은 `npm run test:db`의 `tests/db-concurrency/`가 실제 PostgreSQL에서 확인한다. `tuple-lock-cycle.test.js`는 위 순환을 세션 순서를 고정해 재현하고, `lock-order.test.js`와 `writer-mix.test.js`는 쓰기 경로를 겹쳐 실행해 서버 교착 집계가 0인지 본다. 이 레인은 실행마다 전용 데이터베이스를 만들고 지우며 `npm test`에는 포함되지 않는다.
 
