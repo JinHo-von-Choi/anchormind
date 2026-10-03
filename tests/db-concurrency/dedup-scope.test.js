@@ -7,13 +7,18 @@
  * 실제 유일 색인으로 세 색인 상태(키 범위 색인만, 두 범위 모두, workspace 범위 색인만)를 만들고
  * FragmentWriter의 insert, amend와 BatchRememberProcessor가 각 상태에서 같은 키, 같은 본문,
  * 다른 workspace를 어떻게 저장하는지 확인한다. 실행 중에 키 범위 색인을 지웠을 때(42P10)
- * 색인 상태를 다시 읽고 이어 가는지도 본다. 실행마다 전용 데이터베이스를 만들고 끝나면 지운다.
+ * 색인 상태를 다시 읽고 이어 가는지, DROP INDEX CONCURRENTLY가 앞선 트랜잭션을 기다리는 동안과
+ * lock_timeout으로 중단된 뒤(키 범위 색인이 indisvalid=false, indisready=true로 남는다)
+ * remember, 원자 remember, batch_remember, amend, 가져오기가 오류 없이 키 범위로 판정하는지,
+ * 마무리 스크립트(scripts/ops/finish-dedup-scope.mjs), workspace 값 정규화, reflect workspace 백필의
+ * 같은 본문 제외도 본다. 실행마다 전용 데이터베이스를 만들고 끝나면 지운다.
  */
+import pg                              from "pg";
 import crypto                          from "node:crypto";
 import { describe, it, before, beforeEach, after } from "node:test";
 import assert                          from "node:assert/strict";
 
-const { SCHEMA, prepareLaneDatabase, dropLaneDatabase, directQuery } = await import("./_harness.js");
+const { SCHEMA, prepareLaneDatabase, dropLaneDatabase, directQuery, directClientConfig } = await import("./_harness.js");
 
 /** 앱 모듈이 풀을 만들기 전에 실행 전용 데이터베이스를 준비한다. */
 await prepareLaneDatabase();
@@ -24,6 +29,10 @@ const { FragmentFactory }                       = await import("../../lib/memory
 const { WriteGate }                             = await import("../../lib/memory/write/WriteGate.js");
 const { DEDUP_INDEXES, invalidateDedupIndexes } = await import("../../lib/memory/write/DedupScope.js");
 const { getPrimaryPool, shutdownPool }          = await import("../../lib/tools/db.js");
+const { importFragment, IMPORT_DEFAULTS }       = await import("../../lib/memory/write/FragmentImporter.js");
+const { WRITE_ENTRIES }                         = await import("../../lib/memory/write/WriteGate.js");
+const { main: finishDedupScope }                = await import("../../scripts/ops/finish-dedup-scope.mjs");
+const { main: backfillReflectWorkspace }        = await import("../../scripts/backfill-reflect-workspace.js");
 
 const KEY    = "dedup-lane-key";
 const TEXT   = "같은 키의 두 workspace에 같은 본문을 저장하는 실서버 시험 파편";
@@ -43,13 +52,11 @@ const STATES = {
   scoped: [DEDUP_INDEXES.keyScoped, DEDUP_INDEXES.masterScoped]
 };
 
-/** 판정 색인을 state 구성으로 맞춘다. 표를 비운 뒤 바꾸고, 기억한 색인 상태를 버린다. */
+/** 판정 색인을 state 구성으로 맞춘다. 표를 비우고 모든 판정 색인(무효 상태 포함)을 지운 뒤 만든다. */
 async function setIndexes(state) {
   await directQuery(`DELETE FROM ${SCHEMA}.fragments`);
-  for (const name of Object.values(DEDUP_INDEXES)) {
-    if (STATES[state].includes(name)) await directQuery(INDEX_DDL[name]);
-    else await directQuery(`DROP INDEX IF EXISTS ${SCHEMA}.${name}`);
-  }
+  for (const name of Object.values(DEDUP_INDEXES)) await directQuery(`DROP INDEX IF EXISTS ${SCHEMA}.${name}`);
+  for (const name of STATES[state]) await directQuery(INDEX_DDL[name]);
   invalidateDedupIndexes();
   assert.deepEqual(await validIndexes(), [...STATES[state]].sort());
 }
@@ -60,6 +67,69 @@ async function validIndexes() {
       WHERE c.relnamespace = '${SCHEMA}'::regnamespace AND c.relname = ANY($1::text[]) AND i.indisvalid
       ORDER BY 1`, [Object.values(DEDUP_INDEXES)]);
   return rows.map(r => r.name);
+}
+
+async function indexFlags(name) {
+  const { rows } = await directQuery(
+    `SELECT i.indisvalid AS valid, i.indisready AS ready FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+      WHERE c.relnamespace = '${SCHEMA}'::regnamespace AND c.relname = $1`, [name]);
+  return rows[0] ?? null;
+}
+
+const LANE_URL = () => {
+  const c = directClientConfig();
+  return `postgresql://${c.user}:${encodeURIComponent(c.password)}@${c.host}:${c.port}/${c.database}`;
+};
+
+/** fragments 를 읽은 채 열려 있는 트랜잭션. DROP INDEX CONCURRENTLY 는 이 트랜잭션이 끝나기를 기다린다. */
+async function holdReader() {
+  const client = new pg.Client(directClientConfig());
+  await client.connect();
+  await client.query("BEGIN");
+  await client.query(`SELECT count(*) FROM ${SCHEMA}.fragments`);
+  return { async release() { try { await client.query("COMMIT"); } finally { await client.end(); } } };
+}
+
+/** 별도 연결에서 문장 하나를 실행한다. 끝나기를 기다리지 않으려면 반환 약속을 나중에 기다린다. */
+async function runOnOwnConnection(sql) {
+  const client = new pg.Client(directClientConfig());
+  await client.connect();
+  try {
+    return await client.query(sql);
+  } finally {
+    await client.end();
+  }
+}
+
+async function waitUntil(predicate, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!(await predicate())) {
+    if (Date.now() > deadline) throw new Error("조건을 기다리다 시간이 지났다");
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+}
+
+/** 원자 remember 경로처럼 외부 트랜잭션 안에서 저장한다. */
+async function insertAtomic(workspace, opts) {
+  const client = await getPrimaryPool().connect();
+  try {
+    await client.query("BEGIN");
+    const id = await writer.insert(await draft(workspace, opts), { client });
+    await client.query("COMMIT");
+    return id;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function importGlobal(content = TEXT) {
+  return importFragment(
+    { content, topic: "dedup-lane", type: "fact", key_id: KEY },
+    { entry: WRITE_ENTRIES.ADMIN_IMPORT, gate: new WriteGate(), writer, defaults: IMPORT_DEFAULTS.admin }
+  );
 }
 
 async function rowCount() {
@@ -88,13 +158,13 @@ async function amend(id, content) {
   return writer.update(id, fields, "default", KEY);
 }
 
-async function batch(items, keyId = KEY) {
+async function batch(items, keyId = KEY, content = TEXT) {
   const proc = new BatchRememberProcessor({
     store: {}, index: { index: async () => {} }, factory: new FragmentFactory()
   });
   proc.setPool(getPrimaryPool());
   return proc.process({
-    fragments: items.map(workspace => ({ content: TEXT, topic: "dedup-lane", type: "fact", workspace })),
+    fragments: items.map(workspace => ({ content, topic: "dedup-lane", type: "fact", workspace })),
     agentId  : "default",
     _keyId   : keyId
   });
@@ -257,5 +327,147 @@ describe("자료 정합", () => {
          FROM ${SCHEMA}.fragments GROUP BY 1, 2, 3 HAVING count(*) > 1`
     );
     assert.deepEqual(rows, []);
+  });
+});
+
+/**
+ * 키 범위 색인이 무효 상태로 남은 동안 모든 쓰기 경로가 오류 없이 키 범위로 판정하는지 본다.
+ * 다른 workspace의 같은 본문은 모두 ws-a의 기존 파편을 돌려받아야 한다.
+ */
+async function assertKeyScopeWithoutErrors(seed) {
+  assert.equal(await insert("ws-b"), seed.text, "remember");
+  assert.equal(await insertAtomic("ws-c"), seed.text, "원자 remember");
+  assert.equal((await batch(["ws-d"])).results[0].id, seed.batch, "batch_remember");
+  assert.deepEqual(await amend(seed.other, TEXT), { merged: true, existingId: seed.text }, "amend");
+  const imported = await importGlobal();
+  assert.equal(imported.status, "duplicate", "가져오기");
+  assert.equal(imported.id, seed.text);
+  assert.equal(await insert("ws-b", { keyId: null }), seed.master, "마스터 remember");
+}
+
+/** ws-a의 키 보유 본문, 다른 workspace의 amend 대상, batch 본문, 마스터 본문을 두고 색인 상태를 기억시킨다. */
+async function seedForTransition() {
+  await setIndexes("both");
+  const seed = {
+    text  : await insert("ws-a"),
+    other : await insert("ws-b", { content: OTHER }),
+    batch : (await batch(["ws-a"])).results[0].id,
+    master: await insert("ws-a", { keyId: null })
+  };
+  assert.equal(await rowCount(), 4);
+  return seed;
+}
+
+describe("키 범위 색인이 무효 상태로 남았을 때", () => {
+  it("DROP INDEX CONCURRENTLY 가 앞선 트랜잭션을 기다리는 동안 모든 쓰기 경로가 오류 없이 키 범위로 판정한다", { timeout: 60_000 }, async () => {
+    const seed   = await seedForTransition();
+    const reader = await holdReader();
+    let   dropping;
+    try {
+      dropping = runOnOwnConnection(`DROP INDEX CONCURRENTLY ${SCHEMA}.${DEDUP_INDEXES.keyLegacy}`);
+      await waitUntil(async () => (await indexFlags(DEDUP_INDEXES.keyLegacy))?.valid === false);
+      assert.deepEqual(await indexFlags(DEDUP_INDEXES.keyLegacy), { valid: false, ready: true });
+      invalidateDedupIndexes();
+      await assertKeyScopeWithoutErrors(seed);
+      assert.equal(await rowCount(), 4);
+    } finally {
+      await reader.release();
+      await dropping;
+    }
+    assert.equal(await indexFlags(DEDUP_INDEXES.keyLegacy), null);
+    invalidateDedupIndexes();
+    assert.notEqual(await insert("ws-e"), seed.text, "키 범위 색인이 사라지면 workspace 범위");
+  });
+
+  it("lock_timeout 으로 중단된 뒤에도 오류 없이 키 범위로 판정하고, 마무리 스크립트가 지우면 workspace 범위가 된다", { timeout: 60_000 }, async () => {
+    const seed   = await seedForTransition();
+    const reader = await holdReader();
+    try {
+      for (const name of [DEDUP_INDEXES.keyLegacy, DEDUP_INDEXES.masterLegacy]) {
+        const client = new pg.Client(directClientConfig());
+        await client.connect();
+        try {
+          await client.query("SET lock_timeout = '300ms'");
+          await assert.rejects(client.query(`DROP INDEX CONCURRENTLY ${SCHEMA}.${name}`), err => err.code === "55P03");
+        } finally {
+          await client.end();
+        }
+        assert.deepEqual(await indexFlags(name), { valid: false, ready: true });
+      }
+    } finally {
+      await reader.release();
+    }
+    invalidateDedupIndexes();
+    await assertKeyScopeWithoutErrors(seed);
+    assert.equal(await rowCount(), 4);
+
+    const out  = [];
+    const code = await finishDedupScope(["--confirm", "--url", LANE_URL()], {}, { out: l => out.push(l), err: l => out.push(l) });
+    assert.equal(code, 0, out.join("\n"));
+    assert.equal(await indexFlags(DEDUP_INDEXES.keyLegacy), null);
+    assert.equal(await indexFlags(DEDUP_INDEXES.masterLegacy), null);
+    invalidateDedupIndexes();
+    assert.notEqual(await insert("ws-e"), seed.text);
+    assert.notEqual(await insert("ws-e", { keyId: null }), seed.master);
+  });
+});
+
+describe("마무리 스크립트", () => {
+  it("새 색인이 유효하지 않으면 키 범위 색인을 지우지 않는다", async () => {
+    await setIndexes("both");
+    await directQuery(`DROP INDEX ${SCHEMA}.${DEDUP_INDEXES.masterScoped}`);
+    const out  = [];
+    const code = await finishDedupScope(["--confirm", "--url", LANE_URL()], {}, { out: l => out.push(l), err: l => out.push(l) });
+    assert.equal(code, 1);
+    assert.deepEqual(await indexFlags(DEDUP_INDEXES.keyLegacy), { valid: true, ready: true });
+  });
+
+  it("새 설치(migration-050 뒤 두 범위 모두)에서 키 범위 색인을 지우고 다시 실행해도 성공한다", async () => {
+    await setIndexes("both");
+    const run = () => finishDedupScope(["--confirm", "--url", LANE_URL()], {}, { out: () => {}, err: () => {} });
+    assert.equal(await run(), 0);
+    assert.deepEqual(await validIndexes(), [...STATES.scoped].sort());
+    assert.equal(await run(), 0);
+  });
+});
+
+describe("workspace 값 정규화", () => {
+  it("batch 의 '' 저장 뒤 전역 batch 와 remember 는 같은 칸이다", async () => {
+    await setIndexes("scoped");
+    const first = (await batch([""])).results[0].id;
+    const { rows: [row] } = await directQuery(`SELECT workspace FROM ${SCHEMA}.fragments WHERE id = $1`, [first]);
+    assert.equal(row.workspace, null);
+    assert.equal((await batch([null])).results[0].id, first);
+    assert.equal((await batch(["  "])).results[0].id, first);
+    const single = await insert("");
+    assert.equal(await insert(null), single);
+    assert.equal(await rowCount(), 2, "batch 와 remember 는 content_hash 형식이 달라 따로 남는다");
+  });
+});
+
+describe("reflect workspace 백필", () => {
+  it("대상 workspace에 같은 키의 같은 본문이 있으면 옮기지 않고 dryRun 에 제외 건수를 알린다", async () => {
+    await setIndexes("scoped");
+    const same  = "proj-alpha 배포 회고: 같은 본문이 이미 대상 workspace에 있는 reflect 파편";
+    const fresh = "proj-alpha 배포 회고: 대상 workspace로 옮겨야 하는 reflect 파편";
+    const ids   = { ws: crypto.randomUUID(), dup: crypto.randomUUID(), move: crypto.randomUUID() };
+    await directQuery(
+      `INSERT INTO ${SCHEMA}.fragments (id, content, topic, type, content_hash, key_id, workspace)
+       VALUES ($1, $4, 't', 'fact', md5($4), $6, 'proj-alpha'),
+              ($2, $4, 'session_reflect', 'episode', md5($4), $6, NULL),
+              ($3, $5, 'session_reflect', 'episode', md5($5), $6, NULL)`,
+      [ids.ws, ids.dup, ids.move, same, fresh, KEY]
+    );
+    const lines  = [];
+    const dryRun = await backfillReflectWorkspace({ pool: getPrimaryPool(), execute: false, out: l => lines.push(l) });
+    assert.deepEqual(dryRun, { total: 2, excluded: 1, updated: 0 });
+    assert.ok(lines.some(l => l.includes("제외 1건")));
+
+    const done = await backfillReflectWorkspace({ pool: getPrimaryPool(), execute: true, out: () => {} });
+    assert.equal(done.updated, 1);
+    const { rows } = await directQuery(`SELECT id, workspace FROM ${SCHEMA}.fragments WHERE id = ANY($1)`, [[ids.dup, ids.move]]);
+    const byId = Object.fromEntries(rows.map(r => [r.id, r.workspace]));
+    assert.equal(byId[ids.dup], null);
+    assert.equal(byId[ids.move], "proj-alpha");
   });
 });
