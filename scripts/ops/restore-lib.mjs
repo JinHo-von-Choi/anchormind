@@ -207,16 +207,24 @@ export function parseChecksumFile(text, fileName) {
 }
 
 /**
- * pg_restore의 표준 오류에서 행 내용이 실릴 수 있는 줄(CONTEXT, DETAIL, Command was)을
- * 빼고, 남은 줄을 줄마다 200자로 자른다. 보고에는 이 결과만 싣는다.
+ * pg_restore의 표준 오류에서 보고에 실어도 되는 줄만 남긴다. pg_restore: error 와
+ * pg_restore: warning 줄만 쓰고, 서버 오류 문구(ERROR: 뒤)는 행 값을 인용할 수 있으므로
+ * 잘라낸다. 남는 것은 실패한 작업의 이름, 개수(errors ignored on restore: N)뿐이다.
+ * 줄마다 200자로 자른다.
  *
  * @param {string} stderr
  * @returns {string[]}
  */
 export function sanitizePgErrors(stderr) {
-  return String(stderr)
-    .split("\n")
-    .map(line => line.trim())
-    .filter(line => line !== "" && !/^(CONTEXT|DETAIL|HINT|Command was):?/i.test(line))
-    .map(line => (line.length > 200 ? `${line.slice(0, 200)}...` : line));
+  const out = [];
+  for (const raw of String(stderr).split("\n")) {
+    const match = /^pg_restore: (error|warning): (.*)$/.exec(raw.trim());
+    if (!match) continue;
+    let detail = match[2];
+    const server = detail.search(/\bERROR:/i);
+    if (server >= 0) detail = `${detail.slice(0, server).trim().replace(/:$/, "")} (서버 오류 문구 생략)`;
+    const line = `pg_restore: ${match[1]}: ${detail}`;
+    out.push(line.length > 200 ? `${line.slice(0, 200)}...` : line);
+  }
+  return out;
 }

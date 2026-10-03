@@ -180,8 +180,9 @@ async function restoreInto(server, name, dumpPath) {
       }
     );
   } catch (err) {
-    const lines = sanitizePgErrors(err.stderr || err.message);
-    throw new RestoreVerifyError(`pg_restore 실패: ${lines.join(" | ") || "원인 불명"}`, { cause: err });
+    if (err.code === "ENOENT") throw new RestoreVerifyError("pg_restore 를 PATH 에서 찾지 못했다", { cause: err });
+    const lines = sanitizePgErrors(err.stderr || "");
+    throw new RestoreVerifyError(`pg_restore 실패 (종료 코드 ${String(err.code)}): ${lines.join(" | ") || "보고할 수 있는 오류 줄 없음"}`, { cause: err });
   }
 }
 

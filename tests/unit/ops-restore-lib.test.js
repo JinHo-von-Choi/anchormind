@@ -34,7 +34,7 @@ describe("복구 대상 서버 검사", () => {
     { POSTGRES_HOST: "127.0.0.1" },
     { POSTGRES_HOST: "::1" },
     { POSTGRES_HOST: "db.example.com" },
-    { POSTGRES_HOST: "192.168.0.10" },
+    { POSTGRES_HOST: "203.0.113.10" },
     { POSTGRES_PORT: "5432" },
     { POSTGRES_PORT: "57332" },
     { POSTGRES_USER: "postgres" },
@@ -225,18 +225,29 @@ describe("체크섬 파일 해석", () => {
 });
 
 describe("pg_restore 오류 정리", () => {
-  it("행 내용이 실릴 수 있는 줄을 뺀다", () => {
+  it("서버 오류 문구와 행 내용이 실릴 수 있는 줄을 모두 뺀다", () => {
     const stderr = [
-      "pg_restore: error: COPY failed for table \"fragments\": ERROR:  invalid input",
+      'pg_restore: error: COPY failed for table "fragments": ERROR:  invalid input syntax for type real: "secret memory text"',
+      'pg_restore: error: could not execute query: ERROR:  duplicate key value violates unique constraint',
       "CONTEXT:  COPY fragments, line 3: \"secret memory text\"",
       "DETAIL:  Key (id)=(abc) already exists.",
       "Command was: COPY agent_memory.fragments (id, content) FROM stdin;",
+      "pg_restore: warning: errors ignored on restore: 2",
       ""
     ].join("\n");
     const lines = sanitizePgErrors(stderr);
-    assert.equal(lines.length, 1);
-    assert.match(lines[0], /^pg_restore: error: COPY failed/);
-    assert.ok(!lines.join("\n").includes("secret memory text"));
+    assert.deepEqual(lines, [
+      'pg_restore: error: COPY failed for table "fragments" (서버 오류 문구 생략)',
+      "pg_restore: error: could not execute query (서버 오류 문구 생략)",
+      "pg_restore: warning: errors ignored on restore: 2"
+    ]);
+    const joined = lines.join("\n");
+    assert.ok(!joined.includes("secret memory text"));
+    assert.ok(!joined.includes("abc"));
+  });
+
+  it("pg_restore 줄이 아닌 줄은 버린다", () => {
+    assert.deepEqual(sanitizePgErrors("Command failed: pg_restore --x\nrandom text with value=secret"), []);
   });
 
   it("긴 줄은 200자로 자른다", () => {
