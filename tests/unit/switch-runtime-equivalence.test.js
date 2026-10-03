@@ -3,8 +3,8 @@
  *
  * 스위치마다 여러 원시값(미설정, 빈 값, 공백, 대소문자, 잘못된 값, 문서 값)을 넣고 실제 사용처가 읽은 값이
  * describeSwitches의 적용 값과 같은지 본다. 모든 스위치가 대상이다.
- *   1. 사용처가 모듈 상수나 내보낸 함수로 값을 드러내는 45개: 자식 프로세스의 환경에 원시값을 넣고 읽은 값을 비교한다.
- *   2. 호출 시점에 읽는 열거 8개와 리터럴 true 불리언 6개: 사용처가 부르는 lib/env-parse.js의 판독 함수와
+ *   1. 사용처가 모듈 상수나 내보낸 함수로 값을 드러내는 48개: 자식 프로세스의 환경에 원시값을 넣고 읽은 값을 비교한다.
+ *   2. 호출 시점에 읽는 열거 8개와 리터럴 true 불리언 5개: 사용처가 부르는 lib/env-parse.js의 판독 함수와
  *      대장을 같은 원시값 표로 비교하고, 사용처가 그 함수를 부르며 환경을 직접 비교하지 않는지 소스로 본다.
  *   3. 잘못된 값 표시: 환경 변수 도우미(envBool, envEnum)로도 읽는 스위치는 기동 시 설정 문제 목록과, 기동 실패로
  *      이어지는 값은 판독 결과와, 그 밖의 모든 스위치는 문서 값 집합에서 독립적으로 계산한 기대값과 비교한다.
@@ -40,6 +40,9 @@ const RUNTIME = {
   MCP_REJECT_NONAPIKEY_OAUTH:               "cfg.REJECT_NONAPIKEY_OAUTH",
   ENABLE_OPENAPI:                           "cfg.ENABLE_OPENAPI",
   MEMENTO_REMEMBER_DUPLICATE_GUARD:         "cfg.isRememberDuplicateGuardEnabled()",
+  MEMENTO_WORKSPACE_GATE:                   "cfg.workspaceGateEnforced()",
+  MEMENTO_WRITE_GATE:                       "cfg.writeGateEnabled() ? 'on' : 'off'",
+  MEMENTO_LOG_STDERR:                       "cfg.logToStderr()",
   REDIS_ENABLED:                            "cfg.REDIS_ENABLED",
   REDIS_SENTINEL_ENABLED:                   "cfg.REDIS_SENTINEL_ENABLED",
   CACHE_ENABLED:                            "cfg.CACHE_ENABLED",
@@ -79,7 +82,7 @@ const RUNTIME = {
  * 사용처가 호출 시점에 isLiteralTrue(env, 이름)으로 읽고 값을 모듈 밖으로 내보내지 않는 불리언 스위치.
  */
 const LITERAL_TRUE = [
-  "MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN", "MEMENTO_REMEMBER_ATOMIC", "MEMENTO_WORKSPACE_GATE",
+  "MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN", "MEMENTO_REMEMBER_ATOMIC",
   "ENABLE_RECONSOLIDATION", "ENABLE_SPREADING_ACTIVATION", "UPDATE_REQUIRE_SIGNED_TAG"
 ];
 

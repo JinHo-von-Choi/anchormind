@@ -80,6 +80,7 @@ export const SWITCHES = Object.freeze([
   boolOff("MEMENTO_REMEMBER_ATOMIC", "쓰기 경로", "remember의 한도 확인과 저장을 한 트랜잭션으로 묶는다"),
   boolOff("MEMENTO_REMEMBER_DUPLICATE_GUARD", "쓰기 경로", "remember 중복 적중 시 기존 파편을 고치지 않고 상태만 알린다"),
   boolOff("MEMENTO_WORKSPACE_GATE", "쓰기 경로", "workspace가 없는 파편의 저장을 거부한다"),
+  enumOf("MEMENTO_WRITE_GATE", ["on", "off"], "on", "쓰기 경로", "의미 쓰기 진입점이 쓰기 관문의 전체 단계를 거친다", { off: ["off"] }),
 
   /* 저장소와 캐시 */
   boolOff("REDIS_ENABLED", "저장소", "Redis를 쓴다(L1 검색, 세션, 캐시)"),
@@ -127,6 +128,7 @@ export const SWITCHES = Object.freeze([
 
   /* 운영 */
   boolOff("MEMENTO_CONFIG_STRICT", "운영", "환경 변수 값 문제가 있으면 기동을 멈춘다"),
+  boolOff("MEMENTO_LOG_STDERR", "운영", "콘솔 로그를 표준 오류로 보낸다(CLI는 serve를 뺀 명령에서 자동으로 켠다)"),
   boolOff("UPDATE_CHECK_DISABLED", "운영", "신규 버전 확인을 끈다"),
   boolOff("UPDATE_REQUIRE_SIGNED_TAG", "운영", "git 설치본 갱신에서 서명된 태그를 요구한다"),
   offDisables("MEMENTO_ADMIN_METRICS_SAMPLING", "운영", "관리 콘솔 메트릭 샘플링을 한다"),
