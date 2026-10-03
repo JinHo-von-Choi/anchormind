@@ -295,6 +295,22 @@ node scripts/measure/recall-metrics.mjs --compare budget-off.json budget-on.json
 - `warnings`에 `token_budget`, `query_keywords`, `include_links` 차이가 있으면 조건이 다른 실행이므로 비교하지 않는다.
 - 복구본에 마이그레이션 051을 적용하면(`DATABASE_URL=postgresql://<사용자>:<비밀번호>@localhost:35433/<복구본_B> npm run migrate`, `DATABASE_URL`을 명시해 다른 설정 파일의 접속 값을 쓰지 않게 한다) 후보 실행의 `search_events.candidate_count`, `budget_kept`로 예산이 묶인 recall의 비율을 볼 수 있다(`SELECT count(*) FILTER (WHERE budget_kept < candidate_count), count(*) FROM agent_memory.search_events WHERE candidate_count IS NOT NULL`). 적용하지 않아도 recall과 지표는 같고 검색 이벤트는 두 열 없이 기록된다.
 
+### context 주입 줄 주석 토큰 측정 (`MEMENTO_CONTEXT_ANNOTATE`)
+
+`scripts/measure/context-annotation-tokens.mjs`는 파편 목록을 context 크기의 창(기본 15개, `contextInjection.maxCoreFragments` 기본값)으로 나누어 주입 줄을 주석 없이(off)와 주석과 함께(on) 만들고 cl100k_base 토큰 수와 문자 수 / 4 추정을 잰다. 같은 창으로 recall `format:"pack"` 답 꾸러미의 부가 토큰(꾸러미 텍스트 대 본문만)도 잰다. DB, 네트워크, 설정 파일에 닿지 않는다.
+
+```bash
+# 저장소에 든 평가 세트 본문(tests/fixtures/recall-goldset.jsonl의 store 100줄)
+node scripts/measure/context-annotation-tokens.mjs
+
+# 복구본에서 내보낸 파일(형식 버전 1, 2)로 실제 분포 측정
+node scripts/measure/context-annotation-tokens.mjs --fragments <내보내기.jsonl> --out annotate-tokens.json
+```
+
+- 평가 세트 줄에는 저장일이 없으므로 `--base-date`(기본 2026-10-03)와 저장 기본값 `observed`를 쓴다. 내보내기 줄은 저장된 `created_at`, `assertion_status`, `is_anchor`를 쓴다.
+- 출력: `total.tokens_off`, `tokens_on`, `growth_ratio`(on과 off의 차 / off), `estimate_growth_ratio`(문자 수 / 4 기준), `per_window_growth`(창별 증가율의 최솟값, 중앙값, p95, 최댓값), `per_line.annotation_tokens_mean`, `pack.overhead_ratio`.
+- 2026-10-03 저장소 평가 세트(100줄, 창 15개) 측정: 주입 줄 토큰 4389에서 5389(증가율 0.2278, 창별 0.171~0.3311), 줄당 주석 10토큰, 문자 수 / 4 추정 증가율 0.42. 꾸러미 부가 비율 1.1783(본문 4212토큰, 꾸러미 9175토큰). 꾸러미 부가분은 창마다 한 번 들어가는 고정 정책 문단과 항목별 여는 줄이다. 짧은 본문(평균 약 42토큰)의 세트이므로 본문이 긴 실제 분포에서는 비율이 작아진다.
+
 ## Ablation 연구
 
 동일 검색 결과(round_direct, K=5, recall_any@5=0.883)에 대해 세 가지 리더 조건을 테스트했다.

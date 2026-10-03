@@ -271,6 +271,7 @@ scripts/
 +-- switch-report.mjs                            Prints the applied value, default and state of every feature switch as a table (`npm run switches`, `--strict`)
 +-- measure/recall-metrics.mjs                   Measures search metrics on the evaluation set and compares two runs (`--compare`)
 +-- measure/protocol-era-probe.mjs               Sends modern MCP requests to a scratch server and observes the era decision and initialize fallback
++-- measure/context-annotation-tokens.mjs        Measures the token growth of context injection line annotations and the answer pack offline (no database)
 +-- ops/backup.sh                                agent_memory schema backup with manifest (14 days kept by default)
 +-- ops/restore-verify.mjs                       Restores a dump into a disposable test server and compares it with the manifest
 +-- ops/online-index.mjs                         Builds large table indexes from the work list (`ops/index-manifest.json`) with `CONCURRENTLY`

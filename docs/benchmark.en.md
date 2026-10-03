@@ -391,3 +391,19 @@ node scripts/measure/recall-metrics.mjs --compare budget-off.json budget-on.json
 - Reading: the budgeted nDCG improved when the `comparisons` entry with `group` `overall` has `ci_low` above 0 and `insufficient_n` false. Subset, tag and domain groups are read with the same rule.
 - When `warnings` lists a difference in `token_budget`, `query_keywords` or `include_links`, the runs were made under different conditions and are not compared.
 - With migration 051 applied to the restored copy (`DATABASE_URL=postgresql://<user>:<password>@localhost:35433/<restore_b> npm run migrate`; set `DATABASE_URL` explicitly so that no connection value from another settings file is used), `search_events.candidate_count` and `budget_kept` of the candidate run show the share of recalls where the budget bound (`SELECT count(*) FILTER (WHERE budget_kept < candidate_count), count(*) FROM agent_memory.search_events WHERE candidate_count IS NOT NULL`). Without it, recall and the metrics are the same and search events are recorded without the two columns.
+
+### Context injection line annotation tokens (`MEMENTO_CONTEXT_ANNOTATE`)
+
+`scripts/measure/context-annotation-tokens.mjs` splits a fragment list into context-sized windows (15 by default, the `contextInjection.maxCoreFragments` default), renders the injection lines without (off) and with (on) the annotation, and counts cl100k_base tokens and the characters / 4 estimate. With the same windows it also measures the added tokens of the recall `format:"pack"` answer pack (pack text against content only). It touches no database, network or settings file.
+
+```bash
+# Evaluation set content in the repository (100 store lines of tests/fixtures/recall-goldset.jsonl)
+node scripts/measure/context-annotation-tokens.mjs
+
+# Real distribution from an export of a restored copy (format version 1 or 2)
+node scripts/measure/context-annotation-tokens.mjs --fragments <export.jsonl> --out annotate-tokens.json
+```
+
+- Evaluation set lines have no storage date, so `--base-date` (default 2026-10-03) and the storage default `observed` are used. Export lines use the stored `created_at`, `assertion_status` and `is_anchor`.
+- Output: `total.tokens_off`, `tokens_on`, `growth_ratio` (on minus off, divided by off), `estimate_growth_ratio` (characters / 4), `per_window_growth` (minimum, median, p95 and maximum of the window growth), `per_line.annotation_tokens_mean`, `pack.overhead_ratio`.
+- Measured on 2026-10-03 with the repository evaluation set (100 lines, windows of 15): injection line tokens 4389 to 5389 (growth 0.2278, per window 0.171 to 0.3311), 10 annotation tokens per line, characters / 4 estimate growth 0.42. Pack overhead ratio 1.1783 (content 4212 tokens, pack 9175 tokens); the overhead is the fixed policy paragraph, included once per window, and the opening line of each item. The set has short content (about 42 tokens on average), so the ratios are smaller for a real distribution with longer content.
