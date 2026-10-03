@@ -37,7 +37,7 @@ The fastest path for someone new to this repository is to hand the work to an AI
 After the assistant finishes, all of the following must hold:
 
 - `.env` exists, with `MEMENTO_ACCESS_KEY`, `POSTGRES_*`, and `REDIS_*` populated
-- `npm run migrate` succeeds through `migration-054`
+- `npm run migrate` succeeds through `migration-052`
 - `node bin/memento.js health` returns OK for DB, Redis, and the embedding provider
 - The AI client lists `mcp__*__remember`, `recall`, and `reflect`
 - A `context` call returns a valid response (zero fragments is fine; so does `memory_stats` with a master key)
@@ -275,13 +275,13 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-049-align-synthetic-query-
 psql $DATABASE_URL -f lib/memory/migrations/migration-050-dedup-scope-workspace.sql
 
 # search_events budget selection columns (candidate_count, budget_kept)
-psql $DATABASE_URL -f lib/memory/migrations/migration-052-search-events-budget.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-051-search-events-budget.sql
 
 # outbox_events table
-psql $DATABASE_URL -f lib/memory/migrations/migration-054-outbox-events.sql
+psql $DATABASE_URL -f lib/memory/migrations/migration-052-outbox-events.sql
 ```
 
-There are no migrations 046, 051 and 053. Prefer `npm run migrate`, which records applied files and substitutes the vector opclass automatically.
+There is no migration 046. Prefer `npm run migrate`, which records applied files and substitutes the vector opclass automatically.
 
 After migration-050 the per-key content_hash indexes (`uq_frag_hash_per_key`, `uq_frag_hash_master`) remain, so duplicate detection stays per key. A new install finishes the switch to per workspace detection (`MEMENTO_DEDUP_SCOPE=workspace`, the default) by dropping the per-key indexes with the command below after migrating. Without options it only prints the steps; the target comes from `--url` or the PG environment variables (it does not read environment files).
 

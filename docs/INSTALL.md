@@ -37,7 +37,7 @@
 위 프롬프트를 받은 AI가 정상적으로 처리했다면 다음이 모두 충족되어야 한다.
 
 - `.env` 파일이 생성되고 `MEMENTO_ACCESS_KEY`·`POSTGRES_*`·`REDIS_*` 키가 모두 채워져 있다
-- `npm run migrate`가 `migration-054`까지 통과한다
+- `npm run migrate`가 `migration-052`까지 통과한다
 - `node bin/memento.js health`가 DB/Redis/임베딩 제공자 모두 OK를 반환한다
 - AI 클라이언트 도구 목록에 `mcp__*__remember`·`recall`·`reflect`가 노출된다
 - `context` 호출이 기억 0건이라도 정상 응답을 반환한다 (master 키의 `memory_stats`도 같다)
@@ -170,11 +170,11 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-047-agent-scope-audit.sql 
 psql $DATABASE_URL -f lib/memory/migrations/migration-048-case-events-case-closed.sql               # case_events.event_type에 case_closed 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-049-align-synthetic-query-embedding.sql       # synthetic query 임베딩 정합 마커 (DDL은 scripts/migrate.js가 적용)
 psql $DATABASE_URL -f lib/memory/migrations/migration-050-dedup-scope-workspace.sql                 # 키와 workspace 단위 content_hash 유일 색인 (운영 DB는 online-index로 먼저 생성)
-psql $DATABASE_URL -f lib/memory/migrations/migration-052-search-events-budget.sql                   # search_events 예산 선택 열(candidate_count, budget_kept) 추가
-psql $DATABASE_URL -f lib/memory/migrations/migration-054-outbox-events.sql                         # outbox_events 표 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-051-search-events-budget.sql                   # search_events 예산 선택 열(candidate_count, budget_kept) 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-052-outbox-events.sql                         # outbox_events 표 추가
 ```
 
-migration-046, 051, 053은 결번이다. 수동 적용보다 `npm run migrate`를 권장한다(적용 이력과 opclass 치환을 자동 처리).
+migration-046은 결번이다. 수동 적용보다 `npm run migrate`를 권장한다(적용 이력과 opclass 치환을 자동 처리).
 
 migration-050 뒤에도 키 단위 content_hash 색인(`uq_frag_hash_per_key`, `uq_frag_hash_master`)이 남아 있어 중복 판정은 키 단위로 동작한다. 새 설치는 마이그레이션 뒤 다음 명령으로 키 단위 색인을 지워 workspace 단위 판정(`MEMENTO_DEDUP_SCOPE=workspace`, 기본)으로 마무리한다. 옵션이 없으면 단계만 출력하고, 접속 대상은 `--url` 또는 PG 환경변수로 준다(환경 파일은 읽지 않는다).
 
