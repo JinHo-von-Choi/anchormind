@@ -11,9 +11,12 @@ describe("superseded_by valid_to 연동", () => {
   });
 
   test("MemoryConsolidator._resolveContradiction의 해소 기록은 ContradictionDetector와 같은 본문과 topic을 쓴다", async () => {
-    const { MemoryConsolidator } = await import("../../lib/memory/consolidate/MemoryConsolidator.js");
-    const src = new MemoryConsolidator()._resolveContradiction.toString();
-    assert.ok(src.includes("contradictionAuditContent("), "해소 기록 본문은 contradictionAuditContent로 만든다");
+    const { MemoryConsolidator }    = await import("../../lib/memory/consolidate/MemoryConsolidator.js");
+    const { ContradictionDetector } = await import("../../lib/memory/link/ContradictionDetector.js");
+    const src   = new MemoryConsolidator()._resolveContradiction.toString();
+    const audit = ContradictionDetector.prototype.recordResolutionAudit.toString();
+    assert.ok(src.includes("recordResolutionAudit("), "해소 기록은 ContradictionDetector의 감사 기록 함수로 남긴다");
+    assert.ok(audit.includes("contradictionAuditContent("), "해소 기록 본문은 contradictionAuditContent로 만든다");
     assert.ok(src.includes("CONTRADICTION_AUDIT_TOPIC"), "해소 기록 topic은 CONTRADICTION_AUDIT_TOPIC이다");
     assert.ok(!src.includes("substring(0, 80)"), "본문 앞부분을 직접 담지 않는다");
   });

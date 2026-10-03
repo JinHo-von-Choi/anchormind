@@ -108,7 +108,7 @@ describe("통합 경로의 모순 감사 파편", () => {
       "test"
     );
     assert.equal(remembered.length, 1);
-    assert.equal(remembered[0].topic, "ops");
+    assert.equal(remembered[0].topic, "contradiction_audit");
     assert.deepEqual(remembered[0]._provenance, { clientName: "internal", trustCap: 0 });
   });
 });
