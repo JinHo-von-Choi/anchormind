@@ -12,7 +12,8 @@ import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
 import { scanText, maskText, scanFields, SCANNED_TEXT_FIELDS } from "../../lib/security/SensitiveScanner.js";
-import { SENSITIVE_PATTERNS, patternsFor, luhnValid, rrnChecksumValid } from "../../lib/security/sensitivePatterns.js";
+import { SENSITIVE_PATTERNS, patternsFor, luhnValid, rrnChecksumValid, createRrnValidator } from "../../lib/security/sensitivePatterns.js";
+import { keywordText } from "../../lib/memory/write/FragmentFactory.js";
 
 const rep = (ch, n) => ch.repeat(n);
 
@@ -89,7 +90,7 @@ const POSITIVE = {
   ],
   card_number: [
     "카드 4111111111111111", "4111 1111 1111 1111", "5555-5555-5555-4444", `card: ${luhnNumber("37", 15)}`,
-    "3782 822463 10005", `visa ${luhnNumber("65", 16)} 승인`, `결제 ${luhnNumber("35", 16)}`, `${luhnNumber("2223", 16)} master`, `cvc ${luhnNumber("62", 19)}`
+    "3782 822463 10005", `visa ${luhnNumber("65", 16)} amex`, `신용 ${luhnNumber("35", 16)}`, `${luhnNumber("2223", 16)} mastercard`, `cvv ${luhnNumber("62", 19)}`
   ],
   email: ["ops-team@example.com", "a.b+c@sub.example.co.kr"],
   password_field: ["password: hunter2", "비밀번호=abc123!", "PWD : s3cret"],
@@ -353,6 +354,30 @@ describe("PEM 개인 키 규칙", () => {
     assert.ok(!out.includes(rep("A", 64)) && !out.includes("BEGIN"));
   });
 
+  it("줄바꿈이 공백으로 바뀐 한 줄 키를 가리고 뒤 문장을 보존한다", () => {
+    const tokens = [rep("M", 64), rep("b", 64), rep("Q", 20)];
+    const flat   = `-----BEGIN RSA PRIVATE KEY----- ${tokens.slice(0, 2).join(" ")} ${tokens[2]} -----END RSA PRIVATE KEY-----`;
+    assert.equal(maskText(`앞 문장 ${flat} 뒤 문장`), "앞 문장 [REDACTED_PRIVATE_KEY] 뒤 문장");
+
+    const open = `-----BEGIN PRIVATE KEY----- ${tokens[0]} ${tokens[1]} and then normal words follow here`;
+    assert.equal(maskText(open), "[REDACTED_PRIVATE_KEY] and then normal words follow here");
+
+    const tabbed = `-----BEGIN PRIVATE KEY-----\t${tokens[0]}\t${tokens[1]}\t-----END PRIVATE KEY-----`;
+    assert.equal(maskText(tabbed), "[REDACTED_PRIVATE_KEY]");
+  });
+
+  it("머리말 뒤에 일반 단어가 이어지는 설명은 공백이 있어도 가리지 않는다", () => {
+    for (const text of [
+      "-----BEGIN PRIVATE KEY----- is the header line of a PEM file and the rest of the note continues",
+      "Use -----BEGIN RSA PRIVATE KEY----- header then base64 lines follow in the file with the key material",
+      `-----BEGIN PRIVATE KEY----- ${rep("A", 30)} ${rep("B", 30)}`,
+      "-----BEGIN PRIVATE KEY----- 머리말 설명 이후 단계 3개"
+    ]) {
+      assert.deepEqual(scanText(text).rules, [], text);
+      assert.equal(maskText(text), text);
+    }
+  });
+
   it("키 본문이 base64 40자 미만이면 가리지 않는다", () => {
     const text = `-----BEGIN PRIVATE KEY-----\n${rep("A", 39)}\n-----END PRIVATE KEY-----`;
     assert.deepEqual(scanText(text).rules, []);
@@ -365,13 +390,66 @@ describe("PEM 개인 키 규칙", () => {
   });
 });
 
+describe("주민등록번호 규칙의 날짜 상한", () => {
+  const at        = (iso) => createRrnValidator(() => new Date(iso));
+  const noChecksum = (born, gender = 3) => `${born}-${gender}123456`;
+
+  it("성별 자리 3의 번호는 생년월일이 오늘과 어제이면 가리고 내일이면 가리지 않는다", () => {
+    const valid = at("2026-10-03T12:00:00");
+    assert.equal(rrnChecksumValid(noChecksum("261003").replace("-", "")), false);
+    assert.equal(valid(noChecksum("261003")), true, "오늘");
+    assert.equal(valid(noChecksum("261002")), true, "어제");
+    assert.equal(valid(noChecksum("261004")), false, "내일");
+    assert.equal(valid(noChecksum("261004", 4)), false, "내일, 성별 4");
+  });
+
+  it("2020-10-01 이전 생년월일과 성별 1, 2, 하이픈 없는 형식은 검증 자릿수가 없으면 가리지 않는다", () => {
+    const valid = at("2026-10-03T12:00:00");
+    assert.equal(valid(noChecksum("200930")), false);
+    assert.equal(valid(noChecksum("201001")), true);
+    assert.equal(valid(noChecksum("250315", 1)), false);
+    assert.equal(valid(noChecksum("250315").replace("-", "")), false);
+  });
+
+  it("검증 자릿수가 맞으면 날짜와 무관하게 가린다", () => {
+    const valid = at("2026-10-03T12:00:00");
+    const digits = rrnDigits("990101123456");
+    assert.equal(valid(`${digits.slice(0, 6)}-${digits.slice(6)}`), true);
+  });
+
+  it("시계를 넘기면 해가 바뀐 뒤의 오늘 기준으로 판정한다", () => {
+    assert.equal(at("2031-01-01T00:00:00")(noChecksum("301231", 4)), true);
+    assert.equal(at("2029-12-31T00:00:00")(noChecksum("301231", 4)), false);
+  });
+});
+
+describe("키워드 문자열 변환", () => {
+  it("keywordText는 문자열과 유한한 숫자를 문자열로 바꾸고 그 밖의 값은 그대로 둔다", () => {
+    assert.equal(keywordText("A"), "A");
+    assert.equal(keywordText(8503152345678), "8503152345678");
+    assert.equal(keywordText(1.5), "1.5");
+    for (const junk of [true, null, undefined, {}, ["x"], NaN, Infinity]) assert.equal(keywordText(junk), junk);
+  });
+
+  it("숫자 키워드도 문자열과 같이 검사한다", () => {
+    const rrn = rrnDigits("850315234567");
+    const out = scanFields({ keywords: [rrn, Number(rrn), true, null, { a: 1 }, ["n"]].map(keywordText) }, []);
+    assert.equal(out.findings[0].rule, "rrn_kr");
+    assert.deepEqual(out.fields.keywords.slice(0, 2), ["[REDACTED_RRN]", "[REDACTED_RRN]"]);
+    assert.deepEqual(out.fields.keywords.slice(2), [true, null, { a: 1 }, ["n"]]);
+  });
+});
+
 describe("카드 번호 규칙의 문맥과 바코드", () => {
   const card = "4111111111111111";
 
   it("구분자 없는 숫자열은 앞뒤 24자 안에 카드 단어가 있을 때만 가린다", () => {
     assert.deepEqual(scanText(`영수증 번호 ${card} 끝`).rules, []);
-    for (const text of [`card ${card}`, `${card} visa`, `결제 수단 ${card}`, `승인 번호가 아닌 ${card}`, `${card} 카드`, `MasterCard: ${card}`, `amex ${card}`, `${card}, cvc 123`]) {
+    for (const text of [`card ${card}`, `${card} visa`, `신용 ${card}`, `체크카드 ${card}`, `${card} 카드`, `MasterCard: ${card}`, `amex ${card}`, `${card}, cvc 123`, `${card} cvv`]) {
       assert.deepEqual(scanText(text).rules.map((r) => r.id), ["card_number"], text);
+    }
+    for (const text of [`결제 수단 ${card}`, `승인 번호 ${card}`, `master 계정 ${card}`, `결제 승인 ${card} 완료`]) {
+      assert.deepEqual(scanText(text).rules, [], text);
     }
     assert.deepEqual(scanText(`카드${rep("가", 30)} ${card}`).rules, []);
   });
@@ -458,6 +536,11 @@ describe("적대적 입력의 처리 시간", () => {
     "mmcp_ 반복"           : rep("mmcp_", SIZE / 5),
     "PEM 시작 반복"        : rep("-----BEGIN PRIVATE KEY-----", SIZE / 27),
     "PEM 시작 꼬리 없음"   : `-----BEGIN RSA PRIVATE KEY-----${rep("A", SIZE)}`,
+    "PEM 머리말 뒤 공백"   : `-----BEGIN PRIVATE KEY-----${rep(" ", SIZE)}`,
+    "PEM 본문 뒤 공백"     : `-----BEGIN PRIVATE KEY----- ${rep("A", 40)}${rep(" ", SIZE)}`,
+    "PEM 공백 토큰 반복"   : `-----BEGIN PRIVATE KEY----- ${rep(`${rep("A", 16)} `, SIZE / 17)}`,
+    "PEM 짧은 토큰 반복"   : `-----BEGIN PRIVATE KEY----- ${rep("A", 40)}${rep(" A", SIZE / 2)}`,
+    "PEM 머리말 공백 반복" : rep("-----BEGIN PRIVATE KEY----- ", SIZE / 28),
     "PEM 머리말과 헤더 줄 반복": rep("-----BEGIN PRIVATE KEY-----\nA: b\n", SIZE / 33),
     "PEM 줄 구분자 반복"   : `-----BEGIN PRIVATE KEY-----${rep("\\n" + rep("A", 3), SIZE / 5)}`,
     "PEM 짧은 줄 반복"     : `-----BEGIN PRIVATE KEY-----\n${rep("A", 39)}${rep("\nA", SIZE / 2)}`,

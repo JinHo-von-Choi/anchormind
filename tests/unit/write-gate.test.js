@@ -198,6 +198,38 @@ describe("민감 정보 탐지 판정", () => {
     );
   });
 
+  it("숫자 키워드도 문자열과 같이 검사해 가린다", async () => {
+    const weights = [2, 3, 4, 5, 6, 7, 8, 9, 2, 3, 4, 5];
+    const first12 = "850315234567";
+    const sum     = [...first12].reduce((acc, ch, i) => acc + Number(ch) * weights[i], 0);
+    const rrn     = `${first12}${(11 - (sum % 11)) % 10}`;
+    const gate    = new WriteGate();
+    const out     = await gate.check(request({
+      fields: { content: "배포 설정을 정리한 메모를 남긴다", type: "fact", topic: "t", keywords: [rrn, Number(rrn), "Deploy"] }
+    }));
+    assert.deepEqual(out.warnings, ["sensitive.rrn_kr"]);
+    assert.equal(out.fields.keywords.length, 3);
+    assert.ok(out.fields.keywords.slice(0, 2).every(k => typeof k === "string" && !k.includes(rrn)));
+    assert.equal(out.fields.keywords[2], "deploy");
+  });
+
+  it("숫자가 아닌 잡다한 키워드 항목은 관문이 거부한다", async () => {
+    const gate = new WriteGate();
+    for (const keywords of [["a", true], ["a", null], ["a", { x: 1 }], ["a", ["nested"]], [NaN]]) {
+      await assert.rejects(
+        () => gate.check(request({ fields: { content: "배포 설정을 정리한 메모를 남긴다", type: "fact", topic: "t", keywords } })),
+        (err) => err instanceof WriteInputError && /must be a string/.test(err.message),
+        JSON.stringify(keywords)
+      );
+    }
+  });
+
+  it("sensitiveStep은 숫자가 섞인 원본 키워드에서 문자열이 아닌 항목을 그대로 둔다", () => {
+    const next = sensitiveStep({ ...stateOf({ fields: { keywords: ["a", "b"] } }), rawKeywords: ["Deploy", 42, true, null] });
+    assert.deepEqual(next.fields.keywords, ["a", "b"]);
+    assert.deepEqual(next.violations, []);
+  });
+
   it("keywords는 소문자로 정규화되기 전의 값을 검사해 대문자 접두 규칙을 찾는다", async () => {
     const gate = new WriteGate();
     const key  = `AKIA${"A1".repeat(8)}`;
