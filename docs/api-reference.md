@@ -170,7 +170,7 @@ GET이 아닌 관리 요청, 관리 로그인, 기억 쓰기(remember, amend, fo
 }
 ```
 
-`anchor`는 `genesis`(seq 1부터), `retained`(보존 정리 뒤 남은 첫 행), `previous_row`(`fromSeq` 바로 앞 행)다. `broken.reason`은 `row_hash_mismatch`, `prev_hash_mismatch`, `seq_gap`이다. `complete`는 끝까지 확인했을 때 `true`이고 `maxRows`에서 멈추면 `false`다. 내보내기와 검증 요청도 각각 `admin.audit.export`, `admin.audit.verify`로 기록된다.
+`anchor`는 `genesis`(seq 1부터), `checkpoint`(보존 정리가 남긴 기준점 행의 경계 해시), `previous_row`(`fromSeq` 바로 앞 행)다. `broken.reason`은 `row_hash_mismatch`, `prev_hash_mismatch`, `seq_gap`, `prefix_mismatch`(기준점 없이 앞부분이 사라짐)이다. `complete`는 끝까지 확인했을 때 `true`이고 `maxRows`에서 멈추면 `false`다. 내보내기와 검증 요청도 각각 `admin.audit.export`, `admin.audit.verify`로 기록되고, 목록 조회(`GET /audit`)는 기록하지 않는다. 행은 seq(기록 순서) 기준이며 `occurredAt` 순서와 다를 수 있다.
 
 ### /health 엔드포인트 정책
 

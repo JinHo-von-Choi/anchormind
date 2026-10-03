@@ -526,7 +526,7 @@ node bin/memento.js audit verify --json
 | `--max-rows <n>` | Check at most this many rows (default 1000000) |
 | `--json` | Print the result object as JSON |
 
-An intact chain prints the number of checked rows, the anchor (`genesis`, or `retained` after retention cleanup) and the last `row_hash` (`head`) and exits with code 0. A broken chain prints the first broken seq and the reason (`row_hash_mismatch`, `prev_hash_mismatch`, `seq_gap`) and exits with code 1. The chain structure is in [configuration.en.md](configuration.en.md#audit-table).
+An intact chain prints the number of checked rows, the anchor (`genesis`, or `checkpoint` after retention cleanup) and the last `row_hash` (`head`) and exits with code 0. A broken chain prints the first broken seq and the reason (`row_hash_mismatch`, `prev_hash_mismatch`, `seq_gap`, `prefix_mismatch`) and exits with code 1. The chain structure is in [configuration.en.md](configuration.en.md#audit-table).
 
 ---
 

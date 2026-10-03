@@ -167,7 +167,7 @@ Verification `POST /audit/verify` takes an optional body (`{ "fromSeq": n, "maxR
 }
 ```
 
-`anchor` is `genesis` (starting at seq 1), `retained` (first row left after retention) or `previous_row` (the row just before `fromSeq`). `broken.reason` is `row_hash_mismatch`, `prev_hash_mismatch` or `seq_gap`. `complete` is `true` when the check reached the end and `false` when it stopped at `maxRows`. The export and verification requests themselves are recorded as `admin.audit.export` and `admin.audit.verify`.
+`anchor` is `genesis` (starting at seq 1), `checkpoint` (boundary hash of the checkpoint row written by retention cleanup) or `previous_row` (the row just before `fromSeq`). `broken.reason` is `row_hash_mismatch`, `prev_hash_mismatch`, `seq_gap` or `prefix_mismatch` (leading part removed without a checkpoint). `complete` is `true` when the check reached the end and `false` when it stopped at `maxRows`. The export and verification requests themselves are recorded as `admin.audit.export` and `admin.audit.verify`; list queries (`GET /audit`) are not recorded. Rows are ordered by seq (write order), which can differ from the `occurredAt` order.
 
 ### /health Endpoint Policy
 

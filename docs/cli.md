@@ -527,7 +527,7 @@ node bin/memento.js audit verify --json
 | `--max-rows <n>` | 이 행 수까지만 확인한다(기본 1000000) |
 | `--json` | 결과 객체를 JSON으로 출력한다 |
 
-체인이 온전하면 확인한 행 수, 기준점(`genesis` 또는 보존 정리 뒤의 `retained`), 마지막 `row_hash`(`head`)를 출력하고 종료 코드 0으로 끝난다. 끊겼으면 첫 끊긴 seq와 사유(`row_hash_mismatch`, `prev_hash_mismatch`, `seq_gap`)를 출력하고 종료 코드 1로 끝난다. 체인 구조는 [configuration.md](configuration.md#감사-표)에 있다.
+체인이 온전하면 확인한 행 수, 기준점(`genesis` 또는 보존 정리 뒤의 `checkpoint`), 마지막 `row_hash`(`head`)를 출력하고 종료 코드 0으로 끝난다. 끊겼으면 첫 끊긴 seq와 사유(`row_hash_mismatch`, `prev_hash_mismatch`, `seq_gap`, `prefix_mismatch`)를 출력하고 종료 코드 1로 끝난다. 체인 구조는 [configuration.md](configuration.md#감사-표)에 있다.
 
 ---
 

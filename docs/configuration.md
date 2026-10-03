@@ -502,7 +502,7 @@ Claude Code와 Codex의 훅이 부르는 `POST /hooks/{client}/{event}`다. `cli
 | 변수 | 기본값 | 설명 |
 |-|-|-|
 | MEMENTO_AUDIT_DB | on | `on`이면 감사 이벤트를 outbox에 기록하고, outbox 작업자를 돌리는 프로세스가 감사 승격 처리기를 등록한다. `off`이면 기록하지 않고 처리기도 등록하지 않는다(파일 감사 로그는 계속된다). `off`인 동안 생긴 행위는 표에 남지 않는다. 이미 대기 중인 `audit.record` 행은 처리기가 없는 topic이 되어 `MEMENTO_OUTBOX_UNHANDLED_DAYS`가 지나면 `no_handler` dead-letter로 옮겨질 수 있고, 다시 `on`으로 켠 뒤 위 SQL로 대기로 돌린다. `MEMENTO_OUTBOX=off`이면 이 값과 관계없이 기록하지 않는다. 기록 여부는 호출 시점에, 처리기 등록은 기동 시점에 읽는다 |
-| MEMENTO_AUDIT_RETENTION_DAYS | 400 | 감사 행의 보존 일수(`recorded_at` 기준). 6시간마다 이 기간이 지난 앞부분을 1000건 묶음으로, 한 번에 최대 50000건까지 지운다. 마지막 행은 지우지 않는다. 1 이상 3650 이하의 정수, 그 밖의 값은 400 |
+| MEMENTO_AUDIT_RETENTION_DAYS | 400 | 감사 행의 보존 일수(`recorded_at` 기준). 6시간마다 이 기간이 지난 앞부분을 10000건 묶음으로, 한 번에 최대 50000건까지 지운다. 묶음마다 같은 트랜잭션에서 보존 기준점 행(`audit.retention.prune`)을 체인 끝에 남긴다. 마지막 행은 지우지 않는다. 1 이상 3650 이하의 정수, 그 밖의 값은 400 |
 
 기록 범위(행위 이름)
 
@@ -513,16 +513,22 @@ Claude Code와 Codex의 훅이 부르는 `POST /hooks/{client}/{event}`다. `cli
 | `memory.remember`, `memory.amend`, `memory.forget`, `memory.link` | 기억 도구 처리기. 실패도 `failure`로 남기고 dryRun은 남기지 않는다 | 파편 id(forget의 주제 지정은 `topic`) | 본문은 `contentSha256`과 `contentLength`만, 실패는 `errorCode`만(오류 메시지는 남기지 않는다) |
 | `memory.anchor` | 앵커로 저장하거나 amend가 `isAnchor`를 바꿀 때 | 파편 id | `isAnchor` |
 | `gate.block` | 쓰기 관문(`WriteGate`)이 거부할 때(hard gate, `MEMENTO_SENSITIVE_SCAN=reject`, hard gate 조회 실패) | 없음 | `entry`, `op`, `rule`, `fragmentType`. 행위자는 키(키 없는 사용자 진입점은 마스터, 서버 내부 작업은 system) |
+| `memory.batch_remember` | batch_remember 한 번에 이벤트 하나. 실패도 남기고 dryRun은 남기지 않는다 | 없음 | `total`, `inserted`, `skipped`, `anchors`(앵커 지정 항목 수), `async`. 본문은 남기지 않는다 |
+| `memory.reflect` | reflect | 없음 | `count` |
+| `memory.consolidate` | memory_consolidate(마스터) | 없음 | 결과의 최상위 수치(`expiredDeleted` 등) |
+| `system.update.apply` | apply_update의 실제 적용(dryRun 제외) | 없음 | `step`, `targetVersion`, `installType` |
+| `llm.egress` | 외부 전송 감사 topic `audit.llm.egress`를 감사 승격 소비자가 옮긴다 | 제공자(`llm_provider`) | `stage`, `providerClass`, `bytes`, `maskedRules`, `workspaceCount`. workspace 이름은 남기지 않는다 |
+| `audit.retention.prune` | 보존 정리(행위자 system) | 체인(`audit_chain`, 경계 seq) | `boundarySeq`, `boundaryHash`(지운 마지막 행의 seq와 `row_hash`), `deleted`, `retentionDays` |
 
-검토 결정과 외부 전송 감사는 그 기능의 생산자가 같은 함수(`recordAudit`, 트랜잭션 안에서는 `enqueueAudit`)로 기록한다.
+쓰기 도구 중 `tool_feedback`(사용 신호만 기록)과 `session_rotate`(세션 ID 교체, `session-audit.log`에 남음)는 감사 이벤트를 남기지 않는다. 쓰기 도구마다 감사 행위나 제외 이유를 `lib/tools/memory-audit.js`의 `TOOL_AUDIT_COVERAGE`에 적고 `tests/structure/tool-audit-coverage.test.js`가 확인한다. 감사 조회(`GET /audit`)는 읽기라 기록하지 않고, 내보내기와 검증 요청은 기록한다. 검토 결정은 그 기능의 생산자가 같은 함수(`recordAudit`, 트랜잭션 안에서는 `enqueueAudit`)로 기록한다.
 
-detail 규칙: 키 이름이 본문이나 비밀을 가리키면(`content`, `body`, `text`, `summary`, `token`, `secret`, `password`, `authorization`, `cookie`, `credential`, `api_key`, `raw`를 포함) 이벤트를 만들지 않는다. 단 `Sha256`, `Length`로 끝나는 키는 16진 64자와 0 이상의 정수일 때만 받는다. 문자열 값은 비밀 형식을 표식으로 바꾸고(`SensitiveScanner`) 200자로 자른다. 규칙을 어긴 이벤트와 outbox 기록 실패는 업무 응답을 막지 않고 경고 로그와 `memento_audit_enqueue_failed_total`로 남는다.
+detail 규칙: 키 이름이 본문이나 비밀을 가리키면(`content`, `body`, `text`, `summary`, `token`, `secret`, `password`, `authorization`, `cookie`, `credential`, `api_key`, `private_key`, `raw`를 포함하거나 `code`, `otp`, `key`, `session`, `pin`과 같으면. `errorCode`, `keyId`처럼 포함하는 이름은 받는다) 이벤트를 만들지 않는다. 단 `Sha256`, `Length`로 끝나는 키는 16진 64자와 0 이상의 정수일 때만 받는다. 문자열 값은 비밀 형식을 표식으로 바꾸고(`SensitiveScanner`) 코드 포인트 200개로 자른다. 대상 id와 workspace도 비밀 형식을 표식으로 바꾼다. 모든 문자열 값(행위자, 대상, workspace, detail)은 홀로 남은 서로게이트를 U+FFFD로 바꾼 올바른 유니코드로 만든 뒤 코드 포인트 단위로 자르므로 서로게이트 쌍이 갈리지 않고, 해시한 값과 DB에 저장된 값이 같다. 규칙을 어긴 이벤트와 outbox 기록 실패는 업무 응답을 막지 않고 경고 로그와 `memento_audit_enqueue_failed_total`로 남는다.
 
 체인
 
 - 행 해시: `row_hash = sha256(prev_hash + "\n" + 행 값의 정규 JSON)`. 첫 행의 `prev_hash`는 0 64개다. 정규 JSON은 키를 사전순으로 정렬하고, seq는 10진 문자열, 시각은 밀리초 ISO 문자열로 넣는다(`lib/logging/audit-chain.js`).
-- 순번: 소비자는 표를 `SHARE ROW EXCLUSIVE`로 잠근 트랜잭션 안에서 마지막 행을 읽고 `seq = 마지막 + 1`로 기록한다(잠금 대기 상한 10초). 작업자가 여럿이어도 체인은 갈라지지 않는다. `source_event`(outbox 멱등 키)가 이미 있으면 새 행을 만들지 않는다.
-- 검증: seq 연속성, `prev_hash` 연결, `row_hash` 재계산을 차례로 본다. 행 값이 바뀌면 `row_hash_mismatch`, 행이 빠지면 `seq_gap`, 이어지지 않으면 `prev_hash_mismatch`를 첫 끊긴 seq와 함께 보고한다. 보존 정리로 앞부분이 지워진 체인은 남은 첫 행의 `prev_hash`를 기준점(`retained`)으로 삼고, seq 1부터 남은 체인은 0 64개(`genesis`)를 기준점으로 삼는다. 마지막 행 뒤를 지운 경우는 체인만으로 알 수 없으므로 검증 결과의 `headHash`를 밖에 따로 보관해 대조한다.
+- 순번: 소비자는 표를 `SHARE ROW EXCLUSIVE`로 잠근 트랜잭션 안에서 마지막 행을 읽고 `seq = 마지막 + 1`로 기록한다(잠금 대기 상한 10초). 작업자가 여럿이어도 체인은 갈라지지 않는다. `source_event`(outbox 멱등 키)가 이미 있으면 새 행을 만들지 않는다. seq는 기록(커밋) 순서이고 `occurred_at`(발생 시각) 순서와 다를 수 있다. 발생 순서로 볼 때는 `occurred_at`으로 정렬한다.
+- 검증: seq 연속성, `prev_hash` 연결, `row_hash` 재계산을 차례로 본다. 행 값이 바뀌면 `row_hash_mismatch`, 행이 빠지면 `seq_gap`, 이어지지 않으면 `prev_hash_mismatch`를 첫 끊긴 seq와 함께 보고한다. seq 1부터 남은 체인은 0 64개(`genesis`)를 기준점으로 삼는다. 앞부분이 지워진 체인은 남은 첫 행 바로 앞 seq를 `boundarySeq`로 가진 보존 기준점 행이 있고 그 `boundaryHash`가 남은 첫 행의 `prev_hash`와 같을 때만 그 해시를 기준점(`checkpoint`)으로 삼고, 기준점 행 자신도 체인에서 확인한다. 기준점 없이 앞부분이 사라졌거나 정리 뒤 경계 다음 행이 사라졌으면 `prefix_mismatch`다. `fromSeq`를 주었는데 바로 앞 행이 없으면 `seq_gap`이다. 마지막 행 뒤를 지운 경우는 체인만으로 알 수 없으므로 검증 결과의 `headHash`를 밖에 따로 보관해 대조한다.
 
 조회와 검증
 
