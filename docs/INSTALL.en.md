@@ -282,6 +282,9 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-052-outbox-events.sql
 
 # Fragment provenance, trust tier and review state columns
 psql $DATABASE_URL -f lib/memory/migrations/migration-057-fragment-provenance.sql
+
+# Review decision table and review_state value constraint
+psql $DATABASE_URL -f lib/memory/migrations/migration-058-review-decisions.sql
 ```
 
 There is no migration 046. Prefer `npm run migrate`, which records applied files and substitutes the vector opclass automatically.

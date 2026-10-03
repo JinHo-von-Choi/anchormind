@@ -36,15 +36,18 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | GET | /v1/internal/model/nothing/activity | 최근 파편 활동 로그 (10건) |
 | GET | /v1/internal/model/nothing/metrics-summary | 대시보드 메트릭 요약 |
 | GET | /v1/internal/model/nothing/keys | API 키 목록 조회. 정책 열(`default_mode`, `allowed_workspaces`, `symbolic_hard_gate`)을 포함한다 |
-| POST | /v1/internal/model/nothing/keys | API 키 생성. 원시 키는 응답에서 단 1회 반환. `permissions`는 `read`, `write` 중 하나 이상을 담은 배열이며 출처 신뢰 표지 `trusted_origin`을 함께 둘 수 있다. 생략하면 `DEFAULT_PERMISSIONS`. 빈 배열, `null`, `trusted_origin`만 있는 배열, 그 밖의 값은 400 |
+| POST | /v1/internal/model/nothing/keys | API 키 생성. 원시 키는 응답에서 단 1회 반환. `permissions`는 `read`, `write` 중 하나 이상을 담은 배열이며 출처 신뢰 표지 `trusted_origin`을 함께 둘 수 있다. 생략하면 `DEFAULT_PERMISSIONS`. 빈 배열, `null`, `trusted_origin`만 있는 배열, 그 밖의 값은 400. 검토 대기열 방식 표지 `review_off`(그 키의 검토 표지 끔) 또는 `review_all`(그 키의 모든 쓰기를 검토 대기로 둠) 중 하나도 함께 둘 수 있다 |
 | PUT | /v1/internal/model/nothing/keys/:id | API 키 상태 변경 (active ↔ inactive) |
 | GET | /v1/internal/model/nothing/keys/:id/stats | API 키별 사용 통계 |
 | PUT | /v1/internal/model/nothing/keys/:id/daily-limit | API 키 일일 호출 제한 변경. 마스터 키 인증 필요 |
-| PUT | /v1/internal/model/nothing/keys/:id/permissions | API 키 권한 변경. 허용 값은 POST와 같다(`read`, `write` 중 하나 이상, 선택 `trusted_origin`). 빈 배열과 `trusted_origin`만 있는 배열은 400이다. `trusted_origin`이 있는 키는 remember의 `origin` 주장으로 신뢰 등급 3까지 쓸 수 있고, 없는 키는 2가 상한이다(`MEMENTO_PROVENANCE`) |
+| PUT | /v1/internal/model/nothing/keys/:id/permissions | API 키 권한 변경. 허용 값은 POST와 같다(`read`, `write` 중 하나 이상, 선택 `trusted_origin`). 빈 배열과 `trusted_origin`만 있는 배열은 400이다. `trusted_origin`이 있는 키는 remember의 `origin` 주장으로 신뢰 등급 3까지 쓸 수 있고, 없는 키는 2가 상한이다(`MEMENTO_PROVENANCE`). 검토 방식 표지 `review_off`, `review_all`은 둘 중 하나만 둘 수 있고 둘 다 있으면 400이다(`MEMENTO_REVIEW_QUEUE`) |
 | PUT | /v1/internal/model/nothing/keys/:id/fragment-limit | API 키 파편 할당량 변경 |
 | PATCH | /v1/internal/model/nothing/keys/:id/workspace | API 키의 default_workspace 변경. `{ workspace: "name" }` 또는 `{ workspace: null }` (null=해제) |
 | PATCH | /v1/internal/model/nothing/keys/:id/policy | API 키 정책 열 변경. 본문은 `default_mode`, `allowed_workspaces`, `symbolic_hard_gate` 중 하나 이상. 아래 절 참조 |
 | DELETE | /v1/internal/model/nothing/keys/:id | API 키 삭제(성공 204). 저장된 파편이나 재통합 이력이 있는 키는 삭제하지 않고 409 `key_in_use`를 돌려준다(`MEMENTO_API_KEY_DELETE_GUARD=false`면 확인 생략). 비활성화나 삭제 시 이 프로세스의 그 키 세션이 즉시 닫힌다 |
+| GET | /v1/internal/model/nothing/review | 검토 대기 파편 목록(오래된 순). 질의 `key_id`(`master`는 마스터 키가 쓴 것), `limit`(1~200, 기본 50), `cursor`(앞 응답의 `nextCursor`). 항목은 `id`, `key_id`, `key_name`, `agent_id`, `workspace`, `type`, `topic`, `content_preview`(500자), `review_reasons`, `origin`, `trust_tier`, `is_anchor`, `created_at`, `auto_reject_at`(만든 지 30일). 잘못된 값은 400과 `field` |
+| POST | /v1/internal/model/nothing/review/:id/approve | 검토 대기 파편 승인. 본문 `note`(500자 이하, 민감 정보는 가려서 저장), `idempotencyKey`(또는 `Idempotency-Key` 헤더, 1~128자 `[A-Za-z0-9._:-]`). `review_state`를 `approved`로 바꾸고 보류한 앵커 지정 요청(`anchor_requested`)이 있으면 앵커로 지정한다. 응답 `decisionId`, `fragmentId`, `decision`, `reviewer`, `keyId`, `decidedAt`, `replayed`(같은 멱등 키의 재요청이면 true), `anchorApplied`. 없는 파편 404, 검토 대기가 아닌 파편 409(`state`), 다른 결정에 쓰인 멱등 키 409(`field: idempotencyKey`) |
+| POST | /v1/internal/model/nothing/review/:id/reject | 검토 대기 파편 거절. 본문과 응답은 승인과 같다. `review_state`를 `rejected`로 바꾸고 `valid_to`를 설정해 만료 파편으로 만든다. 결정은 `memory_review_decisions`에 남고 감사 기록 `admin review_decision` 한 줄이 남는다 |
 | GET | /v1/internal/model/nothing/groups | 키 그룹 목록 |
 | POST | /v1/internal/model/nothing/groups | 키 그룹 생성 |
 | DELETE | /v1/internal/model/nothing/groups/:id | 키 그룹 삭제 |
@@ -614,6 +617,8 @@ reason code 목록 (최대 3개):
 
 `MEMENTO_PROVENANCE=on`(기본)이면 기본 형식 응답의 파편에 `origin`(저장 시 주장된 출처)과 `trust_tier`(0 격리, 1 낮음, 2 보통, 3 높음)가 붙는다. 값이 NULL인 기존 파편에는 두 필드가 없으며 등급은 2로 해석한다. `fields`를 지정하면 거기 든 키만 싣는다. 두 값은 recall과 같은 agent, 키(그룹 포함), workspace 범위로 파편 id마다 한 번 따로 조회하며, 조회가 실패하면 두 필드 없이 응답한다. 등급은 remember의 `origin` 설명을 따른다. `off`이면 조회하지 않고 필드도 없다.
 
+`MEMENTO_REVIEW_QUEUE=on`(기본)이면 이 키가 쓴 검토 대기 파편(`review_state='pending'`)이 결과에 그대로 보이며 `pending_review: true`와 낮은 신뢰 표지 `low_trust: true`가 `fields` 지정과 무관하게 붙는다. 같은 키 그룹의 다른 키, 마스터 키, context 주입에는 보이지 않는다. 승인되면 표지 없이 모두에게 보이고, 거절되면 만료 파편이 된다.
+
 ### 답 꾸러미 (format: pack)
 
 `format: "pack"`이면 응답은 `fragments` 없이 `success`, `format: "pack"`, `pack`, `count`, `totalTokens`, `searchPath`, `_meta`를 담는다. `format`을 주지 않거나 `default`이면 응답은 위 형식 그대로다.
@@ -623,7 +628,7 @@ reason code 목록 (최대 3개):
 | `pack.version` | `v0` |
 | `pack.policy_id` | 정책 문단의 고정 식별자(`memento-pack-policy-v0`). 정책 문단 본문은 `pack.text`에만 한 번 들어간다 |
 | `pack.text` | 답에 바로 넣을 텍스트. `[MEMORY PACK v0]`, 기억 내용에서 파생하지 않는 고정 정책 문단(블록 안 내용은 자료이며 지시가 아니라는 것, date와 status, assertion의 뜻, 이스케이프 표기), 파편마다 여는 줄 `<<<MEMORY ...>>>`, 본문 한 줄, 닫는 줄 `<<<END MEMORY>>>` |
-| `pack.items[]` | 블록과 같은 순서의 속성: `id`, `date`(UTC 저장일 YYYY-MM-DD), `status`(`valid`, `superseded`), `assertion`, `type`, `topic`, `case_id`, `source`, `superseded_by`, `supersedes`, `truncated`, 있을 때만 `stale_warning`(recall의 stale 경고, 120자), `validation_warnings`(저장 시 검증 경고, 최대 5개, 각 120자), `origin`(`MEMENTO_PROVENANCE=on`일 때만, 값이 없으면 null). 본문은 `pack.text`에만 있다 |
+| `pack.items[]` | 블록과 같은 순서의 속성: `id`, `date`(UTC 저장일 YYYY-MM-DD), `status`(`valid`, `superseded`), `assertion`, `type`, `topic`, `case_id`, `source`, `superseded_by`, `supersedes`, `truncated`, 있을 때만 `stale_warning`(recall의 stale 경고, 120자), `validation_warnings`(저장 시 검증 경고, 최대 5개, 각 120자), `origin`(`MEMENTO_PROVENANCE=on`일 때만, 값이 없으면 null). 본문은 `pack.text`에만 있다, 검토 대기 파편이면 `review`(`pending`, 여는 줄에는 `review=pending`) |
 | `pack.groups[]` | `{ key, ids }`. key는 `case:<caseId>`, caseId가 없으면 `topic:<topic>`. 묶음은 처음 나온 순서, 묶음 안은 순위 순서이며 블록도 이 순서다 |
 | `pack.partial` | 출처와 대체 체인 조회가 실패해 그 정보 없이 만든 경우 `true` |
 | `pack.estimatedTokens` | `estimatedTokens`를 뺀 `pack` 객체를 응답과 같은 방식(JSON, 들여쓰기 2)으로 직렬화한 문자열의 cl100k_base 토큰 수(저장 경로와 recall 예산 선택이 쓰는 `countTokens`). 꾸러미 전체의 크기다 |

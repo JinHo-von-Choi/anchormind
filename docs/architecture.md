@@ -50,6 +50,8 @@ server.js  (HTTP 서버)
             │   ├── AnswerPackLoader.js   답 꾸러미 출처(source)와 대체 체인(superseded_by 링크) 조회. recall과 같은 agent, 키, workspace 술어. 기본 형식 recall 응답에 `origin`, `trust_tier`를 싣는다(`MEMENTO_PROVENANCE`)
             │   ├── ProvenanceLoader.js   파편 id의 출처 열(source, origin, trust_tier) 조회와 recall 범위 술어. 꾸러미, recall 응답, context core 거르기가 함께 쓴다. 풀은 호출자가 넘긴다
             │   ├── ContextTrust.js       context 주입 제외(신뢰 등급 1 이하, core는 등급을 확인하지 못한 파편 포함)의 앵커 SQL 조각, core 후보 거르기와 결과 메타, 주석 출처 필드(순수 함수)
+            │   ├── ReviewVisibility.js   검토 대기 파편 가시성 술어. recall 질의(쓴 키에게만 보임), id 조회(API 키 조회만), ANCHOR 주입과 앵커 승격(모두 제외)의 SQL 조각, 응답 표지(pending_review, low_trust), core 후보 거르기
+            │   ├── SearchLayerScope.js   FragmentSearch가 계층 호출에 넘기는 공통 범위 옵션(workspace, agent, 앵커 필터, 검토 가시성의 보는 주체)
             │   ├── provenance-metrics.js core 신뢰 등급 제외 지표 `memento_context_core_trust_excluded_total{reason}`
             │   ├── GraphNeighborSearch.js L2.5 그래프 이웃 검색 (fragment_links 1-hop 양방향 UNION, tanh 포화 스코어링 + 관계 유형별 부스트)
             │   ├── HistoryReconstructor.js case_id/entity 기반 서사 재구성 (ordered_timeline, causal_chains, unresolved_branches)
@@ -63,6 +65,8 @@ server.js  (HTTP 서버)
             │   └── SearchSideEffects.js  검색 부작용 격리 모듈. commitSearchSideEffects()가 searchEventId를 동기 반환하고 SearchParamAdaptor.recordOutcome()을 fire-and-forget으로 호출. FragmentSearch는 검색 파이프라인에만 집중
             ├── write/                    쓰기 레이어 모듈
             │   ├── WriteGate.js          의미 쓰기 단일 관문. normalize, sensitive, length, policy, workspace, anchor 단계를 순서대로 적용하고 위반을 경고로 남기거나 hard gate 키에서 거부한다. `MEMENTO_WRITE_GATE`
+            │   ├── ReviewQueue.js        검토 대기열 동기 판정(순수 함수). 지시 덮어쓰기 문구, 신뢰 등급 1 이하의 앵커와 preference와 procedure, 무권한 앵커 경고를 사유로 모으고 키의 검토 방식(off, flagged, all)으로 review_state='pending'을 싣는다. 앵커 요청은 승인까지 보류한다. INSERT 열 조각과 갱신 SET 조각. `MEMENTO_REVIEW_QUEUE`
+            │   ├── reviewRules.js        지시 덮어쓰기 문구 규칙 표(한국어, 영어). 걸리지 않아야 하는 일반 절차문 표는 시험에 있다
             │   ├── write-gate-metrics.js 관문 판정 지표 `memento_write_gate_total{entry,outcome}`
             │   ├── gateApproval.js       관문 통과 표식. WriteGate가 등록한 쓰기 값만 FragmentWriter 의미 메서드가 받는다
             │   ├── serverWriteGate.js    서버 쓰기 경로의 관문 생성. 키의 workspace 허가 집합과 hard gate 설정을 ApiKeyStore에서 읽어 주입한다
@@ -129,6 +133,7 @@ server.js  (HTTP 서버)
             ├── WorkingMemoryRows.js      Redis가 준비되지 않았을 때의 작업 기억 행(`source=wm-fallback`) 읽기, 정리, 키별 상한(`MEMENTO_WM_PG_FALLBACK`, `MEMENTO_WM_FALLBACK_MAX_ROWS`)
             ├── WorkingMemorySql.js       작업 기억 행 식별 값과 조회, 집계에서 그 행을 빼는 SQL 조건
             ├── provenance.js             파편 출처와 신뢰 등급 판정(순수 함수). 허용 origin, 출처별 등급, 키 상한(`trusted_origin` 권한 또는 마스터 키 3, 그 밖 2), NULL을 2로 보는 주입 제외 술어와 같은 문턱의 SQL 조각, 관측 클라이언트 표기, INSERT 열 조각
+            ├── reviewState.js            검토 상태(pending, approved, rejected), 검토 방식(off, flagged, all), 키 권한 목록의 검토 방식 표지(review_off, review_all)
             ├── keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` 공유 헬퍼. key_id 범위 WHERE 절 생성. FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js에서 공유 사용
             ├── CaseEventStore.js         semantic milestone 로그 (case_events CRUD, DAG 엣지, 증거 조인)
             ├── memory-schema.sql         PostgreSQL 스키마 정의
@@ -183,6 +188,8 @@ lib/admin/
 ├── admin-metrics.js   `/metrics-summary` 요약 (prom-client 레지스트리 직접 조회, 10초 응답 캐시)
 ├── admin-keys.js      API 키 관리 라우트
 ├── key-policy.js      키 정책 열(default_mode, allowed_workspaces, symbolic_hard_gate) 편집 값 검증과 감사 기록 형식
+├── admin-review.js    검토 대기열 라우트(GET /review, POST /review/:id/approve, /reject)와 요청 검증
+├── ReviewStore.js     검토 대기 목록, 승인과 거절(대상 행 잠금, 결정 기록, 멱등 키), 30일 미결정 자동 거절(6시간 주기)
 ├── admin-memory.js    메모리 운영 라우트 (overview, fragments, anomalies, graph)
 ├── admin-sessions.js  세션 관리 라우트
 ├── admin-logs.js      로그 조회 라우트

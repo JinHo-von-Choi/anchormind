@@ -47,6 +47,8 @@ server.js  (HTTP server)
             |   +-- AnswerPackLoader.js   Answer pack source and supersession chain (superseded_by links) lookup with the same agent, key and workspace predicates as recall. Adds `origin` and `trust_tier` to default recall responses (`MEMENTO_PROVENANCE`)
             |   +-- ProvenanceLoader.js   Provenance column lookup (source, origin, trust_tier) by fragment id and the recall scope predicate. Shared by the pack, recall responses and the context core filter. The caller passes the pool
             |   +-- ContextTrust.js       Anchor SQL fragment, core candidate filter with its result meta and annotation origin field for the context injection exclusion (trust tier 1 or lower; for core also fragments whose tier could not be confirmed) (pure functions)
+            |   +-- ReviewVisibility.js   Pending review visibility predicates. SQL fragments for recall queries (visible to the writing key only), id lookups (API key lookups only), ANCHOR injection and anchor promotion (always excluded), response markers (pending_review, low_trust) and the core candidate filter
+            |   +-- SearchLayerScope.js   Common scope options FragmentSearch passes to its layers (workspace, agent, anchor filter, review visibility viewer)
             |   +-- provenance-metrics.js Core trust exclusion metric `memento_context_core_trust_excluded_total{reason}`
             |   +-- GraphNeighborSearch.js L2.5 graph neighbor search (fragment_links 1-hop bidirectional UNION, tanh-saturated scoring + relation-type boosts)
             |   +-- HistoryReconstructor.js case_id/entity-based narrative reconstruction (ordered_timeline, causal_chains, unresolved_branches)
@@ -60,6 +62,8 @@ server.js  (HTTP server)
             |   +-- SearchSideEffects.js  Search side-effect isolation module. commitSearchSideEffects() synchronously returns searchEventId; fire-and-forgets SearchParamAdaptor.recordOutcome()
             +-- write/                    Write layer modules
             |   +-- WriteGate.js          Single semantic write gate. Applies the normalize, sensitive, length, policy, workspace and anchor steps in order and records violations as warnings or rejects them on hard-gate keys. `MEMENTO_WRITE_GATE`
+            |   +-- ReviewQueue.js        Synchronous review queue decisions (pure functions). Collects instruction override phrases, anchors, preferences and procedures with trust tier 1 or lower and unauthorized anchor warnings as reasons, and stores review_state='pending' according to the key's review mode (off, flagged, all). Holds anchor requests until approval. INSERT column fragment and update SET fragment. `MEMENTO_REVIEW_QUEUE`
+            |   +-- reviewRules.js        Instruction override phrase rule table (Korean, English). The table of ordinary procedural sentences that must not match is in the tests
             |   +-- write-gate-metrics.js Gate verdict metric `memento_write_gate_total{entry,outcome}`
             |   +-- gateApproval.js       Gate approval marks. FragmentWriter semantic methods accept only write values registered by WriteGate
             |   +-- serverWriteGate.js    Builds the gate for server write paths, injecting the key's allowed workspace set and hard gate setting from ApiKeyStore
@@ -126,6 +130,7 @@ server.js  (HTTP server)
             +-- WorkingMemoryRows.js      Reads, cleanup and per-key cap of the working memory rows (`source=wm-fallback`) used while Redis is not ready (`MEMENTO_WM_PG_FALLBACK`, `MEMENTO_WM_FALLBACK_MAX_ROWS`)
             +-- WorkingMemorySql.js       Working memory row marker and the SQL condition that excludes those rows from queries and counts
             +-- provenance.js             Fragment provenance and trust tier decisions (pure functions). Accepted origins, per-origin tiers, key cap (3 with the `trusted_origin` permission or the master key, otherwise 2), the injection exclusion predicate that reads NULL as 2 and the SQL fragment with the same threshold, observed client notation, INSERT column fragment
+            +-- reviewState.js            Review states (pending, approved, rejected), review modes (off, flagged, all) and the review mode markers of key permission lists (review_off, review_all)
             +-- keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` shared helper. Generates key_id-scoped WHERE clauses. Used by FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js
             +-- CaseEventStore.js         Semantic milestone log (case_events CRUD, DAG edges, evidence join)
             +-- memory-schema.sql         PostgreSQL schema definition
@@ -180,6 +185,8 @@ lib/admin/
 +-- admin-metrics.js   `/metrics-summary` summary (reads the prom-client registry directly, 10-second response cache)
 +-- admin-keys.js      API key management routes
 +-- key-policy.js      Validation of key policy column edits (default_mode, allowed_workspaces, symbolic_hard_gate) and the audit record format
++-- admin-review.js    Review queue routes (GET /review, POST /review/:id/approve, /reject) and request validation
++-- ReviewStore.js     Pending review list, approval and rejection (row lock, decision record, idempotency key) and automatic rejection after 30 undecided days (every 6 hours)
 +-- admin-memory.js    Memory operations routes (overview, fragments, anomalies, graph)
 +-- admin-sessions.js  Session management routes
 +-- admin-logs.js      Log viewing routes

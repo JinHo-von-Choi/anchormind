@@ -110,6 +110,8 @@ Tailwind CSS와 d3 스크립트는 외부 CDN이 아니라 서버가 `assets/adm
 
 키 상세의 PERMISSIONS 토글(READ, WRITE, TRUSTED_ORIGIN)은 `PUT /v1/internal/model/nothing/keys/:id/permissions`로 저장된다. TRUSTED_ORIGIN을 켠 키는 remember의 `origin` 주장(`user_stated`)으로 신뢰 등급 3까지 기록할 수 있고, 끈 키는 2가 상한이다(`MEMENTO_PROVENANCE`).
 
+PERMISSIONS의 REVIEW_OFF와 REVIEW_ALL은 검토 대기열 방식 표지다(`MEMENTO_REVIEW_QUEUE`). REVIEW_OFF를 켠 키는 검토 표지를 달지 않고, REVIEW_ALL을 켠 키는 모든 쓰기가 검토 대기로 저장된다. 둘 중 하나만 켤 수 있으며 하나를 켜면 다른 하나는 꺼진다. 둘 다 끈 키는 규칙에 걸린 쓰기만 검토 대기로 둔다. 검토 대기 파편은 관리 API `GET /v1/internal/model/nothing/review`로 보고 `POST .../review/:id/approve`, `.../reject`로 결정한다.
+
 키 행을 클릭하면 우측에 상세 패널이 열린다:
 - Daily Rate Limit -- 일일 호출 제한을 인라인으로 편집한다. 숫자 입력 필드에 값을 입력하면 변경 즉시 `PUT /v1/internal/model/nothing/keys/:id/daily-limit` API로 저장된다.
 - ACCESS POLICY -- 세 정책 열을 한 카드에서 편집하고 SAVE POLICY로 한 번에 저장한다. 바뀐 필드만 `PATCH /v1/internal/model/nothing/keys/:id/policy`로 전송한다. 변경은 감사 로그(`admin key_policy`)에 필드 이름과 이전, 이후 값으로 남는다.

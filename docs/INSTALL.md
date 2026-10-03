@@ -173,6 +173,7 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-050-dedup-scope-workspace.
 psql $DATABASE_URL -f lib/memory/migrations/migration-051-search-events-budget.sql                   # search_events 예산 선택 열(candidate_count, budget_kept) 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-052-outbox-events.sql                         # outbox_events 표 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-057-fragment-provenance.sql                    # 파편 출처, 신뢰 등급, 검토 상태 열
+psql $DATABASE_URL -f lib/memory/migrations/migration-058-review-decisions.sql                       # 검토 결정 기록 표, review_state 값 제약
 ```
 
 migration-046은 결번이다. 수동 적용보다 `npm run migrate`를 권장한다(적용 이력과 opclass 치환을 자동 처리).
