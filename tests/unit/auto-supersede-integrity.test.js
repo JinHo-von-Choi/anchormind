@@ -143,6 +143,43 @@ describe("ContradictionDetector 모순 해소", () => {
     assert.equal(audits[0].topic, CONTRADICTION_AUDIT_TOPIC);
   });
 
+  it("해소 기록은 두 파편의 본문 대신 id를 담고 두 id를 linkedTo로 잇는다", async () => {
+    const saved = process.env.MEMENTO_FORGET_CASCADE;
+    delete process.env.MEMENTO_FORGET_CASCADE;
+    try {
+      vectorHandler = captureWrites;
+      const winner = { ...newer, id: "frag-winner-01" };
+      const loser  = { id: "frag-loser-02", key_id: null, created_at: "2026-09-01T00:00:00Z", content: "포트는 8080이다", is_anchor: false };
+      await detector().resolveContradiction(winner, loser, "port changed");
+
+      assert.equal(audits.length, 1);
+      assert.ok(audits[0].content.includes("frag-loser-02"));
+      assert.ok(audits[0].content.includes("frag-winner-01"));
+      assert.ok(!audits[0].content.includes(loser.content), "패배 파편 본문이 담기지 않는다");
+      assert.ok(!audits[0].content.includes(winner.content), "승리 파편 본문이 담기지 않는다");
+      assert.deepEqual(audits[0].linkedTo, ["frag-winner-01", "frag-loser-02"]);
+    } finally {
+      if (saved === undefined) delete process.env.MEMENTO_FORGET_CASCADE;
+      else process.env.MEMENTO_FORGET_CASCADE = saved;
+    }
+  });
+
+  it("MEMENTO_FORGET_CASCADE=off이면 해소 기록이 두 파편 본문의 앞부분을 담는다", async () => {
+    const saved = process.env.MEMENTO_FORGET_CASCADE;
+    process.env.MEMENTO_FORGET_CASCADE = "off";
+    try {
+      vectorHandler = captureWrites;
+      const loser = { id: "o", key_id: null, created_at: "2026-09-01T00:00:00Z", content: "포트는 8080이다", is_anchor: false };
+      await detector().resolveContradiction(newer, loser, "port changed");
+
+      assert.ok(audits[0].content.includes(loser.content));
+      assert.ok(audits[0].content.includes(newer.content));
+    } finally {
+      if (saved === undefined) delete process.env.MEMENTO_FORGET_CASCADE;
+      else process.env.MEMENTO_FORGET_CASCADE = saved;
+    }
+  });
+
   it("오래된 쪽이 앵커면 닫지도 중요도를 낮추지도 않는다", async () => {
     vectorHandler = captureWrites;
     const anchor = { id: "o", key_id: null, created_at: "2026-09-01T00:00:00Z", content: "포트는 8080이다", is_anchor: true };
