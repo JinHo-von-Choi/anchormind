@@ -117,7 +117,8 @@ describe("suggestTopics", () => {
     assert.match(calls[0].sql, /agent_id = \$2/);
     assert.match(calls[0].sql, /key_id IS NOT DISTINCT FROM \$3/);
     assert.match(calls[0].sql, /key_id = ANY\(\$4::text\[\]\)/);
-    assert.deepEqual(calls[0].params, ["anchormind-mcp", "default", "key-1", ["key-1", "key-2"]]);
+    assert.deepEqual(calls[0].params, ["anchormind-mcp", "default", "key-1", ["key-1", "key-2"], "key-1"]);
+    assert.match(calls[0].sql, /review_state NOT IN \('pending', 'rejected'\) OR key_id IS NOT DISTINCT FROM \$5/);
   });
 
   it("peer topic 제안도 key/workspace 경계를 유지한다", async () => {

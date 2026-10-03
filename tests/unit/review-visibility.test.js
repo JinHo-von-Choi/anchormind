@@ -32,12 +32,13 @@ const {
   reviewViewer,
   isReviewVisible,
   appendReviewVisibility,
-  reviewVisibilityParts,
   reviewPointClause,
   notPendingReviewSql,
   toReviewView,
   dropPendingReview,
-  withReviewMarkers
+  withReviewMarkers,
+  recallViewer,
+  REVIEW_VIEWER_NONE
 } = await import("../../lib/memory/read/ReviewVisibility.js");
 const { FragmentReader }     = await import("../../lib/memory/read/FragmentReader.js");
 const { ContextBuilder }     = await import("../../lib/memory/read/ContextBuilder.js");
@@ -51,14 +52,18 @@ const { CaseRecall }           = await import("../../lib/memory/read/CaseRecall.
 const { HistoryReconstructor } = await import("../../lib/memory/read/HistoryReconstructor.js");
 const { fetchGraphNeighbors }  = await import("../../lib/memory/read/GraphNeighborSearch.js");
 const { listWorkingMemoryRows } = await import("../../lib/memory/WorkingMemoryRows.js");
+const { ContradictionDetector } = await import("../../lib/memory/link/ContradictionDetector.js");
 
-const PREDICATE = /review_state IS DISTINCT FROM 'pending' OR (?:f\.)?key_id (?:IS NOT DISTINCT FROM \$(\d+)|IS NULL)/;
+const PREDICATE = /review_state IS NULL OR (?:\w+\.)?review_state NOT IN \('pending', 'rejected'\) OR (?:\w+\.)?key_id (?:IS NOT DISTINCT FROM \$(\d+)|IS NULL)/;
+const NOT_HELD  = /review_state IS NULL OR (?:\w+\.)?review_state NOT IN \('pending', 'rejected'\)\)/;
 
 /** 순수 판정과 SQL 술어가 따르는 표: [파편 상태, 파편 키, 보는 주체, 보이는가] */
 const VISIBILITY_TABLE = [
   [null,       "key-a", "key-b", true],
   ["approved", "key-a", "key-b", true],
-  ["rejected", "key-a", "key-b", true],
+  ["rejected", "key-a", "key-b", false],
+  ["rejected", "key-a", "key-a", true],
+  ["rejected", "key-a", null,    false],
   ["pending",  "key-a", "key-a", true],
   ["pending",  "key-a", "key-b", false],
   ["pending",  "key-a", null,    false],
@@ -92,7 +97,7 @@ describe("가시성 술어", () => {
       const match   = cond.match(PREDICATE);
       assert.ok(match, cond);
       const writerMatches = match[1] ? (key ?? null) === (params[Number(match[1]) - 1] ?? null) : key === null;
-      const sqlVisible    = state !== "pending" || writerMatches;
+      const sqlVisible    = !["pending", "rejected"].includes(state) || writerMatches;
       assert.equal(sqlVisible, visible, `${state} ${key} ${viewer}`);
     }
   });
@@ -111,31 +116,41 @@ describe("가시성 술어", () => {
     const conditions = [];
     appendReviewVisibility(conditions, params, { viewerKeyId: null }, "");
     assert.deepEqual(params, []);
-    assert.equal(conditions[0], "(review_state IS DISTINCT FROM 'pending' OR key_id IS NULL)");
+    assert.equal(conditions[0], "(review_state IS NULL OR review_state NOT IN ('pending', 'rejected') OR key_id IS NULL)");
+  });
+
+  it("주입 후보 조회의 보는 주체(REVIEW_VIEWER_NONE)는 쓴 키도 예외로 두지 않는다", () => {
+    const params = [];
+    const conditions = [];
+    appendReviewVisibility(conditions, params, { viewerKeyId: REVIEW_VIEWER_NONE });
+    assert.deepEqual(params, []);
+    assert.equal(conditions[0], "(f.review_state IS NULL OR f.review_state NOT IN ('pending', 'rejected'))");
+    assert.equal(isReviewVisible({ review_state: "pending", key_id: "own" }, REVIEW_VIEWER_NONE), false);
+    assert.equal(recallViewer({ excludePendingReview: true }, "own"), REVIEW_VIEWER_NONE);
+    assert.equal(recallViewer({}, "own"), "own");
   });
 
   it("주입과 승격 술어는 쓴 키도 예외가 아니다", () => {
-    assert.equal(notPendingReviewSql(), " AND review_state IS DISTINCT FROM 'pending'");
-    assert.equal(notPendingReviewSql("f"), " AND f.review_state IS DISTINCT FROM 'pending'");
+    assert.equal(notPendingReviewSql(), " AND (review_state IS NULL OR review_state NOT IN ('pending', 'rejected'))");
+    assert.equal(notPendingReviewSql("f"), " AND (f.review_state IS NULL OR f.review_state NOT IN ('pending', 'rejected'))");
   });
 
   it("id 조회 술어는 API 키 조회에만 붙는다", () => {
     const params = ["id"];
     assert.equal(reviewPointClause(params, null), "");
-    assert.match(reviewPointClause(params, "key-a"), /^ AND \(review_state IS DISTINCT FROM 'pending' OR key_id IS NOT DISTINCT FROM \$2\)$/);
+    assert.match(reviewPointClause(params, "key-a"), /^ AND \(review_state IS NULL OR review_state NOT IN \('pending', 'rejected'\) OR key_id IS NOT DISTINCT FROM \$2\)$/);
     assert.deepEqual(params, ["id", "key-a"]);
   });
 
-  it("MEMENTO_REVIEW_QUEUE=off이면 모든 조각이 비고 매개변수가 늘지 않는다", () => {
+  it("MEMENTO_REVIEW_QUEUE=off여도 가시성 술어는 그대로다(off는 새 표지만 멈춘다)", () => {
     process.env.MEMENTO_REVIEW_QUEUE = "off";
     const params = [];
     const conditions = [];
-    assert.equal(appendReviewVisibility(conditions, params, { viewerKeyId: "k" }), "");
-    assert.deepEqual(reviewVisibilityParts(params, { viewerKeyId: "k" }), { clause: "", select: "", column: "" });
-    assert.equal(reviewPointClause(params, "k"), "");
-    assert.equal(notPendingReviewSql(), "");
-    assert.deepEqual(params, []);
-    assert.deepEqual(conditions, []);
+    assert.equal(appendReviewVisibility(conditions, params, { viewerKeyId: "k" }), ", f.review_state");
+    assert.match(conditions[0], PREDICATE);
+    assert.match(reviewPointClause(params, "k"), PREDICATE);
+    assert.match(notPendingReviewSql(), NOT_HELD);
+    assert.equal(isReviewVisible({ review_state: "pending", key_id: "a" }, "b"), false);
   });
 
   it("별칭은 식별자만 받는다", () => {
@@ -180,12 +195,22 @@ describe("recall 질의의 술어", () => {
     assert.match(last().sql, /assertion_status, review_state, review_reason/);
   });
 
-  it("MEMENTO_REVIEW_QUEUE=off이면 recall 질의에 검토 술어와 열이 없다", async () => {
+  it("MEMENTO_REVIEW_QUEUE=off여도 recall 질의의 술어는 그대로다", async () => {
     process.env.MEMENTO_REVIEW_QUEUE = "off";
-    await reader.searchByKeywords(["k"], { keyId: ["own"], viewerKeyId: "own" });
-    assert.doesNotMatch(last().sql, /review_state/);
-    await reader.getById("a", "default", "own", [], { withReview: true });
-    assert.doesNotMatch(last().sql, /review_state/);
+    await reader.searchByKeywords(["k"], { keyId: ["own", "peer"], viewerKeyId: "own" });
+    assert.equal(viewerParam(last()), "own");
+  });
+
+  it("대체 체인은 호출 키 기준 술어를 거친다", async () => {
+    const origGetById = reader.getById;
+    reader.getById = async () => ({ id: "a" });
+    try {
+      await reader.getHistory("a", "default", "own", ["own", "peer"]);
+    } finally {
+      reader.getById = origGetById;
+    }
+    const chain = captured.find(q => /superseded_by/.test(q.sql));
+    assert.equal(viewerParam(chain), "own");
   });
 
   it("계층 공통 범위 옵션은 보는 주체를 싣는다", () => {
@@ -229,11 +254,40 @@ describe("recall 부속 경로의 술어", () => {
   });
 });
 
+describe("모순 해소", () => {
+  const frag = (id, extra = {}) => ({ id, key_id: "own", created_at: "2026-10-0" + (id === "new" ? "3" : "1") + "T00:00:00Z", content: id, ...extra });
+
+  it("검토 대기나 거절 파편이 끼면 대체 링크를 만들거나 파편을 닫지 않는다", async () => {
+    for (const held of ["pending", "rejected"]) {
+      const links = [];
+      const detector = new ContradictionDetector({ createLink: async (...args) => { links.push(args); } });
+      captured.length = 0;
+      await detector.resolveContradiction(frag("new", { review_state: held }), frag("old"), "r");
+      await detector.resolveContradiction(frag("new"), frag("old", { review_state: held }), "r");
+      assert.deepEqual(links, [], held);
+      assert.ok(!captured.some(q => /SET valid_to/.test(q.sql)), held);
+
+      const consolidator = Object.create(MemoryConsolidator.prototype);
+      consolidator.store = { createLink: async (...args) => { links.push(args); } };
+      await consolidator._resolveContradiction(frag("new", { review_state: held }), frag("old"), "r");
+      assert.deepEqual(links, [], held);
+    }
+  });
+
+  it("모순 탐지 후보 질의는 검토 대기와 거절 파편을 뺀다", async () => {
+    captured.length = 0;
+    await new ContradictionDetector({}).detectContradictions().catch(() => {});
+    const newFrags = captured.find(q => /watermark_at/.test(q.sql));
+    assert.ok(newFrags, "새 파편 질의");
+    assert.match(newFrags.sql, NOT_HELD);
+  });
+});
+
 describe("앵커 승격", () => {
   it("검토 대기 파편은 승격 잠금 대상에서 빠진다", async () => {
     const consolidator = Object.create(MemoryConsolidator.prototype);
     await consolidator._promoteAnchors();
-    assert.match(last().opts.lock.sql, /is_anchor = FALSE AND access_count >= 10 AND importance >= 0\.8 AND review_state IS DISTINCT FROM 'pending'/);
+    assert.match(last().opts.lock.sql, /is_anchor = FALSE AND access_count >= 10 AND importance >= 0\.8 AND \(review_state IS NULL OR review_state NOT IN \('pending', 'rejected'\)\)/);
   });
 
   function last() { return captured.at(-1); }
@@ -280,18 +334,31 @@ describe("ANCHOR와 CORE 주입", () => {
     const result  = await makeBuilder(queries).build({ types: ["error"], _keyId: "own" });
     const anchorSql = queries.filter(sql => /is_anchor = TRUE/.test(sql));
     assert.ok(anchorSql.length > 0);
-    for (const sql of anchorSql) assert.match(sql, /AND review_state IS DISTINCT FROM 'pending'/);
+    for (const sql of anchorSql) assert.match(sql, NOT_HELD);
     assert.ok(!result.injectionText.includes("pending body"), result.injectionText);
     assert.ok(result.injectionText.includes("ok body"), result.injectionText);
     assert.ok(!result.fragments.some(f => f.id === "pending"));
   });
 
-  it("MEMENTO_REVIEW_QUEUE=off이면 앵커 술어가 없고 core를 거르지 않는다", async () => {
+  it("MEMENTO_REVIEW_QUEUE=off여도 앵커 술어와 core 거르기는 그대로다", async () => {
     process.env.MEMENTO_REVIEW_QUEUE = "off";
     const queries = [];
     const result  = await makeBuilder(queries).build({ types: ["error"], _keyId: "own" });
-    for (const sql of queries) assert.doesNotMatch(sql, /review_state/);
-    assert.ok(result.injectionText.includes("pending body"), result.injectionText);
+    for (const sql of queries.filter(q => /is_anchor = TRUE/.test(q))) assert.match(sql, NOT_HELD);
+    assert.ok(!result.injectionText.includes("pending body"), result.injectionText);
+  });
+
+  it("core 후보 recall은 검토 대기와 거절 파편을 SQL에서 빼도록 요청한다", async () => {
+    const seen = [];
+    const builder = new ContextBuilder({
+      recall : async (params) => { seen.push(params); return { fragments: [] }; },
+      store  : { searchBySource: async () => [] },
+      index  : { getWorkingMemory: async () => [], setSeenIds: async () => {} },
+      getPool: () => ({ query: async () => ({ rows: [] }) })
+    });
+    await builder.build({ types: ["error"], _keyId: "own" });
+    assert.ok(seen.length > 0);
+    for (const params of seen) assert.equal(params.excludePendingReview, true);
   });
 
   it("세션 작업 기억의 검토 대기 항목도 주입하지 않는다", async () => {
@@ -303,13 +370,13 @@ describe("ANCHOR와 CORE 주입", () => {
 
   it("작업 기억 대체 행 조회는 검토 대기 행을 읽지 않는다", async () => {
     await listWorkingMemoryRows("s1");
-    assert.match(captured.at(-1).sql, /valid_to IS NOT NULL AND review_state IS DISTINCT FROM 'pending'/);
+    assert.match(captured.at(-1).sql, /valid_to IS NOT NULL AND \(review_state IS NULL OR review_state NOT IN \('pending', 'rejected'\)\)/);
   });
 
   it("dropPendingReview는 표지나 상태가 검토 대기인 후보만 뺀다", () => {
-    const map = new Map([["fact", [{ id: "a", pending_review: true }, { id: "b", review_state: "pending" }, { id: "c" }]]]);
+    const map = new Map([["fact", [{ id: "a", pending_review: true }, { id: "b", review_state: "pending" }, { id: "c" }, { id: "d", review_rejected: true }]]]);
     assert.deepEqual(dropPendingReview(map).get("fact").map(f => f.id), ["c"]);
-    assert.equal(map.get("fact").length, 3, "입력 맵은 그대로다");
+    assert.equal(map.get("fact").length, 4, "입력 맵은 그대로다");
   });
 });
 
@@ -321,10 +388,10 @@ describe("쓴 키의 recall 응답 표지", () => {
     assert.equal(toReviewView(plain), plain);
   });
 
-  it("MEMENTO_REVIEW_QUEUE=off이면 행을 바꾸지 않는다", () => {
+  it("거절 파편(쓴 키의 includeSuperseded 조회)에는 review_rejected를 달고 off에서도 같다", () => {
     process.env.MEMENTO_REVIEW_QUEUE = "off";
-    const row = { id: "a", review_state: "pending" };
-    assert.equal(toReviewView(row), row);
+    assert.deepEqual(toReviewView({ id: "a", review_state: "rejected" }), { id: "a", review_rejected: true });
+    assert.deepEqual(toReviewView({ id: "b", review_state: "pending" }), { id: "b", pending_review: true });
   });
 
   it("기본 형식 응답에는 pending_review와 낮은 신뢰 표지를 fields와 무관하게 싣는다", () => {
