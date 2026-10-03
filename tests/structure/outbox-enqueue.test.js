@@ -9,8 +9,9 @@
  *
  *   1. outbox_events에 INSERT하는 SQL 문자열은 lib/outbox/Outbox.js에만 있다.
  *   2. outbox_events를 UPDATE, DELETE하는 SQL 문자열은 lib/outbox/OutboxStore.js에만 있다.
- *   3. lib, scripts, bin에서 enqueue를 부르는 곳은 첫 인자로 연결 변수(식별자)를 넘기고, 그 이름이
- *      풀(pool)을 가리키지 않는다. 풀 호출식(getPrimaryPool() 등)이나 속성 접근을 넘기면 위반이다.
+ *   3. lib, scripts, bin에서 enqueue를 부르는 곳은 첫 인자로 연결 변수(식별자) 또는 `<식별자>.client`를
+ *      넘기고, 식별자 이름이 풀(pool)을 가리키지 않는다. 풀 호출식(getPrimaryPool() 등), this 속성,
+ *      client가 아닌 속성 접근을 넘기면 위반이다.
  *      업무 변경 없는 독립 기록은 enqueueStandalone(pool, event)를 쓴다.
  *
  * 정적 검사가 놓치는 자동 커밋 연결은 enqueue의 실행 시 확인(트랜잭션 밖이면 0행, 오류)이 막는다.
@@ -61,6 +62,30 @@ function enqueueCallees(file, scan) {
 }
 
 /**
+ * 연결 인자로 받는 형태: 이름이 pool을 담지 않는 식별자, 또는 그런 식별자의 client 속성.
+ *
+ * @param {{ kind: string, name?: string, object?: string, property?: string }|undefined} arg
+ * @returns {boolean}
+ */
+function isConnectionArgument(arg) {
+  if (arg?.kind === "identifier") return !/pool/i.test(arg.name);
+  if (arg?.kind === "member")     return arg.property === "client" && !/pool/i.test(arg.object);
+  return false;
+}
+
+/**
+ * 위반 메시지용 인자 표기.
+ *
+ * @param {{ kind: string, name?: string, object?: string, property?: string }|undefined} arg
+ * @returns {string}
+ */
+function describeConnection(arg) {
+  if (arg?.kind === "identifier") return arg.name;
+  if (arg?.kind === "member")     return `${arg.object}.${arg.property}`;
+  return "<식>";
+}
+
+/**
  * enqueue 호출의 첫 인자 위반 목록.
  *
  * @param {string} file
@@ -71,8 +96,8 @@ export function enqueueArgumentViolations(file, scan) {
   const callees = enqueueCallees(file, scan);
   return scan.calls
     .filter(call => callees.has(call.callee))
-    .filter(call => call.args[0]?.kind !== "identifier" || /pool/i.test(call.args[0].name))
-    .map(call => `${file}:${call.line} ${call.callee}(${call.args[0]?.kind === "identifier" ? call.args[0].name : "<식>"}, ...)`);
+    .filter(call => !isConnectionArgument(call.args[0]))
+    .map(call => `${file}:${call.line} ${call.callee}(${describeConnection(call.args[0])}, ...)`);
 }
 
 /**
@@ -101,7 +126,7 @@ describe("enqueue 호출의 연결 인자", () => {
     assert.deepEqual(violations, []);
   });
 
-  it("검사는 풀 호출식, 풀 이름 변수, 속성 접근을 위반으로 찾고 연결 변수는 통과시킨다", () => {
+  it("검사는 풀 호출식, 풀 이름 변수, client가 아닌 속성, this 속성을 위반으로 찾고 연결 변수와 client 속성은 통과시킨다", () => {
     const file   = "lib/example/Producer.js";
     const source = `
       import { enqueue, enqueueStandalone } from "../outbox/Outbox.js";
@@ -110,16 +135,19 @@ describe("enqueue 호출의 연결 인자", () => {
       async function bad(pool, ctx) {
         await enqueue(getPrimaryPool(), {});
         await enqueue(pool, {});
-        await Outbox.enqueue(ctx.client, {});
+        await Outbox.enqueue(ctx.pool, {});
         await put(primaryPool, {});
+        await enqueue(this.client, {});
+        await enqueue(poolCtx.client, {});
       }
-      async function good(client, pool) {
+      async function good(client, pool, ctx) {
         await enqueue(client, {});
         await Outbox.enqueue(txClient, {});
+        await put(ctx.client, {});
         await enqueueStandalone(pool, {});
       }`;
     const found = enqueueArgumentViolations(file, scanSource(source));
-    assert.equal(found.length, 4, found.join("\n"));
-    assert.ok(found.every(v => /:(6|7|8|9) /.test(v)), found.join("\n"));
+    assert.equal(found.length, 6, found.join("\n"));
+    assert.ok(found.every(v => /:(6|7|8|9|10|11) /.test(v)), found.join("\n"));
   });
 });

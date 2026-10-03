@@ -85,6 +85,9 @@ function describeArg(arg) {
     return { kind: "object", keys, spreads };
   }
   if (arg.type === "Identifier") return { kind: "identifier", name: arg.name };
+  if (arg.type === "MemberExpression" && !arg.computed && arg.object.type === "Identifier") {
+    return { kind: "member", object: arg.object.name, property: arg.property.name };
+  }
   return { kind: "other" };
 }
 
