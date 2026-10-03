@@ -91,6 +91,7 @@ npm run migrate
 
 - `npm run migrate` automatically reads DB settings from `.env`. No need to pass `DATABASE_URL` manually.
 - pgvector schema is auto-detected. `PGVECTOR_SCHEMA` is usually not needed.
+- For an update that includes migrations, take a backup with `scripts/ops/backup.sh --label pre-migration` before `npm run migrate`. On a production database with many rows, build the migration-050 indexes with `scripts/ops/online-index.mjs` before `npm run migrate`, and after the deployment finish the duplicate detection scope switch with `node scripts/ops/finish-dedup-scope.mjs --confirm` ([docs/operations/online-migration.md](docs/operations/online-migration.md#중복-판정-범위-전환), Korean).
 
 ### Claude Code Integration
 
@@ -184,6 +185,12 @@ See [integration guides](docs/getting-started/) for platform-specific setup.
 | Affective tagging | `fragments.affect` column (neutral / frustration / confidence / surprise / doubt / satisfaction). Filter remember / recall results by emotional label. |
 | Recall suggestions | `recall` responses carry a `_meta.suggestion` field that flags repeat queries, empty results with no context, oversized limits with no budget, and noisy untyped queries. Clients are free to ignore it. |
 | Local embedding | `EMBEDDING_PROVIDER=transformers` runs `@huggingface/transformers` pipeline-based embeddings without an external API call (`Xenova/multilingual-e5-small`, 384d by default). |
+| Semantic write gate | `remember`, `amend`, `batch_remember`, reflect derived writes, imports and the CLI `remember` local mode pass the same gate (normalization, sensitive data masking, per-type length caps, PolicyRules, workspace permission, anchor permission). Violations are reported in `validation_warnings` and rejected only for keys with `symbolic_hard_gate=true` (`MEMENTO_WRITE_GATE`, `MEMENTO_SENSITIVE_SCAN`). |
+| Duplicate detection scope | The same body counts once per key and workspace. A hit on an existing fragment in the same scope returns its id in `duplicate_of` of the `remember` response (`MEMENTO_DEDUP_SCOPE`). |
+| Working memory fallback | While Redis is not ready, `remember(scope=session)` is stored as a PostgreSQL working memory row, and `working_memory` in the response reports the storage path (`MEMENTO_WM_PG_FALLBACK`). |
+| Recall budget selection | Candidates, linked fragments included, receive the final score before selection within `tokenBudget` (`MEMENTO_RANK_BEFORE_BUDGET`). |
+| Export and import | Export writes format version 2 JSONL (all fragment columns, links, revision history); import writes through the same write gate under a chosen target key. Compatibility rules are in [docs/api-versioning.en.md](docs/api-versioning.en.md). |
+| Transactional outbox | Events are recorded inside the changing transaction, and a worker delivers them to per-topic handlers with `SKIP LOCKED` claims, retries, dead-letter and retention cleanup (`MEMENTO_OUTBOX`). |
 | Migration lint | `npm run lint:migrations` checks new migration files for numbering conflicts and convention violations before commit. |
 
 See [SKILL.md](SKILL.md) for the full list of MCP tools.
@@ -341,6 +348,9 @@ AnchorMind is optimized for fact caching. When narrative context matters:
 - Graceful Shutdown: On SIGTERM, waits up to 30s for workers to drain, then runs session auto-reflect. The whole shutdown is bounded by `MEMENTO_SHUTDOWN_DEADLINE_MS` (default 60000, 0 means no bound); exceeding it forces exit with code 1.
 - OAuth Endpoints: On authentication failure, a `WWW-Authenticate` header is returned so OAuth clients can automatically initiate the auth flow. Session TTL defaults to 43200 minutes (30 days) and is set with `SESSION_TTL_MINUTES`.
 - Migration lint: `npm run lint:migrations` checks numbering conflicts and convention violations before commit.
+- Backup and restore drill: `scripts/ops/backup.sh` (`pg_dump` of the agent_memory schema, 14 days kept by default) and `scripts/ops/restore-verify.mjs` (restores into a disposable test server and compares with the manifest). Procedures are in [docs/operations/backup-restore.md](docs/operations/backup-restore.md) (Korean).
+- Large table indexes: `scripts/ops/online-index.mjs` builds the indexes of the work list without blocking writes (`--dry-run`, `--confirm`). Procedures are in [docs/operations/online-migration.md](docs/operations/online-migration.md) (Korean).
+- Switch report: `npm run switches` prints the applied value, default and state of every feature switch as a table; `--strict` exits with code 1 when a switch has an invalid value.
 - Operations guides: [docs/operations/](docs/operations/) covers the LLM provider chain, symbolic hard gate, agent worktree, upstream porting and more.
 - External access check: follow the "외부 노출 점검" procedure in `docs/operations/maintenance.md` to verify the listen address, access key, and Origin allowlist state.
 

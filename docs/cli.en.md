@@ -512,11 +512,12 @@ frag-00def456,procedure,deploy-2026,0.70,"deployment complete"
 | `npm run test:integration:llm` | LLM provider integration tests (sequential) |
 | `npm run test:e2e` | E2E tests only |
 | `npm run test:e2e:local` | Runs `scripts/run-e2e-tests.sh` |
-| `npm run test:db` | Real-PostgreSQL concurrency tests (row lock order, batch link creation consistency). Creates and drops a dedicated database per run |
+| `npm run test:db` | Real-PostgreSQL tests (row lock order, batch link creation consistency, online indexes and resumable backfill, duplicate detection scope, working memory rows, outbox worker, export and import round trip). Creates and drops a dedicated database per run |
 | `npm run test:ci` | `npm test` followed by `npm run test:integration` |
 | `npm run lint` | ESLint |
 | `npm run lint:ratchet` | `scripts/lint-ratchet.js`. Fails when a per-rule metric grows past the baseline (`scripts/lint-baseline.json`) |
 | `npm run lint:migrations` | `scripts/lint-migrations.js`. Checks migration numbering conflicts and convention violations |
+| `npm run switches` | `scripts/switch-report.mjs`. Prints the applied value, default and state of every feature switch as a table. `-- --strict` exits with code 1 when a switch has an invalid value |
 | `npm run audit:ci` | audit-ci dependency check (`audit-ci.jsonc`) |
 | `npm run release -- X.Y.Z` | `scripts/release.js`. Release preparation (version markers, commit, annotated tag). Prints the push and Release commands without running them |
 

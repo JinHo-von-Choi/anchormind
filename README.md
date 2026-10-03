@@ -91,6 +91,7 @@ npm run migrate
 
 - `npm run migrate`는 `.env`의 DB 설정을 자동으로 사용한다. `DATABASE_URL` 수동 지정 불필요.
 - pgvector 스키마는 자동 감지된다. `PGVECTOR_SCHEMA` 설정은 대부분 불필요.
+- 마이그레이션이 포함된 업데이트는 `npm run migrate` 전에 `scripts/ops/backup.sh --label pre-migration`으로 백업한다. 행이 많은 운영 DB는 migration-050의 색인을 `npm run migrate`보다 먼저 `scripts/ops/online-index.mjs`로 만들고, 배포 뒤 `node scripts/ops/finish-dedup-scope.mjs --confirm`으로 중복 판정 범위 전환을 마친다([docs/operations/online-migration.md](docs/operations/online-migration.md#중복-판정-범위-전환)).
 
 ### Claude Code 연동
 
@@ -184,6 +185,12 @@ Claude.ai Web / ChatGPT 연동은 OAuth를 사용한다. 발급한 API 키(`mmcp
 | Affective tagging | `fragments.affect` 컬럼(neutral / frustration / confidence / surprise / doubt / satisfaction). remember / recall 시 감정 레이블로 필터링. |
 | Recall 제안 | `recall` 응답의 `_meta.suggestion`이 반복 질의, 맥락 없는 빈 결과, 예산 없는 과대 limit, 유형 미지정 잡음 질의를 표시한다. 클라이언트는 무시해도 된다. |
 | 로컬 임베딩 | `EMBEDDING_PROVIDER=transformers`로 외부 API 없이 `@huggingface/transformers` 파이프라인 기반 임베딩(`Xenova/multilingual-e5-small`, 384d 기본). |
+| 의미 쓰기 관문 | `remember`, `amend`, `batch_remember`, reflect 파생 쓰기, 가져오기, CLI `remember` 로컬 모드가 같은 관문(정규화, 민감 정보 마스킹, 유형별 길이 상한, PolicyRules, workspace 허가, 앵커 권한)을 거친다. 위반은 `validation_warnings`로 알리고 `symbolic_hard_gate=true` 키에서만 거부한다(`MEMENTO_WRITE_GATE`, `MEMENTO_SENSITIVE_SCAN`). |
+| 중복 판정 범위 | 같은 본문은 키와 workspace 단위로 하나로 본다. 같은 범위의 기존 파편에 적중하면 `remember` 응답의 `duplicate_of`에 그 id를 싣는다(`MEMENTO_DEDUP_SCOPE`). |
+| 작업 기억 대체 경로 | Redis가 준비되지 않았을 때 `remember(scope=session)`를 PostgreSQL 작업 기억 행으로 받고, 응답의 `working_memory`가 저장 경로를 알린다(`MEMENTO_WM_PG_FALLBACK`). |
+| recall 예산 선택 | 연결 파편을 포함한 후보에 최종 점수를 매긴 뒤 `tokenBudget` 안에서 고른다(`MEMENTO_RANK_BEFORE_BUDGET`). |
+| 내보내기와 가져오기 | 형식 버전 2 JSONL(파편 전체 열, 링크, 수정 이력)을 내보내고, 가져오기는 대상 키를 정해 같은 쓰기 관문으로 기록한다. 호환 규칙은 [docs/api-versioning.md](docs/api-versioning.md). |
+| 트랜잭션 outbox | 변경 트랜잭션 안에서 이벤트를 기록하고 작업자가 `SKIP LOCKED` 점유로 topic별 처리기에 전달한다. 재시도, dead-letter, 보존 정리 포함(`MEMENTO_OUTBOX`). |
 | 마이그레이션 lint | `npm run lint:migrations`로 신규 마이그레이션 파일의 번호 충돌·규약 위반을 커밋 전 자동 검사. |
 
 전체 MCP 도구 목록은 [SKILL.md](SKILL.md) 참조.
@@ -328,6 +335,9 @@ lib/
     embedding/   # EmbeddingWorker, EmbeddingCache, MorphemeIndex
     signals/     # SpreadingActivation, CaseRewardBackprop 등
     processors/  # facade — MemoryRecaller, MemoryReflector 등
+    transfer/    # 내보내기와 가져오기 (exportFormat, ImportRunner 등)
+  outbox/        # 트랜잭션 outbox 기록과 작업자
+  security/      # 민감 정보 규칙 표와 스캐너
   llm/           # dispatchChain, provider 구현체
   symbolic/      # 설명 가능성, 링크 무결성, 정책 규칙 (opt-in)
 docs/
@@ -364,6 +374,9 @@ docs/
 - Graceful Shutdown: SIGTERM 시 진행 중 워커 완료 대기(30초) 후 세션 auto-reflect 실행. 종료 절차 전체는 `MEMENTO_SHUTDOWN_DEADLINE_MS`(기본 60000, 0은 상한 없음)로 제한하며 넘기면 종료 코드 1로 강제 종료한다.
 - OAuth 엔드포인트: 인증 실패 시 `WWW-Authenticate` 헤더를 반환하여 OAuth 클라이언트가 자동으로 인증 흐름을 시작할 수 있다. 세션 TTL 기본값은 43200분(30일)이며 `SESSION_TTL_MINUTES`로 조정한다.
 - 마이그레이션 lint: `npm run lint:migrations`로 번호 충돌 및 규약 위반을 커밋 전 검사.
+- 백업과 복구 훈련: `scripts/ops/backup.sh`(agent_memory 스키마 `pg_dump`, 기본 14일 보관)와 `scripts/ops/restore-verify.mjs`(일회용 시험 서버에 복원해 매니페스트와 대조). 절차는 [docs/operations/backup-restore.md](docs/operations/backup-restore.md).
+- 대형 표 색인: `scripts/ops/online-index.mjs`가 작업 목록의 색인을 쓰기를 막지 않고 만든다(`--dry-run`, `--confirm`). 절차는 [docs/operations/online-migration.md](docs/operations/online-migration.md).
+- 스위치 보고: `npm run switches`가 기능 스위치의 적용 값, 기본값, 상태를 표로 출력하고, `--strict`는 값이 잘못된 스위치가 있으면 종료 코드 1로 끝난다.
 - 운영 가이드: [docs/operations/](docs/operations/) — LLM provider 체인, symbolic hard gate, agent worktree, upstream porting 등.
 - 외부 노출 점검: `docs/operations/maintenance.md`의 "외부 노출 점검" 절차로 listen 주소, 인증 키, Origin allowlist 상태를 확인.
 

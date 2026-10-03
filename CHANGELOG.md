@@ -12,7 +12,7 @@
 - `MEMENTO_SEMANTIC_THRESHOLD_MODE`(`inner`, `outer`, 기본 `inner`): 시맨틱 검색의 유사도 임계값을 이웃 조회 안쪽(현행)에서 적용할지, 바깥에서 적용할지 정한다.
 - `MEMENTO_SCORE_UPDATE_BATCH`(기본 200, 0은 단일 문장): 감쇠와 utility 점수 갱신을 id 오름차순으로 잠근 묶음 단위로 처리한다. 0이면 단일 문장으로 돌아간다. `forget`의 `linked_to` 정리는 이 값과 무관하게 항상 id 오름차순으로 행을 잠근다.
 - `MEMENTO_API_KEY_DELETE_GUARD`(기본 `true`): 저장된 파편이나 재통합 이력이 있는 API 키는 삭제하지 않고 409(`key_in_use`)를 돌려준다. `false`면 확인을 건너뛴다.
-- `npm run test:db`: 실제 PostgreSQL에서 행 잠금 순서와 링크 일괄 생성의 정합을 확인하는 시험 레인. 실행마다 전용 데이터베이스를 만들고 지운다.
+- `npm run test:db`: 실제 PostgreSQL에서 행 잠금 순서와 링크 일괄 생성의 정합, 온라인 색인과 재개형 백필, 중복 판정 범위, 작업 기억 행, outbox 작업자, 내보내기와 가져오기 왕복을 확인하는 시험 레인. 실행마다 전용 데이터베이스를 만들고 지운다.
 - `node scripts/lint-ratchet.js`: 무처리 catch 처리기, 복잡도, 파일 길이, 직접 환경 변수 읽기의 수치가 기준선(`scripts/lint-baseline.json`)보다 늘면 실패한다. 기준선 상향에는 `--update --allow-increase`가 필요하다.
 - `MEMENTO_CONFIG_STRICT`(기본 `false`): 숫자, 열거, 불리언 환경 변수의 값 문제(숫자 아님, 정수 아님, 허용 범위 밖, 허용 목록 밖)를 기동 시 한 줄로 기록한다. `true`면 문제가 있을 때 종료 코드 78로 멈춘다. 공백만 있는 값은 미설정과 같다.
 - `MEMENTO_SESSION_ID_POLICY`(`warn`, `enforce`, 기본 `warn`): MCP 세션 ID 수신 처리. `warn`은 쿼리스트링 ID와 서버 발급 형식(UUID)이 아닌 ID의 자동 복구를 경고 로그로 기록하고 정상 처리한다. `enforce`는 쿼리 ID에 400, UUID가 아닌 ID의 복구에 404를 돌려준다. 헤더로 보낸 UUID 세션과 `/message?sessionId=`는 영향이 없다.
@@ -47,7 +47,7 @@
 - 모든 도구가 `title`과 네 가지 `annotations`(`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)를 boolean으로 선언한다. `destructiveHint`는 `forget`, `amend`, `memory_consolidate`, `apply_update`가 true다. 도구별 값과 기준은 `docs/api-reference.md`의 도구 힌트 표에 있다.
 - `ping` 메서드: 인증된 세션에서 빈 객체 `{}`를 돌려주고, 알림으로 보내면 응답 없이 수락한다.
 - `PATCH /v1/internal/model/nothing/keys/:id/policy`: API 키의 `default_mode`(`recall-only`, `write-only`, `onboarding`, `null`), `allowed_workspaces`(문자열 배열 또는 `null`, 최대 64개, 항목당 길이 제한), `symbolic_hard_gate`(boolean)를 전달한 필드만 한 문장으로 갱신한다. 알 수 없는 필드, 빈 객체, 마스터 전용 preset(`audit`)은 400이다. 변경은 `admin key_policy` 감사 기록(필드 이름과 이전, 이후 값)으로 남고 조회 캐시를 비운다. 관리 콘솔의 키 상세에 ACCESS POLICY 카드가 있고, 키 목록 응답은 세 정책 열을 포함한다.
-- `config/switches.js`의 스위치 대장: 기능 스위치 61개의 이름, 기본값, 용도, 분류를 한곳에 두고 환경에서 실제로 적용되는 값을 사용처와 같은 규칙으로 계산한다. `npm run switches`는 적용 값, 기본값, 상태, 기본과 다름, 분류를 표로 출력하고(`.env` 파일은 읽지 않는다), `--strict`는 값이 잘못된 스위치가 있으면 종료 코드 1로 끝난다.
+- `config/switches.js`의 스위치 대장: 기능 스위치 67개의 이름, 기본값, 용도, 분류를 한곳에 두고 환경에서 실제로 적용되는 값을 사용처와 같은 규칙으로 계산한다. `npm run switches`는 적용 값, 기본값, 상태, 기본과 다름, 분류를 표로 출력하고(`.env` 파일은 읽지 않는다), `--strict`는 값이 잘못된 스위치가 있으면 종료 코드 1로 끝난다.
 - 관리 `/stats` 응답의 `switches`(`total`, `on`, `off`, `mode`, `nonDefaultCount`, `nonDefault`, `invalid`)와 기동 로그의 `[Startup] switches: total=N on=N off=N mode=N nonDefault=N ... invalid=N` 한 줄. 값은 담지 않는다.
 - 의미 쓰기 관문(`WriteGate`): `remember`, `amend`, `batch_remember`, reflect 파생 쓰기, AutoReflect, 관리 가져오기, CLI 가져오기, CLI `remember` 로컬 모드, 통합 분할 자식이 같은 관문(정규화, 민감 정보 마스킹, 유형별 길이 상한, PolicyRules, workspace 허가, 앵커 권한)을 트랜잭션 밖에서 거친다. 위반은 `validation_warnings`로 알리고 `api_keys.symbolic_hard_gate=true` 키에서만 거부한다. 판정은 지표 `memento_write_gate_total{entry,outcome}`(`pass`, `warn`, `reject`)로 센다.
 - `MEMENTO_WRITE_GATE`(`on`, `off`, 기본 `on`): `off`이면 진입점별 기본 단계만 적용한다. 호출 시점에 읽는다.

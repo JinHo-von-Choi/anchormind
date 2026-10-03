@@ -436,6 +436,7 @@ CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uq_frag_hash_master
 6. 배포하고 `npm run migrate`를 실행한다.
 7. 백필이 있으면 표를 만들고 `runResumableBackfill`을 실행한다.
 8. 제약 검증이 있으면 `VALIDATE CONSTRAINT`를 실행한다.
+9. migration-050이 포함된 배포는 동작을 확인한 뒤 `node scripts/ops/finish-dedup-scope.mjs`로 단계를 보고 `--confirm`으로 키 범위 색인을 지운 다음 자료 정합을 확인한다(「중복 판정 범위 전환」의 6, 7단계). 3, 4단계의 색인은 `uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`다.
 
 ---
 

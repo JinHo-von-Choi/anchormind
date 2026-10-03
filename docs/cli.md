@@ -513,11 +513,12 @@ frag-00def456,procedure,deploy-2026,0.70,"배포 완료"
 | `npm run test:integration:llm` | LLM provider 통합 테스트 순차 실행 |
 | `npm run test:e2e` | E2E 테스트만 실행 |
 | `npm run test:e2e:local` | `scripts/run-e2e-tests.sh` 실행 |
-| `npm run test:db` | 실제 PostgreSQL 동시성 시험(행 잠금 순서, 링크 일괄 생성 정합). 실행마다 전용 데이터베이스를 만들고 지운다 |
+| `npm run test:db` | 실제 PostgreSQL 시험(행 잠금 순서, 링크 일괄 생성 정합, 온라인 색인과 재개형 백필, 중복 판정 범위, 작업 기억 행, outbox 작업자, 내보내기와 가져오기 왕복). 실행마다 전용 데이터베이스를 만들고 지운다 |
 | `npm run test:ci` | `npm test`와 `npm run test:integration` |
 | `npm run lint` | ESLint |
 | `npm run lint:ratchet` | `scripts/lint-ratchet.js`. 규칙별 수치가 기준선(`scripts/lint-baseline.json`)보다 늘면 실패 |
 | `npm run lint:migrations` | `scripts/lint-migrations.js`. 마이그레이션 번호 충돌과 규약 위반 검사 |
+| `npm run switches` | `scripts/switch-report.mjs`. 기능 스위치의 적용 값, 기본값, 상태를 표로 출력. `-- --strict`는 값이 잘못된 스위치가 있으면 종료 코드 1 |
 | `npm run audit:ci` | audit-ci 의존성 점검 (`audit-ci.jsonc`) |
 | `npm run release -- X.Y.Z` | `scripts/release.js`. 릴리스 준비(버전 표기 갱신, 커밋, annotated tag). push와 Release 생성 명령은 출력만 한다 |
 

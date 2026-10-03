@@ -88,6 +88,7 @@ after(async () => {
 - [ ] `npm test` passes; with PostgreSQL available, `npm run test:integration` (integration + e2e) passes. CI runs these as separate jobs in `.github/workflows/test.yml` (unit with lint, lint ratchet, migration lint and coverage; runtime boot on Node 20, 22 and 24; e2e; DB concurrency, reported without failing the workflow). Dependency audit runs in `.github/workflows/audit.yml`
 - [ ] `npm run lint && npm run lint:ratchet` passes
 - [ ] New migration file if DB schema changed; run `npm run lint:migrations` to verify body-only convention (see `docs/migration-conventions.md`)
+- [ ] New boolean or enum environment switch: entry in `config/switches.js`, `.env.example`, `docs/configuration.md` and `docs/configuration.en.md` (`tests/unit/switch-ledger-structure.test.js` fails on a missing entry); `npm run switches -- --strict` exits 0
 - [ ] `docs/features.md` ledger updated for any new or removed feature
 - [ ] `docs/concurrency.md` updated if a new write path is introduced
 - [ ] CHANGELOG.md updated

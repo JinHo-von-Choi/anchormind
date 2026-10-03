@@ -13,7 +13,7 @@ memento-mcp의 테스트는 네 계층으로 구성된다.
 - 단위 테스트 (node:test): 외부 의존성 없이 모듈 단위 검증
 - 통합 테스트: DB/Redis 연결 가능 여부를 런타임 자동 판단 또는 환경변수 활성화
 - E2E 테스트(tests/e2e): PostgreSQL(pgvector)에 마이그레이션을 적용한 상태에서 도는 전단 검증. 실제 LLM CLI 검증은 `npm run test:integration:llm`(tests/integration)이 맡는다.
-- DB 동시성 레인(tests/db-concurrency, `npm run test:db`): 실제 PostgreSQL에서 행 잠금 순서와 링크 일괄 생성의 정합을 확인하는 직렬 레인. `npm test`에 포함되지 않는다.
+- DB 동시성 레인(tests/db-concurrency, `npm run test:db`): 실제 PostgreSQL에서 행 잠금 순서와 링크 일괄 생성의 정합, 온라인 색인과 재개형 백필, 중복 판정 범위, 작업 기억 행, outbox 작업자, 내보내기와 가져오기 왕복을 확인하는 직렬 레인. `npm test`에 포함되지 않는다.
 
 단위 테스트 러너는 Node.js 내장 `node:test`만 사용한다. jest 의존성은 없다.
 
@@ -55,18 +55,19 @@ npm run test:integration:llm
 
 | 스크립트 | 실행 범위 |
 |--------|---------|
-| `npm test` | unit 전체 (node:test) |
+| `npm test` | unit 전체와 tests/structure 구조 검사 (node:test) |
 | `npm run test:coverage` | unit 전체를 커버리지와 함께 실행하고 `coverage/lcov.info`의 줄, 분기, 함수 합계를 `coverage-baseline.json`과 비교한다. 합계가 기준선에서 허용 폭(0.5%p)을 뺀 값보다 낮으면 실패한다. 로컬 72코어에서 약 40초로 `npm test`(약 35초)보다 조금 길다. 기준선보다 오른 값은 `node scripts/check-coverage.js coverage/lcov.info --write`로 올리고, 낮추는 갱신은 소유자 승인 아래 `--write --allow-decrease`로만 한다. 숫자로 읽히지 않는 lcov 값이나 기준선 필드는 통과가 아니라 종료 코드 2로 처리한다. 이 수치는 시험 실행이 적재한 파일만 센 값이며 모든 소스 파일을 센 프로젝트 전체 수치가 아니다 |
 | `npm run test:integration` | 통합 + e2e (tests/integration/*.test.js + tests/e2e/*.test.js) |
 | `npm run test:e2e` | e2e만 |
 | `npm run test:ci` | `npm test && npm run test:integration`. 로컬 일괄 실행용 (DB 필요). CI는 아래 워크플로 작업으로 나눠 돈다 |
 | `npm run test:integration:llm` | 실제 LLM CLI 통합 시험 4종 순차 실행 |
 | `npm run test:e2e:local` | `scripts/run-e2e-tests.sh`로 테스트 DB를 띄운 뒤 e2e 실행 |
-| `npm run test:db` | tests/db-concurrency. 마이그레이션된 PostgreSQL에서 파편 행 잠금 순서(교착 0건)와 링크 일괄 생성의 `linked_to` 정합, 감쇠와 utility 묶음 갱신(잠금 순서, 무변경 재기록, 최소 변화량) 확인. 표 전체를 갱신하는 시험은 병렬 레인에 두지 않고 이 직렬 레인에만 둔다. 실행마다 전용 데이터베이스(`dbl_<pid>_<hex>`)를 만들어 마이그레이션하고 끝나면 지운다. 서버는 POSTGRES_* 로 지정하며 로컬 호스트, 포트 35433, 사용자 memento, 비밀번호 memento_test 가 아니면 연결 전에 거부한다(다른 일회용 서버는 `DB_LANE_SERVER_ALLOW=<host:port>`). 서버에 닿지 못하면 건너뛰지 않고 실패. `npm test`에는 포함되지 않음 |
+| `npm run test:db` | tests/db-concurrency. 마이그레이션된 PostgreSQL에서 파편 행 잠금 순서(교착 0건)와 링크 일괄 생성의 `linked_to` 정합, 감쇠와 utility 묶음 갱신(잠금 순서, 무변경 재기록, 최소 변화량), 온라인 색인 스크립트, 재개형 백필, 중복 판정 범위, 작업 기억 행, outbox 작업자, 내보내기와 가져오기 왕복 확인. 표 전체를 갱신하는 시험은 병렬 레인에 두지 않고 이 직렬 레인에만 둔다. 실행마다 전용 데이터베이스(`dbl_<pid>_<hex>`)를 만들어 마이그레이션하고 끝나면 지운다. 서버는 POSTGRES_* 로 지정하며 로컬 호스트, 포트 35433, 사용자 memento, 비밀번호 memento_test 가 아니면 연결 전에 거부한다(다른 일회용 서버는 `DB_LANE_SERVER_ALLOW=<host:port>`). 서버에 닿지 못하면 건너뛰지 않고 실패. `npm test`에는 포함되지 않음 |
 | `npm run lint` | eslint 전체 |
 | `npm run lint:ratchet` | 무처리 catch 처리기, 복잡도, 파일 길이, 직접 환경 변수 읽기의 수치를 `scripts/lint-baseline.json`과 비교한다. 기준선보다 늘면 실패하며 기준선 상향에는 `--update --allow-increase`가 필요하다 |
 | `npm run audit:ci` | 런타임 의존성 audit-ci 검사 |
 | `npm run lint:migrations` | migration SQL body-only 규약 검사 (MIGRATION_LINT_FROM 기준) |
+| `npm run switches` | 기능 스위치의 적용 값, 기본값, 상태를 표로 출력(`scripts/switch-report.mjs`). `-- --strict`는 값이 잘못된 스위치가 있으면 종료 코드 1 |
 | `node scripts/import-cycles.js` | `lib`, `config`, `server.js`의 상대 경로 import 순환 검사. 정적 import만 본 결과와 동적 import를 포함한 결과를 따로 출력한다. 단위 시험(`import-cycles.test.js`)이 정적 순환 0건과 동적 포함 순환의 허용 목록을 확인한다 |
 | `npm run release -- X.Y.Z` | 작업 트리와 HEAD의 Tests 워크플로 결과를 확인한 뒤 CHANGELOG와 버전 표기를 갱신하고 `release: X.Y.Z` 커밋과 annotated tag를 만든다. main 브랜치에서만 실행한다(`scripts/release.js`, 시험은 `release-script.test.js`) |
 
@@ -196,6 +197,14 @@ MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test \
 | `score-update-lock-order.test.js` | `decayImportance`, `_updateUtilityScores`, `FragmentWriter.delete`의 `linked_to` 정리가 id 순 거래와 교착하지 않고, 묶음 감쇠의 행별 결과가 같은 기준 시각의 단일 계산과 같음 |
 | `score-update-noop.test.js` | 값이 바뀌지 않는 행을 두 번째 실행에서 다시 쓰지 않음(xmin 불변) |
 | `score-update-min-delta.test.js` | `MEMENTO_DECAY_MIN_DELTA`, `MEMENTO_UTILITY_MIN_DELTA` 적용 |
+| `tuple-lock-cycle.test.js` | id 순으로 여러 행을 잠그는 쓰기 경로가 오래된 스냅숏의 키 공유 잠금이 걸린 행 버전에서도 다른 id 순 잠금 트랜잭션과 교착하지 않음(세션 순서 고정) |
+| `writer-mix.test.js` | 접근 기록, 임베딩 저장, 링크 생성, forget, 감쇠, TTL 전환, 앵커 승격과 외래키 검사를 일으키는 링크 삽입을 겹쳐 실행해 서버 교착 집계, 40P01, 잠금 충돌 재시도 지표가 모두 0. 회차 수는 `DB_LANE_ROUNDS`(기본 10) |
+| `online-index.test.js` | `scripts/ops/online-index.mjs`의 색인 생성, 재실행 건너뜀, 무효 색인 재구성, 잠금 대기 초과 뒤 재시도와 소진, 디스크 여유 거부, 확인 플래그 없는 실행 거부 |
+| `resumable-backfill.test.js` | 재개형 백필의 watermark 이어하기와 행 단위 오류 기록, 행 단위가 아닌 오류의 전파 |
+| `dedup-scope.test.js` | 세 색인 상태에서 insert, amend, batch_remember의 판정, 실행 중 색인 제거(42P10), 무효 상태로 남은 키 범위 색인, 마무리 스크립트, workspace 정규화, reflect workspace 백필의 같은 본문 제외 |
+| `working-memory-rows.test.js` | 작업 기억 행의 기록, 조회, 보관 시간 만료, 보관량 제거, 세션 격리, 조회 대상 제외 |
+| `working-memory-exclusion.test.js` | 기억을 보여 주거나 세는 경로가 작업 기억 행을 빼고 일반 파편과 닫힌 파편은 그대로 보임 |
+| `outbox-worker.test.js` | outbox 기록의 트랜잭션 원자성, 두 작업자 동시 점유에서 이벤트마다 한 번 처리, 임대 만료 재점유, 재시도와 dead-letter, 반납, 보존 정리의 묶음 상한 |
 | `import-export-roundtrip.test.js` | 시드한 데이터베이스에서 내보낸 JSONL을 두 번째 빈 데이터베이스로 가져와 행 수, `content_hash` 집합, 열 값, 링크, 이력, 집계가 시험이 계산한 값과 같음. 보통 가져오기의 변환과 거부, 되살리기, 재가져오기의 duplicates, 대상 키, dryRun, 관리 API 경로 |
 
 `_guard.js`와 `_harness.js`는 시험이 아니라 허용 조건 검사와 전용 데이터베이스 준비·삭제를 맡는 도우미다.
@@ -204,8 +213,8 @@ MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test \
 
 ## 전체 테스트 현황
 
-- 시험 파일: 455개(tests/unit 432, 그중 tests/unit/symbolic 9, tests/integration 14, tests/e2e 4, tests/db-concurrency 5).
-- 단위 테스트: node:test 단일 러너. DB·Redis·EMBEDDING_API_KEY 불필요. 마지막 실행 기준 3706개 테스트(통과 3704, 건너뜀 2, 실패 0).
+- 시험 파일: 530개(tests/unit 493, 그중 tests/unit/symbolic 9, tests/structure 5, tests/integration 14, tests/e2e 4, tests/db-concurrency 14).
+- 단위 테스트: node:test 단일 러너. DB·Redis·EMBEDDING_API_KEY 불필요. 마지막 실행 기준 5574개 테스트(통과 5572, 건너뜀 2, 실패 0, tests/structure 포함).
 - 통합 테스트: DB/Redis 환경에서 전체 통과
 - E2E: PostgreSQL 환경에서 전체 통과(CI e2e 작업). LLM CLI 검증은 CLI 인증 환경에서 `npm run test:integration:llm`으로 수행
 - DB 동시성 레인: PostgreSQL 환경에서 `npm run test:db`로 실행. CI에서는 결과만 보고한다.

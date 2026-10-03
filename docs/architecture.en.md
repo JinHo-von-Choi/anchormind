@@ -44,6 +44,7 @@ server.js  (HTTP server)
             |   +-- ContextBuilder.js     Dedicated context() logic. Reserves effective-workspace anchor slots first, deduplicates candidates by ID in anchor > core > learning > working order, guarantees anchors plus minimum non-anchor slots, and uses one token-selected set for flat/structured/injectionText outputs
             |   +-- GraphNeighborSearch.js L2.5 graph neighbor search (fragment_links 1-hop bidirectional UNION, tanh-saturated scoring + relation-type boosts)
             |   +-- HistoryReconstructor.js case_id/entity-based narrative reconstruction (ordered_timeline, causal_chains, unresolved_branches)
+            |   +-- BudgetSelector.js     recall token budget selection (`MEMENTO_RANK_BEFORE_BUDGET`). Pure functions for the search-order cut (`trimInSearchOrder`) and the final-score selection (`selectWithinBudget`)
             |   +-- Reranker.js           Cross-Encoder reranking (disabled by default; enable via MEMENTO_RERANKER_ENABLED or RERANKER_URL)
             |   +-- CaseRecall.js         Dedicated caseMode: true path. Returns (goal, events[], outcome) triple per case_id
             |   +-- LinkedFragmentLoader.js Bulk linked fragment load (1-hop neighbor batch query)
@@ -54,6 +55,8 @@ server.js  (HTTP server)
             +-- write/                    Write layer modules
             |   +-- WriteGate.js          Single semantic write gate. Applies the normalize, sensitive, length, policy, workspace and anchor steps in order and records violations as warnings or rejects them on hard-gate keys. `MEMENTO_WRITE_GATE`
             |   +-- write-gate-metrics.js Gate verdict metric `memento_write_gate_total{entry,outcome}`
+            |   +-- gateApproval.js       Gate approval marks. FragmentWriter semantic methods accept only write values registered by WriteGate
+            |   +-- serverWriteGate.js    Builds the gate for server write paths, injecting the key's allowed workspace set and hard gate setting from ApiKeyStore
             |   +-- FragmentImporter.js   Passes import rows through the gate and writes them with FragmentWriter. Applies the target key profile (owner, restore) (shared by admin import and CLI import)
             |   +-- DedupScope.js         content_hash duplicate detection scope (`MEMENTO_DEDUP_SCOPE`). Reads the valid detection indexes to choose the detection scope, ON CONFLICT target, pre-insert lookup and batch fold key
             |   +-- FragmentWriter.js     Fragment writes. The semantic methods (insert, update) accept only gated values; internal metadata goes through updateInternal, which cannot write the 9 semantic columns (also delete, incrementAccess, touchLinked)
@@ -86,6 +89,7 @@ server.js  (HTTP server)
             |   +-- ConsolidatorGC.js     Feedback reports, stale fragment collection/cleanup, long fragment splitting, feedback-based correction
             |   +-- FragmentGC.js         Fragment expiration/deletion, exponential decay, TTL tier transitions (permanent parole + EMA batch decay)
             |   +-- idOrderedUpdate.js    Locks and updates decay and utility score changes in id-ascending batches (`MEMENTO_SCORE_UPDATE_BATCH`). Rows below the minimum change (`MEMENTO_DECAY_MIN_DELTA`, `MEMENTO_UTILITY_MIN_DELTA`) are not rewritten
+            |   +-- resumableBackfill.js  Resumable backfill helper (`runResumableBackfill`). Records a watermark per batch so a run with the same job name resumes, and records row-level errors in `backfill_failures`
             |   +-- decay.js              Exponential decay half-life constants, pure computation functions, ACT-R EMA activation approximation (`updateEmaActivation`, `computeEmaRankBoost`), EMA-based dynamic half-life (`computeDynamicHalfLife`), age-weighted utility score (`computeUtilityScore`)
             |   +-- UtilityBaseline.js    Fragment utility baseline computation (dedup/compression decision baseline)
             |   +-- feedbackFactor.js     Feedback-based correction factor computation
@@ -104,10 +108,16 @@ server.js  (HTTP server)
             |   +-- SearchMetrics.js      L1/L2/L3/total layer-level latency collection (Redis circular buffer, P50/P90/P99)
             |   +-- SearchEventAnalyzer.js Search event analysis, query pattern tracking (reads from SearchEventRecorder)
             |   +-- SearchEventRecorder.js FragmentSearch.search() result to search_events table recording
+            |   +-- RecallEvalSet.js      Search evaluation set (`tests/fixtures/recall-eval-v2`) format, validation and loading
+            |   +-- RecallMetrics.js      Pure functions for search evaluation metrics such as R@k, MRR and nDCG within the token budget
+            |   +-- RecallRankStats.js    Pure rank-based metric functions (shared with RecallBenchmark)
+            |   +-- PairedBootstrap.js    Paired bootstrap confidence interval over per-query differences of two runs (seeded)
             |   +-- EvaluationMetrics.js  tool_feedback-based implicit Precision@5 and downstream task success rate computation
             |   +-- SearchParamAdaptor.js key_id x query_type x hour minSimilarity online learning, atomic UPSERT
             +-- QuotaChecker.js           API key fragment quota check (fragment_limit based)
-            +-- FragmentIndex.js          Redis L1 index management, getFragmentIndex() singleton factory
+            +-- FragmentIndex.js          Redis L1 index management, getFragmentIndex() singleton factory. Chooses the working memory store between Redis and the PostgreSQL fallback
+            +-- WorkingMemoryRows.js      Reads, cleanup and per-key cap of the working memory rows (`source=wm-fallback`) used while Redis is not ready (`MEMENTO_WM_PG_FALLBACK`, `MEMENTO_WM_FALLBACK_MAX_ROWS`)
+            +-- WorkingMemorySql.js       Working memory row marker and the SQL condition that excludes those rows from queries and counts
             +-- keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` shared helper. Generates key_id-scoped WHERE clauses. Used by FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js
             +-- CaseEventStore.js         Semantic milestone log (case_events CRUD, DAG edges, evidence join)
             +-- memory-schema.sql         PostgreSQL schema definition
@@ -135,6 +145,7 @@ lib/
 +-- openapi.js         OpenAPI 3.1.0 spec generator. Enabled when `ENABLE_OPENAPI=true` via `GET /openapi.json`. Auth-level-based tool list filtering: master key -> all paths (including Admin REST API), API key -> permissions-based tool list
 +-- rate-limiter.js    IP-based sliding window rate limiter
 +-- rbac.js            RBAC authorization (read/write/admin tool-level permissions)
++-- env-parse.js       Raw value classification of boolean and enum environment variables. Leaf module that lets config.js and the switch ledger (`config/switches.js`) share one rule
 +-- security/          Sensitive data detection. `sensitivePatterns.js` (the rule table shared by the storage path and the logger, a leaf module with no imports) and `SensitiveScanner.js` (pure functions that mask content fields and keywords and report rule names)
 +-- http-handlers.js   HTTP handler re-export hub. Actual implementations in lib/handlers/ submodules
 +-- scheduler.js       Periodic task scheduler (setInterval task management)
@@ -160,6 +171,7 @@ lib/admin/
 +-- key-state-cache.js API key state recheck cache used when a session is used (`MEMENTO_SESSION_KEY_RECHECK_MS`)
 +-- admin-metrics.js   `/metrics-summary` summary (reads the prom-client registry directly, 10-second response cache)
 +-- admin-keys.js      API key management routes
++-- key-policy.js      Validation of key policy column edits (default_mode, allowed_workspaces, symbolic_hard_gate) and the audit record format
 +-- admin-memory.js    Memory operations routes (overview, fragments, anomalies, graph)
 +-- admin-sessions.js  Session management routes
 +-- admin-logs.js      Log viewing routes
@@ -195,6 +207,7 @@ lib/tools/
 +-- memory.js    16 MCP tool handlers
 +-- reconstruct.js  reconstruct_history, search_traces tool handlers (Narrative Reconstruction)
 +-- memory-schemas.js  Tool schema definitions (inputSchema)
++-- tool-head.js  name, title and MCP hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) of every tool
 +-- tool-error.js Converts error text in tool responses. Intended business errors pass through, driver/OS/runtime errors become fixed text, and storage CHECK constraint violations become an `INVALID_ARGUMENT` message naming the parameter and allowed values
 +-- db.js        PostgreSQL connection pool, agent session variable query helper (not exposed via MCP). getPrimaryPool(), getBatchPool(), queryWithAgentVector(). With `opts.lock` it runs the lock statement first in the same transaction and then the write statement with the locked ids as $1
 +-- lock-retry.js Re-runs transactions that ended in a deadlock (40P01) or lock timeout (55P03) (`MEMENTO_DB_LOCK_RETRY_MAX`), and the `memento_db_deadlock_retries_total` and `memento_db_write_failures_total` metrics
@@ -251,8 +264,16 @@ scripts/
 +-- lint-ratchet.js                              Compares silent catch handlers, complexity, file length and direct environment reads against `scripts/lint-baseline.json` (`npm run lint:ratchet`)
 +-- import-cycles.js                             Import cycle check over relative imports in `lib`, `config` and `server.js` (static-only and static+dynamic results printed separately)
 +-- check-coverage.js                            Compares unit test coverage totals with `coverage-baseline.json` (`npm run test:coverage`)
++-- switch-report.mjs                            Prints the applied value, default and state of every feature switch as a table (`npm run switches`, `--strict`)
++-- measure/recall-metrics.mjs                   Measures search metrics on the evaluation set and compares two runs (`--compare`)
++-- ops/backup.sh                                agent_memory schema backup with manifest (14 days kept by default)
++-- ops/restore-verify.mjs                       Restores a dump into a disposable test server and compares it with the manifest
++-- ops/online-index.mjs                         Builds large table indexes from the work list (`ops/index-manifest.json`) with `CONCURRENTLY`
++-- ops/finish-dedup-scope.mjs                   Drops the per-key content_hash indexes to finish the duplicate detection scope switch
 +-- release.js                                   Release procedure (`npm run release -- X.Y.Z`)
 ```
+
+`config/switches.js` is the feature switch ledger. It holds the name, documented default, purpose and category of each switch and computes the value that applies in a given environment with the same rules as the code that reads it. `npm run switches`, `switches` in the admin `/stats` response and the `[Startup] switches:` startup log line use this ledger.
 
 `config/recommended-settings.js` returns the names of recommended production settings that are not applied (`recommendedSettingsGap`), and the server lists them on one `[Startup] Recommended settings not applied:` line at startup. Values are not included.
 
@@ -919,6 +940,8 @@ After the three layers' results are merged via RRF, time-semantic composite rank
 
 **MemoryRecaller final sort (`computeRecallScore`).** Immediately after FragmentSearch results are merged with any `includeLinks` fragments, `MemoryRecaller.recall` performs one additional unified sort via `computeRecallScore`. Naive composite re-sorting at this stage would discard cross-encoder reranker results, so the following four principles are applied. (1) If a fragment carries a `rerankerScore`, that score is preserved as the base. (2) If not, the composite formula `effectiveImportance × 0.4 + temporalProximity × 0.3 + similarity × 0.3` is multiplied by `unrerankedBaseDiscount` (0.85) to penalize fragments that were not validated by reranking. (3) `lexicalMatchScore` (topic exact +4, keyword in topic +2, keyword in keywords +1.5, keyword in content +1, multi-match bonus +2) is log-normalized and added as a bounded additive term using `lexicalWeightReranked` (0.12) or `lexicalWeightFallback` (0.18) -- the applicable weight is selected per-fragment based on `rerankerScore` presence, not per result set. (4) Fragments added via `includeLinks` are tagged `_source="linked"` before sorting; their lexical weight is halved by `lexicalLinkedMultiplier` (0.5), and they are removed from the final response after sorting. This design intentionally avoids hard overrides such as `if (lexical > 0) return 1000 + lexical` -- a pattern that was evaluated and rejected in a multi-LLM review (Oracle/Claude/Gemini) for causing cross-encoder result discarding, double-counting, and pagination instability.
 
+**Budget selection (`BudgetSelector`).** With `MEMENTO_RANK_BEFORE_BUDGET=on` (the default), FragmentSearch returns candidates without a token budget cut, `MemoryRecaller` merges linked fragments and scores them with `computeRecallScore`, and `selectWithinBudget` selects within `tokenBudget`. When every candidate fits the budget, all are selected; linked fragments use the same budget. With `off`, the search layer cuts the budget in search order (`trimInSearchOrder`) and linked fragments are added outside the budget. Selection rules and caps are in the `MEMENTO_RANK_BEFORE_BUDGET` row of [Configuration](configuration.en.md).
+
 When `includeLinks: true` (default) is set on recall, linked fragments are fetched via a 1-hop traversal. The `linkRelationType` parameter filters for specific relation types -- when unspecified, caused_by, resolved_by, and related are included. The linked fragment fetch limit is `MEMORY_CONFIG.linkedFragmentLimit` (default 10).
 
 > **Note:** The L1 Redis index currently supports namespace isolation by API key (keyId) only. Agent-level isolation is enforced at L2/L3, so final result accuracy is unaffected. In multi-agent deployments, L1 candidate sets may include fragments from other agents.
@@ -938,7 +961,7 @@ Fragments move across four tiers -- hot, warm, cold, permanent -- based on acces
 | cold | Fragments not accessed for a long time. Candidates for deletion in the next maintenance cycle |
 | permanent | Exempt from decay, TTL demotion, and expiration deletion |
 
-Fragments stored with `scope: "session"` serve as session working memory. They are discarded when the session ends. `scope: "permanent"` is the default.
+Fragments stored with `scope: "session"` serve as session working memory. They are discarded when the session ends. `scope: "permanent"` is the default. While Redis is not ready they are stored as working memory rows in `fragments` (`source=wm-fallback`); these rows do not appear in recall, consolidation, quota or export and are removed after 24 hours (`MEMENTO_WM_PG_FALLBACK`).
 
 Fragments marked `isAnchor: true` are permanently excluded from MemoryConsolidator's decay and deletion regardless of their tier. Even with importance as low as 0.1, they will not be deleted. Use this for knowledge that must never be lost.
 

@@ -470,7 +470,7 @@ ID lookups through `fragment_history` and `graph_explore` now apply workspace fi
 | text | string | - | Natural language query (L3 semantic) |
 | topic | string | - | Topic filter |
 | type | string | - | Type filter (fact, decision, error, preference, procedure, relation, episode) |
-| tokenBudget | number | - | Maximum return tokens. Default 1000. |
+| tokenBudget | number | - | Maximum return tokens. Default 1000. With `MEMENTO_RANK_BEFORE_BUDGET=on` (the default), candidates including linked fragments receive the final score and are selected within this budget; linked fragments use the same budget. With `off`, results are cut in search order and linked fragments are added outside the budget. |
 | includeLinks | boolean | - | Include linked fragments (1-hop, resolved_by/caused_by prioritized). Default true. |
 | linkRelationType | string | - | Link relation type filter (related, caused_by, resolved_by, part_of, contradicts) |
 | threshold | number | - | Similarity threshold (0-1) |

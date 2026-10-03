@@ -472,7 +472,7 @@ Agent 조회는 생략 시 `default`, 지정 시 해당 agent와 `default`를 �
 | text | string | - | 자연어 쿼리 (L3 시맨틱) |
 | topic | string | - | 주제 필터 |
 | type | string | - | 타입 필터 (fact, decision, error, preference, procedure, relation, episode) |
-| tokenBudget | number | - | 최대 반환 토큰. 기본 1000. |
+| tokenBudget | number | - | 최대 반환 토큰. 기본 1000. `MEMENTO_RANK_BEFORE_BUDGET=on`(기본)이면 연결 파편을 포함한 후보에 최종 점수를 매긴 뒤 이 예산 안에서 고르고, 연결 파편도 같은 예산을 쓴다. `off`이면 검색 순서대로 자른 뒤 연결 파편을 예산 밖에서 더한다. |
 | includeLinks | boolean | - | 연결된 파편 포함 (1-hop, resolved_by/caused_by 우선). 기본 true. |
 | linkRelationType | string | - | 연결 파편 관계 유형 필터 (related, caused_by, resolved_by, part_of, contradicts) |
 | threshold | number | - | similarity 임계값 (0~1) |

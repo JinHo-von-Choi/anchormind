@@ -256,6 +256,9 @@ MCP `memory_consolidate` 도구는 master 키 세션 전용이다. 일반 키 �
 | `scripts/migrate.js` | DB 마이그레이션 자동 실행 및 synthetic-query 보조 임베딩 차원 정합화 | 서버 업그레이드, 초기 설치 | 버전 업그레이드 시 1회 |
 | `scripts/ops/backup.sh` | agent_memory 스키마 `pg_dump -Fc`, 체크섬, 행 수 매니페스트, 역할 정의 덤프 (`--dir`, `--keep`, `--dry-run`). 절차는 `docs/operations/backup-restore.md` | 일일 백업, 마이그레이션 반영 직전 | 하루 1회와 마이그레이션 전 |
 | `scripts/ops/restore-verify.mjs` | 덤프를 일회용 시험 서버(35433)에 복원해 행 수, `schema_migrations` 최댓값, HNSW 색인을 매니페스트와 대조하고 JSON으로 출력 | 복구 훈련 | 분기 1회 이상 |
+| `scripts/ops/online-index.mjs` | 작업 목록(`scripts/ops/index-manifest.json`)의 대형 표 색인을 `CONCURRENTLY`로 생성 (`--dry-run`, `--confirm`, `--index`, `--data-dir` 또는 `--free-bytes`). 절차는 `docs/operations/online-migration.md` | 대형 표 색인이 있는 마이그레이션 반영 전 | 조건부 |
+| `scripts/ops/finish-dedup-scope.mjs` | 새 판정 색인 두 개가 유효한지 확인한 뒤 키 범위 content_hash 색인을 `DROP INDEX CONCURRENTLY`로 지워 중복 판정 범위 전환을 마침 (옵션 없으면 단계만 출력, `--confirm`으로 실행) | migration-050 반영 뒤 「중복 판정 범위 전환」 6단계 | 일회성 |
+| `scripts/measure/recall-metrics.mjs` | 평가 세트로 R@k, MRR, 토큰 예산 내 nDCG, 지연을 일회용 시험 서버의 DB에서 측정하고 `--compare`로 두 실행을 비교. 절차는 `docs/benchmark.md` | 검색 경로나 스위치 변경 전후 비교 | 조건부 |
 | `scripts/backfill-embeddings.js` | embedding IS NULL 파편에 임베딩 일괄 생성 | EMBEDDING_PROVIDER 변경 후, 임베딩 API 장애 복구 후 | 조건부 1회 |
 | `scripts/backfill-morpheme-dict.js` | morpheme_dict의 embedding NULL 행 일괄 재임베딩 (`--dry-run`·`--batch`·`--sleep-ms`·`--max`) | 형태소 사전 NULL 행 누적 확인 시 (backfill-embeddings는 fragments 전용이라 이 테이블을 다루지 않음) | 조건부 1회 |
 | `scripts/check-embedding-consistency.js` | 설정 차원과 DB 실제 벡터 차원 일치 검증 | 서버 기동 시 자동 실행 (server.js 내부 호출) | 기동마다 자동 |

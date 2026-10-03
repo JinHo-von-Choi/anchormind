@@ -277,6 +277,8 @@ top-level `_searchEventId` / `_memento_hint` / `_suggestion` mirror 필드는 �
 
 같은 key_id 범위에서 동일 `idempotencyKey`로 다시 호출하면 기존 파편 id를 반환하고 저장을 건너뛴다.
 
+`idempotencyKey`가 없어도 같은 본문은 키와 workspace 단위(`MEMENTO_DEDUP_SCOPE=workspace`, 기본)로 한 번만 저장된다. 같은 workspace나 전역 파편에 같은 본문이 있으면 응답의 `id`가 기존 파편 id이고 `duplicate_of`에 같은 id가 실린다. 다른 workspace의 같은 본문은 별도 파편이다.
+
 ---
 
 ### 내부 구조
@@ -627,7 +629,7 @@ remember(content="선호하는 코딩 스타일: ...", topic="preference", type=
 | 깊은 조사 | 3000~5000 | 복잡한 주제, 다수 파편 필요 시 |
 | 에러 디버깅 | 2000 | 에러+해결책+관련 컨텍스트 |
 
-tokenBudget을 초과하면 중요도 낮은 파편부터 잘림. 중요한 정보가 누락되면 tokenBudget을 올려서 재검색.
+recall은 연결 파편을 포함한 후보에 최종 점수를 매긴 뒤 tokenBudget 안에서 점수가 높은 파편을 고른다(`MEMENTO_RANK_BEFORE_BUDGET=on`, 기본). 연결 파편도 같은 예산을 쓴다. 중요한 정보가 누락되면 tokenBudget을 올려서 재검색.
 
 ## recall 결과 해석
 
@@ -851,7 +853,7 @@ RBAC default-deny: 등록되지 않은 도구 이름은 `Unknown tool: <name>`(-
 | importance | number | - | 0.0~1.0. 미입력 시 type별 기본값. |
 | source | string | - | 출처 (세션 ID, 도구명 등) |
 | linkedTo | string[] | - | 연결할 기존 파편 ID 목록 |
-| scope | string | - | permanent(기본) 또는 session |
+| scope | string | - | permanent(기본) 또는 session. session 응답의 `working_memory`가 저장 경로(`redis`, Redis가 준비되지 않아 PostgreSQL 작업 기억 행에 저장한 `postgres-fallback`, 저장하지 못한 `none`)를 알린다. `none`이면 permanent로 다시 저장한다 |
 | isAnchor | boolean | - | true면 영구 보존. 핵심 규칙/정책용. |
 | supersedes | string[] | - | 대체할 기존 파편 ID. 지정 파편은 만료 처리. |
 | contextSummary | string | - | 맥락/배경 요약 (1-2문장) |
