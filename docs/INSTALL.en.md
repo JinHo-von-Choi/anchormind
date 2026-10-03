@@ -279,7 +279,14 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-054-outbox-events.sql
 
 There is no migration-046. Prefer `npm run migrate`, which records applied files and substitutes the vector opclass automatically.
 
-After migration-050 the per-key content_hash indexes (`uq_frag_hash_per_key`, `uq_frag_hash_master`) remain, so duplicate detection stays per key. The rollout to per workspace detection (`MEMENTO_DEDUP_SCOPE=workspace`, the default) and its rollback are described in [operations/online-migration.md](operations/online-migration.md#중복-판정-범위-전환).
+After migration-050 the per-key content_hash indexes (`uq_frag_hash_per_key`, `uq_frag_hash_master`) remain, so duplicate detection stays per key. A new install finishes the switch to per workspace detection (`MEMENTO_DEDUP_SCOPE=workspace`, the default) by dropping the per-key indexes with the command below after migrating. Without options it only prints the steps; the target comes from `--url` or the PG environment variables (it does not read environment files).
+
+```bash
+node scripts/ops/finish-dedup-scope.mjs
+PGHOST=<host> PGDATABASE=<db> PGUSER=<user> PGPASSWORD=<password> node scripts/ops/finish-dedup-scope.mjs --confirm
+```
+
+The production rollout and its rollback are described in [operations/online-migration.md](operations/online-migration.md#중복-판정-범위-전환).
 
 > **Re-running migration-007**: If you change `EMBEDDING_DIMENSIONS` or switch embedding providers, re-run `scripts/post-migrate-flexible-embedding-dims.js` to update the vector column dimensions in the `fragments`, `morpheme_dict`, and `fragment_synthetic_query` tables simultaneously.
 

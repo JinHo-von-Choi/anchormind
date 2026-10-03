@@ -175,7 +175,14 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-054-outbox-events.sql     
 
 migration-046은 결번이다. 수동 적용보다 `npm run migrate`를 권장한다(적용 이력과 opclass 치환을 자동 처리).
 
-migration-050 뒤에도 키 단위 content_hash 색인(`uq_frag_hash_per_key`, `uq_frag_hash_master`)이 남아 있어 중복 판정은 키 단위로 동작한다. workspace 단위 판정(`MEMENTO_DEDUP_SCOPE=workspace`, 기본)으로 전환하는 절차와 되돌리기는 [operations/online-migration.md](operations/online-migration.md#중복-판정-범위-전환)에 있다.
+migration-050 뒤에도 키 단위 content_hash 색인(`uq_frag_hash_per_key`, `uq_frag_hash_master`)이 남아 있어 중복 판정은 키 단위로 동작한다. 새 설치는 마이그레이션 뒤 다음 명령으로 키 단위 색인을 지워 workspace 단위 판정(`MEMENTO_DEDUP_SCOPE=workspace`, 기본)으로 마무리한다. 옵션이 없으면 단계만 출력하고, 접속 대상은 `--url` 또는 PG 환경변수로 준다(환경 파일은 읽지 않는다).
+
+```bash
+node scripts/ops/finish-dedup-scope.mjs
+PGHOST=<호스트> PGDATABASE=<DB> PGUSER=<사용자> PGPASSWORD=<비밀번호> node scripts/ops/finish-dedup-scope.mjs --confirm
+```
+
+운영 DB의 전환 절차와 되돌리기는 [operations/online-migration.md](operations/online-migration.md#중복-판정-범위-전환)에 있다.
 
 > **migration-007 재실행**: `EMBEDDING_DIMENSIONS`를 변경하거나 임베딩 제공자를 전환한 경우, `scripts/post-migrate-flexible-embedding-dims.js`를 재실행하면 `fragments`, `morpheme_dict`, `fragment_synthetic_query` 테이블의 벡터 차원이 동시에 갱신된다.
 

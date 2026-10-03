@@ -276,17 +276,17 @@ ALTER TABLE agent_memory.fragments VALIDATE CONSTRAINT chk_example;
 
 ## 중복 판정 범위 전환
 
-migration-050은 같은 본문(content_hash)을 하나로 보는 범위를 키 단위에서 키와 workspace 단위로 바꾸는 유일 색인 두 개를 더한다. 키 범위 색인(migration-031)은 이 파일에서 지우지 않고 아래 운영 단계로 지운다. 쓰기 경로(`lib/memory/write/DedupScope.js`)는 실행 시점의 유효 색인을 읽어 판정 범위와 `ON CONFLICT` 대상을 고르므로 세 상태 어느 쪽에서도 동작하고, 배포와 색인 단계의 순서에 묶이지 않는다.
+migration-050은 같은 본문(content_hash)을 하나로 보는 범위를 키 단위에서 키와 workspace 단위로 바꾸는 유일 색인 두 개를 더한다. 키 범위 색인(migration-031)은 이 파일에서 지우지 않고 아래 운영 단계로 지운다. 쓰기 경로(`lib/memory/write/DedupScope.js`)는 실행 시점의 판정 색인을 읽어 판정 범위와 `ON CONFLICT` 대상을 고르므로 세 상태 어느 쪽에서도 동작하고, 배포와 색인 단계의 순서에 묶이지 않는다.
 
-|상태|유효 색인|판정 범위|ON CONFLICT 대상|
+|상태|남아 있는 색인|판정 범위|ON CONFLICT 대상|
 |-|-|-|-|
 |키 범위만|`uq_frag_hash_per_key`, `uq_frag_hash_master`|키|키 범위 색인|
 |둘 다|위 둘과 `uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`|키(키 범위 색인이 다른 workspace의 같은 본문을 막는다)|키 범위 색인|
 |workspace 범위만|`uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`|`MEMENTO_DEDUP_SCOPE`(기본 `workspace`)|workspace 범위 색인|
 
-판정은 키 경로(키 보유, 마스터)마다 따로 한다. 판정 색인이 하나도 없으면 `ON CONFLICT` 없이 저장하고 사전 조회만으로 판정한다.
+판정은 키 경로(키 보유, 마스터)마다 따로 한다. 판정 범위는 `pg_index`에 남아 있는 색인으로 정하고, `ON CONFLICT` 대상은 그중 유효(`indisvalid`)한 색인에서만 고른다. 키 범위 색인이 `indisvalid=false`로 남아 있어도(아래 6단계의 주의) 유일성을 계속 강제하므로 「둘 다」처럼 키 범위로 판정한다. 대상으로 쓸 유효 색인이 없으면 `ON CONFLICT` 없이 저장하고 사전 조회만으로 판정한다.
 
-색인 정의는 다음과 같다. workspace NULL과 `''`는 같은 칸이다. 유일성은 열 순서와 무관하며, 사전 조회(`key_id`, `content_hash`)가 색인 앞부분을 쓰도록 `content_hash`를 workspace 앞에 둔다.
+색인 정의는 다음과 같다. workspace NULL과 `''`는 같은 칸이고, 모든 저장 경로(remember, batch_remember, 가져오기)는 `''`와 공백뿐인 workspace를 NULL로 저장한다. 유일성은 열 순서와 무관하며, 사전 조회(`key_id`, `content_hash`)가 색인 앞부분을 쓰도록 `content_hash`를 workspace 앞에 둔다.
 
 ```sql
 CREATE UNIQUE INDEX uq_frag_hash_ws_per_key
@@ -297,7 +297,7 @@ CREATE UNIQUE INDEX uq_frag_hash_ws_master
 
 판정 범위 workspace에서 전역 파편(workspace NULL)은 모든 workspace에서 보이므로 workspace 요청도 같은 본문의 전역 파편 id를 돌려받는다. 반대로 전역 요청은 workspace 파편과 별개로 저장한다.
 
-색인 상태는 프로세스마다 60초 동안 기억한다. 기억한 상태와 실제가 달라 `ON CONFLICT` 대상 색인이 없거나(42P10) 대상이 아닌 판정 색인이 저장을 막으면(23505) 그 쓰기는 색인 상태를 다시 읽고 한 번 더 판정한다. remember는 같은 트랜잭션 안에서 저장점으로 되돌린 뒤, batch_remember는 트랜잭션 전체를 되돌린 뒤 다시 실행한다. amend는 오류를 돌려주고 다음 호출이 다시 읽은 상태로 판정한다. 키 범위 색인을 지운 뒤 최대 60초(또는 새 본문의 저장이 42P10을 받을 때까지) 같은 본문 판정은 키 범위로 남는다.
+색인 상태는 프로세스마다 60초 동안 기억한다. 기억한 상태와 실제가 달라 `ON CONFLICT` 대상 색인이 없거나(42P10) 대상이 아닌 판정 색인이 저장을 막으면(23505) 그 쓰기는 색인 상태를 다시 읽고 다시 판정한다. remember는 같은 트랜잭션 안에서 저장점으로 되돌린 뒤 한 번, batch_remember는 트랜잭션 전체를 되돌린 뒤 최대 두 번 다시 실행한다. 다시 판정한 뒤에도 판정 색인이 23505로 막으면 막은 색인의 범위(키 범위 색인이면 같은 키, workspace 범위 색인이면 같은 칸)로 기존 행을 다시 읽어 중복으로 돌려준다. amend는 UPDATE가 판정 색인의 23505를 받으면 같은 방식으로 병합 신호(`merged`)를 낸다. 가져오기는 FragmentWriter를 거치므로 remember와 같다. 키 범위 색인이 사라진 뒤 최대 60초(또는 새 본문의 저장이 42P10을 받을 때까지) 같은 본문 판정은 키 범위로 남는다.
 
 ### 운영 순서
 
@@ -343,12 +343,38 @@ CREATE UNIQUE INDEX uq_frag_hash_ws_master
    ```
 
 5. 배포하고 `npm run migrate`를 실행한다. migration-050의 `IF NOT EXISTS` 문은 이미 만든 색인을 건너뛴다. 이 시점은 「둘 다」 상태라 판정은 키 범위 그대로이고, `MEMENTO_DEDUP_SCOPE=workspace`이면 첫 쓰기 때 `[DedupScope] 키 범위 색인(...)이 있어 해당 경로의 중복 판정은 키 범위로 동작한다` 경고가 한 번 남는다.
-6. 동작을 확인한 뒤 키 범위 색인을 지운다. 이 단계부터 workspace 범위로 판정한다. `DROP INDEX CONCURRENTLY`는 트랜잭션 블록 밖에서 한 문장씩 실행한다(psql 기본 자동 커밋). 잠금 대기 초과(55P03)이면 열린 트랜잭션을 확인하고 같은 문장을 다시 실행한다.
+6. 동작을 확인한 뒤 마무리 스크립트로 키 범위 색인을 지운다. 이 단계부터 workspace 범위로 판정한다. 스크립트는 새 색인 두 개가 유효하지 않으면 아무것도 지우지 않고 거부하고, 열린 트랜잭션을 경고한 뒤 `DROP INDEX CONCURRENTLY IF EXISTS`를 한 문장씩 실행한다. 잠금 대기 초과(55P03)와 교착(40P01)은 대기 시간을 두 배로 늘리며 다시 시도한다. 끝나면 키 범위 색인이 `pg_class`에서 사라졌는지(무효 상태로 남은 것도 남은 것으로 본다) 확인하고 네 색인의 최종 상태를 출력한다. 옵션이 없으면 연결하지 않고 단계만 출력하며 `--confirm`이 있어야 실행한다. 접속 대상과 옵션(`--url`, `--lock-timeout`, `--retries`, `--retry-wait-ms`, `--retry-max-wait-ms`)은 online-index.mjs와 같고 환경 파일은 읽지 않는다. 다시 실행해도 안전하다.
+
+   ```bash
+   node scripts/ops/finish-dedup-scope.mjs
+   PGHOST=<호스트> PGPORT=<포트> PGDATABASE=<DB> PGUSER=<사용자> PGPASSWORD=<비밀번호> \
+     node scripts/ops/finish-dedup-scope.mjs --confirm
+   ```
+
+   스크립트가 실행하는 문장은 다음과 같다.
 
    ```sql
    SET lock_timeout = '3s';
+   SET statement_timeout = 0;
    DROP INDEX CONCURRENTLY IF EXISTS agent_memory.uq_frag_hash_per_key;
    DROP INDEX CONCURRENTLY IF EXISTS agent_memory.uq_frag_hash_master;
+   ```
+
+   주의: `DROP INDEX CONCURRENTLY`는 먼저 색인을 `indisvalid=false`로 바꾼 뒤 그 표를 읽거나 쓰는 앞선 트랜잭션이 끝나기를 기다린다. 기다리는 동안과, 잠금 대기 초과(55P03)나 취소로 중단된 뒤에는 색인이 `indisvalid=false, indisready=true`로 남아 유일성을 계속 강제한다. 쓰기 경로는 이 상태를 키 범위로 판정하므로 오류는 나지 않지만 workspace 범위로 바뀌지도 않으며, `[DedupScope] 무효 상태의 판정 색인(...)` 경고가 남는다. 상태는 다음 질의로 확인한다.
+
+   ```sql
+   SELECT c.relname, i.indisvalid, i.indisready
+     FROM pg_index i
+     JOIN pg_class c ON c.oid = i.indexrelid
+    WHERE c.relnamespace = 'agent_memory'::regnamespace
+      AND c.relname IN ('uq_frag_hash_per_key', 'uq_frag_hash_master', 'uq_frag_hash_ws_per_key', 'uq_frag_hash_ws_master');
+   ```
+
+   복구는 열린 트랜잭션(위 「열린 트랜잭션과 백업」의 질의)이 끝난 뒤 마무리 스크립트를 다시 실행하는 것이다. 같은 `DROP INDEX CONCURRENTLY IF EXISTS` 문이 무효 상태의 색인도 지운다. 지우기를 그만두고 키 범위 색인을 유효 상태로 되돌리려면 다음을 실행한다(쓰기를 막지 않는다).
+
+   ```sql
+   REINDEX INDEX CONCURRENTLY agent_memory.uq_frag_hash_per_key;
+   REINDEX INDEX CONCURRENTLY agent_memory.uq_frag_hash_master;
    ```
 
 7. 자료 정합을 확인한다. 결과가 0행이어야 한다.
@@ -360,15 +386,15 @@ CREATE UNIQUE INDEX uq_frag_hash_ws_master
    HAVING count(*) > 1;
    ```
 
-새 설치는 `npm run migrate`가 네 색인을 모두 만든다(「둘 다」 상태). 6단계 문장을 실행하면 workspace 범위로 판정한다.
+새 설치는 `npm run migrate`가 네 색인을 모두 만든다(「둘 다」 상태). 6단계의 `node scripts/ops/finish-dedup-scope.mjs --confirm`을 실행하면 workspace 범위로 판정한다.
 
-전환 뒤에는 같은 키의 전역 파편과 workspace 파편이 같은 본문을 가질 수 있다. 전역 파편의 workspace를 채우는 운영 스크립트(`scripts/backfill-reflect-workspace.js` 등)는 대상 workspace에 같은 본문이 이미 있으면 `uq_frag_hash_ws_per_key` 위반(23505)으로 그 묶음이 실패한다.
+전환 뒤에는 같은 키의 전역 파편과 workspace 파편이 같은 본문을 가질 수 있다. 전역 파편의 workspace를 채우는 운영 스크립트는 대상 workspace에 같은 키의 같은 본문이 이미 있으면 `uq_frag_hash_ws_per_key` 위반(23505)을 받는다. `scripts/backfill-reflect-workspace.js`는 그런 파편을 옮기지 않고 미리보기에서 제외 건수를 출력한다.
 
 ### 되돌리기
 
 |상황|방법|
 |-|-|
-|판정 범위만 되돌린다|`MEMENTO_DEDUP_SCOPE=key`. 호출 시점에 읽으므로 재시작하지 않아도 된다. insert, amend, batch_remember의 사전 조회가 키 범위로 판정하므로 키 범위 색인을 다시 만들 필요가 없다. 이미 workspace마다 저장된 같은 본문 행은 그대로 남는다|
+|판정 범위만 되돌린다|`MEMENTO_DEDUP_SCOPE=key`. 호출 시점에 읽으므로 재시작하지 않아도 된다. insert, amend, batch_remember의 사전 조회가 키 범위로 판정하므로 키 범위 색인을 다시 만들 필요가 없다. 이미 workspace마다 저장된 같은 본문 행은 그대로 남는다. workspace 범위 색인만 있는 상태에서는 키 범위 색인과 똑같지는 않다. 두 workspace에 같은 본문을 동시에 쓰면 둘 다 사전 조회를 통과해 따로 저장될 수 있다|
 |6단계 전에 코드를 되돌린다|키 범위 색인이 남아 있으므로 이전 버전을 그대로 배포한다. 이전 버전은 키 범위 색인을 `ON CONFLICT` 대상으로 쓰고, 새 색인이 막는 행은 키 범위 색인도 막으므로 함께 있어도 된다. 새 색인을 치우려면 아래 첫 묶음을 실행한다|
 |6단계 뒤에 코드를 되돌린다|이전 버전은 키 범위 색인이 없으면 저장이 42P10으로 실패하므로 먼저 키 범위 색인을 다시 만든다. (1) `MEMENTO_DEDUP_SCOPE=key`로 새 중복 생성을 멈춘다. (2) 아래 둘째 묶음으로 키 범위 중복을 찾는다. (3) 0행이 될 때까지 운영자가 정리한다(같은 키의 같은 본문 중 남길 파편을 정하고 나머지를 forget 또는 amend). (4) 아래 셋째 묶음으로 키 범위 색인을 만든다. 실패해 무효 색인이 남으면 `DROP INDEX CONCURRENTLY IF EXISTS`로 지우고 (2)부터 다시 한다. (5) 이전 버전을 배포한다|
 
@@ -419,7 +445,7 @@ CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uq_frag_hash_master
 |-|-|
 |lint 규칙, 스크립트 계획과 실행 논리, 백필 도우미|`npm test`(`tests/unit/lint-migrations.test.js`, `tests/unit/online-index.test.js`, `tests/unit/resumable-backfill.test.js`)|
 |스크립트 실서버 동작, 백필 이어하기|`npm run test:db`(`tests/db-concurrency/online-index.test.js`, `tests/db-concurrency/resumable-backfill.test.js`)|
-|중복 판정 범위의 세 색인 상태, 실행 중 색인 제거|`npm test`(`tests/unit/dedup-scope.test.js`, `tests/unit/fragment-writer-dedup-scope.test.js`, `tests/unit/batch-remember-dedup-scope.test.js`), `npm run test:db`(`tests/db-concurrency/dedup-scope.test.js`)|
+|중복 판정 범위의 세 색인 상태, 무효 상태로 남은 키 범위 색인, 실행 중 색인 제거, 마무리 스크립트|`npm test`(`tests/unit/dedup-scope.test.js`, `tests/unit/fragment-writer-dedup-scope.test.js`, `tests/unit/batch-remember-dedup-scope.test.js`, `tests/unit/finish-dedup-scope.test.js`), `npm run test:db`(`tests/db-concurrency/dedup-scope.test.js`)|
 
 DB 레인 시험은 일회용 시험 서버(포트 35433)의 전용 데이터베이스에서만 실행한다. 운영 데이터베이스에는 실행하지 않는다.
 
