@@ -8,8 +8,9 @@
  *   1. 마이그레이션 053은 열만 더하고 색인을 만들지 않는다(상태: 열 있음, 색인 없음)
  *   2. tsquery 생성기의 이스케이프 표가 실제 to_tsquery에서 오류 없이 읽힌다
  *   3. remember, amend, batch_remember가 content_tokens를 채우고 본문 변경 시 다시 쓴다
- *   4. 어휘 검색이 키, workspace 범위를 지키고 NULL 행은 찾지 않으며, 무효 색인이면 참여하지 않는다
- *   5. 백필 스크립트와 재개형 백필: 미리보기는 쓰지 않고, 중단 뒤 이어 가며, 읽은 뒤 본문이 바뀐 행은 쓰지 않는다
+ *   4. 어휘 검색은 유효한 GIN 색인이 있을 때만 참여하고, 키, workspace 범위를 지키며 NULL 행은 찾지 않는다
+ *   5. 백필 스크립트와 재개형 백필: 미리보기는 쓰지 않고, 중단 뒤 이어 가며, 읽은 뒤 본문이 바뀐 행은 쓰지 않고,
+ *      동시 삭제, 동시 저장, 스위치 전환 속에서도 모든 행이 채워지거나 남은 NULL 수로 집계된다
  */
 
 import crypto                                  from "node:crypto";
@@ -167,12 +168,20 @@ describe("어휘 검색", () => {
   let scoped;
 
   before(async () => {
+    await directQuery(`CREATE INDEX idx_fragments_content_tokens ON ${SCHEMA}.fragments USING gin (content_tokens)`);
+    resetLexicalSchema();
     mine   = await remember("키 격리 시험: 야간 백업 스크립트가 덤프를 다른 호스트로 복사한다");
     other  = await remember("키 격리 시험: 야간 백업 스크립트가 덤프를 지운다", { keyId: KEY_B });
     scoped = await remember("키 격리 시험: 야간 백업 스크립트의 workspace 파편", { workspace: "ws-lexical" });
   });
 
   const search = (text, opts) => new LexicalSearch().search(text, { agentId: "default", ...opts });
+
+  it("3자리 이상 숫자로 찾는다", async () => {
+    const id  = await remember("키 격리 시험: MCP 서버 내부 포트는 53535이다");
+    const ids = (await search("포트 53535", { keyId: KEY_A })).map(f => f.id);
+    assert.ok(ids.includes(id));
+  });
 
   it("같은 키의 일치 파편만 찾는다", async () => {
     const ids = (await search("야간 백업 덤프", { keyId: KEY_A })).map(f => f.id);
@@ -199,8 +208,7 @@ describe("어휘 검색", () => {
     assert.ok(!ids.includes(id));
   });
 
-  it("색인이 유효하면 참여하고 무효이면 참여하지 않는다", async () => {
-    await directQuery(`CREATE INDEX idx_fragments_content_tokens ON ${SCHEMA}.fragments USING gin (content_tokens)`);
+  it("색인이 유효하면 참여하고, 무효이거나 없으면 참여하지 않는다", async () => {
     resetLexicalSchema();
     assert.equal((await loadLexicalSchema(run)).index, "valid");
     assert.ok((await search("야간 백업", { keyId: KEY_A })).length > 0);
@@ -209,7 +217,11 @@ describe("어휘 검색", () => {
       "UPDATE pg_index SET indisvalid = false WHERE indexrelid = 'agent_memory.idx_fragments_content_tokens'::regclass");
     resetLexicalSchema();
     assert.deepEqual(await search("야간 백업", { keyId: KEY_A }), []);
+
     await directQuery(`DROP INDEX ${SCHEMA}.idx_fragments_content_tokens`);
+    resetLexicalSchema();
+    assert.equal((await loadLexicalSchema(run)).index, "absent");
+    assert.deepEqual(await search("야간 백업", { keyId: KEY_A }), []);
   });
 });
 
@@ -232,11 +244,8 @@ describe("백필", () => {
     const ids = await seedNull(`${RUN}-resume`, ["이어하기 첫째 본문", "이어하기 둘째 본문", "이어하기 셋째 본문", "이어하기 넷째 본문"]);
     await ensureBackfillTables(sql => directQuery(sql));
     const job  = `${RUN}-resume-job`;
-    const base = {
-      job, batchSize: 2,
-      where: `${backfillScript.BACKFILL_WHERE} AND topic = '${RUN}' AND id LIKE '${RUN}-resume-%'`,
-      set  : backfillScript.BACKFILL_SET
-    };
+    const base = { job, batchSize: 2, where: backfillScript.BACKFILL_WHERE, set: backfillScript.BACKFILL_SET };
+    const only = `${backfillScript.CANDIDATE_WHERE} AND id LIKE '${RUN}-resume-%'`;
 
     let calls = 0;
     const failing = async (content) => {
@@ -244,7 +253,7 @@ describe("백필", () => {
       if (calls === 3) throw Object.assign(new Error("tokenizer stopped"), { code: "XX000" });
       return contentTokenDocument(content);
     };
-    const candidateRun = (sql, params) => directQuery(sql.replace(backfillScript.BACKFILL_WHERE, base.where), params);
+    const candidateRun = (sql, params) => directQuery(sql.replace(backfillScript.CANDIDATE_WHERE, only), params);
     await assert.rejects(runResumableBackfill({ ...base, prepareBatch: backfillScript.makePrepareBatch(candidateRun, failing) }), /tokenizer stopped/);
     assert.match(await tokensOf(ids[0]), /'첫째'/);
     assert.equal(await tokensOf(ids[2]), null);
@@ -260,5 +269,50 @@ describe("백필", () => {
     assert.equal(result.resumedFrom, ids[1]);
     assert.match(await tokensOf(ids[2]), /'셋째'/);
     assert.equal(await tokensOf(ids[3]), null);
+  });
+
+  it("동시 삭제, 동시 저장, 스위치 전환 속에서도 모든 행이 채워지거나 남은 NULL 수로 집계된다", async () => {
+    const prefix = `${RUN}-cc`;
+    const seeded = await seedNull(prefix, Array.from({ length: 300 }, (_, i) => `동시성 시험 파편 번호 ${i} 서버 점검 기록`));
+    await ensureBackfillTables(sql => directQuery(sql));
+    const only   = `${backfillScript.CANDIDATE_WHERE} AND (id LIKE '${prefix}-%' OR topic = '${prefix}-w')`;
+    const spec   = {
+      job: `${prefix}-job`, batchSize: 20, where: backfillScript.BACKFILL_WHERE, set: backfillScript.BACKFILL_SET,
+      prepareBatch: backfillScript.makePrepareBatch((sql, params) => directQuery(sql.replace(backfillScript.CANDIDATE_WHERE, only), params), contentTokenDocument)
+    };
+
+    const deleted = new Set();
+    const writtenOff = [];
+    let   done = false;
+    const churn = (async () => {
+      for (let i = 0; !done && i < 200; i++) {
+        const victim = seeded[(i * 37) % seeded.length];
+        await directQuery(`DELETE FROM ${SCHEMA}.fragments WHERE id = $1`, [victim]);
+        deleted.add(victim);
+        process.env.MEMENTO_LEXICAL_CHANNEL = i % 2 === 0 ? "off" : "on";
+        const id = await remember(`동시 저장 파편 ${i} 스위치 ${process.env.MEMENTO_LEXICAL_CHANNEL}`, { topic: `${prefix}-w` });
+        if (process.env.MEMENTO_LEXICAL_CHANNEL === "off") writtenOff.push(id);
+        delete process.env.MEMENTO_LEXICAL_CHANNEL;
+        await new Promise(resolve => setTimeout(resolve, 2));
+      }
+    })();
+    const result = await runResumableBackfill(spec);
+    done = true;
+    await churn;
+
+    assert.equal(result.failedRows, 0);
+    const { rows: [wm] } = await directQuery("SELECT status FROM agent_memory.backfill_watermarks WHERE job = $1", [spec.job]);
+    assert.equal(wm.status, "completed");
+
+    const { rows } = await directQuery(
+      `SELECT id FROM ${SCHEMA}.fragments WHERE content_tokens IS NULL AND (id LIKE $1 OR topic = $2)`, [`${prefix}-%`, `${prefix}-w`]);
+    const remaining = rows.map(r => r.id);
+    for (const id of seeded) {
+      if (!deleted.has(id)) assert.notEqual(await tokensOf(id), null, id);
+    }
+    assert.ok(remaining.every(id => writtenOff.includes(id)), JSON.stringify(remaining));
+
+    const { rows: [counted] } = await directQuery(backfillScript.REMAINING_SQL);
+    assert.ok(Number(counted.total) >= remaining.length);
   });
 });

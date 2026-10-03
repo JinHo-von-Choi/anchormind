@@ -49,8 +49,12 @@ function runBatchSql(sql, params) {
   if (db.errorOnCall && db.batchCalls.length === db.errorOnCall.callNo) { const err = db.errorOnCall.error; db.errorOnCall = null; throw err; }
   if (db.batchError) { const err = db.batchError; db.batchError = null; throw err; }
 
-  const pool = onlyId === null ? db.ids.filter(id => id > afterId && !db.updated.includes(id)).slice(0, limit)
-                               : db.ids.filter(id => id === onlyId && !db.updated.includes(id));
+  /** 첫 값이 배열이면 준비한 id 로 한정한 조건(id = ANY($4))으로 본다. */
+  const only = Array.isArray(params[3]) ? new Set(params[3]) : null;
+  const pool = (onlyId === null ? db.ids.filter(id => id > afterId && !db.updated.includes(id))
+                                : db.ids.filter(id => id === onlyId && !db.updated.includes(id)))
+    .filter(id => only === null || only.has(id))
+    .slice(0, onlyId === null ? limit : 1);
   const bad = pool.find(id => db.badIds.has(id));
   if (bad !== undefined) throw db.badErrors.get(bad) ?? dataError(bad);
   db.updated.push(...pool);
@@ -313,30 +317,72 @@ describe("retryBackfillFailures", () => {
 });
 
 describe("묶음별 값(prepareBatch)", () => {
-  it("묶음마다 직전 watermark로 값을 만들고 그 값을 $4부터 전달한다", async () => {
-    const seen = [];
-    const spec = {
-      ...SPEC, params: undefined,
-      prepareBatch: async ({ afterId, batchSize, clock, onlyId }) => {
-        seen.push({ afterId, batchSize, onlyId, clock: clock instanceof Date });
-        return [`after:${afterId}`];
-      }
+  /** db.ids 에서 afterId 뒤의 아직 갱신하지 않은 id 를 묶음 크기만큼 준비한다. */
+  function preparer({ seen = [], onPrepared = () => {} } = {}) {
+    return async ({ afterId, batchSize, clock, onlyId }) => {
+      seen.push({ afterId, batchSize, onlyId, clock: clock instanceof Date });
+      const ids = onlyId !== undefined
+        ? db.ids.filter(id => id === onlyId)
+        : db.ids.filter(id => id > afterId && !db.updated.includes(id)).slice(0, batchSize);
+      onPrepared(ids);
+      return { params: [ids], lastId: ids.at(-1) ?? null };
     };
-    await runResumableBackfill(spec);
+  }
+  const SPEC_P = { job: "job-p", where: "id = ANY($4::text[])", set: "importance = 0.75", batchSize: 2 };
+
+  it("묶음마다 직전 watermark로 값을 만들고 그 값을 $4부터 전달하며 watermark 는 준비한 마지막 id 다", async () => {
+    const seen = [];
+    await runResumableBackfill({ ...SPEC_P, prepareBatch: preparer({ seen }) });
     assert.deepEqual(seen.map(s => s.afterId), ["", "f002", "f004", "f005"]);
     assert.ok(seen.every(s => s.batchSize === 2 && s.onlyId === undefined && s.clock));
-    assert.deepEqual(db.batchCalls.map(c => c.params[3]), ["after:", "after:f002", "after:f004", "after:f005"]);
+    assert.deepEqual(db.batchCalls.map(c => c.params[3]), [["f001", "f002"], ["f003", "f004"], ["f005"]]);
+    assert.deepEqual(db.watermarks.get("job-p"), { last_id: "f005", rows_done: 5, status: "completed" });
+  });
+
+  it("준비한 행이 모두 사라져 잠근 행이 없어도 watermark 를 넘기고 남은 행을 계속 한다", async () => {
+    let first = true;
+    const onPrepared = (ids) => {
+      if (!first) return;
+      first  = false;
+      db.ids = db.ids.filter(id => !ids.includes(id));
+    };
+    const result = await runResumableBackfill({ ...SPEC_P, prepareBatch: preparer({ onPrepared }) });
+    assert.equal(result.rowsUpdated, 3);
+    assert.deepEqual(db.updated, ["f003", "f004", "f005"]);
+    assert.equal(db.watermarks.get("job-p").status, "completed");
+  });
+
+  it("잠금은 준비한 행으로 한정되어 그 사이 지워진 행 대신 다음 행을 잠그지 않는다", async () => {
+    const onPrepared = (ids) => { if (ids[0] === "f001") db.ids = db.ids.filter(id => id !== "f002"); };
+    await runResumableBackfill({ ...SPEC_P, prepareBatch: preparer({ onPrepared }) });
+    assert.deepEqual(db.batchCalls[0].params[3], ["f001", "f002"]);
+    assert.deepEqual(db.updated.slice(0, 1), ["f001"]);
+    assert.equal(db.batchCalls[1].afterId, "f002");
+  });
+
+  it("lastId 가 null 이면 묶음을 실행하지 않고 완료로 표시한다", async () => {
+    const result = await runResumableBackfill({ ...SPEC_P, prepareBatch: async () => ({ params: [[]], lastId: null }) });
+    assert.equal(result.rowsUpdated, 0);
+    assert.equal(db.batchCalls.length, 0);
+    assert.equal(db.watermarks.get("job-p").status, "completed");
+  });
+
+  it("lastId 가 afterId 보다 크지 않거나 모양이 다르면 거부한다", async () => {
+    await assert.rejects(runResumableBackfill({ ...SPEC_P, prepareBatch: async () => ({ params: [["f001"]], lastId: "" }) }), BackfillError);
+    reset(ids(5));
+    await assert.rejects(runResumableBackfill({ ...SPEC_P, prepareBatch: async () => [["f001"]] }), BackfillError);
   });
 
   it("실패 행 재시도는 행 하나의 값을 onlyId로 만든다", async () => {
     db.badIds = new Set(["f003"]);
     const seen = [];
-    const spec = { ...SPEC, params: undefined, prepareBatch: async ({ onlyId }) => { seen.push(onlyId); return ["v"]; } };
+    const spec = { ...SPEC_P, prepareBatch: preparer({ seen }) };
     await runResumableBackfill(spec);
     db.badIds = new Set();
     seen.length = 0;
     assert.deepEqual(await retryBackfillFailures(spec), { resolved: 1, stillFailing: 0 });
-    assert.deepEqual(seen, ["f003"]);
+    assert.deepEqual(seen.map(s => s.onlyId), ["f003"]);
+    assert.ok(db.updated.includes("f003"));
   });
 
   it("prepareBatch가 함수가 아니면 거부한다", async () => {

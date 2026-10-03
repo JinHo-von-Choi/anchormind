@@ -4,13 +4,16 @@
  *
  * 작성자: 최진호
  * 작성일: 2026-10-03
+ * 수정일: 2026-10-04 (준비한 행으로 잠금 한정, 남은 NULL 행 집계)
  *
  * 목적: 마이그레이션 053이 더한 fragments.content_tokens를 저장 경로와 같은 토큰화(LexicalTokens)로 채운다.
  *       본문 어휘 채널은 content_tokens가 NULL인 행을 찾지 못하므로 배포 뒤 한 번 실행한다.
  * 방식: lib/memory/consolidate/resumableBackfill.js(watermark, 실패 행 기록) 위에서 id 순 묶음마다 후보의
- *       본문을 읽어 토큰 문서를 만들고, 잠근 행 가운데 content_hash가 읽은 값과 같은 행만 갱신한다. 그 사이
- *       본문이 바뀐 행은 저장 경로가 이미 토큰을 썼으므로 그대로 둔다. 중단되면 같은 --job으로 다시 실행해
- *       이어 간다.
+ *       본문을 읽어 토큰 문서를 만들고(prepareBatch), 준비한 행 가운데 아직 NULL이고 content_hash가 읽은
+ *       값과 같은 행만 잠가 갱신한다. watermark는 준비한 마지막 id까지 나아간다. 그 사이 지워지거나 채워지거나
+ *       본문이 바뀐 행은 잠그지 않고 지나간다. 끝나면 아직 NULL인 행 수를 출력한다(작업 뒤에 생긴 NULL 행,
+ *       본문이 바뀐 행, 토큰화하지 않는 본문). 완료된 작업은 다시 실행해도 아무것도 하지 않으므로 남은 행을
+ *       채우려면 --restart로 처음부터 실행한다. 중단되면 같은 --job으로 다시 실행해 이어 간다.
  * 접속 대상: --url 또는 표준 PG 환경변수(PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD). 환경 파일은 읽지
  *            않는다. 대상이 명시되지 않으면 연결하지 않는다.
  * 실행 모드: 기본은 미리보기(연결해서 키별 미채움 수와 작업 상태만 출력하고 쓰지 않는다). --confirm이 있어야
@@ -33,22 +36,29 @@ export const MAX_BATCH_SIZE     = 5000;
 const JOB_PATTERN    = /^[a-z0-9][a-z0-9_.-]{0,63}$/;
 const LEGACY_DB_KEYS = ["DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD", "DATABASE_URL", "BATCH_DATABASE_URL"];
 
-/** 갱신 대상: 아직 채우지 않은 행 */
-export const BACKFILL_WHERE = "content_tokens IS NULL";
+/** 후보 조건: 아직 채우지 않은 행 */
+export const CANDIDATE_WHERE = "content_tokens IS NULL";
 
 /**
- * 갱신 식. $4 id 배열, $5 토큰 문서 배열, $6 content_hash 배열. 읽은 뒤 본문이 바뀐 행(해시 불일치)이나
- * 준비하지 않은 행은 기존 값을 둔다.
+ * 잠금과 갱신 대상. $4 id 배열, $6 content_hash 배열(준비한 행). 준비한 뒤 채워졌거나 지워졌거나 본문이
+ * 바뀐 행은 대상이 아니다.
  */
-export const BACKFILL_SET =
-  "content_tokens = COALESCE((SELECT to_tsvector('simple', m.doc) FROM unnest($4::text[], $5::text[], $6::text[]) AS m(id, doc, hash) " +
-  "WHERE m.id = f.id AND m.hash = f.content_hash), f.content_tokens)";
+export const BACKFILL_WHERE =
+  `${CANDIDATE_WHERE} AND (id, content_hash) IN (SELECT u.id, u.hash FROM unnest($4::text[], $6::text[]) AS u(id, hash))`;
 
-/** 묶음 후보 조회. 갱신 대상 조건과 순서, 크기가 resumableBackfill의 잠금 문장과 같다. */
+/** 갱신 식. $5 토큰 문서 배열(토큰화하지 않는 본문은 NULL). 잠근 행은 준비한 행이다. */
+export const BACKFILL_SET =
+  "content_tokens = to_tsvector('simple', (SELECT m.doc FROM unnest($4::text[], $5::text[]) AS m(id, doc) WHERE m.id = f.id))";
+
+/** 묶음 후보 조회. 순서와 크기가 resumableBackfill의 잠금 문장과 같다. */
 export const CANDIDATE_SQL = Object.freeze({
-  batch : `SELECT id, content, content_hash FROM agent_memory.fragments WHERE ${BACKFILL_WHERE} AND id > $1 ORDER BY id LIMIT $2`,
-  single: `SELECT id, content, content_hash FROM agent_memory.fragments WHERE ${BACKFILL_WHERE} AND id = $1`
+  batch : `SELECT id, content, content_hash FROM agent_memory.fragments WHERE ${CANDIDATE_WHERE} AND id > $1 ORDER BY id LIMIT $2`,
+  single: `SELECT id, content, content_hash FROM agent_memory.fragments WHERE ${CANDIDATE_WHERE} AND id = $1`
 });
+
+/** 끝난 뒤 아직 NULL인 행 수(현행 행과 전체) */
+export const REMAINING_SQL =
+  "SELECT count(*) FILTER (WHERE valid_to IS NULL) AS live, count(*) AS total FROM agent_memory.fragments WHERE content_tokens IS NULL";
 
 /** 키별 미채움 수(미리보기) */
 export const MISSING_SQL =
@@ -156,31 +166,35 @@ export function prepareEnvironment(env, target) {
 }
 
 /**
- * 후보 행으로 묶음 값($4 id, $5 토큰 문서, $6 content_hash)을 만든다.
+ * 후보 행으로 묶음 값($4 id, $5 토큰 문서, $6 content_hash)을 만든다. 행 사이마다 이벤트 루프에 차례를 넘긴다.
  *
  * @param {Array<{id: string, content: string, content_hash: string}>} rows
- * @param {(content: string) => Promise<string>} tokenize
- * @returns {Promise<[string[], string[], string[]]>}
+ * @param {(content: string) => Promise<string|null>} tokenize
+ * @returns {Promise<[string[], Array<string|null>, string[]]>}
  */
 export async function buildBatchParams(rows, tokenize) {
   const docs = [];
-  for (const row of rows) docs.push(await tokenize(row.content));
+  for (const row of rows) {
+    docs.push(await tokenize(row.content));
+    await new Promise(resolve => setImmediate(resolve));
+  }
   return [rows.map(row => row.id), docs, rows.map(row => row.content_hash)];
 }
 
 /**
- * resumableBackfill의 prepareBatch. 묶음 시작 watermark 뒤의 후보(또는 실패 행 하나)를 읽어 값을 만든다.
+ * resumableBackfill의 prepareBatch. 묶음 시작 watermark 뒤의 후보(또는 실패 행 하나)를 읽어 값을 만들고,
+ * 준비한 마지막 id를 돌려준다. 후보가 없으면 lastId는 null이다.
  *
  * @param {(sql: string, params: unknown[]) => Promise<{rows: Object[]}>} run
- * @param {(content: string) => Promise<string>} tokenize
- * @returns {(batch: {afterId: string, batchSize: number, onlyId?: string}) => Promise<Array>}
+ * @param {(content: string) => Promise<string|null>} tokenize
+ * @returns {(batch: {afterId: string, batchSize: number, onlyId?: string}) => Promise<{params: Array, lastId: string|null}>}
  */
 export function makePrepareBatch(run, tokenize) {
   return async ({ afterId, batchSize, onlyId }) => {
     const { rows } = onlyId === undefined
       ? await run(CANDIDATE_SQL.batch, [afterId, batchSize])
       : await run(CANDIDATE_SQL.single, [onlyId]);
-    return buildBatchParams(rows, tokenize);
+    return { params: await buildBatchParams(rows, tokenize), lastId: rows.at(-1)?.id ?? null };
   };
 }
 
@@ -240,7 +254,11 @@ async function execute(runtime, opts, io) {
     prepareBatch: makePrepareBatch(runtime.run, runtime.tokenize)
   };
   const result = opts.retryFailures ? await runtime.retryBackfillFailures(spec) : await runtime.runResumableBackfill(spec);
-  io.out(`[backfill-content-tokens] ${JSON.stringify(result)}`);
+  const { rows: [remaining] } = await runtime.run(REMAINING_SQL, []);
+  io.out(`[backfill-content-tokens] ${JSON.stringify({ ...result, remainingNull: { live: Number(remaining?.live ?? 0), total: Number(remaining?.total ?? 0) } })}`);
+  if (Number(remaining?.total ?? 0) > 0) {
+    io.out("[backfill-content-tokens] 남은 NULL 행은 작업 뒤에 생긴 행, 본문이 바뀐 행, 토큰화하지 않는 본문이다. 채우려면 --restart로 다시 실행한다");
+  }
 }
 
 /**

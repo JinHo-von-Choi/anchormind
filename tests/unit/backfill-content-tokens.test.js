@@ -14,7 +14,7 @@ import os               from "node:os";
 
 import {
   parseBackfillArgs, prepareEnvironment, buildBatchParams, makePrepareBatch, main,
-  BACKFILL_WHERE, BACKFILL_SET, CANDIDATE_SQL, DEFAULT_JOB, DEFAULT_BATCH_SIZE, BackfillUsageError
+  BACKFILL_WHERE, BACKFILL_SET, CANDIDATE_SQL, CANDIDATE_WHERE, REMAINING_SQL, DEFAULT_JOB, DEFAULT_BATCH_SIZE, BackfillUsageError
 } from "../../scripts/backfill-content-tokens.mjs";
 
 const TARGET_ENV = { PGHOST: "db.internal.test", PGPORT: "6543", PGDATABASE: "memento", PGUSER: "ops", PGPASSWORD: "s3cret-pw" };
@@ -87,32 +87,31 @@ describe("prepareEnvironment", () => {
 describe("묶음 값과 문장", () => {
   it("buildBatchParams는 id, 토큰 문서, 해시를 같은 순서로 만든다", async () => {
     const rows   = [{ id: "a", content: "x y", content_hash: "h1" }, { id: "b", content: "", content_hash: "h2" }];
-    const params = await buildBatchParams(rows, async (content) => content.toUpperCase());
-    assert.deepEqual(params, [["a", "b"], ["X Y", ""], ["h1", "h2"]]);
+    const params = await buildBatchParams(rows, async (content) => (content ? content.toUpperCase() : null));
+    assert.deepEqual(params, [["a", "b"], ["X Y", null], ["h1", "h2"]]);
   });
 
-  it("갱신 문장은 해시가 같은 행에만 값을 쓰고 아니면 기존 값을 둔다", () => {
-    assert.equal(BACKFILL_WHERE, "content_tokens IS NULL");
-    assert.match(BACKFILL_SET, /^content_tokens = COALESCE\(/);
-    assert.match(BACKFILL_SET, /unnest\(\$4::text\[\], \$5::text\[\], \$6::text\[\]\)/);
-    assert.match(BACKFILL_SET, /m\.id = f\.id AND m\.hash = f\.content_hash/);
-    assert.match(BACKFILL_SET, /to_tsvector\('simple', m\.doc\)/);
-    assert.match(BACKFILL_SET, /, f\.content_tokens\)$/);
+  it("잠금과 갱신 대상은 준비한 id와 해시가 같은 아직 NULL인 행이다", () => {
+    assert.equal(CANDIDATE_WHERE, "content_tokens IS NULL");
+    assert.match(BACKFILL_WHERE, /^content_tokens IS NULL AND \(id, content_hash\) IN \(SELECT u\.id, u\.hash FROM unnest\(\$4::text\[\], \$6::text\[\]\)/);
+    assert.match(BACKFILL_SET, /^content_tokens = to_tsvector\('simple', \(SELECT m\.doc FROM unnest\(\$4::text\[\], \$5::text\[\]\)/);
+    assert.match(BACKFILL_SET, /WHERE m\.id = f\.id\)\)$/);
   });
 
-  it("makePrepareBatch는 같은 조건과 묶음 크기로 다음 후보를 읽는다", async () => {
+  it("makePrepareBatch는 같은 조건과 묶음 크기로 다음 후보를 읽고 준비한 마지막 id를 돌려준다", async () => {
     const calls = [];
     const run   = async (sql, params) => {
       calls.push({ sql, params });
-      return { rows: [{ id: "f2", content: "서버 재시작", content_hash: "h" }] };
+      return { rows: sql === CANDIDATE_SQL.batch && params[0] === "f9" ? [] : [{ id: "f2", content: "서버 재시작", content_hash: "h" }] };
     };
     const prepare = makePrepareBatch(run, async () => "서버 재시작");
-    assert.deepEqual(await prepare({ afterId: "f1", batchSize: 10 }), [["f2"], ["서버 재시작"], ["h"]]);
+    assert.deepEqual(await prepare({ afterId: "f1", batchSize: 10 }), { params: [["f2"], ["서버 재시작"], ["h"]], lastId: "f2" });
+    assert.deepEqual(await prepare({ afterId: "f9", batchSize: 10 }), { params: [[], [], []], lastId: null });
     assert.equal(calls[0].sql, CANDIDATE_SQL.batch);
     assert.deepEqual(calls[0].params, ["f1", 10]);
     await prepare({ afterId: "", batchSize: 1, onlyId: "f9" });
-    assert.equal(calls[1].sql, CANDIDATE_SQL.single);
-    assert.deepEqual(calls[1].params, ["f9"]);
+    assert.equal(calls[2].sql, CANDIDATE_SQL.single);
+    assert.deepEqual(calls[2].params, ["f9"]);
   });
 });
 
@@ -127,6 +126,7 @@ function runtimeStub({ column = true, config = { DB_HOST: "db.internal.test", DB
         calls.queries.push(sql);
         if (sql.includes("column_present")) return { rows: [{ column_present: column, indexes: [] }] };
         if (sql.includes("to_regclass($1) AS watermark")) return { rows: [{ watermark: null, failure: null }] };
+        if (sql === REMAINING_SQL) return { rows: [{ live: "1", total: "2" }] };
         return { rows: [{ key_id: "k1", total: "5", missing: "2" }] };
       },
       lexicalSchemaSql      : "SELECT ... column_present",
@@ -185,6 +185,8 @@ describe("main", () => {
     assert.equal(spec.restart, true);
     assert.equal(typeof spec.prepareBatch, "function");
     assert.match(sink.out.join("\n"), /rowsUpdated/);
+    assert.match(sink.out.join("\n"), /"remainingNull":\{"live":1,"total":2\}/);
+    assert.match(sink.out.join("\n"), /--restart/);
   });
 
   it("--retry-failures는 기록된 실패 행만 다시 한다", async () => {
