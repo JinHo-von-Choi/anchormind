@@ -82,6 +82,8 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | GET | /v1/internal/model/nothing/audit | Audit record list (newest first). See "Audit" below |
 | GET | /v1/internal/model/nothing/audit/export?format=jsonl | Audit record JSON Lines export (seq ascending, hashes on every line) |
 | POST | /v1/internal/model/nothing/audit/verify | Audit hash chain verification |
+| GET | /v1/internal/model/nothing/me | Kind, roles, capabilities and ranges of the requesting principal. See "Admin Authorization" below |
+| GET | /v1/internal/model/nothing/me/explain?cap=&workspace= | Decision and per-step reasons for one capability. See "Admin Authorization" below |
 
 ### Export and import
 
@@ -172,6 +174,43 @@ Verification `POST /audit/verify` takes an optional body (`{ "fromSeq": n, "maxR
 ```
 
 `anchor` is `genesis` (starting at seq 1), `checkpoint` (boundary hash of the checkpoint row written by retention cleanup) or `previous_row` (the row just before `fromSeq`). `broken.reason` is `row_hash_mismatch`, `prev_hash_mismatch`, `seq_gap` or `prefix_mismatch` (leading part removed without a checkpoint). `complete` is `true` when the check reached the end and `false` when it stopped at `maxRows`. The export and verification requests themselves are recorded as `admin.audit.export` and `admin.audit.verify`; list queries (`GET /audit`) are not recorded. Rows are ordered by seq (write order), which can differ from the `occurredAt` order.
+
+### Admin Authorization
+
+Every admin API request is decided against the route table (`lib/admin/admin-route-table.js`), which declares the required capability of each route. Enforcement is always on. The master key (Bearer or a master key login session) is owner and passes every route. A path that is not in the route table requires the owner-only capability (`system.update`). A denial is 403 `{ "error": "Forbidden", "cap", "deniedAt", "reason" }`, and a denied non-GET request is recorded in the audit log as `denied`.
+
+The capabilities are `mem.read`, `mem.write`, `mem.anchor`, `mem.delete.soft`, `mem.delete.hard`, `mem.bulk`, `mem.merge`, `review.decide`, `export.data`, `import.data`, `key.manage`, `key.policy`, `egress.policy`, `ws.create`, `ws.quota`, `retention.manage`, `legal_hold.manage`, `erasure.request`, `erasure.execute`, `job.dry_run`, `job.apply`, `audit.read`, `audit.export`, `webhook.manage`, `usage.read`, `quality.read`, `oauth_client.manage`, `admin_user.manage`, `system.update`. A role is a capability bundle (preset); there are 6 Core presets. Mode O is the whole binding range, W is limited to the bound workspace, M is metadata only (content as hash and length), S is limited to the key scope.
+
+| Preset | Capabilities |
+|-|-|
+| owner | all (O) |
+| admin | all except `legal_hold.manage`, `erasure.execute`, `admin_user.manage`, `system.update` (O) |
+| reviewer | `mem.read` (W), `review.decide` (W) |
+| auditor | `mem.read` (M), `export.data` (M), `audit.read`, `audit.export`, `usage.read`, `quality.read` (O) |
+| viewer | `mem.read`, `usage.read`, `quality.read` (W) |
+| service | `mem.read`, `mem.write`, `mem.anchor`, `mem.delete.soft` (S) |
+
+Decision table:
+
+1. Principal: the master key is owner, an admin session is the union of its role bindings, an API key holds the capabilities its `permissions` convert to within the service preset (`read` is `mem.read`, `write` is `mem.write` and `mem.delete.soft`, `anchor` is `mem.anchor`).
+2. The capability set is the union of the binding presets minus explicit denials. Denial wins.
+3. The workspace range is the intersection of the workspaces of the bindings that grant the capability (a global binding is everything), the key `allowed_workspaces` (API keys; NULL means no restriction), and scope rows (if any row exists, combinations without a row are denied).
+4. Allowed when the capability is held and the target workspace is in range. A request without a target workspace (global target) is allowed only when the range is everything. A denial records the step it stopped at (`principal`, `capability`, `deny`, `workspace`) and a reason.
+
+Required capability per route: `/stats`, `/metrics-summary`, `/sessions`, `/sessions/:id` need `usage.read`; `/activity`, `/memory/overview`, `/memory/fragments` (list, detail, history), `/memory/graph`, `POST /search` need `mem.read`; `/memory/search-events`, `/memory/anomalies`, `/search-events` need `quality.read`; fragment create and update need `mem.write`; fragment delete needs `mem.delete.hard`; key and group listing, creation, status change, deletion and per-key stats need `key.manage`; daily limit, permissions, fragment quota, workspace and policy changes need `key.policy`; session cleanup, reflect-all, manual reflect and session close need `job.apply`; `/logs/*`, `/audit` and `POST /audit/verify` need `audit.read`; `/audit/export` needs `audit.export`; `/export` needs `export.data`; `/import` needs `import.data`. Routes whose scope kind is workspace (`/memory/overview`, `/memory/fragments`, `/memory/graph`, `/export`) use the `workspace` query parameter as the target; the others have a global target.
+
+Queries in admin handlers that read memory tables (fragments, fragment_links, search_events, tool_feedback and others) carry the decision range predicate (`lib/admin/ScopeFilter.js`). The whole range is `TRUE`, a workspace list is `workspace = ANY($n)`, a table without a workspace column is `TRUE` only for the whole range, and a request that did not pass the decision gets `FALSE` (empty result). For metadata-only decisions (auditor `mem.read`, `export.data`) the content fields of the response (`content`, `preview`, `label`, `context_summary`, `keywords`, `summary`, `text`) become `{ "redacted": true, "sha256", "length" }`.
+
+`GET /me` returns the requesting principal itself.
+
+```json
+{
+  "principal": { "kind": "api_key", "id": "<key id>", "roles": ["service"] },
+  "capabilities": [ { "cap": "mem.read", "mode": "S", "range": { "all": false, "workspaces": ["team-a"] } } ]
+}
+```
+
+`GET /me/explain?cap=<capability>&workspace=<name>` returns the decision-table result. Fields are `allowed`, `cap`, `workspace`, `principal`, `mode`, `redact`, `range`, `deniedAt`, `reason`, `steps` (per-step `ok` and reasons; for API keys including `permissions`). A missing or unknown `cap` is 400 `field: "cap"`; a `workspace` longer than 128 characters or containing control characters is 400 `field: "workspace"`. Both routes accept the master key and an API key Bearer and only carry the requesting principal's own decision. An API key Bearer is an admin API principal only on these two routes; other admin routes return 401.
 
 ### /health Endpoint Policy
 

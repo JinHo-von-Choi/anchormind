@@ -195,7 +195,14 @@ lib/admin/
 +-- key-policy.js      Validation of key policy column edits (default_mode, allowed_workspaces, symbolic_hard_gate) and the audit record format
 +-- admin-review.js    Review queue routes (GET /review, POST /review/:id/approve, /reject) and request validation
 +-- ReviewStore.js     Pending review list, approval and rejection (row lock, decision record, idempotency key) and automatic rejection after 30 undecided days (every 6 hours)
-+-- admin-audit-actions.js Audit action declarations for admin routes other than GET (and export GETs), handler audit notes (`noteAdminAudit`)
++-- admin-route-table.js Admin API route table. Per route: required capability (cap), scope kind (scope), audit action (audit)
++-- admin-audit-actions.js Audit action declarations taken from the route table (admin routes other than GET and export GETs), handler audit notes (`noteAdminAudit`)
++-- capabilities.js    Admin capability list, 6 Core role presets (owner, admin, reviewer, auditor, viewer, service), API key permissions conversion
++-- AdminAuthz.js      Decision table (`decide`), `requireCapability`, route decision (`authorizeAdminRoute`), per-request decision range (`adminScopeOf`)
++-- admin-principal.js Admin request principal resolution (master key and login session are owner, an API key Bearer on the `/me` routes is service)
++-- ScopeFilter.js     Workspace range predicate generator for admin SQL (`scopePredicate`, `scopedQuery`, FALSE without a range)
++-- admin-redact.js    Content masking of responses for metadata-only decisions (auditor) (`redactForPrincipal`)
++-- admin-me.js        `GET /me`, `GET /me/explain`
 +-- admin-audit.js     Audit query, JSONL export and chain verification routes (`/audit`, `/audit/export`, `/audit/verify`)
 +-- admin-memory.js    Memory operations routes (overview, fragments, anomalies, graph)
 +-- admin-sessions.js  Session management routes

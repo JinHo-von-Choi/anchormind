@@ -198,7 +198,14 @@ lib/admin/
 ├── key-policy.js      키 정책 열(default_mode, allowed_workspaces, symbolic_hard_gate) 편집 값 검증과 감사 기록 형식
 ├── admin-review.js    검토 대기열 라우트(GET /review, POST /review/:id/approve, /reject)와 요청 검증
 ├── ReviewStore.js     검토 대기 목록, 승인과 거절(대상 행 잠금, 결정 기록, 멱등 키), 30일 미결정 자동 거절(6시간 주기)
-├── admin-audit-actions.js GET이 아닌 관리 라우트(와 내보내기 GET)의 감사 행위 선언, 처리기의 감사 메모(`noteAdminAudit`)
+├── admin-route-table.js 관리 API 라우트 표. 라우트마다 요구 능력(cap), 범위 종류(scope), 감사 행위(audit)
+├── admin-audit-actions.js 라우트 표에서 뽑은 감사 행위 선언(GET이 아닌 관리 라우트와 내보내기 GET), 처리기의 감사 메모(`noteAdminAudit`)
+├── capabilities.js    관리 능력 목록, Core 역할 프리셋 6종(owner, admin, reviewer, auditor, viewer, service), API 키 permissions 변환
+├── AdminAuthz.js      판정 결정 표(`decide`), `requireCapability`, 라우트 판정(`authorizeAdminRoute`), 요청별 판정 범위(`adminScopeOf`)
+├── admin-principal.js 관리 요청 주체 해석(마스터 키와 로그인 세션은 owner, `/me` 라우트의 API 키 Bearer는 service)
+├── ScopeFilter.js     관리 SQL의 workspace 범위 술어 생성기(`scopePredicate`, `scopedQuery`, 범위 없으면 FALSE)
+├── admin-redact.js    메타만 판정(auditor)의 응답 내용 마스킹(`redactForPrincipal`)
+├── admin-me.js        `GET /me`, `GET /me/explain`
 ├── admin-audit.js     감사 조회, JSONL 내보내기, 체인 검증 라우트 (`/audit`, `/audit/export`, `/audit/verify`)
 ├── admin-memory.js    메모리 운영 라우트 (overview, fragments, anomalies, graph)
 ├── admin-sessions.js  세션 관리 라우트

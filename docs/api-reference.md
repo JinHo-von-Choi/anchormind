@@ -85,6 +85,8 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | GET | /v1/internal/model/nothing/audit | 감사 기록 목록(최근 순). 아래 「감사」 참조 |
 | GET | /v1/internal/model/nothing/audit/export?format=jsonl | 감사 기록 JSON Lines 내보내기(seq 오름차순, 줄마다 해시) |
 | POST | /v1/internal/model/nothing/audit/verify | 감사 해시 체인 검증 |
+| GET | /v1/internal/model/nothing/me | 요청 주체의 종류, 역할, 가진 능력과 범위. 아래 「관리 권한」 참조 |
+| GET | /v1/internal/model/nothing/me/explain?cap=&workspace= | 능력 하나의 판정과 단계별 근거. 아래 「관리 권한」 참조 |
 
 ### 내보내기와 가져오기
 
@@ -175,6 +177,43 @@ GET이 아닌 관리 요청, 관리 로그인, 기억 쓰기(remember, amend, fo
 ```
 
 `anchor`는 `genesis`(seq 1부터), `checkpoint`(보존 정리가 남긴 기준점 행의 경계 해시), `previous_row`(`fromSeq` 바로 앞 행)다. `broken.reason`은 `row_hash_mismatch`, `prev_hash_mismatch`, `seq_gap`, `prefix_mismatch`(기준점 없이 앞부분이 사라짐)이다. `complete`는 끝까지 확인했을 때 `true`이고 `maxRows`에서 멈추면 `false`다. 내보내기와 검증 요청도 각각 `admin.audit.export`, `admin.audit.verify`로 기록되고, 목록 조회(`GET /audit`)는 기록하지 않는다. 행은 seq(기록 순서) 기준이며 `occurredAt` 순서와 다를 수 있다.
+
+### 관리 권한
+
+관리 API 요청은 라우트마다 요구 능력을 선언한 라우트 표(`lib/admin/admin-route-table.js`)로 판정한다. 집행은 항상 켜져 있다. 마스터 키(Bearer 또는 마스터 키 로그인 세션)는 owner이며 모든 라우트를 통과한다. 라우트 표에 없는 경로는 owner 전용 능력(`system.update`)을 요구한다. 거부는 403 `{ "error": "Forbidden", "cap", "deniedAt", "reason" }`이고, GET이 아닌 요청의 거부는 감사 기록에 `denied`로 남는다.
+
+능력은 `mem.read`, `mem.write`, `mem.anchor`, `mem.delete.soft`, `mem.delete.hard`, `mem.bulk`, `mem.merge`, `review.decide`, `export.data`, `import.data`, `key.manage`, `key.policy`, `egress.policy`, `ws.create`, `ws.quota`, `retention.manage`, `legal_hold.manage`, `erasure.request`, `erasure.execute`, `job.dry_run`, `job.apply`, `audit.read`, `audit.export`, `webhook.manage`, `usage.read`, `quality.read`, `oauth_client.manage`, `admin_user.manage`, `system.update`이다. 역할은 능력 묶음(프리셋)이며 Core 프리셋은 6종이다. 방식 O는 바인딩 범위 전체, W는 바인딩 workspace 한정, M은 메타만(내용은 해시와 길이), S는 키 범위 한정이다.
+
+| 프리셋 | 능력 |
+|-|-|
+| owner | 전부(O) |
+| admin | `legal_hold.manage`, `erasure.execute`, `admin_user.manage`, `system.update`를 뺀 전부(O) |
+| reviewer | `mem.read`(W), `review.decide`(W) |
+| auditor | `mem.read`(M), `export.data`(M), `audit.read`, `audit.export`, `usage.read`, `quality.read`(O) |
+| viewer | `mem.read`, `usage.read`, `quality.read`(W) |
+| service | `mem.read`, `mem.write`, `mem.anchor`, `mem.delete.soft`(S) |
+
+결정 표:
+
+1. 주체: 마스터 키는 owner, 관리자 세션은 역할 바인딩의 합집합, API 키는 service 프리셋 안에서 `permissions` 변환이 준 능력(`read`는 `mem.read`, `write`는 `mem.write`와 `mem.delete.soft`, `anchor`는 `mem.anchor`).
+2. 능력 집합은 바인딩 프리셋 능력의 합집합에서 명시 거부를 뺀 것이다. 거부가 앞선다.
+3. workspace 범위는 그 능력을 주는 바인딩의 workspace(전역 바인딩은 전체)와 키 `allowed_workspaces`(API 키, NULL은 제한 없음)와 범위 행(행이 하나라도 있으면 행에 없는 조합은 거부)의 교집합이다.
+4. 능력이 있고 대상 workspace가 범위 안이면 허용이다. 대상 workspace가 없는 요청(전역 대상)은 범위가 전체일 때만 허용이다. 거부는 멈춘 단계(`principal`, `capability`, `deny`, `workspace`)와 사유를 남긴다.
+
+라우트의 요구 능력: `/stats`, `/metrics-summary`, `/sessions`, `/sessions/:id`는 `usage.read`, `/activity`, `/memory/overview`, `/memory/fragments`(목록, 상세, 이력), `/memory/graph`, `POST /search`는 `mem.read`, `/memory/search-events`, `/memory/anomalies`, `/search-events`는 `quality.read`, 파편 생성과 수정은 `mem.write`, 파편 삭제는 `mem.delete.hard`, 키와 그룹 목록, 생성, 상태 변경, 삭제, 키별 통계는 `key.manage`, 일일 한도, 권한, 파편 할당량, workspace, 정책 변경은 `key.policy`, 세션 정리, 일괄 reflect, 수동 reflect, 세션 종료는 `job.apply`, `/logs/*`와 `/audit`, `POST /audit/verify`는 `audit.read`, `/audit/export`는 `audit.export`, `/export`는 `export.data`, `/import`는 `import.data`다. 범위 종류가 workspace인 라우트(`/memory/overview`, `/memory/fragments`, `/memory/graph`, `/export`)는 질의 매개변수 `workspace`를 대상으로 쓰고, 나머지는 전역 대상이다.
+
+관리 처리기가 기억 표(fragments, fragment_links, search_events, tool_feedback 등)를 읽는 질의에는 판정 범위 술어가 붙는다(`lib/admin/ScopeFilter.js`). 범위 전체는 `TRUE`, workspace 목록은 `workspace = ANY($n)`, workspace 열이 없는 표는 범위 전체일 때만 `TRUE`이고, 판정을 거치지 않은 요청은 `FALSE`(빈 결과)다. 메타만 판정(auditor의 `mem.read`, `export.data`)의 응답은 내용 필드(`content`, `preview`, `label`, `context_summary`, `keywords`, `summary`, `text`)가 `{ "redacted": true, "sha256", "length" }`로 바뀐다.
+
+`GET /me`는 요청 주체 자신의 정보다.
+
+```json
+{
+  "principal": { "kind": "api_key", "id": "<key id>", "roles": ["service"] },
+  "capabilities": [ { "cap": "mem.read", "mode": "S", "range": { "all": false, "workspaces": ["team-a"] } } ]
+}
+```
+
+`GET /me/explain?cap=<능력>&workspace=<이름>`은 결정 표의 판정을 돌려준다. 필드는 `allowed`, `cap`, `workspace`, `principal`, `mode`, `redact`, `range`, `deniedAt`, `reason`, `steps`(단계별 `ok`와 근거, API 키는 `permissions` 포함)다. `cap`이 없거나 모르는 능력이면 400 `field: "cap"`, `workspace`가 128자를 넘거나 제어 문자를 담으면 400 `field: "workspace"`다. 두 라우트는 마스터 키와 API 키 Bearer 모두 부를 수 있고 요청 주체 자신의 판정만 담는다. API 키 Bearer는 이 두 라우트에서만 관리 API 주체가 되며, 다른 관리 라우트에서는 401이다.
 
 ### /health 엔드포인트 정책
 
