@@ -40,7 +40,8 @@ const LABEL_PARAMS = new Map([
   ["recordSplitStepFailure",        [0]],
   ["recordWarning",                 [0, 1]],
   ["recordClaim",                   [0, 1]],
-  ["recordRememberDuplicate",       [0]]
+  ["recordRememberDuplicate",       [0]],
+  ["recordWriteGate",               [0, 1]]
 ]);
 
 /** 기록 함수 안에서 protocolVersionLabel로 값을 닫는 함수 */
@@ -55,7 +56,8 @@ const METRIC_MODULES = new Set([
   "lib/llm/metrics.js",
   "lib/symbolic/SymbolicMetrics.js",
   "lib/memory/consolidate/gate-metrics.js",
-  "lib/memory/consolidate/split-metrics.js"
+  "lib/memory/consolidate/split-metrics.js",
+  "lib/memory/write/write-gate-metrics.js"
 ]);
 
 /** 검토를 마친 비리터럴 라벨 식. 키는 "파일|함수|식", 값은 값이 닫힌 집합인 근거다. */
@@ -81,6 +83,10 @@ const REVIEWED = new Map([
   ["lib/memory/processors/MemoryRememberer.js|recordWarning|`policy.${v.rule}`",  "PolicyRules 규칙 이름"],
   ["lib/memory/processors/MemoryRememberer.js|recordWarning|v.severity || \"low\"", "PolicyRules 심각도 상수"],
   ["lib/memory/processors/MemoryRememberer.js|recordGateBlock|gateEligible[0]?.rule ?? \"unknown\"", "PolicyRules 규칙 이름"],
+  ["lib/memory/write/WriteGate.js|recordWarning|`policy.${v.rule}`",              "PolicyRules 규칙 이름과 workspace 판정 규칙 이름"],
+  ["lib/memory/write/WriteGate.js|recordWarning|v.severity || \"low\"",             "PolicyRules 심각도 상수"],
+  ["lib/memory/write/WriteGate.js|recordGateBlock|eligible[0]?.rule ?? \"unknown\"", "PolicyRules 규칙 이름과 workspace 판정 규칙 이름"],
+  ["lib/memory/write/WriteGate.js|recordWriteGate|state.entry",                    "호출자가 WRITE_ENTRIES 상수로 넘기는 진입점 이름"],
   ["lib/memory/processors/RememberDuplicate.js|recordRememberDuplicate|kind",      "classifyDuplicate가 돌려주는 네 값이고 기록 함수가 그 밖의 값을 unknown으로 닫는다"],
   ["lib/memory/write/RememberPostProcessor.js|recordClaim|c.extractor ?? \"morpheme-rule\"", "ClaimExtractor 추출기 이름"],
   ["lib/memory/write/RememberPostProcessor.js|recordClaim|c.polarity ?? \"uncertain\"",       "ClaimExtractor 극성 상수"],
