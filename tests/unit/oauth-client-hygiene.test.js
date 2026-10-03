@@ -151,6 +151,31 @@ describe("/register 시간당 상한", () => {
     assert.equal(res.headers.get("retry-after"), "2600");
   });
 
+  it("시계가 뒤로 가도 Retry-After는 창 길이를 넘지 않는다", async (t) => {
+    process.env.MEMENTO_DCR_MAX_PER_HOUR = "1";
+    t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 9, 3) });
+    assert.equal(await register(), 201);
+    t.mock.timers.setTime(Date.UTC(2026, 9, 3) - 7_200_000);
+    const res = await registerResponse();
+    assert.equal(res.status, 429);
+    assert.equal(res.headers.get("retry-after"), "3600");
+  });
+
+  it("창이 지나면 각 집계가 다시 등록을 받는다", async (t) => {
+    process.env.MEMENTO_DCR_MAX_PER_HOUR = "1";
+    t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 9, 3) });
+    assert.equal(await register(), 201);
+    assert.equal(await registerBound(), 201);
+    assert.equal(await register(), 429);
+    assert.equal(await registerBound(), 429);
+    t.mock.timers.tick(3_600_000 - 1);
+    assert.equal(await register(), 429);
+    t.mock.timers.tick(1);
+    assert.equal(await register(), 201);
+    assert.equal(await registerBound(), 201);
+    assert.equal(await register(), 429);
+  });
+
   it("창 끝 직전의 Retry-After는 1 이상이다", async (t) => {
     process.env.MEMENTO_DCR_MAX_PER_HOUR = "1";
     t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 9, 3) });

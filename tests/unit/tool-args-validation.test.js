@@ -171,6 +171,20 @@ describe("validateToolArgs warn 로그의 호출자 표기", () => {
     assert.ok(!line.includes("\n"));
   });
 
+  it("키 형태 토큰은 제어 문자로 쪼개거나 다른 문자에 붙여도 가려진다", () => {
+    const hex = "c".repeat(32);
+    for (const ua of [`mm\u0001cp_owner_${hex}`, `xmmcp_owner_${hex}`, `a\u200bmmcp_owner_${hex}`, `mmcp\u202e_owner_${hex}`]) {
+      const [line] = captureWarn(ua);
+      assert.ok(!line.includes(hex), JSON.stringify(ua));
+      assert.match(line, /ua=.*mmcp_\*\*\*\*/, JSON.stringify(ua));
+    }
+  });
+
+  it("방향 지정 문자 등 서식 문자는 제거된다", () => {
+    const [line] = captureWarn("agent\u202eevil\u2066x\u200b");
+    assert.match(line, /ua=agentevilx\)$/);
+  });
+
   it("User-Agent가 비어 있으면 unknown이다", () => {
     const [line] = captureWarn("\r\n");
     assert.match(line, /ua=unknown\)$/);
