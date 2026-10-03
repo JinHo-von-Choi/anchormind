@@ -104,7 +104,7 @@
 | ENABLE_SPREADING_ACTIVATION | false | SpreadingActivation 활성화. true 시 recall의 contextText 파라미터로 관련 파편을 선제적 활성화한다. 레이턴시 영향 측정 후 활성화 권장 |
 | ENABLE_PATTERN_ABSTRACTION | (미사용) | 패턴 추상화 예약 변수. 현재 코드에서 읽지 않으므로 설정해도 동작에 영향이 없다 |
 | MEMENTO_METRICS_DEFAULT | (없음) | `off`로 설정하면 prom-client 기본 메트릭(CPU·메모리 등) 수집을 생략한다. 그 외 값은 수집 활성 |
-| MEMENTO_ADMIN_AUTH_BACKOFF | `off` | `on`이면 관리 인증이 연속 5회 실패한 뒤 1, 2, 4초 순으로 최대 60초까지 다음 시도를 늦춘다. 지연 중에는 올바른 키도 429(Retry-After)를 받는다. 실패 기록은 이 값과 무관하게 남는다 |
+| MEMENTO_ADMIN_AUTH_BACKOFF | `off` | `on`이면 관리 인증이 연속 5회 실패한 뒤 이어지는 실패마다 다음 시도를 1, 2, 4초 순으로 최대 60초까지 늦춘다. 지연 중에는 올바른 마스터 키도 지연 시간 동안 429(Retry-After)를 받는다. 이미 발급된 쿠키 세션은 영향받지 않는다. 관리 경로에 일반 API 키 등 마스터 키가 아닌 Bearer를 보내 실패한 요청도 실패로 센다. 마지막 실패로부터 60초 동안 실패가 없으면 누적이 새로 시작되고, 인증에 성공해도 지워진다. 실패 기록은 이 값과 무관하게 남고 상태는 프로세스 메모리에 있다 |
 | MEMENTO_ADMIN_METRICS_SAMPLING | (없음) | `off`로 설정하면 admin 콘솔 메트릭 샘플링을 비활성화한다. 그 외 값은 샘플링 활성 |
 | UPDATE_CHECK_DISABLED | false | `true`로 설정 시 신규 버전 확인을 수행하지 않는다 |
 | UPDATE_CHECK_INTERVAL_HOURS | 24 | 신규 버전 확인 주기(시간) |
