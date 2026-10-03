@@ -7,7 +7,8 @@
  * outbox_events는 정해진 두 모듈만 쓴다. 생산자는 lib/outbox/Outbox.js의 enqueue(client, event)를
  * 트랜잭션 연결로 부른다. 소스를 정적으로 읽어 세 가지를 본다.
  *
- *   1. outbox_events에 INSERT하는 SQL 문자열은 lib/outbox/Outbox.js에만 있다.
+ *   1. outbox_events에 INSERT하는 SQL 문자열은 lib/outbox/outbox-sql.js에만 있다(Outbox.js의 enqueue와 비상 복구
+ *      명령이 그 문장을 가져다 쓴다).
  *   2. outbox_events를 UPDATE, DELETE하는 SQL 문자열은 lib/outbox/OutboxStore.js에만 있다.
  *   3. lib, scripts, bin에서 enqueue를 부르는 곳은 첫 인자로 연결 변수(식별자) 또는 `<식별자>.client`를
  *      넘기고, 식별자 이름이 풀(pool)을 가리키지 않는다. 풀 호출식(getPrimaryPool() 등), this 속성,
@@ -24,6 +25,7 @@ import path             from "node:path";
 import { listSourceFiles, scanFile, scanSource } from "./_source-scan.js";
 
 const OUTBOX_MODULE = "lib/outbox/Outbox.js";
+const SQL_MODULE    = "lib/outbox/outbox-sql.js";
 const STORE_MODULE  = "lib/outbox/OutboxStore.js";
 const SOURCES       = [...listSourceFiles("lib"), ...listSourceFiles("scripts"), ...listSourceFiles("bin")];
 const SCANS         = new Map(SOURCES.map(file => [file, scanFile(file)]));
@@ -111,8 +113,8 @@ function filesWithSql(pattern) {
 }
 
 describe("outbox_events 쓰기 위치", () => {
-  it("INSERT 문은 lib/outbox/Outbox.js에만 있다", () => {
-    assert.deepEqual(filesWithSql(WRITE_PATTERNS.insert), [OUTBOX_MODULE]);
+  it("INSERT 문은 lib/outbox/outbox-sql.js에만 있다", () => {
+    assert.deepEqual(filesWithSql(WRITE_PATTERNS.insert), [SQL_MODULE]);
   });
 
   it("UPDATE와 DELETE 문은 lib/outbox/OutboxStore.js에만 있다", () => {
