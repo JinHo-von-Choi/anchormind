@@ -737,7 +737,7 @@ describe("탐지 방식 off의 저장 경로", () => {
       it("세션 범위 remember는 레거시 규칙만 적용한다", async () => {
         const { rememberer } = makeRememberer();
         const stored = [];
-        rememberer.index.addToWorkingMemory = async (sessionId, fragment) => { stored.push(fragment); };
+        rememberer.index.addToWorkingMemory = async (sessionId, fragment) => { stored.push(fragment); return true; };
         await rememberer.remember({ content: OFF_CONTENT, topic: "ops", type: "fact", scope: "session", sessionId: "sess-off-1" });
         assertLegacyOnly(stored[0]?.content);
       });
@@ -767,7 +767,7 @@ describe("탐지 방식 off의 저장 경로", () => {
 
       const { rememberer } = makeRememberer();
       const stored = [];
-      rememberer.index.addToWorkingMemory = async (sessionId, fragment) => { stored.push(fragment); };
+      rememberer.index.addToWorkingMemory = async (sessionId, fragment) => { stored.push(fragment); return true; };
       await rememberer.remember({ content: OFF_CONTENT, topic: "ops", type: "fact", scope: "session", sessionId: "sess-mask-1" });
       assertFullyMasked(stored[0]?.content);
 

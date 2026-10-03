@@ -87,23 +87,23 @@ describe("insertDetailed", () => {
   it("created_at이 있으면 INSERT 바인딩에 넣고 없으면 null을 넣어 서버 시각을 쓴다", async () => {
     await writer.insertDetailed(await approved({ created_at: "2026-01-02T03:04:05.000Z" }), { client: fakeClient });
     const withTime = insertStatement();
-    assert.match(withTime.sql, /COALESCE\(\$29::timestamptz, NOW\(\)\)/);
-    assert.equal(withTime.params[28], "2026-01-02T03:04:05.000Z");
+    assert.match(withTime.sql, /COALESCE\(\$30::timestamptz, NOW\(\)\)/);
+    assert.equal(withTime.params[29], "2026-01-02T03:04:05.000Z");
 
     statements.length = 0;
     await writer.insertDetailed(await approved(), { client: fakeClient });
-    assert.equal(insertStatement().params[28], null);
+    assert.equal(insertStatement().params[29], null);
   });
 
   it("되살린 품질 판정 열을 INSERT 바인딩에 넣고 없으면 null을 넣는다", async () => {
     await writer.insertDetailed(await approved({ quality_verified: true, quality_rationale: "근거" }), { client: fakeClient });
     const withQuality = insertStatement();
     assert.match(withQuality.sql, /quality_verified, quality_rationale/);
-    assert.deepEqual(withQuality.params.slice(29, 31), [true, "근거"]);
+    assert.deepEqual(withQuality.params.slice(30, 32), [true, "근거"]);
 
     statements.length = 0;
     await writer.insertDetailed(await approved(), { client: fakeClient });
-    assert.deepEqual(insertStatement().params.slice(29, 31), [null, null]);
+    assert.deepEqual(insertStatement().params.slice(30, 32), [null, null]);
   });
 
   it("같은 id의 키 소속을 조회한다", async () => {
