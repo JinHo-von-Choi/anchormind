@@ -99,7 +99,7 @@ outbox 게이지는 작업자를 돌리는 프로세스만 갱신한다. 작업�
 | 지표 | 라벨 | 의미 |
 |-|-|-|
 | `memento_db_deadlock_retries_total` | `operation` | 잠금 충돌로 끝난 트랜잭션을 처음부터 다시 실행한 횟수. 재시도 횟수 상한은 `MEMENTO_DB_LOCK_RETRY_MAX`(기본 3) |
-| `memento_db_write_failures_total` | `operation` | 실패를 던지지 않고 경고 로그로 끝낸 배경 쓰기의 실패 수(현재 SpreadingActivation 활성화 갱신, `operation="activation"`) |
+| `memento_db_write_failures_total` | `operation` | 실패를 던지지 않고 경고 로그로 끝낸 배경 쓰기의 실패 수(SpreadingActivation 활성화 갱신 `operation="activation"`, ConsolidatorGC의 stale 중요도 하향 `operation="stale_importance"`) |
 
 `operation` 값은 `lib/tools/lock-retry.js`의 `LOCK_RETRY_OPERATIONS` 닫힌 집합이다(access, touch_linked, embedding, link_sync, unlink, delete, gc_delete, score_batch, activation, feedback, case_reward, merge_links, tier, ema_decay, anchor_promotion, stale_importance).
 

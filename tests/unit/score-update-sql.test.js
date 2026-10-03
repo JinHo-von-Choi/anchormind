@@ -12,13 +12,15 @@ import assert                  from "node:assert/strict";
 
 process.env.MEMENTO_SCORE_UPDATE_BATCH = "0";
 
-const calls = [];
+const calls     = [];
+let   failStale = false;
 mock.module("../../lib/tools/db.js", {
   namedExports: {
     getPrimaryPool       : () => ({ query: async (sql) => { calls.push(sql); return { rows: [] }; } }),
     /** 대상 조건이 잠금 문장에 있는 갱신은 두 문장을 이어 붙여 기록한다. */
     queryWithAgentVector : async (_agent, sql, _params, opts) => {
       calls.push(opts?.lock ? `${sql}\n${opts.lock.sql}` : sql);
+      if (failStale && opts?.lock?.operation === "stale_importance") throw Object.assign(new Error("canceling statement"), { code: "57014" });
       return { rows: [], rowCount: 0 };
     },
     withTransaction      : async () => { throw new Error("unused"); }
@@ -51,5 +53,20 @@ describe("calibrate stale 하향 조건", () => {
     const sql = calls.find(s => /importance \* 0\.5/.test(s));
     assert.ok(sql, "stale 하향 문장이 실행되어야 한다");
     assert.match(sql, /importance <> 0\.05::real/);
+  });
+
+  it("stale 하향이 실패하면 write_failures 지표를 stale_importance로 세고 보정은 계속 끝난다", async () => {
+    const { dbWriteFailuresTotal } = await import("../../lib/tools/lock-retry.js");
+    const { ConsolidatorGC }       = await import("../../lib/memory/consolidate/ConsolidatorGC.js");
+    const count = async () => (await dbWriteFailuresTotal.get()).values
+      .find(v => v.labels.operation === "stale_importance")?.value ?? 0;
+    const before = await count();
+    failStale    = true;
+    try {
+      assert.equal(await new ConsolidatorGC().calibrateByFeedback(), 0);
+    } finally {
+      failStale = false;
+    }
+    assert.equal(await count() - before, 1);
   });
 });
