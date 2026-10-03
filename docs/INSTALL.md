@@ -205,6 +205,21 @@ SELECT c.relname, i.indisvalid, i.indisready
 
 운영 DB의 전환 절차와 되돌리기는 [operations/online-migration.md](operations/online-migration.md#중복-판정-범위-전환)에 있다.
 
+### migration-053 ~ 060 이후 단계
+
+migration-053 ~ 060은 열과 표를 더하며 대형 표의 색인은 마이그레이션 파일이 아니라 `scripts/ops/online-index.mjs`가 만든다. 새 설치는 마이그레이션 뒤 다음을 실행한다. 빈 표에서는 즉시 끝난다.
+
+```bash
+node scripts/ops/online-index.mjs --dry-run --index idx_fragments_content_tokens
+PGHOST=<호스트> PGDATABASE=<DB> PGUSER=<사용자> PGPASSWORD=<비밀번호> \
+  node scripts/ops/online-index.mjs --confirm --index idx_fragments_content_tokens --data-dir <데이터 디렉터리>
+```
+
+`content_tokens`의 GIN 색인이 유효해지기 전에는 `recall`의 본문 어휘 채널이 참여하지 않는다. 기존 설치는 이어서 `scripts/backfill-content-tokens.mjs --confirm`(기존 행의 토큰), `scripts/ops/backfill-key-secrets.mjs --confirm`(키 비밀 이관)을 실행하고, 배포 전에 `scripts/grant-anchor-permission.js --apply`로 앵커를 쓰는 키에 `anchor` 권한을 준다.
+
+관리자 계정(비밀번호와 TOTP 로그인)을 쓰려면 TOTP 비밀 봉인 키 `MEMENTO_ADMIN_SEAL_KEY`(32바이트, base64 또는 64자 hex)를 먼저 설정한다. 예: `openssl rand -hex 32`의 출력. 이 값은 서버 환경 변수와 오프라인 사본에만 두고 저장소나 로그에 쓰지 않는다. 계정이 없으면 마스터 키 로그인만 동작하며, 첫 owner는 마스터 키로 `POST /v1/internal/model/nothing/admin-users/bootstrap`을 불러 만든다. 순서와 되돌리기는 [operations/online-migration.md](operations/online-migration.md#migration-053--060-배포-순서)에 있다.
+
+
 > **migration-007 재실행**: `EMBEDDING_DIMENSIONS`를 변경하거나 임베딩 제공자를 전환한 경우, `scripts/post-migrate-flexible-embedding-dims.js`를 재실행하면 `fragments`, `morpheme_dict`, `fragment_synthetic_query` 테이블의 벡터 차원이 동시에 갱신된다.
 
 > **migration-034-v2.16.0 CONCURRENTLY 옵션**: migration-034-v2.16.0-bundle은 트랜잭션 내에서 실행되므로 `CREATE UNIQUE INDEX`를 사용한다. 수백만 건 이상의 대규모 운영 테이블에서 잠금 최소화가 필요한 경우, `npm run migrate` 실행 전에 아래 두 문을 수동으로 실행하면 IF NOT EXISTS 가드에 의해 자동 실행 시 안전하게 SKIP된다.
@@ -383,6 +398,9 @@ LLM_FALLBACKS                 - JSON 배열. 각 원소: {"provider":"anthropic"
 MEMENTO_REMEMBER_ATOMIC       - true로 설정 시 remember() quota 체크+INSERT를 단일 트랜잭션으로 원자화 (기본: false)
 MEMENTO_CASE_BACKPROP_ENABLED - true로 설정 시 CaseRewardBackprop 활성화 — case_id 단위 reward 역전파 (기본: false)
 MEMENTO_STORAGE               - 저장소 백엔드 이름. 현재 pgvector 하나이며 이 값은 동작에 영향을 주지 않는다
+MEMENTO_ADMIN_SEAL_KEY        - 관리자 계정 TOTP 비밀 봉인 키(32바이트, base64 또는 64자 hex). 미설정이면 TOTP 등록을 시작하지 않는다
+MEMENTO_ANCHOR_PERMISSION     - 앵커 지정 권한 집행 (off, warn, enforce. 기본: warn)
+MEMENTO_WORKSPACE_READ_AUTHZ  - 읽기 경로 workspace 허가 (off, warn, enforce. 기본: warn)
 MEMENTO_CONFIG_STRICT         - true로 설정 시 숫자·열거·불리언 환경 변수의 값 문제가 있으면 기동 시 종료 코드 78로 멈춘다 (기본: false, 문제는 기동 로그 한 줄로 기록)
 MEMENTO_HEALTH_READY_DB_TIMEOUT_MS - /health/ready의 DB 확인 상한 (기본: 2000)
 MEMENTO_SHUTDOWN_DEADLINE_MS  - 종료 절차 전체 상한 (기본: 60000, 0은 상한 없음)
@@ -512,6 +530,8 @@ node server.js
 상세 설정은 [Claude Code Configuration](getting-started/claude-code.md)을 참고한다.
 
 ## 훅 기반 Context 자동 로드
+
+서버의 훅 엔드포인트(`POST /hooks/{client}/{event}`)와 `anchormind hook`, 플러그인(`anchormind init --target claude|codex`)을 쓰면 아래 curl 훅 없이 세션 시작 주입과 세션 종료 회고를 걸 수 있다. 설정은 [훅 설정](getting-started/hooks.md)과 [플러그인 설치](getting-started/plugins.md)에 있다. 아래는 `context`를 직접 호출하는 방식이다.
 
 memento-mcp는 `initialize` 응답의 `instructions` 필드에서 AI에게 기억 도구를 적극 사용하도록 권장하지만, 이것만으로는 세션 시작 시 과거 기억이 자동으로 주입되지 않는다. Claude Code 훅을 이용하면 AI가 매 세션마다 관련 기억을 능동적으로 불러오도록 강제할 수 있다.
 

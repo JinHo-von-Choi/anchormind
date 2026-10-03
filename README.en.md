@@ -92,6 +92,7 @@ npm run migrate
 - `npm run migrate` automatically reads DB settings from `.env`. No need to pass `DATABASE_URL` manually.
 - pgvector schema is auto-detected. `PGVECTOR_SCHEMA` is usually not needed.
 - For an update that includes migrations, take a backup with `scripts/ops/backup.sh --label pre-migration` before `npm run migrate`. On a production database with many rows, build the migration-050 indexes with `scripts/ops/online-index.mjs` before `npm run migrate`, and after the deployment finish the duplicate detection scope switch with `node scripts/ops/finish-dedup-scope.mjs --confirm` ([docs/operations/online-migration.md](docs/operations/online-migration.md#중복-판정-범위-전환), Korean).
+- For an update that includes migrations 053 to 060, grant the `anchor` permission with `scripts/grant-anchor-permission.js --apply` to the keys that write anchors before deploying. Build the `case_events(source_fragment_id)` index with `scripts/ops/online-index.mjs` before the migration and the `content_tokens` GIN index after it, then run `backfill-content-tokens.mjs` and `scripts/ops/backfill-key-secrets.mjs --confirm`. Set `MEMENTO_ADMIN_SEAL_KEY` before using admin accounts. The order and rollback are in [docs/operations/online-migration.md](docs/operations/online-migration.md#rollout-order-for-migrations-053-to-060).
 
 ### Claude Code Integration
 
@@ -191,6 +192,18 @@ See [integration guides](docs/getting-started/) for platform-specific setup.
 | Recall budget selection | Candidates, linked fragments included, receive the final score before selection within `tokenBudget` (`MEMENTO_RANK_BEFORE_BUDGET`). |
 | Export and import | Export writes format version 2 JSONL (all fragment columns, links, revision history); import writes through the same write gate under a chosen target key. Compatibility rules are in [docs/api-versioning.en.md](docs/api-versioning.en.md). |
 | Transactional outbox | Events are recorded inside the changing transaction, and a worker delivers them to per-topic handlers with `SKIP LOCKED` claims, retries, dead-letter and retention cleanup (`MEMENTO_OUTBOX`). |
+| Content lexical channel | Morpheme tokens of the content (`fragments.content_tokens`) are searched through a GIN index and added to the text search candidates of `recall`. Text alone finds fragments on paths where embeddings are off (`MEMENTO_LEXICAL_CHANNEL`). |
+| Answer pack and context annotation | `recall` with `format: "pack"` returns citable blocks carrying source and saved date, and `context` injection lines carry the saved date and the assertion status (`MEMENTO_CONTEXT_ANNOTATE`). |
+| Provenance and trust tiers | The `origin` claim of `remember` and the key ceiling set the `trust_tier` (0 to 3) of a fragment. Tier 1 and below is left out of ANCHOR and CORE injection, and `recall` responses carry the origin (`MEMENTO_PROVENANCE`). |
+| Review queue | Instruction override phrases, low tier anchors, preferences and procedures, and anchor requests without permission are stored as pending review instead of being rejected. The admin API approves or rejects them and a pending item with no decision is rejected after 30 days (`MEMENTO_REVIEW_QUEUE`). |
+| Forget cascade | `forget` removes the target fragment together with the content copies in case summaries and contradiction resolution records derived from it, in the same transaction (`MEMENTO_FORGET_CASCADE`). |
+| LLM egress policy | A per key and per workspace `egress_policy` filters the providers of external LLM calls, masks the content that leaves, and audits each transfer (`MEMENTO_EGRESS_POLICY`). |
+| Audit hash chain | Admin changes, admin authentication, memory writes, anchors, gate rejections, review decisions and external transfers are recorded in a hash chained table. Query and verify them through the admin API, the admin console and `anchormind audit verify` (`MEMENTO_AUDIT_DB`). |
+| Anchor permission and read authorization | Setting an anchor requires the `anchor` permission and a per key cap (`MEMENTO_ANCHOR_PERMISSION`); the target workspace of read tools is judged by the key's `allowed_workspaces` (`MEMENTO_WORKSPACE_READ_AUTHZ`). |
+| Admin capabilities and accounts | A route table declares the required capability of every admin API route and role presets (owner, admin, reviewer, auditor, viewer, service) decide access. Admin accounts sign in with a password and TOTP and use DB sessions (`MEMENTO_ADMIN_USERS`). `GET /me` shows the capabilities and range of the caller. |
+| API key lifecycle | Keys carry an expiry, allowed address ranges, owner and kind, and are rotated with an overlap period, revoked, and signed off in access reviews through the admin API and console. Key secrets live in `api_key_secrets`. |
+| Harness hooks and plugins | `POST /hooks/{client}/{event}` and `anchormind hook` inject session start context and run the session end retrospective for Claude Code and Codex. `anchormind init --target claude\|codex` creates the plugin (`MEMENTO_HOOK_ENDPOINTS`). Installation is in [docs/getting-started/plugins.en.md](docs/getting-started/plugins.en.md). |
+| Expired fragment GC throughput | Expired fragment cleanup repeats 100 row chunks up to a per cycle cap and a time budget (`MEMENTO_GC_THROUGHPUT`). |
 | Migration lint | `npm run lint:migrations` checks new migration files for numbering conflicts and convention violations before commit. |
 
 See [SKILL.md](SKILL.md) for the full list of MCP tools.
@@ -225,7 +238,7 @@ memento-mcp recall "query" --format table --limit 5
 memento-mcp remember "content" --topic project --idempotency-key k1
 ```
 
-`--format table|json|csv` selects the output format; all 16 subcommands support `--help` / `-h`. See [docs/cli.md](docs/cli.md) for the full flag reference.
+`--format table|json|csv` selects the output format; all 20 subcommands support `--help` / `-h`. See [docs/cli.md](docs/cli.md) for the full flag reference.
 
 ## API Response Meta
 
@@ -266,6 +279,10 @@ Successful `remember` / `amend` / `forget` responses carry a `feedback_sampled` 
 - Session ID: `MEMENTO_SESSION_ID_POLICY` (`warn`, `enforce`, default `warn`) governs query-string session IDs and recovery of IDs that are not in the server-issued format (UUID). `enforce` answers 400 for a query-string ID and 404 for recovery of a non-UUID ID.
 - Reserved agent IDs: `MEMENTO_RESERVED_AGENT_IDS` (`warn`, `enforce`, default `warn`) sets the handling of the internal agent IDs (`system`, `admin`) in API-key requests. `enforce` rejects them with FORBIDDEN (-32001); the master key is allowed.
 - Audit records: tool-call audit records carry the actor (`key=`, `sid=` first 8 characters, `ip=`), and admin API mutating requests (anything but GET) plus admin authentication successes and failures are recorded as `admin_auth` and `admin <METHOD> <path>`. With `MEMENTO_ADMIN_AUTH_BACKOFF=on`, after 5 consecutive failed admin authentications the next attempt is delayed up to 60 seconds, and during the delay even the correct key receives 429 (`Retry-After`) (default `off`).
+- Admin capabilities: the admin API judges the required capability of each route from the route table and a path missing from the table is owner only. Admin accounts sign in with a password and TOTP (required for owner and admin), and their session cookies use SameSite=Strict and a double submit CSRF check. Master key sign in remains as the emergency path.
+- Anchors and read authorization: setting an anchor is judged by the `anchor` permission (`MEMENTO_ANCHOR_PERMISSION`) and the workspace of read tools by `allowed_workspaces` (`MEMENTO_WORKSPACE_READ_AUTHZ`). Both default to `warn` and reject with `enforce`.
+- Provenance and review: the `origin` and `trust_tier` of a fragment keep low trust content out of ANCHOR and CORE injection, and instruction override phrases go to the review queue.
+- Key lifecycle: expiry, allowed address ranges, rotation and revocation are supported, and the sessions of a revoked key close at once.
 - Common response headers: every response carries `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`; `MEMENTO_FRAME_OPTIONS=deny` adds `X-Frame-Options: DENY`. HSTS belongs to the TLS-terminating reverse proxy.
 
 ## Symbolic Verification Layer
@@ -330,6 +347,8 @@ AnchorMind is optimized for fact caching. When narrative context matters:
 | [Configuration](docs/configuration.en.md) | Environment variables, MEMORY_CONFIG, embedding providers |
 | [API Reference](docs/api-reference.en.md) | HTTP endpoints, prompts, resources |
 | [CLI](docs/cli.en.md) | Terminal commands |
+| [Admin Console Guide](docs/admin-console-guide.md) | Console screens, admin accounts, key lifecycle, audit log (Korean) |
+| [Hooks and Plugins](docs/getting-started/plugins.en.md) | Claude Code and Codex plugins and hook setup |
 | [API and Export Version Policy](docs/api-versioning.en.md) | Compatibility rules for the protocol, tool schemas, admin API, schema and export format |
 | [Internals](docs/internals.en.md) | Evaluator, consolidator, contradiction detection |
 | [Benchmark](docs/benchmark.en.md) | Full LongMemEval-S benchmark analysis |
@@ -350,6 +369,7 @@ AnchorMind is optimized for fact caching. When narrative context matters:
 - Migration lint: `npm run lint:migrations` checks numbering conflicts and convention violations before commit.
 - Backup and restore drill: `scripts/ops/backup.sh` (`pg_dump` of the agent_memory schema, 14 days kept by default) and `scripts/ops/restore-verify.mjs` (restores into a disposable test server and compares with the manifest). Procedures are in [docs/operations/backup-restore.md](docs/operations/backup-restore.md) (Korean).
 - Large table indexes: `scripts/ops/online-index.mjs` builds the indexes of the work list without blocking writes (`--dry-run`, `--confirm`). Procedures are in [docs/operations/online-migration.md](docs/operations/online-migration.md) (Korean).
+- Audit verification: `anchormind audit verify` recomputes the audit hash chain (exit code 1 when broken). Emergency recovery of admin accounts is `anchormind admin recover --confirm`.
 - Switch report: `npm run switches` prints the applied value, default and state of every feature switch as a table; `--strict` exits with code 1 when a switch has an invalid value.
 - Operations guides: [docs/operations/](docs/operations/) covers the LLM provider chain, symbolic hard gate, agent worktree, upstream porting and more.
 - External access check: follow the "외부 노출 점검" procedure in `docs/operations/maintenance.md` to verify the listen address, access key, and Origin allowlist state.

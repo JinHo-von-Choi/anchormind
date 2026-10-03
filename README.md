@@ -92,6 +92,7 @@ npm run migrate
 - `npm run migrate`는 `.env`의 DB 설정을 자동으로 사용한다. `DATABASE_URL` 수동 지정 불필요.
 - pgvector 스키마는 자동 감지된다. `PGVECTOR_SCHEMA` 설정은 대부분 불필요.
 - 마이그레이션이 포함된 업데이트는 `npm run migrate` 전에 `scripts/ops/backup.sh --label pre-migration`으로 백업한다. 행이 많은 운영 DB는 migration-050의 색인을 `npm run migrate`보다 먼저 `scripts/ops/online-index.mjs`로 만들고, 배포 뒤 `node scripts/ops/finish-dedup-scope.mjs --confirm`으로 중복 판정 범위 전환을 마친다([docs/operations/online-migration.md](docs/operations/online-migration.md#중복-판정-범위-전환)).
+- migration-053 ~ 060이 포함된 업데이트는 배포 전에 `scripts/grant-anchor-permission.js --apply`로 앵커를 쓰는 키에 `anchor` 권한을 주고, `case_events(source_fragment_id)` 색인은 마이그레이션 전에, `content_tokens` GIN 색인은 마이그레이션 뒤에 `scripts/ops/online-index.mjs`로 만들고, 이어서 `backfill-content-tokens.mjs`와 `scripts/ops/backfill-key-secrets.mjs --confirm`을 실행한다. 관리자 계정을 쓰려면 `MEMENTO_ADMIN_SEAL_KEY`를 먼저 설정한다. 순서와 되돌리기는 [docs/operations/online-migration.md](docs/operations/online-migration.md#migration-053--060-배포-순서)에 있다.
 
 ### Claude Code 연동
 
@@ -191,6 +192,18 @@ Claude.ai Web / ChatGPT 연동은 OAuth를 사용한다. 발급한 API 키(`mmcp
 | recall 예산 선택 | 연결 파편을 포함한 후보에 최종 점수를 매긴 뒤 `tokenBudget` 안에서 고른다(`MEMENTO_RANK_BEFORE_BUDGET`). |
 | 내보내기와 가져오기 | 형식 버전 2 JSONL(파편 전체 열, 링크, 수정 이력)을 내보내고, 가져오기는 대상 키를 정해 같은 쓰기 관문으로 기록한다. 호환 규칙은 [docs/api-versioning.md](docs/api-versioning.md). |
 | 트랜잭션 outbox | 변경 트랜잭션 안에서 이벤트를 기록하고 작업자가 `SKIP LOCKED` 점유로 topic별 처리기에 전달한다. 재시도, dead-letter, 보존 정리 포함(`MEMENTO_OUTBOX`). |
+| 본문 어휘 채널 | 본문의 형태소 토큰(`fragments.content_tokens`)을 GIN 색인으로 전문 검색해 `recall`의 text 검색 후보에 더한다. 임베딩이 꺼진 경로에서도 text만으로 찾는다(`MEMENTO_LEXICAL_CHANNEL`). |
+| 답 꾸러미와 맥락 주석 | `recall`의 `format: "pack"`은 출처와 저장일이 붙은 인용 가능한 블록 묶음을 돌려주고, `context` 주입 줄은 저장일과 assertion 주석을 붙인다(`MEMENTO_CONTEXT_ANNOTATE`). |
+| 출처와 신뢰 등급 | `remember`의 `origin` 주장과 키 상한으로 파편의 `trust_tier`(0~3)를 정한다. 등급 1 이하는 ANCHOR와 CORE 주입에서 빠지고, `recall` 응답에 출처가 실린다(`MEMENTO_PROVENANCE`). |
+| 검토 대기열 | 에이전트 지시 덮어쓰기 문구, 낮은 등급의 앵커와 preference와 procedure, 무권한 앵커 요청은 거부하지 않고 검토 대기로 저장한다. 관리 API로 승인하거나 거절하며 30일 미결정은 자동 거절된다(`MEMENTO_REVIEW_QUEUE`). |
+| 연쇄 삭제 | `forget`이 대상 파편과 그 파편을 출처로 한 사례 요약, 모순 해소 기록의 본문 사본을 같은 트랜잭션에서 지운다(`MEMENTO_FORGET_CASCADE`). |
+| LLM 외부 전송 정책 | 키와 workspace별 `egress_policy`로 외부 LLM 호출의 제공자를 거르고, 외부로 나가는 본문을 마스킹하며 전송을 감사한다(`MEMENTO_EGRESS_POLICY`). |
+| 감사 해시 체인 | 관리 변경, 관리 인증, 기억 쓰기, 앵커, 관문 거부, 검토 결정, 외부 전송을 해시 체인 표로 남긴다. 관리 API, 관리 콘솔, `anchormind audit verify`로 조회하고 검증한다(`MEMENTO_AUDIT_DB`). |
+| 앵커 권한과 읽기 허가 | 앵커 지정은 `anchor` 권한과 키별 상한으로 제한하고(`MEMENTO_ANCHOR_PERMISSION`), 읽기 도구의 대상 workspace는 키의 `allowed_workspaces`로 판정한다(`MEMENTO_WORKSPACE_READ_AUTHZ`). |
+| 관리 권한과 관리자 계정 | 관리 API 라우트마다 요구 능력을 선언한 표와 역할 프리셋(owner, admin, reviewer, auditor, viewer, service)으로 판정하고, 비밀번호와 TOTP로 로그인하는 관리자 계정과 DB 세션을 둔다(`MEMENTO_ADMIN_USERS`). `GET /me`가 주체의 능력과 범위를 보여 준다. |
+| API 키 수명 | 키의 만료 시각, 허용 주소 대역, 소유자, 종류를 두고 겹침 기간이 있는 회전, 폐기, 접근 검토 서명을 관리 API와 콘솔로 한다. 키 비밀은 `api_key_secrets`에 따로 둔다. |
+| 하네스 훅과 플러그인 | `POST /hooks/{client}/{event}`와 `anchormind hook`이 Claude Code, Codex의 세션 시작 맥락 주입과 세션 종료 회고를 건다. `anchormind init --target claude\|codex`가 플러그인을 만든다(`MEMENTO_HOOK_ENDPOINTS`). 설치는 [docs/getting-started/plugins.md](docs/getting-started/plugins.md). |
+| 만료 GC 처리량 | 만료 파편 정리가 100건 청크를 주기당 상한과 시간 예산까지 반복한다(`MEMENTO_GC_THROUGHPUT`). |
 | 마이그레이션 lint | `npm run lint:migrations`로 신규 마이그레이션 파일의 번호 충돌·규약 위반을 커밋 전 자동 검사. |
 
 전체 MCP 도구 목록은 [SKILL.md](SKILL.md) 참조.
@@ -227,7 +240,7 @@ memento-mcp recall "query" --format table --limit 5
 memento-mcp remember "내용" --topic 프로젝트명 --idempotency-key k1
 ```
 
-`--format table|json|csv` 출력 형식 선택, 16개 서브명령에 `--help`/`-h` 지원. 자세한 플래그는 [docs/cli.md](docs/cli.md).
+`--format table|json|csv` 출력 형식 선택, 20개 서브명령에 `--help`/`-h` 지원. 자세한 플래그는 [docs/cli.md](docs/cli.md).
 
 ## API 응답 메타
 
@@ -268,6 +281,10 @@ memento-mcp remember "내용" --topic 프로젝트명 --idempotency-key k1
 - 세션 ID: `MEMENTO_SESSION_ID_POLICY`(`warn`, `enforce`, 기본 `warn`)가 쿼리스트링 세션 ID와 서버 발급 형식(UUID)이 아닌 ID의 복구를 다룬다. `enforce`는 쿼리 ID에 400, UUID가 아닌 ID의 복구에 404를 돌려준다.
 - 예약 agentId: `MEMENTO_RESERVED_AGENT_IDS`(`warn`, `enforce`, 기본 `warn`)가 내부 작업 전용 agentId(`system`, `admin`)를 API 키 요청에서 쓸 때의 처리를 정한다. `enforce`는 FORBIDDEN(-32001)으로 거부하며 master 키는 허용한다.
 - 감사 기록: 도구 호출 감사 기록에 행위자(`key=`, `sid=` 앞 8자, `ip=`)가 붙고, 관리 API의 변경 요청(GET 제외)과 관리 인증의 성공과 실패가 `admin_auth`, `admin <METHOD> <path>` 기록으로 남는다. `MEMENTO_ADMIN_AUTH_BACKOFF=on`이면 관리 인증이 연속 5회 실패한 뒤 다음 시도를 최대 60초까지 늦추고, 지연 중에는 올바른 키도 429(`Retry-After`)를 받는다(기본 `off`).
+- 관리 권한: 관리 API는 요청마다 라우트 표의 요구 능력을 판정하고 표에 없는 경로는 owner만 쓴다. 관리자 계정은 비밀번호와 TOTP(owner, admin은 필수)로 로그인하며 세션 쿠키는 SameSite=Strict와 이중 제출 CSRF 확인을 쓴다. 마스터 키 로그인은 비상 경로로 남는다.
+- 앵커와 읽기 허가: 앵커 지정은 `anchor` 권한(`MEMENTO_ANCHOR_PERMISSION`), 읽기 도구의 workspace는 `allowed_workspaces`(`MEMENTO_WORKSPACE_READ_AUTHZ`)로 판정한다. 둘 다 기본 `warn`이며 `enforce`로 거부한다.
+- 출처와 검토: 파편의 `origin`과 `trust_tier`로 낮은 신뢰의 내용이 ANCHOR와 CORE 주입에 들어가지 않게 하고, 지시 덮어쓰기 문구는 검토 대기열로 보낸다.
+- 키 수명: 만료, 허용 주소 대역, 회전, 폐기를 지원하며 폐기한 키의 세션은 바로 닫힌다.
 - 응답 공통 헤더: 모든 응답에 `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`를 붙인다. `MEMENTO_FRAME_OPTIONS=deny`이면 `X-Frame-Options: DENY`도 붙인다. HSTS는 TLS를 종단하는 리버스 프록시에서 설정한다.
 
 ## Symbolic Verification Layer
@@ -337,9 +354,13 @@ lib/
     processors/  # facade — MemoryRecaller, MemoryReflector 등
     transfer/    # 내보내기와 가져오기 (exportFormat, ImportRunner 등)
   outbox/        # 트랜잭션 outbox 기록과 작업자
+  admin/         # 관리 API(키 수명, 검토 대기열, 감사, 관리자 계정, 관리 권한 표)
+  hooks/         # 하네스 훅 계약, 주입 본문, 회고 소비자
+  logging/       # 감사 파일 로그, 감사 해시 체인(AuditStore)
   security/      # 민감 정보 규칙 표와 스캐너
   llm/           # dispatchChain, provider 구현체
   symbolic/      # 설명 가능성, 링크 무결성, 정책 규칙 (opt-in)
+integrations/       # Claude Code, Codex 플러그인 원본
 docs/
   getting-started/   # 플랫폼별 설치 가이드
   operations/        # 운영 가이드 (llm-providers, symbolic-hard-gate 등)
@@ -356,6 +377,8 @@ docs/
 | [Configuration](docs/configuration.md) | 환경 변수, MEMORY_CONFIG, 임베딩 Provider |
 | [API Reference](docs/api-reference.md) | HTTP 엔드포인트, 프롬프트, 리소스 |
 | [CLI](docs/cli.md) | 터미널 명령어 |
+| [관리자 콘솔 사용 안내](docs/admin-console-guide.md) | 콘솔 화면, 관리자 계정, 키 수명, 감사 로그 |
+| [훅과 플러그인](docs/getting-started/plugins.md) | Claude Code, Codex 플러그인과 훅 설정 |
 | [API와 export 버전 정책](docs/api-versioning.md) | 프로토콜, 도구 스키마, 관리 API, 스키마, export 형식의 호환 규칙 |
 | [Internals](docs/internals.md) | 평가기, 통합기, 모순 탐지 |
 | [Benchmark](docs/benchmark.md) | LongMemEval-S 벤치마크 상세 분석 |
@@ -376,6 +399,7 @@ docs/
 - 마이그레이션 lint: `npm run lint:migrations`로 번호 충돌 및 규약 위반을 커밋 전 검사.
 - 백업과 복구 훈련: `scripts/ops/backup.sh`(agent_memory 스키마 `pg_dump`, 기본 14일 보관)와 `scripts/ops/restore-verify.mjs`(일회용 시험 서버에 복원해 매니페스트와 대조). 절차는 [docs/operations/backup-restore.md](docs/operations/backup-restore.md).
 - 대형 표 색인: `scripts/ops/online-index.mjs`가 작업 목록의 색인을 쓰기를 막지 않고 만든다(`--dry-run`, `--confirm`). 절차는 [docs/operations/online-migration.md](docs/operations/online-migration.md).
+- 감사 검증: `anchormind audit verify`가 감사 해시 체인을 다시 계산한다(끊기면 종료 코드 1). 관리자 계정의 비상 복구는 `anchormind admin recover --confirm`이다.
 - 스위치 보고: `npm run switches`가 기능 스위치의 적용 값, 기본값, 상태를 표로 출력하고, `--strict`는 값이 잘못된 스위치가 있으면 종료 코드 1로 끝난다.
 - 운영 가이드: [docs/operations/](docs/operations/) — LLM provider 체인, symbolic hard gate, agent worktree, upstream porting 등.
 - 외부 노출 점검: `docs/operations/maintenance.md`의 "외부 노출 점검" 절차로 listen 주소, 인증 키, Origin allowlist 상태를 확인.

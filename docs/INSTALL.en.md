@@ -328,6 +328,21 @@ SELECT c.relname, i.indisvalid, i.indisready
 
 The production rollout and its rollback are described in [operations/online-migration.md](operations/online-migration.md#중복-판정-범위-전환).
 
+### Steps after migrations 053 to 060
+
+Migrations 053 to 060 add columns and tables. Indexes on large tables are not part of the migration files; `scripts/ops/online-index.mjs` builds them. A new installation runs the following after the migration. It finishes at once on empty tables.
+
+```bash
+node scripts/ops/online-index.mjs --dry-run --index idx_fragments_content_tokens
+PGHOST=<host> PGDATABASE=<db> PGUSER=<user> PGPASSWORD=<password> \
+  node scripts/ops/online-index.mjs --confirm --index idx_fragments_content_tokens --data-dir <data directory>
+```
+
+The content lexical channel of `recall` does not take part until the GIN index on `content_tokens` is valid. An existing installation then runs `scripts/backfill-content-tokens.mjs --confirm` (tokens of existing rows) and `scripts/ops/backfill-key-secrets.mjs --confirm` (key secret transfer), and before deploying grants the `anchor` permission with `scripts/grant-anchor-permission.js --apply` to the keys that write anchors.
+
+To use admin accounts (password and TOTP sign in), set the TOTP secret sealing key `MEMENTO_ADMIN_SEAL_KEY` first (32 bytes, base64 or 64 hex characters, for example the output of `openssl rand -hex 32`). Keep the value only in the server environment and an offline copy, never in the repository or logs. Without accounts only the master key signs in, and the first owner is created by calling `POST /v1/internal/model/nothing/admin-users/bootstrap` with the master key. The order and rollback are in [operations/online-migration.md](operations/online-migration.md#rollout-order-for-migrations-053-to-060).
+
+
 > **Re-running migration-007**: If you change `EMBEDDING_DIMENSIONS` or switch embedding providers, re-run `scripts/post-migrate-flexible-embedding-dims.js` to update the vector column dimensions in the `fragments`, `morpheme_dict`, and `fragment_synthetic_query` tables simultaneously.
 
 Since v1.8.0, automatic migration is supported. Instead of running each file manually:
@@ -473,6 +488,9 @@ LLM_FALLBACKS                 - JSON array of fallback providers: [{"provider":"
 MEMENTO_REMEMBER_ATOMIC       - When true, atomizes quota check + INSERT in remember() into a single transaction to eliminate TOCTOU (default: false)
 MEMENTO_CASE_BACKPROP_ENABLED - When true, enables CaseRewardBackprop — reward back-propagation per case_id (default: false)
 MEMENTO_STORAGE               - Storage backend name. Currently pgvector only; this value does not affect behavior
+MEMENTO_ADMIN_SEAL_KEY        - TOTP secret sealing key of admin accounts (32 bytes, base64 or 64 hex characters). Without it TOTP enrollment does not start
+MEMENTO_ANCHOR_PERMISSION     - Anchor permission enforcement (off, warn, enforce. Default: warn)
+MEMENTO_WORKSPACE_READ_AUTHZ  - Read path workspace authorization (off, warn, enforce. Default: warn)
 MEMENTO_CONFIG_STRICT         - When true, a problem in a numeric, enum or boolean environment variable stops startup with exit code 78 (default: false; problems are logged as one startup line)
 MEMENTO_HEALTH_READY_DB_TIMEOUT_MS - Upper bound of the DB check behind /health/ready (default: 2000)
 MEMENTO_SHUTDOWN_DEADLINE_MS  - Upper bound of the whole shutdown sequence (default: 60000, 0 means no bound)
@@ -597,6 +615,8 @@ See [Claude Code Configuration](getting-started/claude-code.md) for the dedicate
 For external access, expose the service through a reverse proxy (TLS termination, rate limiting). Do not publish internal host addresses or port numbers in external documentation.
 
 ## Hook-Based Context Loading
+
+The server hook endpoints (`POST /hooks/{client}/{event}`), `anchormind hook` and the plugins (`anchormind init --target claude|codex`) set up session start injection and the session end retrospective without the curl hook below. See [Hooks](getting-started/hooks.en.md) and [Plugin Install](getting-started/plugins.en.md). The following calls `context` directly.
 
 AnchorMind's `instructions` field encourages the AI to use memory tools actively, but this alone doesn't automatically inject past memories at session start. With Claude Code hooks, you can ensure the AI loads relevant context at the beginning of every session.
 
