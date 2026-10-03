@@ -14,12 +14,13 @@
  * inspect, update, export, import, completion, session, benchmark, anchor-scope, hook, init.
  */
 import { parseArgs } from '../lib/cli/parseArgs.js';
+import { resolveHookRemote } from '../lib/cli/_remoteSettings.js';
 
 /**
  * 현재 디렉터리의 .env를 불러오지 않는 명령.
  * hook은 하네스가 작업 중인 저장소를 cwd로 두고 실행하므로 cwd의 .env를 읽지 않는다. 저장소의 .env가 서버 주소나
- * 키를 바꾸면 API 키와 대화 발췌가 그 주소로 간다. hook의 서버 주소와 키는 명령 인자나 프로세스 환경 변수
- * (MEMENTO_CLI_REMOTE, MEMENTO_CLI_KEY)에서만 읽는다. init은 서버 설정이 필요 없고 .env를 읽지 않는다.
+ * 키를 바꾸면 API 키와 대화 발췌가 그 주소로 간다. hook의 서버 주소와 키는 명령 인자나 프로세스 환경 변수에서만
+ * 같은 출처의 한 쌍으로 읽는다(hookRemoteSettings). init은 서버 설정이 필요 없고 .env를 읽지 않는다.
  * 그 밖의 명령은 이전처럼 .env를 읽는다.
  */
 const IS_HOOK                = process.argv[2] === "hook";
@@ -52,12 +53,26 @@ const COMMANDS = {
 const LOCAL_ONLY_COMMANDS = new Set(["serve", "migrate", "cleanup", "backfill", "health", "update", "export", "import", "benchmark", "anchor-scope"]);
 
 /**
- * hook 명령의 서버 주소와 키. 프로세스 환경 변수만 읽는다(.env 파일은 읽지 않는다).
+ * hook 명령의 서버 주소와 키. 프로세스 환경 변수만 읽는다(.env 파일은 읽지 않는다). Claude Code 플러그인
+ * userConfig 쌍(CLAUDE_PLUGIN_OPTION_SERVER_URL, CLAUDE_PLUGIN_OPTION_API_KEY)이 둘 다 있으면 그 쌍을, 아니면
+ * MEMENTO_CLI_REMOTE, MEMENTO_CLI_KEY 쌍을 쓴다. 한쪽만 있는 플러그인 값은 경고와 함께 버린다.
  *
- * @returns {{ remote: string|null, key: string|null }}
+ * @returns {{ remote: string|null, key: string|null, source: string, warning: string|null }}
  */
 function hookRemoteSettings() {
-  return { remote: process.env.MEMENTO_CLI_REMOTE || null, key: process.env.MEMENTO_CLI_KEY || null };
+  return resolveHookRemote(process.env);
+}
+
+/**
+ * 명령별 진입점 의존성. hook은 같은 출처의 주소와 키 한 쌍을, init은 PATH 검색 정보를 받는다.
+ *
+ * @param {string} cmd
+ * @returns {object|undefined}
+ */
+function commandOverrides(cmd) {
+  if (IS_HOOK)        return { remoteSettings: hookRemoteSettings };
+  if (cmd === "init") return { searchPath: process.env.PATH ?? "", pathExt: process.env.PATHEXT ?? "" };
+  return undefined;
 }
 
 /**
@@ -148,7 +163,7 @@ async function main() {
 
   try {
     const mod = await COMMANDS[cmd]();
-    await mod.default(args, IS_HOOK ? { remoteSettings: hookRemoteSettings } : undefined);
+    await mod.default(args, commandOverrides(cmd));
   } catch (err) {
     console.error(`[${cmd}] ${err.message}`);
     if (args.verbose) {
