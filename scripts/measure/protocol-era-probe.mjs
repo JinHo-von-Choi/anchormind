@@ -18,17 +18,23 @@
  * 결과는 JSON 한 개로 표준 출력에 낸다. 기대값과 대조하지 않는다. 운영 포트와 외부 주소에는
  * 접속하지 않는다. Redis는 꺼야 한다.
  *
+ * lib/config.js는 불러올 때 DOTENV_CONFIG_PATH(없으면 .env)의 설정 파일을 읽는다. 이 스크립트는
+ * DOTENV_CONFIG_PATH가 없는 파일이거나 임시 디렉터리(os.tmpdir()) 아래의 파일일 때만 실행하고,
+ * 그 밖이면 설정을 읽기 전에 종료 코드 2로 멈춘다. 임시 서버의 마스터 키는 실행마다 새로 만든
+ * 무작위 값이다(MEMENTO_ACCESS_KEY를 이 프로세스 안에서만 덮어쓴다).
+ *
  * 사용:
- *   DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false \
+ *   DOTENV_CONFIG_PATH=/nonexistent/.env MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false \
  *     node scripts/measure/protocol-era-probe.mjs [--port 18913]
  */
 
-import http from "node:http";
+import crypto         from "node:crypto";
+import { existsSync } from "node:fs";
+import http           from "node:http";
+import os             from "node:os";
+import path           from "node:path";
 
-import { parseArgs }                                    from "../../lib/cli/parseArgs.js";
-import { ACCESS_KEY, REDIS_ENABLED }                    from "../../lib/config.js";
-import { handleMcpPost }                                from "../../lib/handlers/mcp-handler.js";
-import { modernProtocolAttemptsTotal }                  from "../../lib/metrics.js";
+import { parseArgs }                                           from "../../lib/cli/parseArgs.js";
 import { DEFAULT_PROTOCOL_VERSION, PROTOCOL_VERSION_META_KEY } from "../../lib/protocol-versions.js";
 
 const DEFAULT_PORT     = 18913;
@@ -43,6 +49,35 @@ class ProbeConfigError extends Error {
     super(message);
     this.name = "ProbeConfigError";
   }
+}
+
+/**
+ * DOTENV_CONFIG_PATH 값을 검증한다. 없는 파일이거나 임시 디렉터리 아래면 통과한다.
+ *
+ * @param {string|undefined} value
+ * @param {{ exists?: (p: string) => boolean, tmpRoot?: string }} [opts]
+ * @returns {string} 절대 경로
+ */
+export function checkDotenvPath(value, { exists = existsSync, tmpRoot = os.tmpdir() } = {}) {
+  if (!value) throw new ProbeConfigError("DOTENV_CONFIG_PATH must be set to a nonexistent file or a file under the temp directory");
+  const abs     = path.resolve(value);
+  const rel     = path.relative(path.resolve(tmpRoot), abs);
+  const inTemp  = rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+  if (inTemp || !exists(abs)) return abs;
+  throw new ProbeConfigError(`DOTENV_CONFIG_PATH points to an existing settings file outside the temp directory: ${value}`);
+}
+
+/**
+ * 설정 경로를 확인한 뒤 서버 모듈을 불러온다. 마스터 키는 무작위 값으로 둔다.
+ */
+async function loadRuntime(env) {
+  checkDotenvPath(env.DOTENV_CONFIG_PATH);
+  env.MEMENTO_ACCESS_KEY = crypto.randomBytes(24).toString("hex");
+  const { ACCESS_KEY, REDIS_ENABLED }   = await import("../../lib/config.js");
+  if (REDIS_ENABLED) throw new ProbeConfigError("REDIS_ENABLED must be false for the probe");
+  const { handleMcpPost }               = await import("../../lib/handlers/mcp-handler.js");
+  const { modernProtocolAttemptsTotal } = await import("../../lib/metrics.js");
+  return { ACCESS_KEY, handleMcpPost, modernProtocolAttemptsTotal };
 }
 
 /**
@@ -110,8 +145,8 @@ function summarize(res) {
   };
 }
 
-async function legacyFallback(base) {
-  const auth = ACCESS_KEY ? { authorization: `Bearer ${ACCESS_KEY}` } : {};
+async function legacyFallback(base, accessKey) {
+  const auth = { authorization: `Bearer ${accessKey}` };
   const init = await send(base, {
     headers: auth,
     body   : { jsonrpc: "2.0", id: 10, method: "initialize",
@@ -127,13 +162,13 @@ async function legacyFallback(base) {
   };
 }
 
-async function attemptCounts() {
-  const snap = await modernProtocolAttemptsTotal.get();
+async function attemptCounts(counter) {
+  const snap = await counter.get();
   return Object.fromEntries(snap.values.map(v => [v.labels.signal, v.value]));
 }
 
-async function probe(port) {
-  const server = http.createServer((req, res) => handleMcpPost(req, res, process.hrtime.bigint(), { allow: () => true }));
+async function probe(port, rt) {
+  const server = http.createServer((req, res) => rt.handleMcpPost(req, res, process.hrtime.bigint(), { allow: () => true }));
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(port, "127.0.0.1", resolve);
@@ -142,17 +177,18 @@ async function probe(port) {
   try {
     const toolsList = summarize(await send(base, modernRequest("tools/list", 1)));
     const discover  = summarize(await send(base, modernRequest("server/discover", 2)));
-    const fallback  = toolsList.era === "legacy" ? await legacyFallback(base) : null;
-    return { schema: SCHEMA, target: base, modernVersion: MODERN_VERSION, modern: { toolsList, discover }, fallback, attempts: await attemptCounts() };
+    const fallback  = toolsList.era === "legacy" ? await legacyFallback(base, rt.ACCESS_KEY) : null;
+    return { schema: SCHEMA, target: base, modernVersion: MODERN_VERSION, modern: { toolsList, discover }, fallback, attempts: await attemptCounts(rt.modernProtocolAttemptsTotal) };
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
 }
 
 async function main(argv) {
-  const args = parseArgs(argv);
-  if (REDIS_ENABLED) throw new ProbeConfigError("REDIS_ENABLED must be false for the probe");
-  const report = await probe(resolvePort(args.port));
+  const args   = parseArgs(argv);
+  const port   = resolvePort(args.port);
+  const rt     = await loadRuntime(process.env);
+  const report = await probe(port, rt);
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }
 
