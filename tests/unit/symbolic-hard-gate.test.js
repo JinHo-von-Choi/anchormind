@@ -19,6 +19,9 @@
 import { describe, it } from "node:test";
 import assert            from "node:assert/strict";
 
+/** 감사 이벤트 기록은 이 시험의 대상이 아니다. DB에 연결하지 않도록 끈다 */
+process.env.MEMENTO_AUDIT_DB = "off";
+
 /**
  * policy rules 검사가 활성화된 상태에서 내부 컴포넌트를 stub한
  * MemoryManager 인스턴스를 반환한다.

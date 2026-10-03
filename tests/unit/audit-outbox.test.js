@@ -35,6 +35,10 @@ mock.module("../../lib/outbox/Outbox.js", {
     }
   }
 });
+/** 기록 실패 경고는 출력하지 않고 모아 확인한다 */
+const warnings   = [];
+const realLogger = await import("../../lib/logger.js");
+mock.module("../../lib/logger.js", { exports: { ...realLogger, logWarn: (msg) => { warnings.push(String(msg)); } } });
 const realDb = await import("../../lib/tools/db.js");
 mock.module("../../lib/tools/db.js", { exports: { ...realDb, getPrimaryPool: () => fakePool } });
 
@@ -97,12 +101,15 @@ describe("recordAudit", () => {
     failNext = new Error("db down");
     assert.equal(await recordAudit({ action: "memory.link", actor: "system" }), null);
     assert.equal(await counter("memento_audit_enqueue_failed_total"), before + 1);
+    assert.ok(warnings.some((w) => /audit event not recorded \(action=memory\.link\): db down/.test(w)));
   });
 
   it("규칙을 어긴 이벤트는 기록하지 않고 실패로 센다", async () => {
     const before = await counter("memento_audit_enqueue_failed_total");
-    assert.equal(await recordAudit({ action: "memory.remember", detail: { content: "본문" } }), null);
+    assert.equal(await recordAudit({ action: "memory.remember", detail: { content: "SECRET-BODY-VALUE" } }), null);
     assert.equal(enqueued.length, 0);
+    assert.ok(warnings.some((w) => /action=memory\.remember/.test(w)));
+    assert.ok(!warnings.some((w) => w.includes("SECRET-BODY-VALUE")));
     assert.equal(await counter("memento_audit_enqueue_failed_total"), before + 1);
   });
 });

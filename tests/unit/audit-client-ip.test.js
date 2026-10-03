@@ -9,6 +9,9 @@
  */
 import { describe, it, before, after, beforeEach, mock } from "node:test";
 import assert                                            from "node:assert/strict";
+
+/** 감사 이벤트 기록은 이 시험의 대상이 아니다. DB에 연결하지 않도록 끈다 */
+process.env.MEMENTO_AUDIT_DB = "off";
 import http                                              from "node:http";
 import fs                                                from "node:fs";
 import os                                                from "node:os";

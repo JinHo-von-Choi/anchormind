@@ -12,6 +12,9 @@
 import { describe, it, beforeEach, afterEach, after } from "node:test";
 import assert                                                from "node:assert/strict";
 
+/** 감사 이벤트 기록은 이 시험의 대상이 아니다. DB에 연결하지 않도록 끈다 */
+process.env.MEMENTO_AUDIT_DB = "off";
+
 const { MemoryRememberer }   = await import("../../lib/memory/processors/MemoryRememberer.js");
 const { FragmentFactory }    = await import("../../lib/memory/write/FragmentFactory.js");
 const { isGateApproved }     = await import("../../lib/memory/write/gateApproval.js");

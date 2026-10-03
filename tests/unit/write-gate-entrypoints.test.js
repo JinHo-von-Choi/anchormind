@@ -11,6 +11,9 @@
 
 import { describe, it, mock, beforeEach, afterEach, after } from "node:test";
 import assert                                                from "node:assert/strict";
+
+/** 감사 이벤트 기록은 이 시험의 대상이 아니다. DB에 연결하지 않도록 끈다 */
+process.env.MEMENTO_AUDIT_DB = "off";
 import { Readable }                                          from "node:stream";
 
 /** admin 처리기와 AutoReflect가 불러오는 MemoryManager를 대역으로 바꾼다. */

@@ -11,6 +11,9 @@
 import { describe, it, mock, after } from "node:test";
 import assert                         from "node:assert/strict";
 
+/** 감사 이벤트 기록은 이 시험의 대상이 아니다. DB에 연결하지 않도록 끈다 */
+process.env.MEMENTO_AUDIT_DB = "off";
+
 import { BatchRememberProcessor }      from "../../lib/memory/write/BatchRememberProcessor.js";
 import { FragmentFactory }             from "../../lib/memory/write/FragmentFactory.js";
 import { WriteGate }                   from "../../lib/memory/write/WriteGate.js";
