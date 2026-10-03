@@ -8,7 +8,8 @@
  * 소스를 정적으로 읽어 다섯 가지를 본다.
  *
  *   1. 제공자 호출(callJson, callText)은 lib/llm/index.js, lib/llm/LlmProvider.js, lib/llm/providers/ 안에만 있다.
- *   2. 제공자 등록부(lib/llm/registry.js)와 제공자 모듈(lib/llm/providers/)은 lib/llm 안에서만 가져온다.
+ *   2. 제공자 모듈(lib/llm/providers/)과 제공자 생성(registry.js의 createProvider)은 lib/llm 안에서만 가져온다.
+ *      lib/llm 밖은 등록된 이름 목록(listProviderNames)만 가져올 수 있다.
  *   3. dispatchChain의 모든 callJson 호출은 관문의 prepare가 돌려준 sent.prompt, sent.options를 넘기고,
  *      prepare 호출 수는 callJson 호출 수와 같다(호출 직전 확인, EgressPolicy.assertEgressAllowed 경유).
  *   4. llmJson은 openEgressGate로 관문을 열고 egress.filter로 거른 체인을 dispatchChain에 넘긴다.
@@ -76,15 +77,15 @@ describe("LLM 외부 전송 경로 구조", () => {
     assert.deepEqual(offenders, []);
   });
 
-  it("제공자 등록부와 제공자 모듈은 lib/llm 안에서만 가져온다", () => {
+  it("제공자 모듈과 제공자 생성은 lib/llm 안에서만 가져온다", () => {
     const offenders = [];
     for (const [file, scan] of SCANS) {
       if (file.startsWith("lib/llm/")) continue;
       for (const spec of scan.importSpecs) {
-        const target = resolveImport(file, spec.source);
-        if (target && (target === "lib/llm/registry.js" || target.startsWith("lib/llm/providers/"))) {
-          offenders.push(`${file} -> ${spec.source}`);
-        }
+        const target     = resolveImport(file, spec.source);
+        const provider   = target?.startsWith("lib/llm/providers/");
+        const namesOnly  = spec.kind === "named" && spec.imported === "listProviderNames";
+        if (provider || (target === "lib/llm/registry.js" && !namesOnly)) offenders.push(`${file} -> ${spec.source} ${spec.imported ?? spec.kind}`);
       }
     }
     assert.deepEqual(offenders, []);
