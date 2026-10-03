@@ -10,6 +10,7 @@
  *   - GET  /mcp                  : SSE 채널 (서버→클라 알림)
  *   - DELETE /mcp                : 세션 종료
  *   - GET  /sse, POST /message   : 레거시 SSE 호환 채널
+ *   - POST /hooks/{client}/{event}: 하네스 훅(Claude Code, Codex)
  *   - GET  /health, /health/live, /health/ready, /metrics, /openapi.json
  *   - GET  /.well-known/oauth-* : OAuth 2.0 메타데이터 / 동적 클라이언트 등록
  *
@@ -87,6 +88,7 @@ import {
   handleOAuthToken,
   handleOAuthRegister,
   handleSessionRotate,
+  handleHookPost,
   handleAdminUi,
   handleAdminImage,
   handleAdminStatic,
@@ -111,6 +113,12 @@ const HEALTH_ROUTES = new Map([
   ["/health",       handleHealth],
   ["/health/live",  handleLive],
   ["/health/ready", handleReady]
+]);
+
+/** IP 요청 한도를 먼저 적용하는 OAuth POST 경로별 처리기 */
+const IP_LIMITED_OAUTH_POSTS = new Map([
+  ["/token",    handleOAuthToken],
+  ["/register", handleOAuthRegister]
 ]);
 
 /**
@@ -216,31 +224,27 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === "POST" && url.pathname === "/token") {
+  /* POST /token, /register: IP 요청 한도 뒤 OAuth 처리기 */
+  if (req.method === "POST" && IP_LIMITED_OAUTH_POSTS.has(url.pathname)) {
     const clientIp = resolveClientIp(req);
     if (!rateLimiter.allow(clientIp)) {
       res.writeHead(429, { "Retry-After": String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)) });
       res.end(JSON.stringify({ error: "too_many_requests" }));
       return;
     }
-    await handleOAuthToken(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/register") {
-    const clientIp = resolveClientIp(req);
-    if (!rateLimiter.allow(clientIp)) {
-      res.writeHead(429, { "Retry-After": String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)) });
-      res.end(JSON.stringify({ error: "too_many_requests" }));
-      return;
-    }
-    await handleOAuthRegister(req, res);
+    await IP_LIMITED_OAUTH_POSTS.get(url.pathname)(req, res);
     return;
   }
 
   /* POST /session/rotate — 세션 교체 (Phase 1 security-hardening) */
   if (req.method === "POST" && url.pathname === "/session/rotate") {
     await handleSessionRotate(req, res);
+    return;
+  }
+
+  /* POST /hooks/{client}/{event}: 하네스 훅(SessionStart context, Stop과 SessionEnd 회고 접수) */
+  if (req.method === "POST" && url.pathname.startsWith("/hooks/")) {
+    await handleHookPost(req, res, startTime, rateLimiter, url.pathname);
     return;
   }
 

@@ -53,6 +53,7 @@ const RUNTIME = {
   MEMENTO_LOG_STDERR:                       "cfg.logToStderr()",
   MEMENTO_OUTBOX:                           "cfg.outboxEnabled() ? 'on' : 'off'",
   MEMENTO_OUTBOX_WORKER:                    "cfg.outboxWorkerEnabled() ? 'on' : 'off'",
+  MEMENTO_HOOK_ENDPOINTS:                   "cfg.hookEndpointsEnabled() ? 'on' : 'off'",
   REDIS_ENABLED:                            "cfg.REDIS_ENABLED",
   REDIS_SENTINEL_ENABLED:                   "cfg.REDIS_SENTINEL_ENABLED",
   CACHE_ENABLED:                            "cfg.CACHE_ENABLED",

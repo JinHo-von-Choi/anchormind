@@ -38,7 +38,7 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | true, false (any other value is false) | MEMENTO_CONFIG_STRICT |
 | true, false (any other value fails startup in `MEMORY_CONFIG` validation) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (any other value is off) | MEMENTO_ADMIN_AUTH_BACKOFF |
-| on, off (any other value is on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE, MEMENTO_PROVENANCE, MEMENTO_REVIEW_QUEUE |
+| on, off (any other value is on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE, MEMENTO_PROVENANCE, MEMENTO_REVIEW_QUEUE, MEMENTO_HOOK_ENDPOINTS |
 | mask, reject, off (any other value is mask) | MEMENTO_SENSITIVE_SCAN |
 | workspace, key (any other value is workspace) | MEMENTO_DEDUP_SCOPE |
 | true, false (any value other than false is true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
@@ -426,6 +426,27 @@ Rows to discard instead are deleted by id. For topics whose records must be kept
 DELETE FROM agent_memory.outbox_events
  WHERE dead_at IS NOT NULL AND id IN (<id>, ...);
 ```
+
+### Hook endpoints
+
+`POST /hooks/{client}/{event}` is called by Claude Code and Codex hooks. `client` is `claude-code` or `codex`, `event` is `SessionStart`, `Stop` or `SessionEnd`; any other path is 404. Setup examples are in [getting-started/hooks.en.md](getting-started/hooks.en.md).
+
+| Variable | Default | Description |
+|-|-|-|
+| MEMENTO_HOOK_ENDPOINTS | on | Hook endpoint switch. With `off`, requests under `/hooks/` get 404 before authentication. Reflect events already recorded in the outbox are still processed by the consumer with `off` (the consumer is registered regardless of the switch). Read at call time |
+
+Behavior
+
+- Authentication and permissions: `Authorization: Bearer <key>` is checked through the same authentication path as `/mcp`, and failures are counted in `memento_auth_denied_total` as well. Authentication failure is 401; an authentication store outage is 503 when `MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS` is 503. `SessionStart` needs the read permission, `Stop` and `SessionEnd` need write (403).
+- Rate limits: the IP bucket (`RATE_LIMIT_PER_IP`) before authentication and the key bucket (`RATE_LIMIT_PER_KEY`) after it, using the same limiter as `/mcp` (429 with `Retry-After`).
+- Input limits: `Content-Type` must be `application/json` (415), request headers total 8192 bytes (431), body 196608 bytes (413), JSON nesting depth 8 (400), summary candidate `excerpt` 65536 bytes (UTF-8, 413). The body is read after authentication. Response bodies have the form `{ "error": "<code>" }` and never echo the request body.
+- Body fields: `session_id` (required for `Stop` and `SessionEnd`, up to 128 characters of `A-Za-z0-9._:-` starting with a letter or digit), `hook_event_name` (when present it must equal the path event), `source` (optional for `SessionStart`: `startup`, `resume`, `compact`, `clear`, `fork`), `cwd`, `git_remote`, `excerpt` (required for `Stop` and `SessionEnd`). Other fields (`transcript_path` and so on) are not read. The server cannot read the client's transcript file, so the `excerpt` is produced by the local CLI `anchormind hook`. A plain http hook `Stop` or `SessionEnd` without `excerpt` gets 422 (`excerpt_required`); a plain http hook supports `SessionStart` injection only.
+- Workspace: among the candidates normalized from `cwd` and `git_remote` (remote `host/path`, remote repository name, full cwd path, last cwd segment, in this order; all lowercase, credentials, port, scheme and a trailing `.git` removed from the remote, backslashes in cwd turned into slashes), the first value inside the key's `allowed_workspaces` (case-insensitive match, stored spelling) is used. When no candidate matches, the key has no `allowed_workspaces`, or the master key is used, the key's `default_workspace` applies.
+- `SessionStart`: calls `context` with a per-client budget (`claude-code` 2000, `codex` 1500 tokens; Codex hands a file path instead of the text when hook output exceeds about 2500 tokens) and answers 200 with `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}`.
+- `Stop`, `SessionEnd`: masks secrets and personal data in `excerpt` with `SensitiveScanner`, records the event in the outbox (topic `hook.reflect`) and answers 202 with `{"accepted":true}`. With `MEMENTO_SENSITIVE_SCAN=reject` an excerpt with findings is not recorded and the answer is 422 (`sensitive_content`, rule names only). With any other value (including `off`) the masked value is always recorded, so outbox rows never keep raw secrets. Unlike audit events, the payload of this topic carries the masked excerpt text, and processed rows stay for `MEMENTO_OUTBOX_RETENTION_DAYS`. When the outbox is off and nothing is recorded, the answer is 503.
+- Reflect consumer: when the worker delivers a `hook.reflect` event, the consumer confirms the key again (an inactive key or a key without write permission goes to dead-letter without retry), claims the idempotency key (SHA-256 of key, client, session id and event) in `idempotency_records` (tool `hook_reflect`), and runs `reflect` with one episode narrative built from the last assistant block of the excerpt. The same session and event of the same key is reflected once within 30 days. `Stop` runs after every response in Claude Code and Codex, so only the first `Stop` of a session is reflected. When reflect fails the claim is released and the outbox retries. A claim left behind by a process that ended mid-processing is taken over by the next delivery after 5 minutes.
+- Metrics: `memento_hook_calls_total{client,event,outcome}` (client and event outside the allow-list become `other`; outcome is `context`, `accepted`, `not_found`, `invalid`, `sensitive_rejected`, `unauthorized`, `forbidden`, `rate_limited`, `unavailable`, `error`), `memento_hook_reflect_total{outcome}` (`reflected`, `duplicate`, `busy`, `rejected`, `failed`).
+- Logs: only client, event, status code and error name are logged; the excerpt, key and session id are not.
 
 ### Redis
 

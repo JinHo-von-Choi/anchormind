@@ -38,7 +38,7 @@
 | true, false (그 밖의 값은 false) | MEMENTO_CONFIG_STRICT |
 | true, false (그 밖의 값은 `MEMORY_CONFIG` 검증에서 기동 실패) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (그 밖의 값은 off) | MEMENTO_ADMIN_AUTH_BACKOFF |
-| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE, MEMENTO_PROVENANCE, MEMENTO_REVIEW_QUEUE |
+| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE, MEMENTO_PROVENANCE, MEMENTO_REVIEW_QUEUE, MEMENTO_HOOK_ENDPOINTS |
 | mask, reject, off (그 밖의 값은 mask) | MEMENTO_SENSITIVE_SCAN |
 | workspace, key (그 밖의 값은 workspace) | MEMENTO_DEDUP_SCOPE |
 | true, false (false가 아닌 값은 true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
@@ -421,6 +421,27 @@ UPDATE agent_memory.outbox_events
 DELETE FROM agent_memory.outbox_events
  WHERE dead_at IS NOT NULL AND id IN (<id>, ...);
 ```
+
+### 훅 엔드포인트
+
+Claude Code와 Codex의 훅이 부르는 `POST /hooks/{client}/{event}`다. `client`는 `claude-code`, `codex`, `event`는 `SessionStart`, `Stop`, `SessionEnd`이고 그 밖의 경로는 404다. 설정 예시는 [getting-started/hooks.md](getting-started/hooks.md)에 있다.
+
+| 변수 | 기본값 | 설명 |
+|-|-|-|
+| MEMENTO_HOOK_ENDPOINTS | on | 훅 엔드포인트 스위치. `off`이면 `/hooks/` 아래 요청에 인증 전에 404로 응답한다. 이미 outbox에 기록된 회고 이벤트는 `off`여도 소비자가 처리한다(소비자는 스위치와 관계없이 등록된다). 호출 시점에 읽는다 |
+
+동작
+
+- 인증과 권한: `Authorization: Bearer <키>`를 `/mcp`와 같은 인증 경로로 확인하고 실패는 `memento_auth_denied_total`에 같이 센다. 인증 실패는 401, 인증 저장소 장애는 `MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS`가 503이면 503이다. `SessionStart`는 read, `Stop`과 `SessionEnd`는 write 권한이 필요하다(403).
+- 요청 한도: 인증 전에 IP 버킷(`RATE_LIMIT_PER_IP`), 인증 뒤 키 버킷(`RATE_LIMIT_PER_KEY`)을 `/mcp`와 같은 한도기로 적용한다(429와 `Retry-After`).
+- 입력 상한: `Content-Type`은 `application/json`만(415), 요청 헤더 합계 8192바이트(431), 본문 196608바이트(413), JSON 중첩 깊이 8(400), 요약 후보 `excerpt` 65536바이트(UTF-8, 413). 본문은 인증 뒤에 읽는다. 응답 본문은 `{ "error": "<코드>" }` 형식이고 요청 본문을 되돌려 보내지 않는다.
+- 본문 필드: `session_id`(`Stop`, `SessionEnd`에서 필수, 영숫자로 시작하는 128자 이하의 `A-Za-z0-9._:-`), `hook_event_name`(있으면 경로의 이벤트와 같아야 한다), `source`(`SessionStart`에서 선택, `startup`, `resume`, `compact`, `clear`, `fork`), `cwd`, `git_remote`, `excerpt`(`Stop`, `SessionEnd`에서 필수). 그 밖의 필드(`transcript_path` 등)는 읽지 않는다. 서버는 클라이언트의 transcript 파일을 읽을 수 없으므로 `excerpt`는 로컬 CLI `anchormind hook`이 만든다. `excerpt` 없는 http 훅 단독 `Stop`, `SessionEnd`는 422(`excerpt_required`)이고, http 훅 단독으로는 `SessionStart` 주입만 쓸 수 있다.
+- workspace: `cwd`와 `git_remote`를 정규화한 후보(원격 `host/path`, 원격 저장소 이름, cwd 전체 경로, cwd 마지막 조각 순. 모두 소문자, 원격의 자격 증명과 포트와 스킴과 끝의 `.git` 제거, cwd의 역빗금은 빗금) 중 키의 `allowed_workspaces` 안에 있는 첫 값(대소문자 무시, 저장된 표기)을 쓴다. 맞는 후보가 없거나 키에 `allowed_workspaces`가 없거나 마스터 키이면 키의 `default_workspace`를 쓴다.
+- `SessionStart`: `context`를 클라이언트별 예산(`claude-code` 2000, `codex` 1500 토큰. Codex는 훅 출력이 약 2500 토큰을 넘으면 본문 대신 파일 경로를 넘긴다)으로 불러 `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}`로 200 응답한다.
+- `Stop`, `SessionEnd`: `excerpt`의 비밀과 개인정보를 `SensitiveScanner`로 가린 뒤 outbox(topic `hook.reflect`)에 기록하고 `{"accepted":true}`로 202 응답한다. `MEMENTO_SENSITIVE_SCAN=reject`이면 검출된 발췌는 기록하지 않고 422(`sensitive_content`, 규칙 이름만)다. 그 밖의 값(`off` 포함)에서는 항상 가린 값을 기록하므로 outbox 행에 원문 비밀이 남지 않는다. 이 topic의 payload는 감사 이벤트와 달리 가린 발췌 본문을 담고, 완료 행은 `MEMENTO_OUTBOX_RETENTION_DAYS` 동안 남는다. outbox가 꺼져 기록하지 못하면 503이다.
+- 회고 소비자: 작업자가 `hook.reflect` 이벤트를 넘기면 키를 다시 확인하고(비활성 키나 write 권한이 없어진 키는 재시도 없이 dead-letter), 멱등 키(키, 클라이언트, 세션 id, 이벤트의 SHA-256)를 `idempotency_records`(tool `hook_reflect`)에 선점한 뒤 발췌의 마지막 응답 블록으로 만든 episode 서사 하나로 `reflect`를 수행한다. 같은 키의 같은 세션과 이벤트는 30일 동안 한 번만 회고한다. Claude Code와 Codex의 `Stop`은 응답마다 실행되므로 세션의 첫 `Stop`만 회고된다. 회고가 실패하면 선점을 풀고 outbox 재시도로 넘긴다. 처리 중 프로세스가 끝나 남은 선점은 5분 뒤 다음 전달이 넘겨받는다.
+- 지표: `memento_hook_calls_total{client,event,outcome}`(client와 event는 허용 목록 밖이면 `other`, outcome은 `context`, `accepted`, `not_found`, `invalid`, `sensitive_rejected`, `unauthorized`, `forbidden`, `rate_limited`, `unavailable`, `error`), `memento_hook_reflect_total{outcome}`(`reflected`, `duplicate`, `busy`, `rejected`, `failed`).
+- 로그: 클라이언트, 이벤트, 상태 코드, 오류 이름만 남기고 발췌, 키, 세션 id는 남기지 않는다.
 
 ### Redis
 
