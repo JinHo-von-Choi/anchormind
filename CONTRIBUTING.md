@@ -104,4 +104,4 @@ Format: `[영역] 설명` (예: `[HTTP] 응답 공통 헤더 추가`, `[문서] 
 
 `npm run release -- X.Y.Z`가 작업 트리와 HEAD의 Tests 워크플로 결과를 확인한 뒤 CHANGELOG의 [Unreleased]를 버전 절로 옮기고 package.json, package-lock.json, SKILL.md, SECURITY.md의 버전 표기를 갱신한다. lint, 마이그레이션 lint, 단위 시험이 통과하면 `release: X.Y.Z` 커밋과 annotated tag를 만들고, push와 `gh release create` 명령을 출력한다. push와 Release 생성은 출력된 명령으로 직접 한다.
 
-main 브랜치에서만 실행되며 다른 브랜치는 `--allow-branch`를 줘야 한다. lint, 시험, 커밋 중 하나가 실패하면 갱신된 파일이 그대로 남고(커밋 단계 실패면 스테이징된 채) 자동 되돌리기는 없다. `git checkout HEAD -- CHANGELOG.md package.json package-lock.json SKILL.md SECURITY.md`로 인덱스와 작업 트리를 함께 되돌린 뒤 원인을 고치고 다시 실행한다.
+main 브랜치에서만 실행되며 다른 브랜치는 `--allow-branch`를 줘야 한다. 분리된 HEAD는 `--allow-branch`를 줘도 거부한다. lint, 시험, 커밋 중 하나가 실패하면 갱신된 파일이 그대로 남고(커밋 단계 실패면 스테이징된 채) 자동 되돌리기는 없다. `git checkout HEAD -- CHANGELOG.md package.json package-lock.json SKILL.md SECURITY.md`로 인덱스와 작업 트리를 함께 되돌린 뒤 원인을 고치고 다시 실행한다.

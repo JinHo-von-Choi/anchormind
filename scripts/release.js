@@ -394,7 +394,7 @@ function printNextSteps(ws, { version, notesPath, branch, skipCi }) {
   lines.push(
     `  git push origin ${shellQuote(branch)}`,
     `  git push origin v${version}`,
-    `  gh release create v${version} --title v${version} --notes-file ${notesPath}`,
+    `  gh release create v${version} --title v${version} --notes-file ${shellQuote(notesPath)}`,
     ""
   );
   ws.log(lines.join("\n"));

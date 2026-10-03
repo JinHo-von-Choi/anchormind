@@ -605,6 +605,17 @@ describe("릴리스 절차 (임시 저장소, 가짜 gh)", () => {
     assert.match(logs.join("\n"), /git push origin 'feat;x'\n/);
   });
 
+  it("notes 파일 경로에 공백이 있으면 gh release create 명령에서 따옴표로 감싼다", async () => {
+    const f        = await fresh();
+    const notesDir = path.join(f.base, "notes dir");
+    fs.mkdirSync(notesDir);
+    f.setRunsFor("success");
+
+    const { result, logs } = await f.run(["5.13.0"], { notesDir });
+
+    assert.ok(logs.join("\n").includes(`--notes-file '${result.notesPath}'\n`));
+  });
+
   it("gh 호출이 실패하면 원문 출력 없이 ReleaseError 로 멈춘다", async () => {
     const f = await fresh();
     const err = await f.run(["5.13.0"], { env: f.env({ FAKE_GH_MODE: "fail" }) }).then(() => null, e => e);
@@ -612,6 +623,22 @@ describe("릴리스 절차 (임시 저장소, 가짜 gh)", () => {
     assert.ok(err instanceof ReleaseError);
     assert.match(err.message, /조회하지 못했다.*--skip-ci-check/);
     assert.doesNotMatch(err.message, /example\.invalid|HTTP 401|secret-path/);
+    assert.equal(f.git("tag", "-l", "v5.13.0").trim(), "");
+    assert.equal(f.git("status", "--porcelain", "--untracked-files=no").trim(), "");
+  });
+
+  it("gh 실행 파일이 없으면 원문 없이 ReleaseError 로 멈춘다", async () => {
+    const f       = await fresh();
+    const gitOnly = path.join(f.base, "git-only-bin");
+    const gitPath = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
+    fs.mkdirSync(gitOnly);
+    fs.symlinkSync(gitPath, path.join(gitOnly, "git"));
+    const err = await f.run(["5.13.0"], { env: { ...f.env(), PATH: gitOnly } }).then(() => null, e => e);
+
+    assert.ok(err instanceof ReleaseError);
+    assert.match(err.message, /조회하지 못했다: gh 를 찾지 못했다.*--skip-ci-check/);
+    assert.doesNotMatch(err.message, /ENOENT|spawn/);
+    assert.deepEqual(f.ghCalls(), []);
     assert.equal(f.git("tag", "-l", "v5.13.0").trim(), "");
     assert.equal(f.git("status", "--porcelain", "--untracked-files=no").trim(), "");
   });
