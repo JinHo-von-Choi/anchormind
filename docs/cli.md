@@ -34,6 +34,8 @@ node bin/memento.js stats
 | `--timeout ms` | 원격 HTTP 요청 타임아웃 (기본: 30000ms) |
 | `--verbose` | 에러 시 스택 트레이스 출력 |
 
+`serve`를 뺀 모든 명령은 서버 로그를 표준 오류로 보낸다(`MEMENTO_LOG_STDERR=true`를 명령 모듈을 불러오기 전에 정한다). 표준 출력에는 명령 결과만 남으므로 `--json` 출력을 그대로 파이프로 넘길 수 있다. 환경에 `MEMENTO_LOG_STDERR`를 직접 두면 그 값을 따른다.
+
 ### 원격 접속 환경변수
 
 | 변수 | 설명 |
@@ -277,6 +279,16 @@ node bin/memento.js remember "배포 완료" --topic deploy-2026 --type procedur
 | `--stdin` | 표준 입력에서 내용을 읽는다 (TTY가 아니면 자동 감지, 최대 1MB) |
 | `--idempotency-key <k>` | 동일 키가 있으면 저장 건너뜀 (멱등성 보장) |
 
+로컬 모드(`--remote` 없음)는 서버 remember와 같은 의미 쓰기 관문을 거쳐 FragmentWriter로 기록한다.
+
+- 이메일, 비밀번호 필드, 휴대전화 번호, API 키 형태를 마스킹한다.
+- 300자(episode는 1000자)를 넘는 본문은 잘라 저장한다.
+- 지정한 키워드는 소문자로 정규화하고 본문에서 추출한 키워드와 합친다.
+- 같은 본문이 이미 있으면 새 행을 만들지 않고 기존 파편 id를 출력한다.
+- importance는 서버 저장과 같은 유형별 상한을 적용해 저장한다(출력은 요청 값).
+- content_hash는 서버 저장과 같은 본문 전체 sha256(64자 16진수)이다.
+- PolicyRules 경고가 있으면 `--json` 출력에 `validation_warnings`를 싣는다.
+
 도움말:
 
 ```bash
@@ -395,7 +407,13 @@ cat out.jsonl | node bin/memento.js import
 node bin/memento.js import --input out.jsonl --idempotent --dry-run
 ```
 
-`--idempotent`는 `idempotency_key` 또는 `id` 충돌 시 INSERT를 건너뛴다. `--dry-run`은 검증만 수행한다.
+행마다 의미 쓰기 관문을 거쳐(트랜잭션 밖) FragmentWriter로 기록하며 행마다 트랜잭션을 연다.
+
+- 이메일, 비밀번호 필드, 휴대전화 번호, API 키 형태를 마스킹하고, 300자(episode는 1000자)를 넘는 본문은 잘라 저장한다. 키워드는 소문자로 정규화한다.
+- 관문이 받아들이지 않은 행(본문 누락이나 품질 미달, 4000자 초과, 형식이 잘못된 키워드, hard gate 키의 정책 위반)은 errors로 세고 다음 행을 계속 가져온다.
+- 같은 본문이 이미 있는 행은 기존 파편을 가리키므로 새로 만들지 않고 skipped로 센다.
+- 같은 id가 이미 있는 행은 `--idempotent`이면 skipped, 아니면 errors로 센다.
+- `--dry-run`은 관문 검증만 수행하고 기록하지 않는다.
 
 도움말:
 

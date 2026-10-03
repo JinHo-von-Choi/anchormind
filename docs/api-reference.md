@@ -902,7 +902,7 @@ violations 있는 경우 (soft gate — 저장됨):
 | dryRun | boolean | - | true 설정 시 실제 변경 없이 패치 적용 후의 예상 파편 상태를 반환. |
 | idempotencyKey | string | - | 재시도 안전 식별자 (최대 128자). 같은 key_id 범위에서 같은 값으로 반복 호출하면 첫 호출의 응답을 그대로 반환하고 이력을 다시 쌓지 않는다 |
 
-바뀐 필드는 remember와 같은 의미 쓰기 관문을 거친다. 이번 변경으로 새로 생긴 PolicyRules 위반은 응답의 `validation_warnings`(rule 이름 string[])로 알리고, 파편에 이미 있던 위반은 다시 알리지 않는다. `api_keys.symbolic_hard_gate=true` 키에서는 새 위반이 있으면 갱신하지 않고 `SymbolicPolicyViolationError`로 거부한다. dryRun 응답은 관문을 거친 예상 상태를 `simulated.would_be_fragment`에, 위반을 `simulated.validation_warnings`에 싣는다.
+바뀐 필드는 remember와 같은 의미 쓰기 관문을 거친다. 이번 변경으로 새로 생긴 PolicyRules 위반은 응답의 `validation_warnings`(rule 이름 string[])로 알리고, 파편에 이미 있던 위반은 다시 알리지 않는다. `api_keys.symbolic_hard_gate=true` 키에서는 새 위반이 있으면 갱신하지 않고 거부한다. 이 거부는 remember처럼 JSON-RPC `-32003` 오류로 올라가지 않고, 도구 응답 `{ "success": false, "error": "policy_violation: <rule>, ..." }`으로 돌아온다(amend 처리기의 감사 기록 경로가 오류를 도구 응답으로 바꾼다). dryRun 응답은 관문을 거친 예상 상태를 `simulated.would_be_fragment`에, 위반을 `simulated.validation_warnings`에 싣는다.
 
 ---
 

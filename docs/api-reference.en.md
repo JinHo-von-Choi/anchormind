@@ -885,7 +885,7 @@ Update the content or metadata of an existing fragment. Selectively modifies whi
 | dryRun | boolean | - | When true, returns the expected fragment state after applying the patch without making actual changes. |
 | idempotencyKey | string | - | Retry-safe identifier (max 128 characters). Repeating a call with the same value in the same key_id scope returns the first response without recording history again |
 
-The changed fields pass the same semantic write gate as remember. PolicyRules violations introduced by this change are reported in the response `validation_warnings` (string[] of rule names); violations the fragment already had are not reported again. On a key with `api_keys.symbolic_hard_gate=true`, a new violation rejects the update with `SymbolicPolicyViolationError`. A dryRun response carries the gated expected state in `simulated.would_be_fragment` and the violations in `simulated.validation_warnings`.
+The changed fields pass the same semantic write gate as remember. PolicyRules violations introduced by this change are reported in the response `validation_warnings` (string[] of rule names); violations the fragment already had are not reported again. On a key with `api_keys.symbolic_hard_gate=true`, a new violation rejects the update. Unlike remember, this rejection is not raised as a JSON-RPC `-32003` error; it comes back as the tool response `{ "success": false, "error": "policy_violation: <rule>, ..." }` (the amend handler's audit path turns the error into a tool response). A dryRun response carries the gated expected state in `simulated.would_be_fragment` and the violations in `simulated.validation_warnings`.
 
 ---
 

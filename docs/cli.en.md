@@ -33,6 +33,8 @@ Flags available for all subcommands.
 | `--timeout ms` | Remote HTTP request timeout (default: 30000ms) |
 | `--verbose` | Print stack traces on error |
 
+Every command except `serve` sends server logs to stderr (the CLI sets `MEMENTO_LOG_STDERR=true` before loading the command module). stdout carries only the command result, so `--json` output can be piped as is. A `MEMENTO_LOG_STDERR` value already present in the environment is respected.
+
 ### Remote Access Environment Variables
 
 | Variable | Description |
@@ -276,6 +278,16 @@ Options:
 | `--stdin` | Read the content from stdin (auto-detected when not a TTY, max 1MB) |
 | `--idempotency-key <k>` | Skip storage if a fragment with this key already exists |
 
+Local mode (no `--remote`) passes the same semantic write gate as the server remember and writes through FragmentWriter.
+
+- Email addresses, password fields, mobile phone numbers and API key shapes are masked.
+- Content longer than 300 characters (1000 for episode) is truncated when stored.
+- Supplied keywords are lowercased and merged with keywords extracted from the content.
+- When the same content already exists, no new row is created and the existing fragment id is printed.
+- importance is stored with the same per-type cap as server writes (the output shows the requested value).
+- content_hash is the full sha256 of the content (64 hex characters), the same as server writes.
+- PolicyRules warnings, if any, are included as `validation_warnings` in the `--json` output.
+
 Help:
 
 ```bash
@@ -394,7 +406,13 @@ cat out.jsonl | node bin/memento.js import
 node bin/memento.js import --input out.jsonl --idempotent --dry-run
 ```
 
-`--idempotent` skips inserts that collide with an existing `idempotency_key` or `id`. `--dry-run` validates only.
+Each row passes the semantic write gate (outside the transaction) and is written through FragmentWriter in its own transaction.
+
+- Email addresses, password fields, mobile phone numbers and API key shapes are masked, and content longer than 300 characters (1000 for episode) is truncated when stored. Keywords are lowercased.
+- Rows the gate does not accept (missing or too short content, more than 4000 characters, malformed keywords, policy violations on a hard-gate key) are counted as errors and the import continues with the next row.
+- A row whose content already exists points to the existing fragment, creates nothing and is counted as skipped.
+- A row whose id already exists is counted as skipped with `--idempotent`, otherwise as an error.
+- `--dry-run` runs only the gate checks and writes nothing.
 
 Help:
 
