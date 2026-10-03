@@ -162,6 +162,22 @@ describe("모듈 적재 시점의 값 검사", () => {
     assert.deepEqual(r.issues.map(i => i[1]).sort(), ["above_max", "below_min"]);
   });
 
+  it("형식이 틀린 MEMENTO_ADMIN_SEAL_KEY는 값 없이 기록되고 봉인 키를 쓰지 않는다", () => {
+    const secretLike = "v1:c2hvcnQta2V5LXZhbHVl";
+    const out = execFileSync(process.execPath, ["--input-type=module", "-e", `
+      const c = await import("./lib/config.js");
+      console.log(JSON.stringify({ ring: c.adminSealKeyRing(), issues: c.getConfigIssues() }));
+    `], {
+      cwd: new URL("../../", import.meta.url),
+      env: { PATH: process.env.PATH, DOTENV_CONFIG_PATH: "/nonexistent.env", MEMENTO_ADMIN_SEAL_KEY: secretLike },
+      encoding: "utf8"
+    });
+    const r = JSON.parse(out);
+    assert.equal(r.ring, null);
+    assert.deepEqual(r.issues.map(i => [i.name, i.problem, i.value]), [["MEMENTO_ADMIN_SEAL_KEY", "key_length", "(hidden)"]]);
+    assert.ok(!out.includes("c2hvcnQta2V5LXZhbHVl"));
+  });
+
   it("범위 밖 값은 그대로 쓰고 기록한다", () => {
     const r = load({ RATE_LIMIT_PER_IP: "-1", MEMENTO_CONFIG_STRICT: "true" });
     assert.equal(r.strict, true);

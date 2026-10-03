@@ -11,7 +11,7 @@
  * 업데이트 확인을 수행하며, UPDATE_CHECK_DISABLED=true 로 비활성화할 수 있다.
  *
  * 지원 커맨드: serve, migrate, cleanup, backfill, stats, health, recall, remember,
- * inspect, update, export, import, completion, session, benchmark, anchor-scope, hook, init, audit.
+ * inspect, update, export, import, completion, session, benchmark, anchor-scope, hook, init, audit, admin.
  */
 import { parseArgs } from '../lib/cli/parseArgs.js';
 import { resolveHookRemote } from '../lib/cli/_remoteSettings.js';
@@ -20,11 +20,11 @@ import { resolveHookRemote } from '../lib/cli/_remoteSettings.js';
  * 현재 디렉터리의 .env를 불러오지 않는 명령.
  * hook은 하네스가 작업 중인 저장소를 cwd로 두고 실행하므로 cwd의 .env를 읽지 않는다. 저장소의 .env가 서버 주소나
  * 키를 바꾸면 API 키와 대화 발췌가 그 주소로 간다. hook의 서버 주소와 키는 명령 인자나 프로세스 환경 변수에서만
- * 같은 출처의 한 쌍으로 읽는다(hookRemoteSettings). init은 서버 설정이 필요 없고 .env를 읽지 않는다.
- * 그 밖의 명령은 이전처럼 .env를 읽는다.
+ * 같은 출처의 한 쌍으로 읽는다(hookRemoteSettings). init은 서버 설정이 필요 없고 .env를 읽지 않는다. admin은
+ * 접속 대상을 --url 또는 PG 환경 변수로만 받는다. 그 밖의 명령은 .env를 읽는다.
  */
 const IS_HOOK                = process.argv[2] === "hook";
-const DOTENV_EXEMPT_COMMANDS = new Set(["hook", "init"]);
+const DOTENV_EXEMPT_COMMANDS = new Set(["hook", "init", "admin"]);
 if (!DOTENV_EXEMPT_COMMANDS.has(process.argv[2])) await import("dotenv/config");
 
 /** 서브커맨드 → lazy import 매핑. 각 모듈은 `default(args)`와 선택적 `usage` 문자열을 export한다. */
@@ -48,10 +48,11 @@ const COMMANDS = {
   hook:       () => import('../lib/cli/hook.js'),
   init:       () => import('../lib/cli/init.js'),
   audit:      () => import('../lib/cli/audit.js'),
+  admin:      () => import('../lib/cli/admin.js'),
 };
 
 /** 원격 모드를 지원하지 않는 로컬 전용 명령 목록 */
-const LOCAL_ONLY_COMMANDS = new Set(["serve", "migrate", "cleanup", "backfill", "health", "update", "export", "import", "benchmark", "anchor-scope", "audit"]);
+const LOCAL_ONLY_COMMANDS = new Set(["serve", "migrate", "cleanup", "backfill", "health", "update", "export", "import", "benchmark", "anchor-scope", "audit", "admin"]);
 
 /**
  * hook 명령의 서버 주소와 키. 프로세스 환경 변수만 읽는다(.env 파일은 읽지 않는다). Claude Code 플러그인
@@ -65,14 +66,16 @@ function hookRemoteSettings() {
 }
 
 /**
- * 명령별 진입점 의존성. hook은 같은 출처의 주소와 키 한 쌍을, init은 PATH 검색 정보를 받는다.
+ * 명령별 진입점 의존성. hook은 같은 출처의 주소와 키 한 쌍을, init은 PATH 검색 정보를, admin은 프로세스
+ * 환경 변수(접속 대상)를 받는다.
  *
  * @param {string} cmd
  * @returns {object|undefined}
  */
 function commandOverrides(cmd) {
-  if (IS_HOOK)        return { remoteSettings: hookRemoteSettings };
-  if (cmd === "init") return { searchPath: process.env.PATH ?? "", pathExt: process.env.PATHEXT ?? "" };
+  if (IS_HOOK)         return { remoteSettings: hookRemoteSettings };
+  if (cmd === "init")  return { searchPath: process.env.PATH ?? "", pathExt: process.env.PATHEXT ?? "" };
+  if (cmd === "admin") return { env: process.env };
   return undefined;
 }
 
@@ -103,6 +106,7 @@ function printUsage() {
     '  hook <event> --client <name>     Claude Code/Codex hook runner (SessionStart|Stop|SessionEnd)',
     '  init --target <claude|codex>     Create the Claude Code/Codex plugin (default: dry-run, --write)',
     '  audit verify [--from-seq N]      Verify the audit hash chain (exit 1 when broken)',
+    '  admin recover [--user NAME]      Revoke admin sessions, reset TOTP (local DB, --confirm)',
     '',
     'Options:',
     '  --help                      Show this help message',
@@ -112,7 +116,7 @@ function printUsage() {
     '  --timeout <ms>              원격 요청 타임아웃 밀리초 (default: 30000)',
     '',
     'Remote-capable commands: recall, remember, stats, inspect, session',
-    'Local-only commands: serve, migrate, cleanup, backfill, health, update, export, import, benchmark, anchor-scope, audit',
+    'Local-only commands: serve, migrate, cleanup, backfill, health, update, export, import, benchmark, anchor-scope, audit, admin',
   ];
   console.log(lines.join('\n'));
 }
