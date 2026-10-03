@@ -166,6 +166,9 @@ describe("MemoryManager — keyId 격리 통합 (mock store)", () => {
     });
 
     mm.store.delete = mock.fn(async () => true);
+    mm.store.deleteWithCascade = mock.fn(async ids => ({
+      deleted: ids.length, purged: { case_summaries: 0, audit_fragments: 0 }
+    }));
     mm.index = { deindex: mock.fn(async () => {}) };
 
     const result = await mm.forget({
@@ -192,6 +195,9 @@ describe("MemoryManager — keyId 격리 통합 (mock store)", () => {
     });
 
     mm.store.delete = mock.fn(async () => true);
+    mm.store.deleteWithCascade = mock.fn(async ids => ({
+      deleted: ids.length, purged: { case_summaries: 0, audit_fragments: 0 }
+    }));
     mm.index = { deindex: mock.fn(async () => {}) };
 
     const result = await mm.forget({

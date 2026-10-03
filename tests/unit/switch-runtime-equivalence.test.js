@@ -45,6 +45,7 @@ const RUNTIME = {
   MEMENTO_SENSITIVE_SCAN:                   "cfg.sensitiveScanMode()",
   MEMENTO_WM_PG_FALLBACK:                   "cfg.wmPgFallbackEnabled() ? 'on' : 'off'",
   MEMENTO_DEDUP_SCOPE:                      "cfg.dedupScope()",
+  MEMENTO_FORGET_CASCADE:                   "cfg.forgetCascadeEnabled() ? 'on' : 'off'",
   MEMENTO_RANK_BEFORE_BUDGET:               "cfg.rankBeforeBudgetEnabled() ? 'on' : 'off'",
   MEMENTO_GC_THROUGHPUT:                    "cfg.gcThroughputEnabled() ? 'on' : 'off'",
   MEMENTO_CONTEXT_ANNOTATE:                 "cfg.contextAnnotateEnabled() ? 'on' : 'off'",
