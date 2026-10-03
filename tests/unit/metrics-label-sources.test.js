@@ -57,7 +57,8 @@ const METRIC_MODULES = new Set([
   "lib/symbolic/SymbolicMetrics.js",
   "lib/memory/consolidate/gate-metrics.js",
   "lib/memory/consolidate/split-metrics.js",
-  "lib/memory/write/write-gate-metrics.js"
+  "lib/memory/write/write-gate-metrics.js",
+  "lib/outbox/outbox-metrics.js"
 ]);
 
 /** 검토를 마친 비리터럴 라벨 식. 키는 "파일|함수|식", 값은 값이 닫힌 집합인 근거다. */
@@ -90,7 +91,8 @@ const REVIEWED = new Map([
   ["lib/memory/write/RememberPostProcessor.js|recordGateBlock|gateResult.reason",            "proactive-gate 판정 사유 상수"],
   ["lib/symbolic/CbrEligibility.js|recordGateBlock|reason",                       "CbrEligibility 판정 사유 상수"],
   ["lib/symbolic/ClaimConflictDetector.js|recordWarning|RULE_ID",                 "모듈 상수"],
-  ["lib/symbolic/ClaimConflictDetector.js|recordWarning|severity",                "판정 심각도 상수"]
+  ["lib/symbolic/ClaimConflictDetector.js|recordWarning|severity",                "판정 심각도 상수"],
+  ["lib/outbox/Outbox.js|inc|topicLabel(row.topic)",                              "topicLabel이 처리기가 등록된 topic 또는 other로 닫는다"]
 ]);
 
 /** 리터럴, 식 없는 템플릿, 리터럴의 단항식, 두 갈래가 모두 리터럴인 조건식이면 정적으로 닫혀 있다. */

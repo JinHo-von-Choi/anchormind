@@ -19,6 +19,8 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | Integer, 0 to 65535 | PORT |
 | Integer, 0 or more, anything else uses the default | MEMENTO_SHUTDOWN_DEADLINE_MS (60000), MEMENTO_SESSION_KEY_RECHECK_MS (30000), MEMENTO_DCR_MAX_PER_HOUR (100), MEMENTO_SCORE_UPDATE_BATCH (200, values above 10000 are capped at 10000) |
 | Integer, 100 to 4500, anything else uses 2000 | MEMENTO_HEALTH_READY_DB_TIMEOUT_MS |
+| Integer, 1 to 100, anything else uses 12 | MEMENTO_OUTBOX_MAX_ATTEMPTS |
+| Integer, 1 to 3650, anything else uses 7 | MEMENTO_OUTBOX_RETENTION_DAYS |
 | Number, 1 or more, anything else uses `SESSION_TTL_MINUTES * 60` | OAUTH_ACCESS_TOKEN_TTL_SECONDS |
 | Number, 0 to 1 (above 1 is capped to 1; negative and non-numeric values become 0) | MEMENTO_DECAY_MIN_DELTA, MEMENTO_UTILITY_MIN_DELTA |
 | off, warn, enforce (any other value, including a whitespace-only value, behaves as enforce) | MEMENTO_TOOL_ARGS_VALIDATION |
@@ -32,7 +34,7 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | true, false (any other value is false) | MEMENTO_CONFIG_STRICT |
 | true, false (any other value fails startup in `MEMORY_CONFIG` validation) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (any other value is off) | MEMENTO_ADMIN_AUTH_BACKOFF |
-| on, off (any other value is on) | MEMENTO_WRITE_GATE |
+| on, off (any other value is on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER |
 | mask, reject, off (any other value is mask) | MEMENTO_SENSITIVE_SCAN |
 | true, false (any value other than false is true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
 | true, false (any value other than true is false) | MEMENTO_LOG_STDERR, MEMENTO_REMEMBER_DUPLICATE_GUARD, MEMENTO_REMEMBER_ATOMIC, MEMENTO_WORKSPACE_GATE, MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN, ENABLE_RECONSOLIDATION, ENABLE_SPREADING_ACTIVATION, UPDATE_REQUIRE_SIGNED_TAG, MEMENTO_AUTH_DISABLED, REDIS_ENABLED, REDIS_SENTINEL_ENABLED, MEMENTO_REDIS_SESSION_FAIL_CLOSED, EMBEDDING_SUPPORTS_DIMS_PARAM, MEMENTO_RERANKER_ENABLED, MEMENTO_CASE_BACKPROP_ENABLED, UPDATE_CHECK_DISABLED, ENABLE_OPENAPI, MCP_ALLOW_AUTO_DCR_REGISTER, MCP_STRICT_ORIGIN |
@@ -369,6 +371,35 @@ This feature operates asynchronously only when `REDIS_ENABLED=true`. When `REDIS
 | Variable | Default | Description |
 |----------|---------|-------------|
 | BATCH_REMEMBER_MAX_TOTAL_CHARS | 200000 | Total content character cap across the `batch_remember` fragments array |
+
+### outbox
+
+Events are written to `agent_memory.outbox_events` (migration-054) inside the changing transaction, and a worker (`OutboxWorker`) delivers them to per-topic handlers. Consumer modules register handlers with `registerOutboxHandler(topic, handler, { maxAttempts })` (`lib/outbox/OutboxHandlers.js`), and a worker claims only topics that have a handler registered in its process.
+
+| Variable | Default | Description |
+|-|-|-|
+| MEMENTO_OUTBOX | on | With `on`, `enqueue(client, event)` writes the row inside the caller's transaction and the worker starts. With `off`, `enqueue` and `enqueueStandalone` write nothing and return `null`, and the worker does not start. Read at call time (whether the worker starts is decided at startup) |
+| MEMENTO_OUTBOX_WORKER | on | Runs the worker in this process. With `off`, writing continues and pending rows are handled by another process that runs the worker, or by this worker after it is turned back on. Only processes that run the worker update the pending, dead-letter and lag gauges |
+| MEMENTO_OUTBOX_MAX_ATTEMPTS | 12 | Claim limit per event. Integer from 1 to 100, any other value uses 12. A handler's registered `maxAttempts` takes precedence |
+| MEMENTO_OUTBOX_RETENTION_DAYS | 7 | Days to keep processed rows. Integer from 1 to 3650, any other value uses 7 |
+
+Behavior
+
+- Writing: `enqueue(client, event)` accepts only a connection borrowed with `pool.connect()` on which `BEGIN` has run. A pool object, a connection outside a transaction block and a connection in a failed transaction are rejected with `OutboxTransactionRequiredError` without any query (the pg client's `getTransactionStatus()` must be `T`). The row commits or disappears with the caller's transaction. Events that must be kept without a business change (gate rejections, authentication failures) are written by `enqueueStandalone(pool, event)` in a short separate transaction. `event` has `topic` (lowercase segments separated by dots, at most 64 characters), `aggregateId` (optional, at most 200 characters), `payload` (a plain object, at most 131072 bytes when serialized; it carries hashes and lengths instead of memory content) and `delayMs` (optional, at most 30 days).
+- Claiming: every second (without pause while there is work) the worker claims up to 50 pending rows in `(available_at, id)` order with `FOR UPDATE SKIP LOCKED`, and in the same statement increments `attempts` and moves `available_at` to the lease expiry (60 seconds later). It holds no transaction or row lock while handlers run. When several processes run workers at the same time, no event is handled by two workers while its lease is valid.
+- Delivery guarantee: at least once. When a worker dies while processing, another worker claims the same row again after the lease expires. A handler must finish within 15 seconds; otherwise its `signal` is aborted and the attempt is recorded as a failure. Consumers absorb duplicates with the `idempotencyKey` (`topic:id`) passed to the handler. When less than 20 seconds of lease remain (15 second handler limit plus 5 seconds margin) or shutdown is requested, the worker starts no further event and releases the remaining claims.
+- Ordering: a batch is processed one event at a time in claim order. There is no ordering across batches, across workers or among events of the same aggregate, and a failed event can be delivered after later events.
+- Retries and dead-letter: a failure is claimed again after a random delay between half and all of an interval that starts at 1 second and doubles per failure (capped at 30 minutes). A failure at the claim limit and an `OutboxPermanentError` thrown by the handler move the event to dead-letter (`dead_at`); it is not claimed again and not deleted automatically.
+- Retention: every 5 minutes processed rows past the retention period are deleted in batches of 500, at most 5000 per run.
+- Status: every 15 seconds the pending and dead-letter counts and the age in seconds of the oldest pending row are published as gauges (`memento_outbox_pending`, `memento_outbox_dead_letter`, `memento_outbox_lag_seconds`) and in `schedulerJobs.outbox` of the admin `/stats` response. Counters are `memento_outbox_{enqueued,processed,failed,dead_letter}_total{topic}`, `memento_outbox_lease_lost_total` and `memento_outbox_cleaned_total`, and the histogram is `memento_outbox_delivery_seconds{topic}`. The topic label is a topic with a registered handler, and `other` for anything else.
+
+After fixing the cause, return dead-letter rows to pending.
+
+```sql
+UPDATE agent_memory.outbox_events
+   SET dead_at = NULL, attempts = 0, available_at = now(), last_error = NULL
+ WHERE dead_at IS NOT NULL AND topic = '<topic>';
+```
 
 ### Redis
 

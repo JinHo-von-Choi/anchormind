@@ -19,6 +19,8 @@
 | 0 이상 65535 이하의 정수 | PORT |
 | 0 이상의 정수, 그 밖은 기본값 | MEMENTO_SHUTDOWN_DEADLINE_MS (60000), MEMENTO_SESSION_KEY_RECHECK_MS (30000), MEMENTO_DCR_MAX_PER_HOUR (100), MEMENTO_SCORE_UPDATE_BATCH (200, 10000을 넘으면 10000) |
 | 100 이상 4500 이하의 정수, 그 밖은 2000 | MEMENTO_HEALTH_READY_DB_TIMEOUT_MS |
+| 1 이상 100 이하의 정수, 그 밖은 12 | MEMENTO_OUTBOX_MAX_ATTEMPTS |
+| 1 이상 3650 이하의 정수, 그 밖은 7 | MEMENTO_OUTBOX_RETENTION_DAYS |
 | 1 이상의 숫자, 그 밖은 `SESSION_TTL_MINUTES * 60` | OAUTH_ACCESS_TOKEN_TTL_SECONDS |
 | 0 이상 1 이하의 숫자 (1을 넘으면 1, 음수와 숫자가 아닌 값은 0) | MEMENTO_DECAY_MIN_DELTA, MEMENTO_UTILITY_MIN_DELTA |
 | off, warn, enforce (공백만 있는 값을 포함한 그 밖의 값은 enforce로 동작) | MEMENTO_TOOL_ARGS_VALIDATION |
@@ -32,7 +34,7 @@
 | true, false (그 밖의 값은 false) | MEMENTO_CONFIG_STRICT |
 | true, false (그 밖의 값은 `MEMORY_CONFIG` 검증에서 기동 실패) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (그 밖의 값은 off) | MEMENTO_ADMIN_AUTH_BACKOFF |
-| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE |
+| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER |
 | mask, reject, off (그 밖의 값은 mask) | MEMENTO_SENSITIVE_SCAN |
 | true, false (false가 아닌 값은 true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
 | true, false (true가 아닌 값은 false) | MEMENTO_LOG_STDERR, MEMENTO_REMEMBER_DUPLICATE_GUARD, MEMENTO_REMEMBER_ATOMIC, MEMENTO_WORKSPACE_GATE, MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN, ENABLE_RECONSOLIDATION, ENABLE_SPREADING_ACTIVATION, UPDATE_REQUIRE_SIGNED_TAG, MEMENTO_AUTH_DISABLED, REDIS_ENABLED, REDIS_SENTINEL_ENABLED, MEMENTO_REDIS_SESSION_FAIL_CLOSED, EMBEDDING_SUPPORTS_DIMS_PARAM, MEMENTO_RERANKER_ENABLED, MEMENTO_CASE_BACKPROP_ENABLED, UPDATE_CHECK_DISABLED, ENABLE_OPENAPI, MCP_ALLOW_AUTO_DCR_REGISTER, MCP_STRICT_ORIGIN |
@@ -364,6 +366,35 @@ POSTGRES_* 접두어가 DB_* 접두어보다 우선한다. 두 형식을 혼용�
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
 | BATCH_REMEMBER_MAX_TOTAL_CHARS | 200000 | `batch_remember` fragments 배열 content 총 문자수 상한 |
+
+### outbox
+
+변경 트랜잭션 안에서 이벤트를 `agent_memory.outbox_events`(migration-054)에 기록하고, 작업자(`OutboxWorker`)가 topic별 처리기로 전달한다. 처리기는 소비자 모듈이 `registerOutboxHandler(topic, handler, { maxAttempts })`(`lib/outbox/OutboxHandlers.js`)로 등록하고, 작업자는 그 프로세스에 처리기가 등록된 topic만 점유한다.
+
+| 변수 | 기본값 | 설명 |
+|-|-|-|
+| MEMENTO_OUTBOX | on | `on`이면 `enqueue(client, event)`가 호출자 트랜잭션 안에서 행을 기록하고 작업자가 기동한다. `off`이면 `enqueue`와 `enqueueStandalone`이 행을 쓰지 않고 `null`을 돌려주며 작업자도 기동하지 않는다. 호출 시점에 읽는다(작업자 기동 여부는 기동 시점) |
+| MEMENTO_OUTBOX_WORKER | on | 이 프로세스에서 작업자를 돌린다. `off`여도 기록은 계속되고, 대기 행은 작업자를 돌리는 다른 프로세스나 다시 켠 뒤의 작업자가 처리한다. 대기, dead-letter, 지연 게이지는 작업자를 돌리는 프로세스만 갱신한다 |
+| MEMENTO_OUTBOX_MAX_ATTEMPTS | 12 | 이벤트 하나의 점유 횟수 상한. 1 이상 100 이하의 정수, 그 밖의 값은 12. 처리기 등록의 `maxAttempts`가 있으면 그 값이 우선한다 |
+| MEMENTO_OUTBOX_RETENTION_DAYS | 7 | 완료한 행의 보존 일수. 1 이상 3650 이하의 정수, 그 밖의 값은 7 |
+
+동작
+
+- 기록: `enqueue(client, event)`는 `pool.connect()`로 빌리고 `BEGIN`을 실행한 연결만 받는다. 풀 객체, 트랜잭션 블록 밖의 연결, 실패한 트랜잭션의 연결은 질의 없이 `OutboxTransactionRequiredError`로 거부한다(pg 클라이언트의 `getTransactionStatus()`가 `T`여야 한다). 행은 호출자 트랜잭션과 함께 커밋되거나 사라진다. 업무 변경 없이 남길 이벤트(관문 차단, 인증 실패)는 `enqueueStandalone(pool, event)`가 짧은 독립 트랜잭션으로 기록한다. `event`는 `topic`(점으로 구분한 소문자 조각, 64자 이하), `aggregateId`(선택, 200자 이하), `payload`(일반 객체, 직렬화 131072바이트 이하. 기억 본문 대신 해시와 길이를 담는다), `delayMs`(선택, 최대 30일)다.
+- 점유: 작업자는 1초 간격(일이 있으면 쉬지 않음)으로 대기 행을 50건까지 `(available_at, id)` 순으로 `FOR UPDATE SKIP LOCKED` 점유하고, 같은 문장에서 `attempts`를 1 늘리며 `available_at`을 임대 만료 시각(60초 뒤)으로 옮긴다. 처리기를 실행하는 동안 트랜잭션이나 행 잠금을 쥐지 않는다. 여러 프로세스가 동시에 작업자를 돌려도 임대가 유효한 동안 한 이벤트를 두 작업자가 처리하지 않는다.
+- 전달 보장: 최소 한 번이다. 작업자가 처리 중에 죽으면 임대가 끝난 뒤 다른 작업자가 같은 행을 다시 점유한다. 처리기는 15초 안에 끝나야 하고, 넘기면 `signal`을 중단하고 실패로 기록한다. 소비자는 처리기에 넘어오는 `idempotencyKey`(`topic:id`)로 중복을 흡수한다. 남은 임대가 20초(처리기 상한 15초와 여유 5초)보다 짧거나 종료 요청을 받으면 다음 이벤트를 시작하지 않고 나머지 점유를 반납한다.
+- 순서: 한 묶음은 점유 순서대로 하나씩 처리한다. 묶음 사이, 작업자 사이, 같은 aggregate의 이벤트 사이의 순서는 보장하지 않으며 실패한 이벤트는 나중 이벤트보다 늦게 전달될 수 있다.
+- 재시도와 dead-letter: 실패는 1초에서 시작해 실패마다 두 배(상한 30분)인 간격의 절반에서 전체 사이 시각에 다시 점유한다. 점유 횟수가 상한에 이른 실패와 처리기가 던진 `OutboxPermanentError`는 dead-letter(`dead_at`)로 남고 다시 점유하지 않으며 자동으로 지우지 않는다.
+- 보존: 5분마다 보존 기간이 지난 완료 행을 500건 묶음으로, 한 번에 최대 5000건까지 지운다.
+- 상태: 15초마다 대기와 dead-letter 건수, 가장 오래된 대기 행의 경과 초를 게이지(`memento_outbox_pending`, `memento_outbox_dead_letter`, `memento_outbox_lag_seconds`)와 관리 `/stats` 응답의 `schedulerJobs.outbox`에 반영한다. 계수기는 `memento_outbox_{enqueued,processed,failed,dead_letter}_total{topic}`, `memento_outbox_lease_lost_total`, `memento_outbox_cleaned_total`, 분포는 `memento_outbox_delivery_seconds{topic}`이다. topic 라벨은 처리기가 등록된 topic이고 그 밖은 `other`다.
+
+dead-letter 행은 원인을 고친 뒤 다시 대기로 돌린다.
+
+```sql
+UPDATE agent_memory.outbox_events
+   SET dead_at = NULL, attempts = 0, available_at = now(), last_error = NULL
+ WHERE dead_at IS NOT NULL AND topic = '<topic>';
+```
 
 ### Redis
 
