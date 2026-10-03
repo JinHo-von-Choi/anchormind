@@ -24,6 +24,7 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | Integer, 1000 to 600000, anything else uses 60000 | MEMENTO_GC_TIME_BUDGET_MS |
 | Integer, 1 to 100, anything else uses 12 | MEMENTO_OUTBOX_MAX_ATTEMPTS |
 | Integer, 1 to 3650, anything else uses 7 | MEMENTO_OUTBOX_RETENTION_DAYS, MEMENTO_OUTBOX_UNHANDLED_DAYS |
+| Integer, 1 to 3650, anything else uses 400 | MEMENTO_AUDIT_RETENTION_DAYS |
 | Integer, 0 to 10, anything else uses 3 | MEMENTO_DB_LOCK_RETRY_MAX |
 | Number, 1 or more, anything else uses `SESSION_TTL_MINUTES * 60` | OAUTH_ACCESS_TOKEN_TTL_SECONDS |
 | Number, 0 to 1 (above 1 is capped to 1; negative and non-numeric values become 0) | MEMENTO_DECAY_MIN_DELTA, MEMENTO_UTILITY_MIN_DELTA |
@@ -39,7 +40,7 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | true, false (any other value is false) | MEMENTO_CONFIG_STRICT |
 | true, false (any other value fails startup in `MEMORY_CONFIG` validation) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (any other value is off) | MEMENTO_ADMIN_AUTH_BACKOFF |
-| on, off (any other value is on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE, MEMENTO_PROVENANCE, MEMENTO_REVIEW_QUEUE, MEMENTO_HOOK_ENDPOINTS, MEMENTO_FORGET_CASCADE, MEMENTO_EGRESS_POLICY |
+| on, off (any other value is on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE, MEMENTO_PROVENANCE, MEMENTO_REVIEW_QUEUE, MEMENTO_HOOK_ENDPOINTS, MEMENTO_FORGET_CASCADE, MEMENTO_EGRESS_POLICY, MEMENTO_AUDIT_DB |
 | mask, reject, off (any other value is mask) | MEMENTO_SENSITIVE_SCAN |
 | workspace, key (any other value is workspace) | MEMENTO_DEDUP_SCOPE |
 | true, false (any value other than false is true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
@@ -498,6 +499,42 @@ Behavior
 | MEMENTO_CLI_REMOTE, MEMENTO_CLI_KEY | User shell environment | Common remote CLI variables ([cli.en.md](cli.en.md#remote-access-environment-variables)). The hook uses them when the plugin pair is absent |
 
 Plugin installation is described in [getting-started/plugins.en.md](getting-started/plugins.en.md).
+
+### Audit table
+
+Audited actions write a topic `audit.record` event to the outbox, and the audit promotion consumer (`lib/logging/audit-consumer.js`) moves it into `agent_memory.admin_audit_events` (migration-056) as one sequential hash chain. The file audit log (`LOG_DIR/audit-YYYY-MM-DD.log`) keeps being written. A 30-day period of comparing both records is recommended; file log files are not deleted automatically.
+
+| Variable | Default | Description |
+|-|-|-|
+| MEMENTO_AUDIT_DB | on | With `on`, audit events are written to the outbox and the processes that run the outbox worker register the audit promotion handler. With `off`, nothing is written and no handler is registered (the file audit log continues). Actions taken while it is `off` are not in the table. Pending `audit.record` rows become a topic without a handler and may move to `no_handler` dead-letter after `MEMENTO_OUTBOX_UNHANDLED_DAYS`; after turning it back `on`, requeue them with the SQL above. With `MEMENTO_OUTBOX=off`, nothing is written regardless of this value. Whether to write is read at call time, handler registration at startup |
+| MEMENTO_AUDIT_RETENTION_DAYS | 400 | Days to keep audit rows (by `recorded_at`). Every 6 hours the leading part older than this is deleted in batches of 1000, at most 50000 per run. The last row is never deleted. Integer from 1 to 3650, any other value uses 400 |
+
+Recorded actions
+
+| Action | Producer | Target | detail |
+|-|-|-|-|
+| `admin.*` | Admin API requests other than GET, and export GETs, recorded when the response finishes. Action names follow the declarations in `lib/admin/admin-audit-actions.js`; a request without a declaration is `admin.request` | First path variable (key, group, fragment id, first 8 characters of a session id) or the id of a resource the handler created | `method`, `path` (without query string, UUID segments shortened to 8 characters), `status`, and values reported by the handler (`changed`, `before`, `after` for key policy, `after` for key numbers and status) |
+| `admin.auth` | Admin login success (`success`) and failure (`denied`) | none | `channel` (form, bearer). The attempted value is never recorded |
+| `memory.remember`, `memory.amend`, `memory.forget`, `memory.link` | Memory tool handlers. Failures are recorded as `failure`; dryRun calls are not recorded | Fragment id (`topic` for a forget by topic) | Content only as `contentSha256` and `contentLength`, failures only as `errorCode` (no error messages) |
+| `memory.anchor` | Storing an anchor, or an amend that changes `isAnchor` | Fragment id | `isAnchor` |
+| `gate.block` | The write gate (`WriteGate`) rejects a write (hard gate, `MEMENTO_SENSITIVE_SCAN=reject`, hard gate lookup failure) | none | `entry`, `op`, `rule`, `fragmentType`. The actor is the key (master for user entry points without a key, system for internal server jobs) |
+
+Review decisions and external transfer audits are written by the producers of those features with the same functions (`recordAudit`, or `enqueueAudit` inside a transaction).
+
+detail rules: an event whose key names point at content or secrets (containing `content`, `body`, `text`, `summary`, `token`, `secret`, `password`, `authorization`, `cookie`, `credential`, `api_key`, `raw`) is not created. Keys ending in `Sha256` and `Length` are accepted only as 64 hex characters and non-negative integers. String values have secret formats replaced with markers (`SensitiveScanner`) and are cut to 200 characters. Events that break the rules and outbox write failures never block the business response; they are recorded as a warning log and `memento_audit_enqueue_failed_total`.
+
+Chain
+
+- Row hash: `row_hash = sha256(prev_hash + "\n" + canonical JSON of the row values)`. The first row's `prev_hash` is 64 zeros. Canonical JSON sorts keys, writes seq as a decimal string and times as millisecond ISO strings (`lib/logging/audit-chain.js`).
+- Sequence: the consumer locks the table in `SHARE ROW EXCLUSIVE` mode, reads the last row and writes `seq = last + 1` in the same transaction (lock wait limit 10 seconds). Several workers never fork the chain. When `source_event` (the outbox idempotency key) already exists, no new row is written.
+- Verification checks seq continuity, the `prev_hash` link and the recomputed `row_hash` in that order. A changed row reports `row_hash_mismatch`, a missing row `seq_gap`, a broken link `prev_hash_mismatch`, each with the first broken seq. A chain whose leading part was removed by retention uses the remaining first row's `prev_hash` as the anchor (`retained`); a chain that still starts at seq 1 uses 64 zeros (`genesis`). Rows removed after the last row cannot be detected from the chain alone, so keep the `headHash` of a verification result outside the database and compare it.
+
+Query and verification
+
+- Admin API: `GET /v1/internal/model/nothing/audit` (filters `action`, `actor`, `target_type`, `target_id`, `outcome`, `workspace`, `from`, `to`, `before`, `limit`), `GET .../audit/export?format=jsonl` (same filters, seq ascending, `prevHash` and `rowHash` on every line), `POST .../audit/verify` (optional body `{ "fromSeq": n, "maxRows": n }`). Formats are in [api-reference.en.md](api-reference.en.md#audit).
+- Console: the Audit Log screen in the sidebar runs filtered queries, loads more, exports JSONL and verifies the chain.
+- CLI: `memento-mcp audit verify [--from-seq N] [--max-rows N] [--json]`. Exit code 1 when the chain is broken.
+- Metrics: `memento_audit_enqueue_failed_total`, `memento_audit_recorded_total` (newly written rows), `memento_audit_cleaned_total`. Promotion lag and failures are visible as `memento_outbox_*{topic="audit.record"}`.
 
 ### Redis
 
@@ -1195,6 +1232,7 @@ Run `npm run migrate` to execute unapplied migrations in order. History is manag
 | 052 | migration-052-outbox-events.sql | `outbox_events` table (transactional outbox: topic, aggregate_id, payload, available_at, attempts, processed_at, last_error, dead_at, claim_token) with partial indexes for pending, processed and dead-letter rows |
 | 054 | migration-054-case-events-source-fragment.sql | Partial index `idx_ce_source_fragment_id` on `case_events(source_fragment_id)` (lookup for the forget deletion cascade and orphan summary cleanup). Production databases create it first with `scripts/ops/online-index.mjs` ([operations/online-migration.md](operations/online-migration.md)) |
 | 055 | migration-055-api-keys-egress-policy.sql | `api_keys.egress_policy JSONB` (LLM egress policy, NULL means no policy). Edited through `egress_policy` of `PATCH /v1/internal/model/nothing/keys/:id/policy`. See "Egress Policy" for the decision rules |
+| 056 | migration-056-admin-audit-events.sql | `admin_audit_events` table (audit hash chain: seq, source_event, occurred_at, recorded_at, action, outcome, actor, target, workspace, detail, prev_hash, row_hash) with time, action, actor and target indexes |
 | 057 | migration-057-fragment-provenance.sql | `fragments.origin`, `observed_client`, `trust_tier` (smallint), `review_state`, `review_reason` (all nullable without defaults, no table rewrite) and CHECK constraints on `origin` and `trust_tier` (NOT VALID, applied to newly written rows only). Existing rows are not backfilled and a NULL `trust_tier` is read as 2 in code (`MEMENTO_PROVENANCE`). `origin` is the origin claimed by the client and differs in role from `source` (label) and `assertion_status` (verification state) |
 | 058 | migration-058-review-decisions.sql | `memory_review_decisions` table (review decision records: `fragment_id`, `decision` (approve, reject, auto_reject), `reviewer`, `note`, `idempotency_key` (partial unique index), `key_id`, `review_reason`, `decided_at`; no fragment content) and the `fragments_review_state_check` constraint (`review_state` is NULL, pending, approved or rejected; NOT VALID, applied to newly written rows only). A key's review mode is not an api_keys column but a permission list marker (`review_off`, `review_all`) (`MEMENTO_REVIEW_QUEUE`) |
 

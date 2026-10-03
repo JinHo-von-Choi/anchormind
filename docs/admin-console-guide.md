@@ -14,12 +14,12 @@ https://{도메인}/v1/internal/model/nothing/
 
 ## Admin UI 아키텍처
 
-Admin UI는 얇은 진입점(80줄) + 15개 ESM 모듈로 구성된다. Consolidator는 22개 stage(stageDefs 배열)를 순차 실행하며, 진행률 표시는 `stageDefs.length`(22)를 분모로 계산된다.
+Admin UI는 얇은 진입점(82줄) + 16개 ESM 모듈로 구성된다. Consolidator는 22개 stage(stageDefs 배열)를 순차 실행하며, 진행률 표시는 `stageDefs.length`(22)를 분모로 계산된다.
 
 ```
 assets/admin/
 ├── index.html          # <script type="module"> 로 로드
-├── admin.js            # 진입점 (80줄), 모듈 초기화 오케스트레이션
+├── admin.js            # 진입점 (82줄), 모듈 초기화 오케스트레이션
 ├── vendor/             # Tailwind CSS 3.4.17, d3 7.9.0 사본과 PROVENANCE.md
 └── modules/
     ├── state.js        # 전역 상태 관리
@@ -34,6 +34,7 @@ assets/admin/
     ├── sessions.js     # 세션 관리
     ├── graph.js        # 지식 그래프
     ├── logs.js         # 로그 뷰어
+    ├── audit.js        # 감사 로그
     ├── memory.js       # 메모리 운영
     ├── metrics.js      # 메트릭 대시보드
     └── metrics-sparkline.js # 메트릭 스파크라인
@@ -47,7 +48,7 @@ Tailwind CSS와 d3 스크립트는 외부 CDN이 아니라 서버가 `assets/adm
 
 ## 화면 구성
 
-좌측 사이드바에 8개 메뉴가 있다. 각 메뉴의 역할과 읽는 법을 설명한다.
+좌측 사이드바에 9개 메뉴가 있다. 각 메뉴의 역할과 읽는 법을 설명한다.
 
 상단 커맨드바:
 - MASTER KEY 배지 -- 현재 세션이 master key 인증임을 표시한다.
@@ -234,6 +235,16 @@ API 키를 논리적 단위로 묶어 관리한다. 같은 그룹의 키들은 �
 - 파일 브라우저 -- 날짜별로 그룹핑된 로그 파일 목록. 클릭하면 해당 파일을 로드.
 - 최근 에러 -- 오늘 발생한 에러 로그 최근 5건 미리보기
 - 디스크 사용량 -- 전체 로그 용량, 보관 기간
+
+#### 감사 로그
+
+사이드바의 감사 로그 메뉴(로그 아래)는 `admin_audit_events` 해시 체인을 최근 순으로 보여 준다. 기록 범위와 체인 구조는 [configuration.md](configuration.md#감사-표)에 있다.
+
+- 조건 -- ACTION(`admin.*`처럼 `.*`로 끝나면 접두어), ACTOR(`master`, `anonymous`, `system` 또는 키 id), TARGET TYPE, TARGET ID, OUTCOME(`success`, `failure`, `denied`), FROM, TO(ISO 날짜나 시각). APPLY로 다시 조회한다.
+- 표 -- SEQ, TIME, ACTION, OUTCOME, ACTOR(키는 앞 8자), TARGET, DETAIL(한 줄 요약). 본문은 담기지 않고 `contentSha256`, `contentLength`만 보인다.
+- MORE -- 쪽이 가득 차면 나타나며 더 오래된 50건을 이어 붙인다.
+- EXPORT JSONL -- 지금 조건의 행을 seq 오름차순 `audit-events.jsonl`로 내려받는다. 줄마다 `prevHash`, `rowHash`가 있다.
+- VERIFY -- 체인 전체를 다시 계산해 결과를 위쪽 띠에 적는다(온전하면 확인한 행 수와 기준점, 끊겼으면 첫 끊긴 seq와 사유). 같은 검사는 `memento-mcp audit verify`로도 실행한다.
 
 ---
 

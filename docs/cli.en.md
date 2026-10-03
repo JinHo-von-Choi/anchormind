@@ -51,7 +51,7 @@ Every command except `serve` sends server logs to stderr (the CLI sets `MEMENTO_
 
 ### Local-only (remote access not supported)
 
-`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, and `anchor-scope` access the DB or process directly and return an error when used with `--remote`.
+`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`, and `audit` access the DB or process directly and return an error when used with `--remote`.
 
 ### Remote-capable
 
@@ -85,6 +85,7 @@ Every command except `serve` sends server logs to stderr (the CLI sets `MEMENTO_
 | `anchor-scope [--execute]` | Inventory and normalize approved shared anchors, snapshot backfill (dry-run by default) | No |
 | `hook <event> --client <name>` | Claude Code and Codex command hook runner (`SessionStart`, `Stop`, `SessionEnd`) | Remote only |
 | `init --target <claude\|codex>` | Create the Claude Code or Codex plugin as a local marketplace (dry-run by default, `--write` to write) | Not applicable |
+| `audit verify [--from-seq N] [--max-rows N]` | Verify the audit hash chain (exit code 1 when broken) | No |
 
 ---
 
@@ -509,6 +510,24 @@ anchormind init --target codex --dir ./mk --url https://memento.example.com/mcp 
 - The API key is never written to a file and `--key` is not accepted. Claude Code asks for `api_key` when the plugin is enabled and keeps it in the secure credential store. For Codex, the `config.toml` snippet names only the environment variable (`bearer_token_env_var = "MEMENTO_CLI_KEY"`).
 - It does not contact a server and does not load the `.env` of the current directory.
 
+### audit
+
+Recompute the `admin_audit_events` audit hash chain in seq order. Connects to the database with the same environment variables as the server.
+
+```bash
+node bin/memento.js audit verify
+node bin/memento.js audit verify --from-seq 5000 --max-rows 100000
+node bin/memento.js audit verify --json
+```
+
+| Option | Description |
+|-|-|
+| `--from-seq <n>` | Start at this seq and also check that it links to the `row_hash` of the row just before it. Without it, start at the first remaining row |
+| `--max-rows <n>` | Check at most this many rows (default 1000000) |
+| `--json` | Print the result object as JSON |
+
+An intact chain prints the number of checked rows, the anchor (`genesis`, or `retained` after retention cleanup) and the last `row_hash` (`head`) and exits with code 0. A broken chain prints the first broken seq and the reason (`row_hash_mismatch`, `prev_hash_mismatch`, `seq_gap`) and exits with code 1. The chain structure is in [configuration.en.md](configuration.en.md#audit-table).
+
 ---
 
 ## Remote Access Examples
@@ -529,7 +548,7 @@ node bin/memento.js stats
 node bin/memento.js remember "deployment complete" --topic deploy --type procedure
 ```
 
-Using `--remote` or `MEMENTO_CLI_REMOTE` with a local-only command (`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`) returns an error.
+Using `--remote` or `MEMENTO_CLI_REMOTE` with a local-only command (`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`, `audit`) returns an error.
 
 ---
 

@@ -78,6 +78,9 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | GET | /v1/internal/model/nothing/memory/graph?topic=&limit= | 지식 그래프 데이터 (nodes + edges) |
 | GET | /v1/internal/model/nothing/export?key_id=&topic= | 파편 JSON Lines 스트림 내보내기(형식 버전 2, 링크와 선택 이력 포함). 아래 「내보내기와 가져오기」 참조 |
 | POST | /v1/internal/model/nothing/import | 파편 가져오기(JSON 본문 또는 export 파일 그대로). 아래 「내보내기와 가져오기」 참조 |
+| GET | /v1/internal/model/nothing/audit | 감사 기록 목록(최근 순). 아래 「감사」 참조 |
+| GET | /v1/internal/model/nothing/audit/export?format=jsonl | 감사 기록 JSON Lines 내보내기(seq 오름차순, 줄마다 해시) |
+| POST | /v1/internal/model/nothing/audit/verify | 감사 해시 체인 검증 |
 
 ### 내보내기와 가져오기
 
@@ -135,6 +138,39 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 - `transformed`는 새로 기록한 행 중 값이 파일과 달라진 행 수이고 `transformed_by_reason`이 사유별 건수다. `content`는 관문이 본문을 바꾼 경우(저장 길이 절삭, 마스킹, 공백 제거), `importance`는 저장 시 유형별 상한이 값을 낮춘 경우다. 한 행이 두 사유에 해당하면 `transformed`에는 한 번, 사유마다 한 번 센다.
 - `ignored`는 파일에 있었지만 반영하지 않은 `key_id`와 `is_anchor`(소유자 경로가 아닌 경우) 행 수다.
 - 읽을 수 없는 형식 버전은 400 `unsupported_format_version`, 머리 줄도 끝 줄도 없고 알아볼 수 있는 기록이 하나도 없는 입력은 400 `no_valid_records`(집계는 `partial`), 깨진 JSON 본문은 400, 크기 초과는 413이다. `{"fragments": [...]}` 형태의 JSON 본문은 파일이 아니라 버전 2 구조의 요청 본문으로 처리하며 버전 1 폐지 표시를 붙이지 않고 `restore=trusted`는 받지 않는다.
+
+### 감사
+
+GET이 아닌 관리 요청, 관리 로그인, 기억 쓰기(remember, amend, forget, link), 앵커, 쓰기 관문 거부가 `admin_audit_events` 해시 체인에 기록된다. 기록 범위, detail 규칙, 체인 구조, 스위치는 [configuration.md](configuration.md#감사-표)에 있다.
+
+목록 `GET /audit`
+
+| 질의 매개변수 | 설명 |
+|-|-|
+| `action` | 행위 이름(`admin.key.policy_update`) 또는 `.*`로 끝나는 접두어(`admin.*`, `memory.*`) |
+| `actor` | `master`, `anonymous`, `system` 또는 키 id |
+| `target_type`, `target_id` | 대상 유형(`api_key`, `key_group`, `fragment`, `topic`, `session`)과 id |
+| `outcome` | `success`, `failure`, `denied` |
+| `workspace` | workspace 이름 |
+| `from`, `to` | 발생 시각 구간(ISO 시각, `to`는 포함하지 않는다) |
+| `before` | 이 seq보다 작은 행만(이어 보기 커서) |
+| `limit` | 1~200, 기본 50 |
+
+응답은 `{ "events": [...], "nextBefore": n | null }`이다. 행은 `seq`, `sourceEvent`, `occurredAt`, `recordedAt`, `action`, `outcome`, `actorKind`, `actorKeyId`, `actorSession`(앞 8자), `actorIp`, `targetType`, `targetId`, `workspace`, `detail`, `prevHash`, `rowHash`를 담는다. `nextBefore`는 쪽이 가득 찼을 때 다음 쪽의 `before` 값이다. 형식이 틀린 매개변수는 400과 `field`, 감사 표가 없으면(migration-056 미적용) 503이다.
+
+내보내기 `GET /audit/export?format=jsonl`은 같은 조건(`limit` 제외)의 행을 seq 오름차순으로 한 줄에 하나씩 내려 준다(`application/x-ndjson`, `audit-events.jsonl`). `format`은 `jsonl`만 받는다. 줄마다 `prevHash`와 `rowHash`가 있어 조건 없이 내보낸 파일은 밖에서 같은 규칙으로 다시 검증할 수 있다.
+
+검증 `POST /audit/verify`의 본문은 선택이다(`{ "fromSeq": n, "maxRows": n }`, `maxRows` 기본과 상한 1000000). 응답 예(필드 구조):
+
+```json
+{
+  "ok": false, "checked": 41, "firstSeq": 1, "lastSeq": 41,
+  "anchor": "genesis", "anchorHash": "000...0", "headHash": null,
+  "complete": false, "broken": { "seq": 42, "reason": "row_hash_mismatch" }
+}
+```
+
+`anchor`는 `genesis`(seq 1부터), `retained`(보존 정리 뒤 남은 첫 행), `previous_row`(`fromSeq` 바로 앞 행)다. `broken.reason`은 `row_hash_mismatch`, `prev_hash_mismatch`, `seq_gap`이다. `complete`는 끝까지 확인했을 때 `true`이고 `maxRows`에서 멈추면 `false`다. 내보내기와 검증 요청도 각각 `admin.audit.export`, `admin.audit.verify`로 기록된다.
 
 ### /health 엔드포인트 정책
 

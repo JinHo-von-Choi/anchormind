@@ -174,6 +174,7 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-051-search-events-budget.s
 psql $DATABASE_URL -f lib/memory/migrations/migration-052-outbox-events.sql                         # outbox_events 표 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-054-case-events-source-fragment.sql          # case_events 원본 파편 색인 (운영 DB는 online-index로 먼저 생성)
 psql $DATABASE_URL -f lib/memory/migrations/migration-055-api-keys-egress-policy.sql                # api_keys.egress_policy(LLM 외부 전송 정책) 열 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-056-admin-audit-events.sql                    # admin_audit_events 감사 해시 체인 표 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-057-fragment-provenance.sql                    # 파편 출처, 신뢰 등급, 검토 상태 열
 psql $DATABASE_URL -f lib/memory/migrations/migration-058-review-decisions.sql                       # 검토 결정 기록 표, review_state 값 제약
 ```

@@ -192,6 +192,8 @@ lib/admin/
 ├── key-policy.js      키 정책 열(default_mode, allowed_workspaces, symbolic_hard_gate) 편집 값 검증과 감사 기록 형식
 ├── admin-review.js    검토 대기열 라우트(GET /review, POST /review/:id/approve, /reject)와 요청 검증
 ├── ReviewStore.js     검토 대기 목록, 승인과 거절(대상 행 잠금, 결정 기록, 멱등 키), 30일 미결정 자동 거절(6시간 주기)
+├── admin-audit-actions.js GET이 아닌 관리 라우트(와 내보내기 GET)의 감사 행위 선언, 처리기의 감사 메모(`noteAdminAudit`)
+├── admin-audit.js     감사 조회, JSONL 내보내기, 체인 검증 라우트 (`/audit`, `/audit/export`, `/audit/verify`)
 ├── admin-memory.js    메모리 운영 라우트 (overview, fragments, anomalies, graph)
 ├── admin-sessions.js  세션 관리 라우트
 ├── admin-logs.js      로그 조회 라우트
@@ -200,7 +202,7 @@ lib/admin/
 assets/admin/
 ├── index.html         Admin SPA app shell (로그인 폼 + 컨테이너)
 ├── admin.css          Admin UI 스타일시트
-├── admin.js           Admin UI 로직 (8개 내비게이션: 개요, API 키, 그룹, 메모리 운영, 세션, 로그, 지식 그래프, 메트릭)
+├── admin.js           Admin UI 로직 (9개 내비게이션: 개요, API 키, 그룹, 메모리 운영, 세션, 로그, 감사 로그, 지식 그래프, 메트릭)
 └── vendor/            Tailwind CSS 3.4.17, d3 7.9.0 스크립트 사본. 콘솔 응답의 CSP는 `script-src 'self' 'unsafe-inline'`이며 외부 스크립트 호스트를 허용하지 않는다. 출처와 sha256은 `PROVENANCE.md`
 
 lib/http/
@@ -208,6 +210,12 @@ lib/http/
 
 lib/logging/
 ├── audit.js           감사 로그 및 접근 이력 기록
+├── audit-event.js     감사 이벤트 payload 구성과 검증, detail 규칙(본문과 비밀 금지, 본문은 sha256과 길이), 행위자 판정
+├── audit-chain.js     감사 해시 체인의 정규 JSON, 행 해시, 묶음 검증(순수 함수)
+├── audit-outbox.js    감사 이벤트 생산자. `enqueueAudit(client, event)`(호출자 트랜잭션), `recordAudit(event)`(독립 기록, 거부하지 않음). `MEMENTO_AUDIT_DB`
+├── audit-consumer.js  outbox topic `audit.record`의 감사 승격 처리기 등록과 보존 정리(`MEMENTO_AUDIT_RETENTION_DAYS`)
+├── AuditStore.js      admin_audit_events 체인 기록(표 잠금 뒤 seq + 1), 조회, 순차 읽기, 검증, 보존 정리
+├── audit-metrics.js   `memento_audit_*` 지표
 └── session-ref.js     로그와 외부 프롬프트에 쓰는 세션 ID 표기 (앞 8자)
 
 lib/outbox/
@@ -225,6 +233,7 @@ lib/outbox/
 ```
 lib/tools/
 ├── memory.js    16개 MCP 도구 핸들러
+├── memory-audit.js 기억 도구의 파일 감사 기록과 감사 이벤트 값(remember, amend, forget, link, 앵커)
 ├── reconstruct.js  reconstruct_history, search_traces 도구 핸들러 (Narrative Reconstruction)
 ├── memory-schemas.js  도구 스키마 정의 (inputSchema)
 ├── tool-head.js  모든 도구의 name, title, MCP 힌트(`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)
@@ -264,6 +273,7 @@ lib/cli/
 ├── benchmark.js        골드셋 recall 계측 (Recall@k, MRR, 지연)
 ├── anchor-scope.js     non-default anchor 범위 inventory, 승인된 공유 anchor 정규화, 스냅숏 backfill (기본 dry-run)
 ├── session.js          세션 조회, 정리, 교체
+├── audit.js            감사 해시 체인 검증 (`audit verify`, 끊기면 종료 코드 1)
 ├── export.js           파편 JSONL 백업
 ├── import.js           JSONL 파편 복원
 ├── update.js           새 버전 확인과 적용
@@ -861,7 +871,7 @@ MCP 클라이언트는 RFC 8414/RFC 7591/RFC 7636 기반 OAuth 2.0 흐름으로 
 
 ### Admin 콘솔 구조
 
-Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + `assets/admin/admin.css` + `assets/admin/admin.js`). 8개 내비게이션 영역으로 나뉜다:
+Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + `assets/admin/admin.css` + `assets/admin/admin.js`). 9개 내비게이션 영역으로 나뉜다:
 
 | 영역 | 설명 | 상태 |
 |------|------|------|
@@ -871,6 +881,7 @@ Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + 
 | 메모리 운영 | 파편 검색/필터, 이상 탐지, 검색 관측성 | 구현 완료 |
 | 세션 | 세션 목록, 상세 조회, 활동 추적, 수동 reflect, 종료, 만료 정리, 미반영 일괄 reflect | 구현 완료 |
 | 로그 | 로그 파일 목록, 내용 조회(역순 tail), 레벨/검색 필터, 통계 | 구현 완료 |
+| 감사 로그 | 감사 해시 체인 조회(행위, 행위자, 대상, 결과, 기간 조건), 이어 보기, JSONL 내보내기, 체인 검증 | 구현 완료 |
 | 지식 그래프 | 파편 관계 시각화 (D3.js force-directed), 토픽 필터, 노드 상세 | 구현 완료 |
 | 메트릭 | 프로세스 내 메트릭 카드, 시계열 sparkline, 시간 범위 토글 | 구현 완료 |
 
@@ -880,7 +891,7 @@ Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + 
 
 **Admin UI ESM 구조** (`assets/admin/`):
 
-번들러 없이 브라우저 네이티브 ESM으로 동작한다. `admin.js`는 엔트리포인트로 `assets/admin/modules/` 하위 15개 모듈을 정적 import로 불러온다.
+번들러 없이 브라우저 네이티브 ESM으로 동작한다. `admin.js`는 엔트리포인트로 `assets/admin/modules/` 하위 16개 모듈을 정적 import로 불러온다.
 
 | 모듈 | 역할 |
 |------|------|
@@ -896,6 +907,7 @@ Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + 
 | `sessions.js` | 세션 목록/상세/reflect/종료 |
 | `graph.js` | D3.js force-directed 지식 그래프 |
 | `logs.js` | 로그 파일 조회 (역순 tail, 레벨/검색 필터) |
+| `audit.js` | 감사 로그 조회(조건, 이어 보기), JSONL 내보내기, 체인 검증 |
 | `memory.js` | 파편 검색/필터, 이상 탐지, 검색 관측성 |
 | `metrics.js` | 메트릭 카드, 시간 범위 토글 |
 | `metrics-sparkline.js` | 순수 SVG sparkline 렌더러 |

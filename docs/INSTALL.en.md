@@ -286,6 +286,9 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-054-case-events-source-fra
 # api_keys.egress_policy (LLM egress policy) column
 psql $DATABASE_URL -f lib/memory/migrations/migration-055-api-keys-egress-policy.sql
 
+# admin_audit_events audit hash chain table
+psql $DATABASE_URL -f lib/memory/migrations/migration-056-admin-audit-events.sql
+
 # Fragment provenance, trust tier and review state columns
 psql $DATABASE_URL -f lib/memory/migrations/migration-057-fragment-provenance.sql
 

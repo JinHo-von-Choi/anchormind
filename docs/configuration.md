@@ -24,6 +24,7 @@
 | 1000 이상 600000 이하의 정수, 그 밖은 60000 | MEMENTO_GC_TIME_BUDGET_MS |
 | 1 이상 100 이하의 정수, 그 밖은 12 | MEMENTO_OUTBOX_MAX_ATTEMPTS |
 | 1 이상 3650 이하의 정수, 그 밖은 7 | MEMENTO_OUTBOX_RETENTION_DAYS, MEMENTO_OUTBOX_UNHANDLED_DAYS |
+| 1 이상 3650 이하의 정수, 그 밖은 400 | MEMENTO_AUDIT_RETENTION_DAYS |
 | 0 이상 10 이하의 정수, 그 밖은 3 | MEMENTO_DB_LOCK_RETRY_MAX |
 | 1 이상의 숫자, 그 밖은 `SESSION_TTL_MINUTES * 60` | OAUTH_ACCESS_TOKEN_TTL_SECONDS |
 | 0 이상 1 이하의 숫자 (1을 넘으면 1, 음수와 숫자가 아닌 값은 0) | MEMENTO_DECAY_MIN_DELTA, MEMENTO_UTILITY_MIN_DELTA |
@@ -39,7 +40,7 @@
 | true, false (그 밖의 값은 false) | MEMENTO_CONFIG_STRICT |
 | true, false (그 밖의 값은 `MEMORY_CONFIG` 검증에서 기동 실패) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (그 밖의 값은 off) | MEMENTO_ADMIN_AUTH_BACKOFF |
-| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE, MEMENTO_PROVENANCE, MEMENTO_REVIEW_QUEUE, MEMENTO_HOOK_ENDPOINTS, MEMENTO_FORGET_CASCADE, MEMENTO_EGRESS_POLICY |
+| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE, MEMENTO_PROVENANCE, MEMENTO_REVIEW_QUEUE, MEMENTO_HOOK_ENDPOINTS, MEMENTO_FORGET_CASCADE, MEMENTO_EGRESS_POLICY, MEMENTO_AUDIT_DB |
 | mask, reject, off (그 밖의 값은 mask) | MEMENTO_SENSITIVE_SCAN |
 | workspace, key (그 밖의 값은 workspace) | MEMENTO_DEDUP_SCOPE |
 | true, false (false가 아닌 값은 true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
@@ -493,6 +494,42 @@ Claude Code와 Codex의 훅이 부르는 `POST /hooks/{client}/{event}`다. `cli
 | MEMENTO_CLI_REMOTE, MEMENTO_CLI_KEY | 사용자 셸 환경 | 원격 CLI 공통 변수([cli.md](cli.md#원격-접속-환경변수)). 플러그인 쌍이 없을 때 훅이 쓴다 |
 
 플러그인 설치는 [getting-started/plugins.md](getting-started/plugins.md)에 있다.
+
+### 감사 표
+
+감사 대상 행위는 topic `audit.record` 이벤트를 outbox에 남기고, 감사 승격 소비자(`lib/logging/audit-consumer.js`)가 `agent_memory.admin_audit_events`(migration-056)에 하나의 순차 해시 체인으로 옮긴다. 파일 감사 로그(`LOG_DIR/audit-YYYY-MM-DD.log`)는 그대로 계속 기록된다. 두 기록을 대조하는 기간은 30일을 권장하고, 파일 로그 파일은 자동으로 지우지 않는다.
+
+| 변수 | 기본값 | 설명 |
+|-|-|-|
+| MEMENTO_AUDIT_DB | on | `on`이면 감사 이벤트를 outbox에 기록하고, outbox 작업자를 돌리는 프로세스가 감사 승격 처리기를 등록한다. `off`이면 기록하지 않고 처리기도 등록하지 않는다(파일 감사 로그는 계속된다). `off`인 동안 생긴 행위는 표에 남지 않는다. 이미 대기 중인 `audit.record` 행은 처리기가 없는 topic이 되어 `MEMENTO_OUTBOX_UNHANDLED_DAYS`가 지나면 `no_handler` dead-letter로 옮겨질 수 있고, 다시 `on`으로 켠 뒤 위 SQL로 대기로 돌린다. `MEMENTO_OUTBOX=off`이면 이 값과 관계없이 기록하지 않는다. 기록 여부는 호출 시점에, 처리기 등록은 기동 시점에 읽는다 |
+| MEMENTO_AUDIT_RETENTION_DAYS | 400 | 감사 행의 보존 일수(`recorded_at` 기준). 6시간마다 이 기간이 지난 앞부분을 1000건 묶음으로, 한 번에 최대 50000건까지 지운다. 마지막 행은 지우지 않는다. 1 이상 3650 이하의 정수, 그 밖의 값은 400 |
+
+기록 범위(행위 이름)
+
+| 행위 | 생산 위치 | 대상 | detail |
+|-|-|-|-|
+| `admin.*` | 관리 API의 GET이 아닌 요청과 내보내기 GET. 응답이 끝날 때 기록한다. 행위 이름은 `lib/admin/admin-audit-actions.js`의 선언을 따르고, 선언이 없는 요청은 `admin.request`다 | 경로의 첫 변수(키, 그룹, 파편 id, 세션 id 앞 8자) 또는 처리기가 알린 생성 자원 id | `method`, `path`(질의 문자열 없이 UUID 조각을 앞 8자로 줄인 경로), `status`, 처리기가 알린 변경 값(키 정책은 `changed`, `before`, `after`, 키 수치와 상태는 `after`) |
+| `admin.auth` | 관리 로그인 성공(`success`)과 실패(`denied`) | 없음 | `channel`(form, bearer). 시도한 값은 남기지 않는다 |
+| `memory.remember`, `memory.amend`, `memory.forget`, `memory.link` | 기억 도구 처리기. 실패도 `failure`로 남기고 dryRun은 남기지 않는다 | 파편 id(forget의 주제 지정은 `topic`) | 본문은 `contentSha256`과 `contentLength`만, 실패는 `errorCode`만(오류 메시지는 남기지 않는다) |
+| `memory.anchor` | 앵커로 저장하거나 amend가 `isAnchor`를 바꿀 때 | 파편 id | `isAnchor` |
+| `gate.block` | 쓰기 관문(`WriteGate`)이 거부할 때(hard gate, `MEMENTO_SENSITIVE_SCAN=reject`, hard gate 조회 실패) | 없음 | `entry`, `op`, `rule`, `fragmentType`. 행위자는 키(키 없는 사용자 진입점은 마스터, 서버 내부 작업은 system) |
+
+검토 결정과 외부 전송 감사는 그 기능의 생산자가 같은 함수(`recordAudit`, 트랜잭션 안에서는 `enqueueAudit`)로 기록한다.
+
+detail 규칙: 키 이름이 본문이나 비밀을 가리키면(`content`, `body`, `text`, `summary`, `token`, `secret`, `password`, `authorization`, `cookie`, `credential`, `api_key`, `raw`를 포함) 이벤트를 만들지 않는다. 단 `Sha256`, `Length`로 끝나는 키는 16진 64자와 0 이상의 정수일 때만 받는다. 문자열 값은 비밀 형식을 표식으로 바꾸고(`SensitiveScanner`) 200자로 자른다. 규칙을 어긴 이벤트와 outbox 기록 실패는 업무 응답을 막지 않고 경고 로그와 `memento_audit_enqueue_failed_total`로 남는다.
+
+체인
+
+- 행 해시: `row_hash = sha256(prev_hash + "\n" + 행 값의 정규 JSON)`. 첫 행의 `prev_hash`는 0 64개다. 정규 JSON은 키를 사전순으로 정렬하고, seq는 10진 문자열, 시각은 밀리초 ISO 문자열로 넣는다(`lib/logging/audit-chain.js`).
+- 순번: 소비자는 표를 `SHARE ROW EXCLUSIVE`로 잠근 트랜잭션 안에서 마지막 행을 읽고 `seq = 마지막 + 1`로 기록한다(잠금 대기 상한 10초). 작업자가 여럿이어도 체인은 갈라지지 않는다. `source_event`(outbox 멱등 키)가 이미 있으면 새 행을 만들지 않는다.
+- 검증: seq 연속성, `prev_hash` 연결, `row_hash` 재계산을 차례로 본다. 행 값이 바뀌면 `row_hash_mismatch`, 행이 빠지면 `seq_gap`, 이어지지 않으면 `prev_hash_mismatch`를 첫 끊긴 seq와 함께 보고한다. 보존 정리로 앞부분이 지워진 체인은 남은 첫 행의 `prev_hash`를 기준점(`retained`)으로 삼고, seq 1부터 남은 체인은 0 64개(`genesis`)를 기준점으로 삼는다. 마지막 행 뒤를 지운 경우는 체인만으로 알 수 없으므로 검증 결과의 `headHash`를 밖에 따로 보관해 대조한다.
+
+조회와 검증
+
+- 관리 API: `GET /v1/internal/model/nothing/audit`(조건 `action`, `actor`, `target_type`, `target_id`, `outcome`, `workspace`, `from`, `to`, `before`, `limit`), `GET .../audit/export?format=jsonl`(같은 조건, seq 오름차순, 줄마다 `prevHash`, `rowHash`), `POST .../audit/verify`(본문 선택 `{ "fromSeq": n, "maxRows": n }`). 자세한 형식은 [api-reference.md](api-reference.md#감사)에 있다.
+- 콘솔: 사이드바의 감사 로그 화면이 조건 조회, 이어 보기, JSONL 내보내기, 체인 검증을 부른다.
+- CLI: `memento-mcp audit verify [--from-seq N] [--max-rows N] [--json]`. 체인이 끊겼으면 종료 코드 1이다.
+- 지표: `memento_audit_enqueue_failed_total`, `memento_audit_recorded_total`(새로 기록한 행), `memento_audit_cleaned_total`. 승격 지연과 실패는 `memento_outbox_*{topic="audit.record"}`로 본다.
 
 ### Redis
 
@@ -1270,6 +1307,7 @@ EMBEDDING_DIMENSIONS=768
 | 052 | migration-052-outbox-events.sql | `outbox_events` 표(트랜잭션 outbox: topic, aggregate_id, payload, available_at, attempts, processed_at, last_error, dead_at, claim_token)와 대기, 완료, dead-letter 부분 색인 |
 | 054 | migration-054-case-events-source-fragment.sql | `case_events(source_fragment_id)` 부분 색인 `idx_ce_source_fragment_id`(forget 삭제 연쇄와 고아 요약 정리의 조회). 운영 DB는 `scripts/ops/online-index.mjs`로 먼저 만든다([operations/online-migration.md](operations/online-migration.md)) |
 | 055 | migration-055-api-keys-egress-policy.sql | `api_keys.egress_policy JSONB`(LLM 외부 전송 정책, NULL은 정책 없음). `PATCH /v1/internal/model/nothing/keys/:id/policy`의 `egress_policy`로 편집. 판정은 「외부 전송 정책」 |
+| 056 | migration-056-admin-audit-events.sql | `admin_audit_events` 표(감사 해시 체인: seq, source_event, occurred_at, recorded_at, action, outcome, 행위자, 대상, workspace, detail, prev_hash, row_hash)와 기간, 행위, 행위자, 대상 색인 |
 | 057 | migration-057-fragment-provenance.sql | `fragments.origin`, `observed_client`, `trust_tier`(smallint), `review_state`, `review_reason`(모두 기본값 없는 nullable, 표 재작성 없음)과 `origin`, `trust_tier` CHECK 제약(NOT VALID, 새로 쓰는 행에만 적용). 기존 행은 백필하지 않으며 NULL `trust_tier`는 코드에서 2로 해석한다(`MEMENTO_PROVENANCE`). `origin`은 클라이언트 주장 출처로 `source`(라벨), `assertion_status`(검증 상태)와 역할이 다르다 |
 | 058 | migration-058-review-decisions.sql | `memory_review_decisions` 표(검토 결정 기록: `fragment_id`, `decision`(approve, reject, auto_reject), `reviewer`, `note`, `idempotency_key`(부분 고유 색인), `key_id`, `review_reason`, `decided_at`. 파편 본문 없음)와 `fragments_review_state_check` 제약(`review_state`는 NULL, pending, approved, rejected. NOT VALID, 새로 쓰는 행에만 적용). 키의 검토 방식은 api_keys 열이 아니라 권한 목록 표지(`review_off`, `review_all`)다(`MEMENTO_REVIEW_QUEUE`) |
 

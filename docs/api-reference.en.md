@@ -75,6 +75,9 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | GET | /v1/internal/model/nothing/memory/graph?topic=&limit= | Knowledge graph data (nodes + edges) |
 | GET | /v1/internal/model/nothing/export?key_id=&topic= | Fragment JSON Lines stream export (format version 2, with links and optional history). See "Export and import" below |
 | POST | /v1/internal/model/nothing/import | Fragment import (JSON body or an export file as is). See "Export and import" below |
+| GET | /v1/internal/model/nothing/audit | Audit record list (newest first). See "Audit" below |
+| GET | /v1/internal/model/nothing/audit/export?format=jsonl | Audit record JSON Lines export (seq ascending, hashes on every line) |
+| POST | /v1/internal/model/nothing/audit/verify | Audit hash chain verification |
 
 ### Export and import
 
@@ -132,6 +135,39 @@ Response (field structure):
 - `transformed` is the number of newly written rows whose values differ from the file, and `transformed_by_reason` counts them per reason. `content` is the gate changing the content (storage length cut, masking, trimming) and `importance` is the per-type cap lowering the value on storage. A row with both reasons counts once in `transformed` and once per reason.
 - `ignored` counts the `key_id` values in the file that were not applied and the `is_anchor` values ignored when the path is not the owner path.
 - A format version that cannot be read gets 400 `unsupported_format_version`, input with no header line, no end line and no recognizable record gets 400 `no_valid_records` (counts in `partial`), a malformed JSON body gets 400, and an oversized body gets 413. A JSON body of the form `{"fragments": [...]}` is handled as a version 2 structured request body and not as a file: it carries no version 1 deprecation marker and does not accept `restore=trusted`.
+
+### Audit
+
+Admin requests other than GET, admin logins, memory writes (remember, amend, forget, link), anchors and write gate rejections are recorded in the `admin_audit_events` hash chain. Scope, detail rules, chain structure and switches are in [configuration.en.md](configuration.en.md#audit-table).
+
+List `GET /audit`
+
+| Query parameter | Description |
+|-|-|
+| `action` | Action name (`admin.key.policy_update`) or a prefix ending in `.*` (`admin.*`, `memory.*`) |
+| `actor` | `master`, `anonymous`, `system` or a key id |
+| `target_type`, `target_id` | Target type (`api_key`, `key_group`, `fragment`, `topic`, `session`) and id |
+| `outcome` | `success`, `failure`, `denied` |
+| `workspace` | Workspace name |
+| `from`, `to` | Occurrence time range (ISO times, `to` excluded) |
+| `before` | Only rows with a smaller seq (load-more cursor) |
+| `limit` | 1 to 200, default 50 |
+
+The response is `{ "events": [...], "nextBefore": n | null }`. Rows carry `seq`, `sourceEvent`, `occurredAt`, `recordedAt`, `action`, `outcome`, `actorKind`, `actorKeyId`, `actorSession` (first 8 characters), `actorIp`, `targetType`, `targetId`, `workspace`, `detail`, `prevHash`, `rowHash`. `nextBefore` is the `before` value of the next page when the page is full. A malformed parameter gets 400 with `field`; without the audit table (migration-056 not applied) the answer is 503.
+
+Export `GET /audit/export?format=jsonl` streams the rows matching the same filters (without `limit`) in seq order, one per line (`application/x-ndjson`, `audit-events.jsonl`). `format` accepts only `jsonl`. Every line carries `prevHash` and `rowHash`, so an unfiltered export can be verified outside the server with the same rules.
+
+Verification `POST /audit/verify` takes an optional body (`{ "fromSeq": n, "maxRows": n }`, `maxRows` default and limit 1000000). Example response (field structure):
+
+```json
+{
+  "ok": false, "checked": 41, "firstSeq": 1, "lastSeq": 41,
+  "anchor": "genesis", "anchorHash": "000...0", "headHash": null,
+  "complete": false, "broken": { "seq": 42, "reason": "row_hash_mismatch" }
+}
+```
+
+`anchor` is `genesis` (starting at seq 1), `retained` (first row left after retention) or `previous_row` (the row just before `fromSeq`). `broken.reason` is `row_hash_mismatch`, `prev_hash_mismatch` or `seq_gap`. `complete` is `true` when the check reached the end and `false` when it stopped at `maxRows`. The export and verification requests themselves are recorded as `admin.audit.export` and `admin.audit.verify`.
 
 ### /health Endpoint Policy
 

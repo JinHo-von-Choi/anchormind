@@ -52,7 +52,7 @@ node bin/memento.js stats
 
 ### local-only (원격 접속 불가)
 
-`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope` 는 직접 DB / 프로세스에 접근하는 명령이므로 `--remote` 플래그와 함께 사용하면 에러를 반환한다.
+`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`, `audit` 는 직접 DB / 프로세스에 접근하는 명령이므로 `--remote` 플래그와 함께 사용하면 에러를 반환한다.
 
 ### 원격 지원
 
@@ -86,6 +86,7 @@ node bin/memento.js stats
 | `anchor-scope [--execute]` | 승인된 공유 앵커 범위 점검·정규화, snapshot backfill (기본 dry-run) | 아니오 |
 | `hook <event> --client <name>` | Claude Code, Codex command 훅 실행체 (`SessionStart`, `Stop`, `SessionEnd`) | 원격 전용 |
 | `init --target <claude\|codex>` | Claude Code, Codex 플러그인을 로컬 마켓플레이스로 생성 (기본 dry-run, `--write`로 쓰기) | 해당 없음 |
+| `audit verify [--from-seq N] [--max-rows N]` | 감사 해시 체인 검증 (끊기면 종료 코드 1) | 아니오 |
 
 ---
 
@@ -510,6 +511,24 @@ anchormind init --target codex --dir ./mk --url https://memento.example.com/mcp 
 - API 키는 어떤 파일에도 쓰지 않고 `--key`도 받지 않는다. Claude Code는 플러그인을 켤 때 `api_key`를 묻고 보안 저장소에 둔다. Codex는 `config.toml`에 환경 변수 이름(`bearer_token_env_var = "MEMENTO_CLI_KEY"`)만 적도록 안내한다.
 - 서버에 접속하지 않고, 현재 디렉터리의 `.env`를 불러오지 않는다.
 
+### audit
+
+`admin_audit_events` 감사 해시 체인을 seq 순으로 다시 계산해 확인한다. 서버와 같은 환경 변수로 DB에 붙는다.
+
+```bash
+node bin/memento.js audit verify
+node bin/memento.js audit verify --from-seq 5000 --max-rows 100000
+node bin/memento.js audit verify --json
+```
+
+| 옵션 | 설명 |
+|-|-|
+| `--from-seq <n>` | 이 seq부터 확인한다. 바로 앞 행의 `row_hash`에 이어지는지도 본다. 생략하면 남은 첫 행부터 |
+| `--max-rows <n>` | 이 행 수까지만 확인한다(기본 1000000) |
+| `--json` | 결과 객체를 JSON으로 출력한다 |
+
+체인이 온전하면 확인한 행 수, 기준점(`genesis` 또는 보존 정리 뒤의 `retained`), 마지막 `row_hash`(`head`)를 출력하고 종료 코드 0으로 끝난다. 끊겼으면 첫 끊긴 seq와 사유(`row_hash_mismatch`, `prev_hash_mismatch`, `seq_gap`)를 출력하고 종료 코드 1로 끝난다. 체인 구조는 [configuration.md](configuration.md#감사-표)에 있다.
+
 ---
 
 ## 원격 접속 사용 예시
@@ -530,7 +549,7 @@ node bin/memento.js stats
 node bin/memento.js remember "배포 완료" --topic deploy --type procedure
 ```
 
-local-only 명령(`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`)에서 `--remote`나 `MEMENTO_CLI_REMOTE`를 쓰면 에러가 반환된다.
+local-only 명령(`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`, `audit`)에서 `--remote`나 `MEMENTO_CLI_REMOTE`를 쓰면 에러가 반환된다.
 
 ---
 

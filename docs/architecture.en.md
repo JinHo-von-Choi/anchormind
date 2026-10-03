@@ -189,6 +189,8 @@ lib/admin/
 +-- key-policy.js      Validation of key policy column edits (default_mode, allowed_workspaces, symbolic_hard_gate) and the audit record format
 +-- admin-review.js    Review queue routes (GET /review, POST /review/:id/approve, /reject) and request validation
 +-- ReviewStore.js     Pending review list, approval and rejection (row lock, decision record, idempotency key) and automatic rejection after 30 undecided days (every 6 hours)
++-- admin-audit-actions.js Audit action declarations for admin routes other than GET (and export GETs), handler audit notes (`noteAdminAudit`)
++-- admin-audit.js     Audit query, JSONL export and chain verification routes (`/audit`, `/audit/export`, `/audit/verify`)
 +-- admin-memory.js    Memory operations routes (overview, fragments, anomalies, graph)
 +-- admin-sessions.js  Session management routes
 +-- admin-logs.js      Log viewing routes
@@ -197,7 +199,7 @@ lib/admin/
 assets/admin/
 +-- index.html         Admin SPA app shell (login form + container)
 +-- admin.css          Admin UI stylesheet
-+-- admin.js           Admin UI logic (8 navigation sections: overview, API keys, groups, memory ops, sessions, logs, knowledge graph, metrics)
++-- admin.js           Admin UI logic (9 navigation sections: overview, API keys, groups, memory ops, sessions, logs, audit log, knowledge graph, metrics)
 +-- vendor/            Copies of the Tailwind CSS 3.4.17 and d3 7.9.0 scripts. The console response CSP is `script-src 'self' 'unsafe-inline'` and allows no external script host. Source and sha256 are in `PROVENANCE.md`
 
 lib/http/
@@ -205,6 +207,12 @@ lib/http/
 
 lib/logging/
 +-- audit.js           Audit logging and access history recording
++-- audit-event.js     Audit event payload construction and validation, detail rules (no content or secrets, content as sha256 and length), actor resolution
++-- audit-chain.js     Canonical JSON, row hash and batch verification of the audit hash chain (pure functions)
++-- audit-outbox.js    Audit event producer. `enqueueAudit(client, event)` (caller transaction), `recordAudit(event)` (separate write, never rejects). `MEMENTO_AUDIT_DB`
++-- audit-consumer.js  Audit promotion handler registration for outbox topic `audit.record` and retention cleanup (`MEMENTO_AUDIT_RETENTION_DAYS`)
++-- AuditStore.js      admin_audit_events chain append (seq + 1 after a table lock), query, sequential read, verification, retention cleanup
++-- audit-metrics.js   `memento_audit_*` metrics
 +-- session-ref.js     Session ID notation used in logs and external prompts (first 8 chars)
 
 lib/outbox/
@@ -222,6 +230,7 @@ Tool implementations are separated into `lib/tools/`.
 ```
 lib/tools/
 +-- memory.js    16 MCP tool handlers
++-- memory-audit.js File audit records and audit event values of the memory tools (remember, amend, forget, link, anchor)
 +-- reconstruct.js  reconstruct_history, search_traces tool handlers (Narrative Reconstruction)
 +-- memory-schemas.js  Tool schema definitions (inputSchema)
 +-- tool-head.js  name, title and MCP hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) of every tool
@@ -261,6 +270,7 @@ lib/cli/
 +-- benchmark.js        Goldset recall measurement (Recall@k, MRR, latency)
 +-- anchor-scope.js     Non-default anchor scope inventory, approved shared-anchor normalization, snapshot backfill (dry-run by default)
 +-- session.js          Session listing, cleanup, rotation
++-- audit.js            Audit hash chain verification (`audit verify`, exit code 1 when broken)
 +-- export.js           Fragment JSONL backup
 +-- import.js           Fragment JSONL restore
 +-- update.js           New version check and apply
@@ -858,7 +868,7 @@ Memory isolation is composed of three layers. The layers that operate today are 
 
 ### Admin Console Structure
 
-The Admin UI is built as an app shell architecture (`assets/admin/index.html` + `assets/admin/admin.css` + `assets/admin/admin.js`). It is divided into 8 navigation sections:
+The Admin UI is built as an app shell architecture (`assets/admin/index.html` + `assets/admin/admin.css` + `assets/admin/admin.js`). It is divided into 9 navigation sections:
 
 | Section | Description | Status |
 |---------|-------------|--------|
@@ -868,6 +878,7 @@ The Admin UI is built as an app shell architecture (`assets/admin/index.html` + 
 | Memory Ops | Fragment search/filter, anomaly detection, search observability | Implemented |
 | Sessions | Session list, detail view, activity tracking, manual reflect, terminate, expired cleanup, bulk unreflected reflect | Implemented |
 | Logs | Log file listing, content viewing (reverse tail), level/search filters, statistics | Implemented |
+| Audit Log | Audit hash chain query (action, actor, target, outcome, time filters), load more, JSONL export, chain verification | Implemented |
 | Knowledge Graph | Fragment relationship visualization (D3.js force-directed), topic filter, node detail | Implemented |
 | Metrics | In-process metric cards, time-series sparklines, time range toggle | Implemented |
 
@@ -877,7 +888,7 @@ The `/stats` response includes `searchMetrics`, `observability`, `queues`, `heal
 
 **Admin UI ESM Structure** (`assets/admin/`):
 
-Operates as browser-native ESM without a bundler. `admin.js` is the entry point and statically imports the 15 modules under `assets/admin/modules/`.
+Operates as browser-native ESM without a bundler. `admin.js` is the entry point and statically imports the 16 modules under `assets/admin/modules/`.
 
 | Module | Role |
 |--------|------|
@@ -893,6 +904,7 @@ Operates as browser-native ESM without a bundler. `admin.js` is the entry point 
 | `sessions.js` | Session list/detail/reflect/terminate |
 | `graph.js` | D3.js force-directed knowledge graph |
 | `logs.js` | Log file viewing (reverse tail, level/search filters) |
+| `audit.js` | Audit log query (filters, load more), JSONL export, chain verification |
 | `memory.js` | Fragment search/filter, anomaly detection, search observability |
 | `metrics.js` | Metric cards, time range toggle |
 | `metrics-sparkline.js` | Pure SVG sparkline renderer |

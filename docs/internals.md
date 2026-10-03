@@ -904,3 +904,10 @@ server.js의 onFatal은 `gracefulShutdown("uncaughtException", { exitCode: 1 })`
 - 처리기는 이벤트 사이의 순서를 가정하지 않는다. 순서가 필요한 소비자(예: 단일 해시 체인)는 자기 기록 시점에 순번을 정한다.
 - 응답 지연이 중요한 요청 경로의 단일 이벤트는 `enqueueAutocommit(pool, event)`로 INSERT 문장 하나(자동 커밋)에 기록할 수 있다. 문장이 곧 트랜잭션이라 돌아온 시점에 커밋되어 있고, BEGIN과 COMMIT 왕복이 없다.
 - 훅 회고(topic `hook.reflect`): 생산자는 `lib/handlers/hook-handler.js`(`enqueueAutocommit`, aggregateId는 키, 클라이언트, 세션 id, 이벤트의 해시), 소비자는 `lib/hooks/hook-reflect-consumer.js`다. 소비자는 `lib/scheduler.js`가 작업자 기동 직전에 `registerHookReflectConsumer()`로 등록하고, `topic:id`가 아니라 aggregateId를 `idempotency_records`에 선점해 다른 이벤트로 들어온 같은 세션과 이벤트도 한 번만 회고한다. payload는 발췌 전체가 아니라 마지막 응답 블록을 민감 정보 규칙으로 가려 1000자로 자른 요약 후보와 메타데이터만 담는다. 요청 경로가 회고를 직접 부르지 않는다는 규칙은 `tests/structure/hook-endpoints.test.js`가 본다.
+
+### 감사 승격(topic `audit.record`)
+
+- 생산자: `lib/logging/audit-outbox.js`. 업무 트랜잭션 안에서는 `enqueueAudit(client, event)`(규칙 위반과 기록 오류를 던진다), 업무 변경 밖에서는 `recordAudit(event)`(독립 트랜잭션, 거부하지 않고 실패를 경고와 `memento_audit_enqueue_failed_total`로 남긴다)를 쓴다. 두 함수 모두 `MEMENTO_AUDIT_DB=off`이면 기록하지 않는다. 이 모듈은 payload 규칙(`audit-event.js`)만 정적으로 가져오고 설정, outbox, DB 모듈은 처음 기록할 때 불러온다(쓰기 관문과 도구 처리기의 정적 의존을 늘리지 않는다).
+- 관리 요청은 응답이 끝날 때, 기억 도구는 처리 직후, 쓰기 관문 거부는 거부 판정 직후에 `recordAudit`로 남긴다. 업무 변경이 커밋된 뒤 독립 트랜잭션으로 기록하므로 그 사이에 프로세스가 끝나면 그 이벤트는 표에 없고 같은 시점에 쓰는 파일 감사 로그 줄만 남는다. 업무 변경과 원자적으로 남겨야 하는 새 생산자는 같은 연결로 `enqueueAudit`를 부른다.
+- 소비자: `lib/logging/audit-consumer.js`. 스위치를 읽어야 하므로 모듈을 불러올 때가 아니라 스케줄러가 outbox 작업자를 시작하기 직전에 `registerAuditConsumer()`로 한 번 등록한다. 처리기는 `readAuditPayload`로 다시 검증하고(실패하면 `OutboxPermanentError`) `AuditStore.append(record, idempotencyKey)`로 표를 잠근 뒤 체인 끝에 기록한다.
+- 관리 라우트를 더할 때는 GET이 아닌 라우트마다 `lib/admin/admin-audit-actions.js`에 행위를 선언한다(`tests/unit/admin-audit-actions.test.js`). 처리기는 `noteAdminAudit(res, { targetId, detail })`로 생성한 자원 id와 변경 전후 값을 덧붙인다.
