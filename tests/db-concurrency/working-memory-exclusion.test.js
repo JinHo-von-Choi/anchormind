@@ -34,6 +34,7 @@ const { evaluateSchemaFitGate } = await import("../../lib/scheduler.js");
 const { checkEmbeddingConsistency } = await import("../../scripts/check-embedding-consistency.js");
 const { EmbeddingWorker }    = await import("../../lib/memory/embedding/EmbeddingWorker.js");
 const { default: statsCli }  = await import("../../lib/cli/stats.js");
+const { MemoryConsolidator } = await import("../../lib/memory/consolidate/MemoryConsolidator.js");
 
 const TAG     = `wmx${Date.now().toString(36)}`;
 const TOPIC   = `wmx-topic-${TAG}`;
@@ -200,6 +201,13 @@ describe("관리 화면과 집계", () => {
     assert.equal(withRow.status, 200);
     assert.equal(withRow.json.fragments + 1, withoutRow.json.fragments);
     assert.equal(withRow.json.queues.qualityPending + 1, withoutRow.json.queues.qualityPending);
+  });
+
+  it("memory_stats 집계(총계, TTL, 유형)는 작업 기억 행을 세지 않는다", async () => {
+    const { withRow, withoutRow } = await withoutWmRow(() => new MemoryConsolidator().getStats());
+    assert.equal(Number(withRow.total) + 1, Number(withoutRow.total));
+    assert.equal(Number(withRow.fact_count) + 1, Number(withoutRow.fact_count));
+    assert.equal(Number(withRow.total_tokens) < Number(withoutRow.total_tokens), true);
   });
 
   it("/activity는 작업 기억 행을 보이지 않는다", async () => {
