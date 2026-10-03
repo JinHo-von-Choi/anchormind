@@ -95,7 +95,8 @@ mock.module("../../lib/sessions.js", {
 });
 
 const { handleKeys }        = await import("../../lib/admin/admin-keys.js");
-const { takeAdminAuditNote } = await import("../../lib/admin/admin-audit-actions.js");
+const { takeAdminAuditNote, adminAuditEvent } = await import("../../lib/admin/admin-audit-actions.js");
+const { buildAuditPayload }  = await import("../../lib/logging/audit-event.js");
 const { ADMIN_BASE }        = await import("../../lib/admin/admin-auth.js");
 
 function request(method, path, body) {
@@ -269,5 +270,25 @@ describe("POST /keys 수명 열", () => {
     const r = await call("POST", "/keys", { name: "svc3", kind: "Bad Kind" });
     assert.equal(r.status, 400);
     assert.equal(r.data.field, "kind");
+  });
+});
+
+describe("감사 이벤트 규칙", () => {
+  it("수명 라우트의 처리기 메모는 감사 payload 규칙을 통과하고 원시 키를 담지 않는다", async () => {
+    const cases = [
+      ["POST", `/keys/${KEY_ID}/rotate`, { graceHours: 0 }, "admin.key.rotate"],
+      ["PATCH", `/keys/${KEY_ID}`, { expires_at: "2027-01-01T00:00:00Z", owner: "팀 운영", allowed_cidrs: ["198.51.100.0/24"] }, "admin.key.lifecycle_update"],
+      ["POST", `/keys/${KEY_ID}/access-review`, undefined, "admin.key.access_review"],
+      ["POST", `/keys/${KEY_ID}/revoke`, { reason: "유출 의심" }, "admin.key.revoke"],
+      ["POST", "/keys", { name: "svc4", expires_at: "2027-01-01T00:00:00Z" }, "admin.key.create"]
+    ];
+    for (const [method, path, body, action] of cases) {
+      const r       = await call(method, path, body);
+      const event   = adminAuditEvent({ method, subPath: path, maskedPath: path, status: r.status, outcome: "success",
+        actor: { keyId: "master", sessionId: "bearer", clientIp: "192.0.2.1" }, note: r.note });
+      const payload = buildAuditPayload(event);
+      assert.equal(payload.action, action);
+      if (r.data?.raw_key) assert.ok(!JSON.stringify(payload).includes(r.data.raw_key));
+    }
   });
 });

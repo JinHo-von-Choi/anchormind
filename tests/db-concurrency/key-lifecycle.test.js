@@ -15,6 +15,7 @@
  *   - 같은 키의 동시 회전은 직렬화되어 현재 해시가 하나로 남는다
  *   - 겹침이 끝나면 그보다 먼저 만든 세션과 OAuth 토큰이 끝나는 판정 값(퇴역 시각)이 세션 상태와 id 조회에 실린다
  *   - 이관이 진행 중인 폐기와 겹쳐도 폐기한 키에 활성 비밀 행을 만들지 않는다
+ *   - 비밀 표가 있는데 수명 열이 없으면 새 프로세스에서도 기본 판으로 내려가지 않고 거부한다
  *   - 수명 판이 한 번 성공한 뒤 비밀 표가 사라지면 기본 판으로 내려가지 않고 거부한다(마지막 시험)
  * 실행마다 전용 데이터베이스를 만들어 쓰고 끝나면 지운다.
  */
@@ -38,6 +39,7 @@ const {
 const { isKeyStateRevoked } = await import("../../lib/admin/key-state-cache.js");
 const { validateApiKeyById } = await import("../../lib/admin/ApiKeyStore.js");
 const { isAccessRetired }    = await import("../../lib/admin/key-lifecycle.js");
+const { resetLifecycleSchemaState } = await import("../../lib/admin/key-schema-state.js");
 const { main: backfillMain } = await import("../../scripts/ops/backfill-key-secrets.mjs");
 
 const KEYS    = "agent_memory.api_keys";
@@ -255,6 +257,20 @@ describe("폐기와 만료", () => {
     assert.equal(outcome(await validateApiKeyFromDB(key.raw)), "expired");
     await updateKeyLifecycle(key.id, { expires_at: null });
     assert.equal(outcome(await validateApiKeyFromDB(key.raw)), "valid");
+  });
+});
+
+describe("수명 열이 사라진 DB의 새 프로세스", () => {
+  it("비밀 표가 있으면 판정 상태를 처음으로 돌린 뒤에도 기본 판으로 내려가지 않고 거부한다", async () => {
+    const key = await legacyKey("columngone");
+    await directQuery(`ALTER TABLE ${KEYS} RENAME COLUMN allowed_cidrs TO allowed_cidrs_moved`);
+    try {
+      resetLifecycleSchemaState();
+      await assert.rejects(validateApiKeyFromDB(key.raw), { code: "42703" });
+      assert.equal(outcome(await validateApiKeyById(key.id)), "store_unavailable");
+    } finally {
+      await directQuery(`ALTER TABLE ${KEYS} RENAME COLUMN allowed_cidrs_moved TO allowed_cidrs`);
+    }
   });
 });
 

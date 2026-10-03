@@ -165,6 +165,29 @@ describe("수명 스키마가 없는 DB", () => {
     assert.deepEqual(await validateApiKeyById(KEY_ID), { valid: false, reason: "store_unavailable" });
   });
 
+  it("비밀 표가 있는데 수명 열이 없으면 새 프로세스에서도 기본 판으로 내려가지 않고 던진다", async () => {
+    const missingColumn = () => Object.assign(new Error('column k.expires_at does not exist'), { code: "42703" });
+    rowsFor = async (sql) => {
+      if (/to_regclass/.test(sql)) return { rows: [{ present: true }] };
+      if (/api_key_secrets|allowed_cidrs/.test(sql)) throw missingColumn();
+      return { rows: [{ ...keyRow(), expires_at: undefined }], rowCount: 1 };
+    };
+    await assert.rejects(validateApiKeyFromDB("mmcp_k_raw"), { code: "42703" });
+    assert.equal(sqls.filter((q) => isLegacy(q.sql)).length, 0);
+    assert.deepEqual(await validateApiKeyById(KEY_ID), { valid: false, reason: "store_unavailable" });
+  });
+
+  it("비밀 표가 없으면 이전 DB로 보고 기본 판을 쓴다", async () => {
+    rowsFor = async (sql) => {
+      if (/to_regclass/.test(sql)) return { rows: [{ present: false }] };
+      if (isLookup(sql)) throw missing();
+      if (isLegacy(sql)) return { rows: [{ ...keyRow(), expires_at: undefined }], rowCount: 1 };
+      return { rows: [] };
+    };
+    assert.equal((await validateApiKeyFromDB("mmcp_k_raw")).valid, true);
+    assert.equal(sqls.filter((q) => /to_regclass/.test(q.sql)).length, 1);
+  });
+
   it("그 밖의 오류는 그대로 던진다", async () => {
     rowsFor = async () => { throw Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }); };
     await assert.rejects(validateApiKeyFromDB("mmcp_k_raw"), { code: "ECONNREFUSED" });
