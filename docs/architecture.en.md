@@ -43,6 +43,8 @@ server.js  (HTTP server)
             |   +-- FragmentReader.js     Fragment reads. `getById(id, agentId, keyId, groupKeyIds)` -- groupKeyIds parameter enables single-call lookup of fragments belonging to same-group keys. `getByIds`, `getHistory`, `searchByKeywords`, `searchBySemantic`, `findCaseIdBySessionTopic`, `findErrorFragmentsBySessionTopic`
             |   +-- ContextBuilder.js     Dedicated context() logic. Reserves effective-workspace anchor slots first, deduplicates candidates by ID in anchor > core > learning > working order, guarantees anchors plus minimum non-anchor slots, and uses one token-selected set for flat/structured/injectionText outputs
             |   +-- ContextLines.js       context injection line renderer (pure functions). Headers and the `- ` line prefix are fixed; with `MEMENTO_CONTEXT_ANNOTATE=on` memory lines end with ` (YYYY-MM-DD, assertion)`
+            |   +-- AnswerPack.js         recall `format:"pack"` answer pack v0 renderer (pure functions). Fixed policy paragraph, `<<<MEMORY ...>>>` delimiter blocks, content escaping and 1000 character cap, UTC dates, caseId/topic groups
+            |   +-- AnswerPackLoader.js   Answer pack source and supersession chain (superseded_by links) lookup with the same agent, key and workspace predicates as recall
             |   +-- GraphNeighborSearch.js L2.5 graph neighbor search (fragment_links 1-hop bidirectional UNION, tanh-saturated scoring + relation-type boosts)
             |   +-- HistoryReconstructor.js case_id/entity-based narrative reconstruction (ordered_timeline, causal_chains, unresolved_branches)
             |   +-- BudgetSelector.js     recall token budget selection (`MEMENTO_RANK_BEFORE_BUDGET`). Pure functions for the search-order cut (`trimInSearchOrder`) and the final-score selection (`selectWithinBudget`)
@@ -209,6 +211,7 @@ lib/tools/
 +-- reconstruct.js  reconstruct_history, search_traces tool handlers (Narrative Reconstruction)
 +-- memory-schemas.js  Tool schema definitions (inputSchema)
 +-- tool-head.js  name, title and MCP hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) of every tool
++-- recall-response-params.js recall response shape parameters (`fields`, `format`) schema fragments
 +-- tool-error.js Converts error text in tool responses. Intended business errors pass through, driver/OS/runtime errors become fixed text, and storage CHECK constraint violations become an `INVALID_ARGUMENT` message naming the parameter and allowed values
 +-- db.js        PostgreSQL connection pool, agent session variable query helper (not exposed via MCP). getPrimaryPool(), getBatchPool(), queryWithAgentVector(). With `opts.lock` it runs the lock statement first in the same transaction and then the write statement with the locked ids as $1
 +-- lock-retry.js Re-runs transactions that ended in a deadlock (40P01) or lock timeout (55P03) (`MEMENTO_DB_LOCK_RETRY_MAX`), and the `memento_db_deadlock_retries_total` and `memento_db_write_failures_total` metrics

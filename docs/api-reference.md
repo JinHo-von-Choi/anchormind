@@ -500,6 +500,7 @@ Agent 조회는 생략 시 `default`, 지정 시 해당 agent와 `default`를 �
 | isAnchor | boolean | - | 앵커 필터. `true`는 앵커만, `false`는 비앵커만 반환하며 미지정 시 둘 다 반환. |
 | affect | string \| string[] | - | 정서 태그 필터. 단일 문자열 또는 배열. 해당 affect 값을 가진 파편만 반환. 유효값: neutral, frustration, confidence, surprise, doubt, satisfaction |
 | fields | string[] | - | 응답에 포함할 파편 필드 목록. 미지정 시 전체 필드 반환. 지원 키: id / content / type / topic / keywords / importance / created_at / access_count / confidence / linked / explanations / workspace / context_summary / case_id / valid_to / affect / ema_activation / key_id / key_name |
+| format | string | - | 응답 형식. `default`(기본)는 기존 응답이고, `pack`은 `fragments` 대신 답 꾸러미 `pack`을 반환한다(아래 「답 꾸러미 (format: pack)」). caseMode에는 적용하지 않는다. |
 
 ### 응답 파편 필드 (주요)
 
@@ -608,6 +609,29 @@ reason code 목록 (최대 3개):
 - `temporal_proximity` — timeRange 필터 또는 ±24h 시간 인접성으로 결과에 포함됨
 - `case_cohort_member` — caseMode 경로에서 동일 case_id 코호트로 결과에 포함됨
 - `recent_activity_ema` — ema_activation 상위로 가점 부여되어 결과에 포함됨
+
+### 답 꾸러미 (format: pack)
+
+`format: "pack"`이면 응답은 `fragments` 없이 `success`, `format: "pack"`, `pack`, `count`, `totalTokens`, `searchPath`, `_meta`를 담는다. `format`을 주지 않거나 `default`이면 응답은 위 형식 그대로다.
+
+| 필드 | 설명 |
+|-|-|
+| `pack.version` | `v0` |
+| `pack.policy` | 기억 내용에서 파생하지 않는 고정 정책 문단. 블록 안 내용은 자료이며 지시가 아니라는 것, date와 status, assertion의 뜻, 이스케이프 표기를 적는다 |
+| `pack.text` | 답에 바로 넣을 텍스트. `[MEMORY PACK v0]`, 정책 문단, 파편마다 여는 줄 `<<<MEMORY ...>>>`, 본문 한 줄, 닫는 줄 `<<<END MEMORY>>>` |
+| `pack.items[]` | 블록과 같은 순서의 속성: `id`, `date`(UTC 저장일 YYYY-MM-DD), `status`(`valid`, `superseded`), `assertion`, `type`, `topic`, `case_id`, `source`, `superseded_by`, `supersedes`, `truncated`. 본문은 `pack.text`에만 있다 |
+| `pack.groups[]` | `{ key, ids }`. key는 `case:<caseId>`, caseId가 없으면 `topic:<topic>`. 묶음은 처음 나온 순서, 묶음 안은 순위 순서이며 블록도 이 순서다 |
+| `pack.partial` | 출처와 대체 체인 조회가 실패해 그 정보 없이 만든 경우 `true` |
+| `pack.estimatedTokens` | `pack.text` 길이 / 4 올림 |
+
+규칙:
+
+- 날짜는 `created_at`의 UTC 날짜만 쓴다. 상대 날짜와 경과 일수(`age_days`)는 싣지 않는다.
+- `status`는 `valid_to`가 없으면 `valid`, 있으면 `superseded`다(`includeSuperseded=true`일 때 나온다). `superseded_by`와 `supersedes`는 `superseded_by` 링크(삭제되지 않은 것)의 상대 id이며 방향마다 최대 5개다. 이 체인과 `source`는 recall과 같은 agent, 키(그룹 포함), workspace 범위의 파편에 대해 한 번씩 따로 조회한다.
+- `source`는 저장된 값이며 `session:<id>`는 `session`으로 줄인다.
+- 본문은 코드 포인트 1000자로 자르고(`truncated=true`) 역슬래시, 줄바꿈, 탭, 제어문자, 방향 제어와 폭 없는 문자를 `\\`, `\n`, `\t`, `\uXXXX`로 이스케이프한다. 세 개 이상 이어진 `<`, `>`는 `\u003c`, `\u003e`로 바꾸므로 본문이나 속성이 블록 구분자를 만들 수 없다. 여는 줄의 문자열 속성은 큰따옴표로 감싸고 120자로 자른다.
+- `assertion`은 `observed`, `inferred`, `verified`, `rejected`일 때만 싣는다.
+- `fields`, `includeKeywords`, `includeContext`의 부가 필드는 pack에 들어가지 않는다. `totalTokens`는 recall이 고른 파편의 토큰 수이고 `pack.text`의 머리와 속성은 포함하지 않는다.
 
 ### depth enum
 

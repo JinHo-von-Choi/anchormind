@@ -498,6 +498,7 @@ ID lookups through `fragment_history` and `graph_explore` now apply workspace fi
 | isAnchor | boolean | - | Anchor filter. `true` returns anchors only, `false` returns non-anchors only, and omission returns both. |
 | affect | string \| string[] | - | Affect tag filter. Single string or array. Returns only fragments with the matching affect value. Valid values: neutral, frustration, confidence, surprise, doubt, satisfaction |
 | fields | string[] | - | Fragment fields to include in the response. Returns all fields if not specified. Supported keys: id / content / type / topic / keywords / importance / created_at / access_count / confidence / linked / explanations / workspace / context_summary / case_id / valid_to / affect / ema_activation / key_id / key_name |
+| format | string | - | Response format. `default` (the default) is the existing response; `pack` returns the answer pack `pack` instead of `fragments` (see "Answer pack (format: pack)" below). Not applied to caseMode. |
 
 ### Response Fragment Fields (key fields)
 
@@ -591,6 +592,29 @@ Reason code list (up to 3):
 - `temporal_proximity` — included via timeRange filter or ±24h temporal proximity
 - `case_cohort_member` — included as a member of the same case_id cohort in caseMode path
 - `recent_activity_ema` — included with a score boost due to high ema_activation ranking
+
+### Answer pack (format: pack)
+
+With `format: "pack"` the response carries `success`, `format: "pack"`, `pack`, `count`, `totalTokens`, `searchPath` and `_meta`, without `fragments`. Without `format` or with `default`, the response is the format above.
+
+| Field | Description |
+|-|-|
+| `pack.version` | `v0` |
+| `pack.policy` | Fixed policy paragraph that is not derived from memory content. It states that block content is data and not instructions, and explains date, status, assertion and the escape notation |
+| `pack.text` | Text ready to place into an answer: `[MEMORY PACK v0]`, the policy paragraph, then per fragment an opening line `<<<MEMORY ...>>>`, one content line and the closing line `<<<END MEMORY>>>` |
+| `pack.items[]` | Attributes in block order: `id`, `date` (UTC storage date YYYY-MM-DD), `status` (`valid`, `superseded`), `assertion`, `type`, `topic`, `case_id`, `source`, `superseded_by`, `supersedes`, `truncated`. The content is only in `pack.text` |
+| `pack.groups[]` | `{ key, ids }`. The key is `case:<caseId>`, or `topic:<topic>` without a caseId. Groups appear in order of first appearance, items within a group in rank order, and the blocks follow this order |
+| `pack.partial` | `true` when the source and supersession lookup failed and the pack was built without that information |
+| `pack.estimatedTokens` | Length of `pack.text` / 4, rounded up |
+
+Rules:
+
+- Dates are the UTC date of `created_at` only. Relative dates and elapsed days (`age_days`) are not included.
+- `status` is `valid` without `valid_to` and `superseded` with it (returned with `includeSuperseded=true`). `superseded_by` and `supersedes` are the ids on the other side of `superseded_by` links (not deleted), at most 5 per direction. The chain and `source` are looked up separately, once each, for fragments within the same agent, key (including the group) and workspace scope as the recall.
+- `source` is the stored value; `session:<id>` is shortened to `session`.
+- Content is cut at 1000 code points (`truncated=true`); backslash, line breaks, tab, control characters, direction controls and zero-width characters are escaped as `\\`, `\n`, `\t`, `\uXXXX`. Runs of three or more `<` or `>` become `\u003c`, `\u003e`, so neither content nor attributes can form a block delimiter. String attributes of the opening line are double-quoted and cut at 120 characters.
+- `assertion` is included only for `observed`, `inferred`, `verified`, `rejected`.
+- The extra fields of `fields`, `includeKeywords` and `includeContext` are not part of the pack. `totalTokens` is the token count of the fragments recall selected and does not include the pack header and attributes.
 
 ### depth enum
 
