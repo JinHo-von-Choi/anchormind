@@ -36,8 +36,8 @@ describe("행위 이름", () => {
 
 describe("행위자", () => {
   it("마스터, 키, 익명, 시스템을 구분한다", () => {
-    assert.deepEqual(auditActor({ keyId: "master", sessionId: "c1a2b3c4d", clientIp: "10.0.0.1" }),
-      { kind: "master", keyId: null, session: "c1a2b3c4", ip: "10.0.0.1" });
+    assert.deepEqual(auditActor({ keyId: "master", sessionId: "c1a2b3c4d", clientIp: "203.0.113.7" }),
+      { kind: "master", keyId: null, session: "c1a2b3c4", ip: "203.0.113.7" });
     assert.deepEqual(auditActor({ keyId: KEY_ID, sessionId: "0f8e2d6c-9999-4000-8000-000000000000" }),
       { kind: "key", keyId: KEY_ID, session: "0f8e2d6c", ip: null });
     assert.equal(auditActor({ keyId: "none" }).kind, "anonymous");
