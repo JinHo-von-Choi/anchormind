@@ -179,6 +179,55 @@ describe("읽을 수 없는 입력은 통과시키지 않는다", () => {
     assert.equal(planWrite(current, undefined, false).ok, true);
   });
 
+  it("음수 tolerance 는 2로 끝난다", () => {
+    assert.throws(() => findDrops({ lines: 80, branches: 50, functions: 50 }, { ...GOOD_BASELINE, tolerance: -0.5 }), CoverageInputError);
+    const r = exec(lcovOf(), { ...GOOD_BASELINE, tolerance: -0.5 });
+    assert.equal(r.code, 2);
+    assert.match(r.err.join("\n"), /tolerance/);
+  });
+
+  it("유한하지 않은 tolerance 는 2로 끝난다", () => {
+    for (const tolerance of [NaN, Infinity, -Infinity]) {
+      assert.throws(() => findDrops({ lines: 80, branches: 50, functions: 50 }, { ...GOOD_BASELINE, tolerance }), CoverageInputError, String(tolerance));
+    }
+    const r = exec(lcovOf(), '{"lines":70,"branches":40,"functions":40,"tolerance":1e999}');
+    assert.equal(r.code, 2);
+    assert.match(r.err.join("\n"), /tolerance/);
+    assert.equal(exec(lcovOf(), { ...GOOD_BASELINE, tolerance: null }).code, 2);
+  });
+
+  it("BRH 가 BRF 보다 크면 2로 끝난다", () => {
+    assert.throws(() => parseLcov(lcovOf({ brf: "5", brh: "6" })), /branches 적중 6/);
+    const r = exec(lcovOf({ brf: "5", brh: "6" }));
+    assert.equal(r.code, 2);
+    assert.match(r.err.join("\n"), /branches 적중 6/);
+    assert.equal(r.out.length, 0);
+  });
+
+  it("기준선 지표가 0 미만이거나 100 초과이면 2로 끝난다", () => {
+    for (const metric of ["lines", "branches", "functions"]) {
+      for (const value of [-0.01, 100.01]) {
+        const baseline = { ...GOOD_BASELINE, [metric]: value };
+        assert.throws(() => findDrops({ lines: 80, branches: 50, functions: 50 }, baseline), CoverageInputError, `${metric} ${value}`);
+        const r = exec(lcovOf(), baseline);
+        assert.equal(r.code, 2, `${metric} ${value}`);
+        assert.match(r.err.join("\n"), new RegExp(metric));
+      }
+    }
+  });
+
+  it("저장소 소스가 없는 lcov(제외 대상 파일만)는 2로 끝난다", () => {
+    const excluded = [
+      "TN:", "SF:tests/x.test.js", "LF:10", "LH:10", "BRF:2", "BRH:2", "FNF:1", "FNH:1", "end_of_record",
+      "TN:", "SF:node_modules/pkg/index.js", "LF:10", "LH:10", "BRF:2", "BRH:2", "FNF:1", "FNH:1", "end_of_record", ""
+    ].join("\n");
+    const r = exec(excluded);
+    assert.equal(r.code, 2);
+    assert.match(r.err.join("\n"), /소스 파일 기록이 없다/);
+    assert.equal(r.out.length, 0);
+    assert.equal(exec(excluded, null, ["--write"]).code, 2);
+  });
+
   it("기준선 아래로 내려가면 1, 허용 폭 안이면 0으로 끝난다", () => {
     assert.equal(exec(lcovOf(), { ...GOOD_BASELINE, lines: 90 }).code, 1);
     assert.equal(exec(lcovOf(), { ...GOOD_BASELINE, lines: 80.3 }).code, 0);
