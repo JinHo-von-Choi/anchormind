@@ -30,6 +30,7 @@ const { runImport }                    = await import("../../lib/memory/transfer
 const { recordsFromLines }             = await import("../../lib/memory/transfer/importRecords.js");
 const { loadImportRuntime }            = await import("../../lib/memory/transfer/importRuntime.js");
 const { handleExport, handleImport }   = await import("../../lib/admin/admin-export.js");
+const { requireCapability, masterPrincipal } = await import("../../lib/admin/AdminAuthz.js");
 const { Readable }                     = await import("node:stream");
 const { V2_FRAGMENT_COLUMNS }          = await import("../../lib/memory/transfer/exportFormat.js");
 
@@ -321,7 +322,9 @@ describe("저장 규칙을 지킨 데이터의 왕복", () => {
       write(c) { chunks.push(c); },
       end(body) { if (body) chunks.push(body); }
     };
-    await handleExport({ method: "GET", headers: {} }, res, new URL("http://localhost/v1/internal/model/nothing/export?confirm=full&include_versions=true"));
+    const exportReq = { method: "GET", headers: {} };
+    requireCapability(exportReq, res, { principal: masterPrincipal(), cap: "export.data" });
+    await handleExport(exportReq, res, new URL("http://localhost/v1/internal/model/nothing/export?confirm=full&include_versions=true"));
     assert.equal(res.statusCode, 200);
     assert.equal(res.headers["x-memento-export-format-version"], "2");
 

@@ -29,6 +29,7 @@ const { SessionLinker }      = await import("../../lib/memory/link/SessionLinker
 const { FragmentIndex }      = await import("../../lib/memory/FragmentIndex.js");
 const { FragmentStore }      = await import("../../lib/memory/write/FragmentStore.js");
 const { ADMIN_BASE }         = await import("../../lib/admin/admin-auth.js");
+const { requireCapability, masterPrincipal } = await import("../../lib/admin/AdminAuthz.js");
 
 const TAG    = `wm${Date.now().toString(36)}`;
 const writer = new FragmentWriter();
@@ -45,7 +46,9 @@ function fakeRes() {
 
 async function callKeys(pathname) {
   const res = fakeRes();
-  await handleKeys({ method: "GET", url: pathname, headers: {} }, res, new URL(pathname, "http://localhost"));
+  const req = { method: "GET", url: pathname, headers: {} };
+  requireCapability(req, res, { principal: masterPrincipal(), cap: "key.manage" });
+  await handleKeys(req, res, new URL(pathname, "http://localhost"));
   return res;
 }
 

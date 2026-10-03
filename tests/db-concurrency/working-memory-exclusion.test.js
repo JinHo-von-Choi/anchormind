@@ -30,6 +30,7 @@ const wm                     = await import("../../lib/memory/WorkingMemoryRows.
 const { handleMemory }       = await import("../../lib/admin/admin-memory.js");
 const { handleAdminApi }     = await import("../../lib/admin/admin-routes.js");
 const { ADMIN_BASE }         = await import("../../lib/admin/admin-auth.js");
+const { requireCapability, masterPrincipal } = await import("../../lib/admin/AdminAuthz.js");
 const { evaluateSchemaFitGate } = await import("../../lib/scheduler.js");
 const { checkEmbeddingConsistency } = await import("../../scripts/check-embedding-consistency.js");
 const { EmbeddingWorker }    = await import("../../lib/memory/embedding/EmbeddingWorker.js");
@@ -61,6 +62,7 @@ async function adminGet(pathname, { memory = false } = {}) {
     headers: { authorization: `Bearer ${ADMIN_KEY}` },
     socket : { remoteAddress: "127.0.0.1" }
   };
+  if (memory) requireCapability(req, res, { principal: masterPrincipal(), cap: "mem.read" });
   if (memory) await handleMemory(req, res, new URL(pathname, "http://localhost"));
   else        await handleAdminApi(req, res);
   return { status: res.statusCode, json: res.body ? JSON.parse(res.body) : null };

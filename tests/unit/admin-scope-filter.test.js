@@ -6,13 +6,13 @@
  *
  * scopePredicate는 판정 범위(range)를 SQL 조건 하나로 바꾼다. 범위가 전체면 TRUE, workspace 목록이면
  * 바인딩 하나를 쓰는 ANY 비교, 범위가 없거나 형식이 틀리면 FALSE(빈 결과)다. workspace 열이 없는 표는
- * 범위가 전체일 때만 TRUE다.
+ * 범위가 전체일 때만 TRUE다. scopedQuery는 다른 바인딩이 없는 질의에 술어와 바인딩 배열을 함께 만든다.
  */
 
 import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
-import { scopePredicate, ScopeFilterError } from "../../lib/admin/ScopeFilter.js";
+import { scopePredicate, scopedQuery, ScopeFilterError } from "../../lib/admin/ScopeFilter.js";
 
 describe("scopePredicate", () => {
   it("전체 범위는 TRUE이고 바인딩을 더하지 않는다", () => {
@@ -53,5 +53,18 @@ describe("scopePredicate", () => {
 
   it("바인딩 배열이 아니면 ScopeFilterError를 던진다", () => {
     assert.throws(() => scopePredicate(null, "workspace", { all: true }), ScopeFilterError);
+  });
+});
+
+describe("scopedQuery", () => {
+  it("술어를 질의 조립 함수에 넘기고 [질의, 바인딩]을 돌려준다", () => {
+    const [text, values] = scopedQuery("workspace", { all: false, workspaces: ["ws-a"] }, (ws) => `SELECT 1 WHERE ${ws}`);
+    assert.equal(text, "SELECT 1 WHERE workspace = ANY($1::text[])");
+    assert.deepEqual(values, [["ws-a"]]);
+  });
+
+  it("범위가 없으면 FALSE 술어와 빈 바인딩이다", () => {
+    assert.deepEqual(scopedQuery("workspace", undefined, (ws) => `WHERE ${ws}`), ["WHERE FALSE", []]);
+    assert.deepEqual(scopedQuery(null, { all: true }, (ws) => `WHERE ${ws}`), ["WHERE TRUE", []]);
   });
 });
