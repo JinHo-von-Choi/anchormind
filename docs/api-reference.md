@@ -32,7 +32,7 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | GET | /v1/internal/model/nothing | Admin SPA. 마스터 키 인증 후 app shell HTML 제공. 미인증 요청은 401과 로그인 페이지를 반환. 데이터 API는 마스터 키 인증 필요 |
 | GET | /v1/internal/model/nothing/assets/* | Admin 정적 파일 (admin.css, admin.js). 인증 불필요 |
 | GET | /v1/internal/model/nothing/images/* | Admin 이미지 파일. 마스터 키 인증 필요 |
-| POST | /v1/internal/model/nothing/auth | 마스터 키 검증 엔드포인트. IP 기준 rate limit 적용(`/keys` POST, `/import` POST도 같다). `MEMENTO_ADMIN_AUTH_BACKOFF=on`이면 연속 5회 실패 뒤 다음 시도를 1, 2, 4초 순으로 최대 60초까지 늦추고 지연 중에는 올바른 키도 429와 `Retry-After`를 받는다 |
+| POST | /v1/internal/model/nothing/auth | 마스터 키 검증 엔드포인트. IP 기준 rate limit 적용(`/keys` POST, `/import` POST, `/me` GET, `/me/explain` GET도 같다). `MEMENTO_ADMIN_AUTH_BACKOFF=on`이면 연속 5회 실패 뒤 다음 시도를 1, 2, 4초 순으로 최대 60초까지 늦추고 지연 중에는 올바른 키도 429와 `Retry-After`를 받는다 |
 | GET | /v1/internal/model/nothing/stats | 대시보드 통계 (파편 수, API 호출량, 시스템 메트릭, searchMetrics, observability, queues, healthFlags, switches) |
 | GET | /v1/internal/model/nothing/activity | 최근 파편 활동 로그 (10건) |
 | GET | /v1/internal/model/nothing/metrics-summary | 대시보드 메트릭 요약 |
@@ -182,7 +182,7 @@ GET이 아닌 관리 요청, 관리 로그인, 기억 쓰기(remember, amend, fo
 
 관리 API 요청은 라우트마다 요구 능력을 선언한 라우트 표(`lib/admin/admin-route-table.js`)로 판정한다. 집행은 항상 켜져 있다. 마스터 키(Bearer 또는 마스터 키 로그인 세션)는 owner이며 모든 라우트를 통과한다. 라우트 표에 없는 경로는 owner 전용 능력(`system.update`)을 요구한다. 거부는 403 `{ "error": "Forbidden", "cap", "deniedAt", "reason" }`이고, GET이 아닌 요청의 거부는 감사 기록에 `denied`로 남는다.
 
-능력은 `mem.read`, `mem.write`, `mem.anchor`, `mem.delete.soft`, `mem.delete.hard`, `mem.bulk`, `mem.merge`, `review.decide`, `export.data`, `import.data`, `key.manage`, `key.policy`, `egress.policy`, `ws.create`, `ws.quota`, `retention.manage`, `legal_hold.manage`, `erasure.request`, `erasure.execute`, `job.dry_run`, `job.apply`, `audit.read`, `audit.export`, `webhook.manage`, `usage.read`, `quality.read`, `oauth_client.manage`, `admin_user.manage`, `system.update`이다. 역할은 능력 묶음(프리셋)이며 Core 프리셋은 6종이다. 방식 O는 바인딩 범위 전체, W는 바인딩 workspace 한정, M은 메타만(내용은 해시와 길이), S는 키 범위 한정이다.
+능력은 `mem.read`, `mem.write`, `mem.anchor`, `mem.delete.soft`, `mem.delete.hard`, `mem.bulk`, `mem.merge`, `review.decide`, `export.data`, `import.data`, `key.manage`, `key.policy`, `egress.policy`, `ws.create`, `ws.quota`, `retention.manage`, `legal_hold.manage`, `erasure.request`, `erasure.execute`, `job.dry_run`, `job.apply`, `audit.read`, `audit.export`, `webhook.manage`, `usage.read`, `quality.read`, `logs.read`, `oauth_client.manage`, `admin_user.manage`, `system.update`이다. `logs.read`는 서버 로그 파일(요청 경로, 클라이언트 주소, 원본 오류 문구를 담는다) 조회 능력이며 owner와 admin만 가진다. 역할은 능력 묶음(프리셋)이며 Core 프리셋은 6종이다. 방식 O는 바인딩 범위 전체, W는 바인딩 workspace 한정, M은 메타만(내용은 해시와 길이), S는 키 범위 한정이다.
 
 | 프리셋 | 능력 |
 |-|-|
@@ -200,9 +200,11 @@ GET이 아닌 관리 요청, 관리 로그인, 기억 쓰기(remember, amend, fo
 3. workspace 범위는 그 능력을 주는 바인딩의 workspace(전역 바인딩은 전체)와 키 `allowed_workspaces`(API 키, NULL은 제한 없음)와 범위 행(행이 하나라도 있으면 행에 없는 조합은 거부)의 교집합이다.
 4. 능력이 있고 대상 workspace가 범위 안이면 허용이다. 대상 workspace가 없는 요청(전역 대상)은 범위가 전체일 때만 허용이다. 거부는 멈춘 단계(`principal`, `capability`, `deny`, `workspace`)와 사유를 남긴다.
 
-라우트의 요구 능력: `/stats`, `/metrics-summary`, `/sessions`, `/sessions/:id`는 `usage.read`, `/activity`, `/memory/overview`, `/memory/fragments`(목록, 상세, 이력), `/memory/graph`, `POST /search`는 `mem.read`, `/memory/search-events`, `/memory/anomalies`, `/search-events`는 `quality.read`, 파편 생성과 수정은 `mem.write`, 파편 삭제는 `mem.delete.hard`, 키와 그룹 목록, 생성, 상태 변경, 삭제, 키별 통계는 `key.manage`, 일일 한도, 권한, 파편 할당량, workspace, 정책 변경은 `key.policy`, 세션 정리, 일괄 reflect, 수동 reflect, 세션 종료는 `job.apply`, `/logs/*`와 `/audit`, `POST /audit/verify`는 `audit.read`, `/audit/export`는 `audit.export`, `/export`는 `export.data`, `/import`는 `import.data`다. 범위 종류가 workspace인 라우트(`/memory/overview`, `/memory/fragments`, `/memory/graph`, `/export`)는 질의 매개변수 `workspace`를 대상으로 쓰고, 나머지는 전역 대상이다.
+허용 판정의 방식은 대상을 덮는 바인딩(대상 workspace에 바인딩된 것과 전역 바인딩, 전역 대상이면 전역 바인딩만)에서 가장 넓은 것을 고른다. 질의 범위(`scope`)는 그 방식을 준 바인딩에 전역 바인딩이 있고 범위가 전체일 때만 전체이고, 그 밖에는 대상 workspace 하나다. 예를 들어 workspace A의 viewer이면서 전역 auditor인 주체는 `workspace=A` 목록을 A로만 걸러 그대로 받고, 다른 workspace와 전역 대상은 가린 값으로 받는다.
 
-관리 처리기가 기억 표(fragments, fragment_links, search_events, tool_feedback 등)를 읽는 질의에는 판정 범위 술어가 붙는다(`lib/admin/ScopeFilter.js`). 범위 전체는 `TRUE`, workspace 목록은 `workspace = ANY($n)`, workspace 열이 없는 표는 범위 전체일 때만 `TRUE`이고, 판정을 거치지 않은 요청은 `FALSE`(빈 결과)다. 메타만 판정(auditor의 `mem.read`, `export.data`)의 응답은 내용 필드(`content`, `preview`, `label`, `context_summary`, `keywords`, `summary`, `text`)가 `{ "redacted": true, "sha256", "length" }`로 바뀐다.
+라우트의 요구 능력: `/stats`, `/metrics-summary`, `/sessions`, `/sessions/:id`는 `usage.read`, `/activity`, `/memory/overview`, `/memory/fragments`(목록, 상세, 이력), `/memory/graph`, `POST /search`는 `mem.read`, `/memory/search-events`, `/memory/anomalies`, `/search-events`는 `quality.read`, `/logs/*`는 `logs.read`, 파편 생성과 수정은 `mem.write`, 파편 삭제는 `mem.delete.hard`, 키와 그룹 목록, 생성, 상태 변경, 삭제, 키별 통계는 `key.manage`, 일일 한도, 권한, 파편 할당량, workspace, 정책 변경은 `key.policy`, 세션 정리, 일괄 reflect, 수동 reflect, 세션 종료는 `job.apply`, `/audit`, `POST /audit/verify`는 `audit.read`, `/audit/export`는 `audit.export`, `/export`는 `export.data`, `/import`는 `import.data`다. 범위 종류가 workspace인 라우트(`/memory/overview`, `/memory/fragments` 목록과 상세, `/memory/graph`)는 질의 매개변수 `workspace`를 대상으로 쓰고, 나머지(파편 이력, `/export` 포함)는 전역 대상이다. 관리 모듈 밖의 기억 경로(MemoryManager, 검색 집계, 내보내기, 가져오기, 세션 반영)를 부르는 처리기는 질의 범위가 전체가 아니면 403 `full_scope_required`다.
+
+관리 처리기가 기억 표(fragments, fragment_links, search_events, tool_feedback 등)를 읽는 질의에는 판정 범위 술어가 붙는다(`lib/admin/ScopeFilter.js`). 범위 전체는 `TRUE`, workspace 목록은 `workspace = ANY($n)`, `fragment_links`는 양 끝 파편이 모두 목록 안인 링크만, workspace 열이 없는 그 밖의 표는 범위 전체일 때만 `TRUE`이고, 판정을 거치지 않은 요청은 `FALSE`(빈 결과)다. 메타만 판정(auditor의 `mem.read`, `export.data`)의 응답은 허용 목록에 있는 값만 남긴다. 숫자, 참거짓, null과 식별자 필드(`id`, `fragment_id`, `from_id`, `to_id`, `key_id`), 열거 필드(`type`, `kind`, `relation_type`, `direction`, `ttl_tier`, `assertion_status`, `resolution_status`, `query_type`), 시각 필드(`created_at` 등)의 형식에 맞는 값, 집계 필드의 숫자 문자열만 그대로이고 그 밖의 문자열은 `{ "redacted": true, "sha256", "length" }`, 식별자 형식이 아닌 객체 키는 `redacted_<해시 12자>`가 된다.
 
 `GET /me`는 요청 주체 자신의 정보다.
 
@@ -213,7 +215,7 @@ GET이 아닌 관리 요청, 관리 로그인, 기억 쓰기(remember, amend, fo
 }
 ```
 
-`GET /me/explain?cap=<능력>&workspace=<이름>`은 결정 표의 판정을 돌려준다. 필드는 `allowed`, `cap`, `workspace`, `principal`, `mode`, `redact`, `range`, `deniedAt`, `reason`, `steps`(단계별 `ok`와 근거, API 키는 `permissions` 포함)다. `cap`이 없거나 모르는 능력이면 400 `field: "cap"`, `workspace`가 128자를 넘거나 제어 문자를 담으면 400 `field: "workspace"`다. 두 라우트는 마스터 키와 API 키 Bearer 모두 부를 수 있고 요청 주체 자신의 판정만 담는다. API 키 Bearer는 이 두 라우트에서만 관리 API 주체가 되며, 다른 관리 라우트에서는 401이다.
+`GET /me/explain?cap=<능력>&workspace=<이름>`은 결정 표의 판정을 돌려준다. 필드는 `allowed`, `cap`, `workspace`, `principal`, `mode`, `redact`, `range`, `deniedAt`, `reason`, `steps`(단계별 `ok`와 근거, API 키는 `permissions` 포함)다. `cap`이 없거나 모르는 능력이면 400 `field: "cap"`, `workspace`가 128자를 넘거나 제어 문자를 담으면 400 `field: "workspace"`다. 두 라우트는 마스터 키와 API 키 Bearer 모두 부를 수 있고 요청 주체 자신의 판정만 담는다. API 키 Bearer는 이 두 라우트에서만 관리 API 주체가 되며, 다른 관리 라우트에서는 401이다. 두 라우트는 관리 인증 지연(`MEMENTO_ADMIN_AUTH_BACKOFF`) 중이면 키 조회 없이 429이고, 토큰이 마스터 키든 아니든 API 키 조회를 한 번 하며, 틀린 Bearer는 다른 관리 라우트와 같이 관리 인증 실패로 센다. 활성 API 키 인증은 지연 집계를 지우지 않는다.
 
 ### /health 엔드포인트 정책
 

@@ -201,10 +201,10 @@ lib/admin/
 ├── admin-route-table.js 관리 API 라우트 표. 라우트마다 요구 능력(cap), 범위 종류(scope), 감사 행위(audit)
 ├── admin-audit-actions.js 라우트 표에서 뽑은 감사 행위 선언(GET이 아닌 관리 라우트와 내보내기 GET), 처리기의 감사 메모(`noteAdminAudit`)
 ├── capabilities.js    관리 능력 목록, Core 역할 프리셋 6종(owner, admin, reviewer, auditor, viewer, service), API 키 permissions 변환
-├── AdminAuthz.js      판정 결정 표(`decide`), `requireCapability`, 라우트 판정(`authorizeAdminRoute`), 요청별 판정 범위(`adminScopeOf`)
+├── AdminAuthz.js      판정 결정 표(`decide`), `requireCapability`, 라우트 판정(`authorizeAdminRoute`), 요청별 질의 범위(`adminScopeOf`), 전체 범위 가드(`requireFullScope`)
 ├── admin-principal.js 관리 요청 주체 해석(마스터 키와 로그인 세션은 owner, `/me` 라우트의 API 키 Bearer는 service)
-├── ScopeFilter.js     관리 SQL의 workspace 범위 술어 생성기(`scopePredicate`, `scopedQuery`, 범위 없으면 FALSE)
-├── admin-redact.js    메타만 판정(auditor)의 응답 내용 마스킹(`redactForPrincipal`)
+├── ScopeFilter.js     관리 SQL의 workspace 범위 술어 생성기(`scopePredicate`, `scopedQuery`, `linkScopePredicate`, 범위 없으면 FALSE)
+├── admin-redact.js    메타만 판정(auditor)의 응답 마스킹. 허용 목록(식별자, 열거 값, 시각, 수치) 밖의 값은 해시와 길이(`redactForPrincipal`)
 ├── admin-me.js        `GET /me`, `GET /me/explain`
 ├── admin-audit.js     감사 조회, JSONL 내보내기, 체인 검증 라우트 (`/audit`, `/audit/export`, `/audit/verify`)
 ├── admin-memory.js    메모리 운영 라우트 (overview, fragments, anomalies, graph)
