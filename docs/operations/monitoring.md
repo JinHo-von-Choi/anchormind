@@ -67,6 +67,12 @@ groups:
       - alert: MementoProtocolVersionOther
         expr: sum(increase(mcp_protocol_version_negotiations_total{requested_version="other"}[1h])) > 0
         labels: { severity: info, component: memento-mcp }
+      - alert: MementoModernProtocolShare
+        expr: |
+          sum(increase(memento_modern_protocol_attempts_total[1d]))
+            / clamp_min(sum(increase(memento_modern_protocol_attempts_total[1d])) + sum(increase(mcp_protocol_version_negotiations_total[1d])), 1)
+            > 0.5
+        labels: { severity: info, component: memento-mcp }
       - alert: MementoOutboxDeadLetter
         expr: max(memento_outbox_dead_letter) > 0
         for: 5m
@@ -88,11 +94,20 @@ groups:
 | MementoSplitStepFailures | 장문 파편 분할의 커밋 단계가 실패한다(`step` 라벨로 구분) |
 | MementoDbLockRetries | 파편 행을 여러 개 잠그는 쓰기 트랜잭션이 교착(40P01)이나 잠금 대기 상한(55P03)으로 끝나 다시 실행됐다(`operation` 라벨로 경로 구분). 재실행은 결과를 바꾸지 않으며, 지속되면 `docs/concurrency.md`의 잠금 순서를 벗어난 경로를 찾는다 |
 | MementoProtocolVersionOther | 지원 목록에 없는 프로토콜 버전을 요청한 협상이 있다 |
+| MementoModernProtocolShare | 하루 동안 세션 없는 현대식 프로토콜 시도가 initialize 협상보다 많다. 현대식 요청을 먼저 보내는 클라이언트는 400 응답 뒤 initialize로 돌아가므로 시도 하나에 협상 하나가 짝을 이루고, 비율이 0.5를 넘으면 돌아가지 않는 클라이언트가 있다는 뜻이다. 아래 "프로토콜 개정 지표"를 본다 |
 | MementoOutboxDeadLetter | 재시도 한도를 넘었거나 재시도 불가로 판정된 outbox 이벤트가 있다. 원인을 고친 뒤 되돌리는 절차는 [configuration.md](../configuration.md#outbox) |
 | MementoOutboxLag | 전달 예정 시각이 지난 outbox 대기 행 중 가장 오래된 행이 5분 넘게 전달되지 않았다(작업자 처리량 부족, 점유되지 않는 topic). 재시도하는 행은 다음 예정 시각이 미래라 지연에 들어가지 않으므로, 처리기 반복 실패는 `memento_outbox_failed_total`과 dead-letter 건수(`memento_outbox_dead_letter`, MementoOutboxDeadLetter)로 본다 |
 | MementoOutboxStatsStale | 어느 프로세스도 5분 넘게 outbox 게이지를 갱신하지 않았다(모든 인스턴스의 작업자 정지, `MEMENTO_OUTBOX_WORKER=off`, 작업자 회차 실패). `MEMENTO_OUTBOX=off`로 기능을 끈 배치에서는 이 규칙을 두지 않는다 |
 
 outbox 게이지는 작업자를 돌리는 프로세스만 갱신한다. 작업자를 돌리지 않는 프로세스도 지표 모듈을 불러오므로 `memento_outbox_lag_seconds`를 0으로 내보내고, 따라서 `absent(memento_outbox_lag_seconds)`는 스크레이프 대상이 사라졌을 때만 참이 되어 작업자 정지를 잡지 못한다. 작업자 정지는 갱신 시각 게이지 `memento_outbox_stats_updated_seconds`(유닉스 초, 갱신 전에는 0)로 본다. 인스턴스가 여럿이면 `max`가 가장 최근 갱신을 고르므로 하나라도 작업자를 돌리면 경보가 나지 않는다.
+
+### 프로토콜 개정 지표
+
+| 지표 | 라벨 | 의미 |
+|-|-|-|
+| `memento_modern_protocol_attempts_total` | `signal` | 세션 없는 비initialize 요청 중 MCP-Protocol-Version 헤더가 지원 목록 밖이거나(`header`) `params._meta`에 `io.modelcontextprotocol/protocolVersion`이 있는(`meta`) 요청 수. 둘 다면 `header_and_meta`. 이 요청들은 세지는 것과 별개로 400과 JSON-RPC `-32000`("Session required")을 받는다 |
+
+`signal` 값은 `header`, `meta`, `header_and_meta` 세 값이고 기록 함수가 그 밖의 값을 `unknown`으로 닫는다. 지원 목록 안의 헤더나 헤더 없음만으로는 세지 않는다. 분모로 쓰는 `mcp_protocol_version_negotiations_total`은 `/mcp`와 레거시 SSE 경로의 initialize를 모두 센다.
 
 ### 행 잠금 지표
 

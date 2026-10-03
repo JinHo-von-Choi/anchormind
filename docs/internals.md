@@ -695,6 +695,16 @@ initialize 이후 모든 요청에서 `MCP-Protocol-Version` 헤더를 검사한
 
 메트릭: `mcp_protocol_version_rejected_total` (label: `version`)
 
+### 세션 없는 비initialize 요청
+
+세션 ID 없이 들어온 initialize 이외의 요청은 디스패치하지 않고 HTTP 400과 JSON-RPC `-32000 "Session required. ..."`로 응답한다. 구현 위치: `lib/handlers/mcp-handler.js#handleMcpPost`
+
+MCP 2026-07-28 개정을 먼저 시도하는 클라이언트는 400 본문이 그 개정이 정한 오류(`-32020` HeaderMismatch, `-32021` MissingRequiredClientCapability, `-32022` UnsupportedProtocolVersion)가 아니면 initialize로 돌아간다. `-32000`은 구현 정의 구간(`-32000`~`-32019`)이므로 이 응답은 레거시 서버의 응답으로 판정된다. 서버는 `-32020`~`-32099` 구간의 코드를 내보내지 않고 `server/discover`를 처리하지 않는다(`tests/structure/protocol-era.test.js`).
+
+응답과 별개로 `classifyModernProtocolAttempt`가 MCP-Protocol-Version 헤더가 지원 목록 밖인지(`header`), `params._meta`에 `io.modelcontextprotocol/protocolVersion`이 있는지(`meta`), 둘 다인지(`header_and_meta`) 판정해 지표에 남긴다.
+
+메트릭: `memento_modern_protocol_attempts_total` (label: `signal`)
+
 ---
 
 ## Mode 시스템 내부 동작
