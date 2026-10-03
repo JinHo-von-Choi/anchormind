@@ -6,7 +6,9 @@
  *
  * 한 키에 앵커 항목이 든 일괄 저장, 앵커 단건 기록(자체 트랜잭션, 호출자 트랜잭션), 일반 단건 기록,
  * 일반 일괄 저장, 앵커 amend를 24건 동시에 여러 번 실행해 교착(40P01)이 0건이고 살아 있는 앵커가
- * 상한을 넘지 않는지 본다. fragments.key_id 외래키가 있는 경우(새 설치)와 없는 경우를 모두 실행한다.
+ * 상한을 넘지 않는지 본다. 같은 키가 같은 본문을 동시에 쓰는 쌍(앵커와 일반 단건, 앵커와 앵커, 일괄 저장의
+ * 앵커 항목과 일반 단건, 앵커 amend와 그 본문의 단건)도 40쌍씩 실행해 교착이 0건인지 본다.
+ * fragments.key_id 외래키가 있는 경우(새 설치)와 없는 경우를 모두 실행한다.
  * 실행마다 전용 데이터베이스를 만들어 쓰고 끝나면 지운다.
  */
 import crypto                  from "node:crypto";
@@ -38,15 +40,17 @@ const factory = new FragmentFactory();
 const writer  = new FragmentWriter();
 const gate    = new WriteGate({ getAnchorState, auditAnchor: () => {}, anchorPermissionMode: () => "warn", anchorLimit: () => LIMIT });
 
+const PAIRS   = 40;
+
 const text = (label) => `${label} 동시 혼합 쓰기 ${crypto.randomUUID()} 를 기록한다`;
 
-/** remember 진입점으로 관문을 거친 생성 후보 */
-async function gatedDraft(keyId, isAnchor) {
+/** remember 진입점으로 관문을 거친 생성 후보. content를 주지 않으면 새 본문을 쓴다. */
+async function gatedDraft(keyId, isAnchor, content = text("단건")) {
   const { draft } = await gate.check({
     entry : WRITE_ENTRIES.REMEMBER,
     op    : "create",
     ctx   : { keyId, agentId: "default" },
-    fields: { content: text("단건"), topic: "anchor-mix", type: "fact", isAnchor },
+    fields: { content, topic: "anchor-mix", type: "fact", isAnchor },
     build : (input) => {
       const f = factory.create(input, { contentPrepared: true });
       f.agent_id = "default";
@@ -129,6 +133,61 @@ async function mixedRound() {
   return { keyId, failed };
 }
 
+/** 같은 본문을 쓰는 두 동작을 PAIRS번 동시에 실행하고 실패와 교착 증가분을 돌려준다. */
+async function samePairs(makePair) {
+  const before = await readDeadlockCount();
+  const failed = [];
+  for (let i = 0; i < PAIRS; i++) {
+    const { keyId, plainRows } = await seededKey();
+    const settled = await Promise.allSettled(makePair(keyId, plainRows).map(op => op()));
+    for (const s of settled) if (s.status === "rejected") failed.push(`${s.reason.code ?? ""} ${s.reason.message}`);
+  }
+  return { failed, deadlocks: await deadlockDelta(before) };
+}
+
+const proc = () => {
+  const p = new BatchRememberProcessor({ store: {}, index: { index: async () => {} }, factory, writeGate: () => gate });
+  p.setPool(getPrimaryPool());
+  return p;
+};
+
+/** 같은 본문 쌍의 조합. 각 항목은 (keyId, plainRows) => [동작, 동작]이다. */
+const SAME_CONTENT_PAIRS = {
+  "앵커 단건과 일반 단건": (keyId) => {
+    const content = text("같은 본문");
+    return [
+      async () => writer.insertDetailed(await gatedDraft(keyId, true, content)),
+      async () => writer.insertDetailed(await gatedDraft(keyId, false, content))
+    ];
+  },
+  "앵커 단건과 앵커 단건": (keyId) => {
+    const content = text("같은 본문");
+    return [
+      async () => writer.insertDetailed(await gatedDraft(keyId, true, content)),
+      async () => writer.insertDetailed(await gatedDraft(keyId, true, content))
+    ];
+  },
+  "일괄 저장 앵커 항목과 일반 단건": (keyId) => {
+    const content = text("같은 본문");
+    return [
+      () => proc().process({ _keyId: keyId, fragments: [{ content, topic: "anchor-mix", type: "fact", isAnchor: true }] }),
+      async () => writer.insertDetailed(await gatedDraft(keyId, false, content))
+    ];
+  },
+  "앵커 amend와 그 본문의 일반 단건": (keyId, plainRows) => [
+    () => amendToAnchor(keyId, plainRows[0]),
+    async () => writer.insertDetailed(await gatedDraft(keyId, false, plainRows[0].content))
+  ]
+};
+
+async function runSameContentPairs() {
+  for (const [name, makePair] of Object.entries(SAME_CONTENT_PAIRS)) {
+    const { failed, deadlocks } = await samePairs(makePair);
+    assert.deepEqual(failed, [], name);
+    assert.equal(deadlocks, 0, name);
+  }
+}
+
 async function runTrials() {
   const before = await readDeadlockCount();
   for (let trial = 0; trial < TRIALS; trial++) {
@@ -149,6 +208,10 @@ describe("앵커 상한 잠금 혼합 동시 쓰기", () => {
     await runTrials();
   });
 
+  it("외래키가 있는 설치에서 같은 본문 동시 쓰기 쌍이 교착하지 않는다", async () => {
+    await runSameContentPairs();
+  });
+
   it("fragments.key_id 외래키가 없는 설치에서도 교착 없이 상한을 지킨다", async () => {
     const { rows } = await directQuery(
       `SELECT conname FROM pg_constraint
@@ -158,5 +221,9 @@ describe("앵커 상한 잠금 혼합 동시 쓰기", () => {
       await directQuery(`ALTER TABLE agent_memory.fragments DROP CONSTRAINT "${conname}"`);
     }
     await runTrials();
+  });
+
+  it("외래키가 없는 설치에서 같은 본문 동시 쓰기 쌍이 교착하지 않는다", async () => {
+    await runSameContentPairs();
   });
 });
