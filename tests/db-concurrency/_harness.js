@@ -165,14 +165,13 @@ async function migrateLaneDatabase(server, name) {
 }
 
 /**
- * 실행 데이터베이스를 지운다. 남은 연결을 먼저 끊는다. 이름이 시험 형식이 아니면
- * 지우지 않는다. 준비되지 않았으면 아무것도 하지 않는다.
+ * 이름이 시험 형식인 데이터베이스를 지운다. 남은 연결을 먼저 끊는다.
  *
+ * @param {{host: string, port: number, user: string, password: string}} server
+ * @param {string} name
  * @returns {Promise<void>}
  */
-export async function dropLaneDatabase() {
-  if (!lane) return;
-  const { name, server } = lane;
+async function dropDatabaseByName(server, name) {
   assertLaneDatabaseName(name);
 
   const client = new pg.Client(maintenanceConfig(server));
@@ -186,7 +185,45 @@ export async function dropLaneDatabase() {
   } finally {
     await client.end();
   }
+}
+
+/**
+ * 실행 데이터베이스를 지운다. 남은 연결을 먼저 끊는다. 이름이 시험 형식이 아니면
+ * 지우지 않는다. 준비되지 않았으면 아무것도 하지 않는다.
+ *
+ * @returns {Promise<void>}
+ */
+export async function dropLaneDatabase() {
+  if (!lane) return;
+  const { name, server } = lane;
+  await dropDatabaseByName(server, name);
   lane = null;
+}
+
+/**
+ * 실행 데이터베이스와 같은 서버에 두 번째 데이터베이스를 만들고 확장과 마이그레이션을 적용한다.
+ * 앱 풀은 이 데이터베이스를 보지 않으므로 호출자가 반환된 연결 설정으로 직접 붙는다. 한 데이터베이스에서
+ * 내보낸 것을 다른 빈 데이터베이스로 가져오는 시험에 쓴다.
+ *
+ * @returns {Promise<{name: string, config: pg.ClientConfig, drop: () => Promise<void>}>}
+ */
+export async function createExtraLaneDatabase() {
+  if (!lane) throw new Error("prepareLaneDatabase()를 먼저 호출해야 한다");
+  const { server } = lane;
+  const name       = newLaneDatabaseName();
+  const config     = { host: server.host, port: server.port, user: server.user, password: server.password, database: name };
+
+  await queryOnce(maintenanceConfig(server), `CREATE DATABASE "${name}"`);
+  const drop = () => dropDatabaseByName(server, name);
+  try {
+    await queryOnce(config, "CREATE EXTENSION IF NOT EXISTS vector");
+    await queryOnce(config, "CREATE EXTENSION IF NOT EXISTS pg_trgm");
+    await migrateLaneDatabase(server, name);
+  } catch (err) {
+    await drop().catch(() => {});
+    throw new Error(`보조 데이터베이스 준비 실패 (${name}): ${err.message}`, { cause: err });
+  }
+  return { name, config, drop };
 }
 
 /** SQLSTATE 40P01(deadlock_detected)를 받은 질의 기록. */
