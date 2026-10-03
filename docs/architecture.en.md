@@ -1246,20 +1246,23 @@ For detailed migration steps, see [docs/embedding-local.md](embedding-local.md).
 
 ### LLM Dispatcher -- dispatchChain and CLI Providers
 
-`lib/llm/index.js` exports `dispatchChain(chain, prompt, options, deps)` as a separate function. `llmJson()` handles chain building and `redactPrompt()` processing, then delegates to this function.
+`lib/llm/index.js` exports `dispatchChain(chain, prompt, options, deps)` as a separate function. `llmJson()` handles `redactPrompt()` processing, opens the egress gate (`lib/llm/EgressGate.js`), builds and filters the chain, then delegates to this function.
 
 ```
 llmJson(prompt, options)
     |
     +-- redactPrompt(prompt) -> safePrompt
+    +-- openEgressGate(options.egress) -> egress   (key policy lookup; pass-through when MEMENTO_EGRESS_POLICY=off)
     +-- buildChain(LLM_PRIMARY, LLM_FALLBACKS) -> chain
-    +-- dispatchChain(chain, safePrompt, options, { startedAt })
+    +-- egress.filter(chain) -> providers the policy allows (EgressSkippedError when none is left)
+    +-- dispatchChain(chain, safePrompt, options, { startedAt, egress })
             |
             +-- Sequential provider attempts (semaphore + circuit breaker)
+            |     +-- egress.prepare(provider, prompt): recheck the decision; for an external provider mask and write the outbox audit event
             +-- Return first successful response / throw Error if all fail
 ```
 
-The five existing callers (AutoReflect, MorphemeIndex, ConsolidatorGC, ContradictionDetector, MemoryEvaluator) continue to use `llmJson` with no code changes required.
+The six modules that use the LLM (ContradictionDetector, AutoReflect, MemoryEvaluator, ConsolidatorGC split, SyntheticQueryGenerator, MorphemeIndex) pass the stage, key and workspace context in `options.egress`. The policy and the decision table are in "Egress Policy" in [configuration.en.md](configuration.en.md).
 
 The `codex-cli` provider carries `model` / `timeoutMs` settings through to the actual CLI call. `qwen-cli` is also supported as a provider.
 

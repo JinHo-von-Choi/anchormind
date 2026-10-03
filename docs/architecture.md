@@ -1249,20 +1249,23 @@ LocalTransformersEmbedder.embed(text) / embedBatch(texts)
 
 ### LLM Dispatcher — dispatchChain 및 CLI Providers
 
-`lib/llm/index.js`는 `dispatchChain(chain, prompt, options, deps)` 함수를 분리 export한다. `llmJson()`은 chain 빌드와 `redactPrompt()` 처리를 수행한 뒤 이 함수에 위임한다.
+`lib/llm/index.js`는 `dispatchChain(chain, prompt, options, deps)` 함수를 분리 export한다. `llmJson()`은 `redactPrompt()` 처리, 외부 전송 관문(`lib/llm/EgressGate.js`) 열기, chain 빌드와 거르기를 수행한 뒤 이 함수에 위임한다.
 
 ```
 llmJson(prompt, options)
     │
     ├── redactPrompt(prompt) → safePrompt
+    ├── openEgressGate(options.egress) → egress   (키 정책 조회, MEMENTO_EGRESS_POLICY=off이면 통과)
     ├── buildChain(LLM_PRIMARY, LLM_FALLBACKS) → chain
-    └── dispatchChain(chain, safePrompt, options, { startedAt })
+    ├── egress.filter(chain) → 정책이 허용하는 제공자 (남는 것이 없으면 EgressSkippedError)
+    └── dispatchChain(chain, safePrompt, options, { startedAt, egress })
             │
             ├── provider 순차 시도 (semaphore + circuit breaker 포함)
+            │     └── egress.prepare(provider, prompt): 판정 재확인, 외부 제공자면 마스킹과 outbox 감사 이벤트
             └── 첫 성공 응답 반환 / 전부 실패 시 Error throw
 ```
 
-기존 호출자(AutoReflect, ConsolidatorGC, ContradictionDetector, MemoryEvaluator)는 `llmJson`을 그대로 사용하며 코드 변경 없이 동작한다. MorphemeIndex는 기본 경로(`MEMENTO_MORPHEME_TOKENIZER=local`)에서 LLM chain을 호출하지 않고 MorphemeTokenizer 로컬 분석기를 사용한다. `MEMENTO_MORPHEME_TOKENIZER=llm` 설정 시에만 `_tokenizeViaLLM()`을 통해 chain을 호출한다.
+LLM을 쓰는 여섯 모듈(ContradictionDetector, AutoReflect, MemoryEvaluator, ConsolidatorGC 분할, SyntheticQueryGenerator, MorphemeIndex)은 `options.egress`로 단계, 키, workspace 문맥을 넘긴다. 정책과 판정 표는 [configuration.md](configuration.md) 「외부 전송 정책」에 있다. MorphemeIndex는 기본 경로(`MEMENTO_MORPHEME_TOKENIZER=local`)에서 LLM chain을 호출하지 않고 MorphemeTokenizer 로컬 분석기를 사용한다. `MEMENTO_MORPHEME_TOKENIZER=llm` 설정 시에만 `_tokenizeViaLLM()`을 통해 chain을 호출한다.
 
 `codex-cli` provider는 `model` / `timeoutMs` 설정을 실제 CLI 호출까지 전달한다. `qwen-cli` provider도 지원된다.
 
