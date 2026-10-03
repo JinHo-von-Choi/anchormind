@@ -198,7 +198,13 @@ describe("호출 시점에 읽는 변수의 기동 검사", () => {
     MEMENTO_SESSION_KEY_RECHECK_MS : "abc",
     DB_STATEMENT_TIMEOUT_MS        : "soon",
     MEMENTO_SEMANTIC_THRESHOLD_MODE: "sideways",
-    MEMENTO_HEALTH_READY_DB_TIMEOUT_MS: "50"
+    MEMENTO_HEALTH_READY_DB_TIMEOUT_MS: "50",
+    MEMENTO_LLM_CLI_TOOL_APPROVAL  : "maybe",
+    MEMENTO_SESSION_ID_POLICY      : "strict",
+    MEMENTO_ADMIN_AUTH_BACKOFF     : "yes",
+    MEMENTO_REMEMBER_DUPLICATE_GUARD: "1",
+    MEMENTO_API_KEY_DELETE_GUARD   : "off",
+    MEMENTO_TOOL_ARGS_VALIDATION   : "loud"
   };
 
   const runServer = (extra) => {
@@ -219,6 +225,59 @@ describe("호출 시점에 읽는 변수의 기동 검사", () => {
       rmSync(logDir, { recursive: true, force: true });
     }
   };
+
+  const SWITCHES = {
+    MEMENTO_LLM_CLI_TOOL_APPROVAL   : "maybe",
+    MEMENTO_SESSION_ID_POLICY       : "strict",
+    MEMENTO_ADMIN_AUTH_BACKOFF      : "yes",
+    MEMENTO_REMEMBER_DUPLICATE_GUARD: "1",
+    MEMENTO_API_KEY_DELETE_GUARD    : "off",
+    MEMENTO_TOOL_ARGS_VALIDATION    : "loud"
+  };
+
+  const probe = (env) => JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", `
+    const c  = await import("./lib/config.js");
+    const a  = await import("./lib/llm/util/cli-approval.js");
+    const k  = await import("./lib/admin/ApiKeyStore.js");
+    console.log("PROBE " + JSON.stringify({
+      approval: a.cliToolApprovalMode(), session: c.sessionIdPolicy(), backoff: c.adminAuthBackoffMode(),
+      dup: c.isRememberDuplicateGuardEnabled(), del: k.isApiKeyDeleteGuardEnabled(),
+      issues: c.getConfigIssues().map(i => [i.name, i.problem, i.used])
+    }));
+  `], {
+    cwd: new URL("../../", import.meta.url),
+    env: {
+      PATH: process.env.PATH, DOTENV_CONFIG_PATH: "/nonexistent.env", POSTGRES_HOST: "127.0.0.1", POSTGRES_PORT: "1",
+      REDIS_ENABLED: "false", CACHE_ENABLED: "false", MEMENTO_METRICS_DEFAULT: "off", ...env
+    },
+    encoding: "utf8"
+  }).split("\n").find(line => line.startsWith("PROBE ")).slice(6));
+
+  it("문서 밖 값은 변수 이름으로 기록하고 적용 값은 그대로 둔다", () => {
+    const r = probe(SWITCHES);
+    assert.deepEqual(r.issues.map(i => i[0]).sort(), Object.keys(SWITCHES).sort());
+    assert.ok(r.issues.every(i => i[1] === "not_in_enum"));
+    assert.equal(r.approval, "none");
+    assert.equal(r.session, "warn");
+    assert.equal(r.backoff, "off");
+    assert.equal(r.dup, false);
+    assert.equal(r.del, true);
+  });
+
+  it("문서에 있는 값과 빈 값은 기록하지 않고 적용 값이 그대로다", () => {
+    const r = probe({
+      MEMENTO_LLM_CLI_TOOL_APPROVAL: "all", MEMENTO_SESSION_ID_POLICY: "enforce", MEMENTO_ADMIN_AUTH_BACKOFF: "on",
+      MEMENTO_REMEMBER_DUPLICATE_GUARD: "true", MEMENTO_API_KEY_DELETE_GUARD: "false", MEMENTO_TOOL_ARGS_VALIDATION: "off"
+    });
+    assert.deepEqual(r.issues, []);
+    assert.equal(r.approval, "all");
+    assert.equal(r.session, "enforce");
+    assert.equal(r.backoff, "on");
+    assert.equal(r.dup, true);
+    assert.equal(r.del, false);
+    const blank = probe({ MEMENTO_SESSION_ID_POLICY: "", MEMENTO_ADMIN_AUTH_BACKOFF: "  " });
+    assert.deepEqual(blank.issues, []);
+  });
 
   it("엄격 모드에서 각 변수를 이름으로 지목하고 종료 코드 78로 멈춘다", () => {
     const r   = runServer({ MEMENTO_CONFIG_STRICT: "true" });
