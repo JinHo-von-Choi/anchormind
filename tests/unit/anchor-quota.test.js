@@ -24,7 +24,6 @@ mock.module("../../lib/tools/db.js", {
 
 const {
   ANCHOR_QUOTA_LOCK_SQL,
-  ANCHOR_QUOTA_LOCK_NAMESPACE,
   attachAnchorQuota,
   anchorQuotaOf,
   insertWithAnchorQuota,
@@ -89,7 +88,9 @@ describe("insertWithAnchorQuota", () => {
     assert.equal(fragment.is_anchor, true);
     assert.deepEqual(quota.calls, []);
     assert.equal(client.calls[0].sql, ANCHOR_QUOTA_LOCK_SQL);
-    assert.deepEqual(client.calls[0].params, [ANCHOR_QUOTA_LOCK_NAMESPACE, KEY]);
+    assert.deepEqual(client.calls[0].params, [KEY]);
+    assert.match(ANCHOR_QUOTA_LOCK_SQL, /FROM agent_memory\.api_keys WHERE id = \$1 FOR UPDATE/);
+    assert.doesNotMatch(ANCHOR_QUOTA_LOCK_SQL, /advisory/);
   });
 
   it("상한에 이르렀으면 앵커 지정을 거두고 위반을 후보에 싣는다", async () => {
