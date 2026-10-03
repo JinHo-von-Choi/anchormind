@@ -12,7 +12,7 @@ import { test, describe } from "node:test";
 import assert             from "node:assert/strict";
 
 import {
-  firstRelevantRank, distractorAboveRelevant, tokenWeightedNdcg, scoreQuery,
+  firstRelevantRank, distractorAboveRelevant, tokenWeightedNdcg, tokenWeightedNdcgParts, dedupeReturned, scoreQuery,
   aggregateRows, aggregateBy, summarizeRows, latencySummary, MetricInputError, NDCG_UNIT_TOKENS
 } from "../../lib/memory/signals/RecallMetrics.js";
 
@@ -202,5 +202,112 @@ describe("latencySummary", () => {
 
   test("빈 입력은 null", () => {
     assert.deepEqual(latencySummary([]), { n: 0, p50: null, p95: null, max: null });
+  });
+});
+
+describe("순위 경계와 질의 행", () => {
+  const entry    = { id: "q", subset: "human_ko", tags: [], domain: "ops" };
+  const relevant = rel([["target", 3, 100]]);
+  const atRank   = (rank) => {
+    const returned = Array.from({ length: Math.max(rank ?? 12, 12) }, (_, i) => ({ id: `x${i + 1}`, tokens: 10 }));
+    if (rank !== null) returned[rank - 1] = { id: "target", tokens: 100 };
+    return scoreQuery({ entry, returned, relevant, budgetTokens: 100000 });
+  };
+
+  for (const [rank, h1, h5, h10] of [[1, 1, 1, 1], [5, 0, 1, 1], [6, 0, 0, 1], [10, 0, 0, 1], [11, 0, 0, 0], [null, 0, 0, 0]]) {
+    test(`순위 ${rank}의 적중 여부는 @1=${h1} @5=${h5} @10=${h10}`, () => {
+      const row = atRank(rank);
+      assert.deepEqual([row.rank, row.hit_at_1, row.hit_at_5, row.hit_at_10], [rank, h1, h5, h10]);
+      assert.equal(row.rr, rank === null ? 0 : 1 / rank);
+    });
+  }
+
+  test("정답이 하나면 상위 k 정답 비율은 적중 여부와 같다", () => {
+    const row = atRank(6);
+    assert.deepEqual([row.recall_fraction_at_1, row.recall_fraction_at_5, row.recall_fraction_at_10], [0, 0, 1]);
+    assert.equal(row.relevant_count, 1);
+  });
+
+  test("정답이 여럿이면 상위 k개에 든 정답 수를 전체 정답 수로 나눈다", () => {
+    const multi = rel([["a", 3, 50], ["b", 2, 50], ["c", 1, 50], ["d", 1, 50]]);
+    const row   = scoreQuery({ entry, returned: ret([["a", 50], ["x", 50], ["b", 50], ["y", 50], ["z", 50], ["c", 50]]), relevant: multi, budgetTokens: 100000 });
+    assert.deepEqual([row.recall_fraction_at_1, row.recall_fraction_at_5, row.recall_fraction_at_10], [0.25, 0.5, 0.75]);
+    assert.equal(row.hit_at_1, 1);
+  });
+
+  test("같은 id가 앞에서 반복되어도 순위는 처음 나온 항목 기준 중복을 뺀 위치다", () => {
+    const row = scoreQuery({ entry, returned: ret([["x", 10], ["x", 10], ["target", 100]]), relevant, budgetTokens: 100000 });
+    assert.equal(row.rank, 2);
+    assert.equal(row.returned, 2);
+  });
+
+  test("dedupeReturned는 처음 나온 항목을 남긴다", () => {
+    assert.deepEqual(dedupeReturned(ret([["a", 1], ["b", 2], ["a", 9]])), ret([["a", 1], ["b", 2]]));
+  });
+});
+
+describe("nDCG의 세부 정의", () => {
+  const D = (consumed) => 1 / Math.log2(2 + consumed / 100);
+
+  test("반복된 id는 한 번만 세어 상한 아래의 값이 정확히 나온다", () => {
+    const relevant = rel([["a", 3, 100], ["b", 3, 100]]);
+    const value    = tokenWeightedNdcg({ returned: ret([["a", 100], ["a", 100], ["x", 100], ["b", 100]]), relevant, budgetTokens: 4000 });
+    const dcg      = 7 * D(0) + 7 * D(200);
+    const idcg     = 7 * D(0) + 7 * D(100);
+    near(value, dcg / idcg);
+    assert.ok(value < 1);
+  });
+
+  test("예산을 넘는 항목에서 반환 목록 계산은 멈춘다", () => {
+    const relevant = rel([["r1", 3, 100], ["r2", 3, 100]]);
+    const value    = tokenWeightedNdcg({ returned: ret([["r1", 100], ["big", 500], ["r2", 100]]), relevant, budgetTokens: 400 });
+    near(value, 7 * D(0) / (7 * D(0) + 7 * D(100)));
+  });
+
+  test("이상적 순서는 예산에 들어가지 않는 항목을 건너뛰고 채운다", () => {
+    const relevant = rel([["h", 3, 900], ["s", 2, 50]]);
+    near(tokenWeightedNdcg({ returned: ret([["s", 50]]), relevant, budgetTokens: 500 }), 1);
+  });
+
+  test("이득이 같으면 토큰이 작은 정답을 앞에 둔 순서가 이상적이다", () => {
+    const relevant = rel([["a", 3, 300], ["b", 3, 100]]);
+    const value    = tokenWeightedNdcg({ returned: ret([["a", 300], ["b", 100]]), relevant, budgetTokens: 4000 });
+    near(value, (7 * D(0) + 7 * D(300)) / (7 * D(0) + 7 * D(100)));
+    assert.ok(value < 1);
+  });
+
+  test("상한 전 값은 1을 넘을 수 있고 보고값만 1로 제한된다", () => {
+    const relevant = rel([["h", 3, 900], ["l", 1, 10]]);
+    const parts    = tokenWeightedNdcgParts({ returned: ret([["l", 10], ["h", 900]]), relevant, budgetTokens: 2000 });
+    near(parts.uncapped, (1 * D(0) + 7 * D(10)) / (7 * D(0) + 1 * D(900)));
+    assert.ok(parts.uncapped > 1);
+    assert.equal(parts.capped, 1);
+    const row = scoreQuery({ entry: { id: "q", subset: "human_ko" }, returned: ret([["l", 10], ["h", 900]]), relevant, budgetTokens: 2000 });
+    assert.equal(row.ndcg, 1);
+    assert.equal(row.ndcg_uncapped, parts.uncapped);
+  });
+
+  test("정답의 토큰 수는 반환 항목이 다른 값을 가져도 정답 항목의 값 한 곳을 쓴다", () => {
+    const relevant = rel([["a", 3, 100]]);
+    const stated   = tokenWeightedNdcg({ returned: ret([["x", 100], ["a", 100]]), relevant, budgetTokens: 4000 });
+    const other    = tokenWeightedNdcg({ returned: ret([["x", 100], ["a", 999]]), relevant, budgetTokens: 4000 });
+    assert.equal(stated, other);
+  });
+
+  test("예산 안에 정답이 없으면 상한 전후 모두 null", () => {
+    assert.deepEqual(tokenWeightedNdcgParts({ returned: [], relevant: rel([["a", 3, 500]]), budgetTokens: 100 }), { capped: null, uncapped: null });
+  });
+});
+
+describe("지연 백분위수 경계", () => {
+  test("20개 값에서 nearest-rank p50은 10번째, p95는 19번째다", () => {
+    const values = [13, 2, 20, 7, 18, 1, 9, 15, 4, 11, 19, 6, 16, 3, 10, 14, 5, 17, 8, 12];
+    assert.deepEqual(latencySummary(values), { n: 20, p50: 10, p95: 19, max: 20 });
+  });
+
+  test("100개 값에서 p50은 50, p95는 95다", () => {
+    const values = Array.from({ length: 100 }, (_, i) => i + 1);
+    const out    = latencySummary(values);
+    assert.deepEqual([out.p50, out.p95], [50, 95]);
   });
 });
