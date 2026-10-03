@@ -19,7 +19,7 @@ mock.module("../../lib/memory/write/FragmentFactory.js", {
   }
 });
 
-const { fragmentTokens, CONTENT_TOKEN_CACHE_LIMIT, selectWithinBudget, trimInSearchOrder } =
+const { fragmentTokens, CONTENT_TOKEN_CACHE_LIMIT, selectWithinBudget, trimInSearchOrder, exceedsBudget, selectForRecall } =
   await import("../../lib/memory/read/BudgetSelector.js");
 
 beforeEach(() => { counted.length = 0; });
@@ -50,6 +50,22 @@ describe("fragmentTokens 기억", () => {
     counted.length = 0;
     fragmentTokens({ id: "again", content: first });
     assert.deepEqual(counted, [first]);
+  });
+
+  it("exceedsBudget은 바이트 상한 합이 예산 이하이면 세지 않고, 넘으면 합이 예산을 넘는 순간까지만 센다", () => {
+    const small = Array.from({ length: 5 }, (_, i) => ({ id: `s${i}`, content: `ab${i}` }));
+    assert.equal(exceedsBudget(small, 100), false);
+    assert.deepEqual(counted, []);
+
+    const many = Array.from({ length: 100 }, (_, i) => ({ id: `m${i}`, content: `lazy-${String(i).padStart(4, "0")}` }));
+    assert.equal(exceedsBudget(many, 35), true);
+    assert.equal(counted.length, 4);
+  });
+
+  it("selectForRecall은 예산이 묶이면 절단 경계와 고른 파편만 정확히 센다(후보 200건)", () => {
+    const pool = Array.from({ length: 200 }, (_, i) => ({ id: `r${String(i).padStart(3, "0")}`, content: `recall-body-${String(i).padStart(4, "0")}`, score: (i % 13) / 13, _storedTokens: 16 }));
+    selectForRecall(pool, { budget: 100, scoreOf: f => f.score });
+    assert.ok(counted.length <= 20, `정확히 센 파편 ${counted.length}건`);
   });
 
   it("검색 순서 절단과 예산 선택을 이어서 해도 후보마다 한 번만 센다", () => {

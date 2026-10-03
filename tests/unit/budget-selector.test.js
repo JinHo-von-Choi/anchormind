@@ -9,9 +9,12 @@ import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
 import {
-  selectWithinBudget, trimInSearchOrder, pairSimilarity, keywordOverlap, sectionOf, fragmentTokens
+  selectWithinBudget, trimInSearchOrder, pairSimilarity, keywordOverlap, sectionOf, fragmentTokens,
+  selectForRecall, verifyExactBudget, estimateTokens, partitionCandidates, attachStoredTokens,
+  SELECTION_POOL_MAX, RANK_CANDIDATE_LIMIT
 } from "../../lib/memory/read/BudgetSelector.js";
 import { createRng } from "../../lib/memory/signals/PairedBootstrap.js";
+import { countTokens } from "../../lib/memory/write/FragmentFactory.js";
 
 /** 점수를 필드로 들고 있는 시험용 파편 */
 const frag     = (id, score, tokens, extra = {}) => ({ id, score, estimated_tokens: tokens, content: id, ...extra });
@@ -220,5 +223,125 @@ describe("유사도와 구획", () => {
     assert.equal(fragmentTokens({ estimated_tokens: 12, content: "x" }), 12);
     assert.ok(fragmentTokens({ content: "budget selection" }) > 0);
     assert.equal(fragmentTokens({}), 0);
+  });
+});
+
+describe("추정값 선택과 정확한 확인", () => {
+  it("estimateTokens는 저장값, 없으면 본문 길이 / 4(올림)를 쓴다", () => {
+    assert.equal(estimateTokens({ id: "s", content: "abcdefghi", _storedTokens: 7 }), 7);
+    assert.equal(estimateTokens({ id: "c", content: "abcdefghi" }), 3);
+    assert.equal(estimateTokens({ id: "z", content: "abcdefghi", _storedTokens: 0 }), 3);
+    assert.equal(estimateTokens({ id: "e", content: "abcdefghi", estimated_tokens: 11, _storedTokens: 7 }), 11);
+  });
+
+  it("저장값이 실제보다 작아 고른 집합이 예산을 넘으면 이득이 가장 작은 파편부터 뺀다", () => {
+    const pool = [
+      { id: "a", score: 1.0, estimated_tokens: 40 },
+      { id: "b", score: 0.9, estimated_tokens: 40 },
+      { id: "c", score: 0.2, estimated_tokens: 40 }
+    ];
+    /** 추정값 20씩이면 셋 다 들어가지만 정확히는 120 */
+    const tokensOf = () => 20;
+    const sel      = selectWithinBudget(pool, { budget: 100, scoreOf, tokensOf });
+    assert.equal(sel.selectedIds.size, 3);
+    const verified = verifyExactBudget(pool.filter(f => sel.selectedIds.has(f.id)), { budget: 100, scoreOf });
+    assert.deepEqual(verified.kept.map(f => f.id), ["a", "b"]);
+    assert.deepEqual(verified.dropped.map(f => f.id), ["c"]);
+    assert.equal(verified.tokens, 80);
+  });
+
+  it("뺄 순서의 동점은 점수, 그다음 id가 큰 쪽이 먼저다", () => {
+    const pool = [
+      { id: "a", score: 0.5, estimated_tokens: 50 },
+      { id: "b", score: 0.5, estimated_tokens: 50 },
+      { id: "c", score: 0.5, estimated_tokens: 50 }
+    ];
+    assert.deepEqual(verifyExactBudget(pool, { budget: 100, scoreOf }).kept.map(f => f.id), ["a", "b"]);
+    assert.deepEqual(verifyExactBudget([...pool].reverse(), { budget: 100, scoreOf }).kept.map(f => f.id).sort(), ["a", "b"]);
+  });
+
+  it("성질: 저장값이 +-30% 틀려도 정확한 토큰 합은 예산 이하이고, 선택 단계는 같은 추정값의 절단 이상이다(시드 300개)", () => {
+    let dropped = 0;
+    for (let seed = 1; seed <= 300; seed++) {
+      const rng  = createRng(seed);
+      const n    = 1 + Math.floor(rng() * 60);
+      const pool = Array.from({ length: n }, (_, i) => {
+        const exact  = 1 + Math.floor(rng() * 40);
+        const stored = Math.max(1, Math.round(countTokens(`${seed}-${i} ${"budget token ".repeat(exact)}`) * (0.7 + rng() * 0.6)));
+        const extra  = {};
+        if (rng() < 0.5) extra.similarity = rng();
+        if (rng() < 0.7) extra.keywords = [`k${Math.floor(rng() * 5)}`];
+        if (rng() < 0.2) extra._kwExact = true;
+        return { id: `f${i}`, score: rng(), content: `${seed}-${i} ${"budget token ".repeat(exact)}`, _storedTokens: stored, ...extra };
+      });
+      /** countTokens를 직접 써서 선택 전에 정확한 수가 기억되지 않게 한다 */
+      const exactOf  = (f) => countTokens(f.content);
+      const total    = pool.reduce((sum, f) => sum + exactOf(f), 0);
+      const budget   = 1 + Math.floor(rng() * total);
+      const baseline = new Set(trimInSearchOrder(pool, budget, undefined, estimateTokens).map(f => f.id));
+
+      const stage = selectWithinBudget(pool, { budget, scoreOf, baselineIds: baseline, tokensOf: estimateTokens });
+      const base  = pool.filter(f => baseline.has(f.id)).reduce((sum, f) => sum + f.score, 0);
+      assert.ok(totalOf(pool, stage.selectedIds) >= base - 1e-9, `seed ${seed}: 선택 단계 ${totalOf(pool, stage.selectedIds)} < ${base}`);
+
+      const result = selectForRecall(pool, { budget, scoreOf, baselineIds: baseline });
+      const exactSum = pool.filter(f => result.selectedIds.has(f.id)).reduce((sum, f) => sum + exactOf(f), 0);
+      assert.ok(exactSum <= budget, `seed ${seed}: 정확한 합 ${exactSum} > ${budget}`);
+      dropped += result.dropped;
+    }
+    assert.ok(dropped > 0, "정확한 확인에서 뺀 파편이 하나도 없다");
+  });
+
+  it("정확한 합이 예산 이하이면 추정값과 무관하게 전부 고른다", () => {
+    const pool = [
+      { id: "a", score: 0.1, estimated_tokens: 30, _storedTokens: 500 },
+      { id: "b", score: 0.2, estimated_tokens: 30, _storedTokens: 500 }
+    ];
+    const result = selectForRecall(pool, { budget: 60, scoreOf });
+    assert.equal(result.strategy, "all");
+    assert.deepEqual(idsOf(result), ["a", "b"]);
+  });
+
+  it("후보가 poolLimit를 넘으면 기준 집합만 쓰고 해를 만들지 않는다(후보 1000건)", () => {
+    let scoreCalls = 0;
+    const counted  = (f) => { scoreCalls++; return f.score; };
+    const pool     = Array.from({ length: 1000 }, (_, i) => ({ id: `p${String(i).padStart(4, "0")}`, score: 1 - i / 1000, estimated_tokens: 10 }));
+    const baseline = new Set(pool.slice(0, 500).map(f => f.id));
+    const result   = selectForRecall(pool, { budget: 5000, scoreOf: counted, baselineIds: baseline, poolLimit: 210 });
+    assert.equal(result.strategy, "baseline-only");
+    assert.equal(result.selectedIds.size, 500);
+    assert.ok(scoreCalls <= 500, `점수 계산 ${scoreCalls}회`);
+  });
+
+  it("selectWithinBudget은 SELECTION_POOL_MAX를 넘는 후보에 해를 만들지 않는다", () => {
+    let scoreCalls = 0;
+    const pool   = Array.from({ length: SELECTION_POOL_MAX + 1 }, (_, i) => ({ id: `q${i}`, score: 1, estimated_tokens: 1 }));
+    const result = selectWithinBudget(pool, { budget: 10, scoreOf: () => { scoreCalls++; return 1; }, baselineIds: new Set(["q0", "q1"]) });
+    assert.equal(result.strategy, "baseline-only");
+    assert.deepEqual(idsOf(result), ["q0", "q1"]);
+    assert.equal(scoreCalls, 0);
+  });
+
+  it("partitionCandidates: 모두 예산 안이면 상한 없이 전부, 묶이면 상한까지와 상한 밖 기준 파편", () => {
+    const ordered = Array.from({ length: RANK_CANDIDATE_LIMIT + 30 }, (_, i) => ({ id: `o${String(i).padStart(4, "0")}`, estimated_tokens: 1 }));
+    const all = partitionCandidates(ordered, { budget: 1000 });
+    assert.equal(all.candidates.length, RANK_CANDIDATE_LIMIT + 30);
+    assert.equal(all.baselineIds.size, RANK_CANDIDATE_LIMIT + 30);
+
+    const binding = partitionCandidates(ordered, { budget: 220 });
+    assert.equal(binding.baselineIds.size, 220);
+    assert.equal(binding.candidates.length, 220);
+    const tight = partitionCandidates(ordered, { budget: 50 });
+    assert.equal(tight.candidates.length, RANK_CANDIDATE_LIMIT);
+  });
+
+  it("attachStoredTokens는 정확한 수를 아는 파편은 묻지 않고, loader가 없으면 아무것도 하지 않는다", async () => {
+    const asked = [];
+    const frags = [{ id: "known", estimated_tokens: 5 }, { id: "u1", content: "unique-body-u1" }, { id: "u2", content: "unique-body-u2" }];
+    await attachStoredTokens(frags, async (ids) => { asked.push(...ids); return new Map([["u1", 9]]); });
+    assert.deepEqual(asked, ["u1", "u2"]);
+    assert.equal(frags[1]._storedTokens, 9);
+    assert.equal(frags[2]._storedTokens, undefined);
+    await attachStoredTokens(frags, null);
   });
 });

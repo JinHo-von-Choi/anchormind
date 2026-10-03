@@ -61,7 +61,7 @@ afterEach(() => {
  * @param {{makeCombined: () => Object[], links?: Map<string, Object[]>}} scenario
  * @returns {{recaller: MemoryRecaller, access: string[][], linkSeeds: string[][], calls: {candidates: number, search: number}}}
  */
-function buildRecaller({ makeCombined, links = new Map() }) {
+function buildRecaller({ makeCombined, links = new Map(), storedTokens = null, storedCalls = null }) {
   const access    = [];
   const linkSeeds = [];
   const calls  = { candidates: 0, search: 0 };
@@ -77,6 +77,12 @@ function buildRecaller({ makeCombined, links = new Map() }) {
     touchLinked    : async () => {}
   };
   search._cacheFragments = async () => {};
+  if (storedTokens) {
+    search.store.getStoredTokenCounts = async (ids) => {
+      storedCalls?.push([...ids]);
+      return new Map(ids.filter(id => storedTokens.has(id)).map(id => [id, storedTokens.get(id)]));
+    };
+  }
   const realCandidates = search.searchCandidates.bind(search);
   const realSearch     = search.search.bind(search);
   search.searchCandidates = (q) => { calls.candidates++; return realCandidates(q); };
@@ -166,7 +172,7 @@ function randomScenario(seed) {
     anchorTime  : ANCHOR,
     ...(rng() < 0.7 ? { keywords: [pick(VOCAB), pick(VOCAB)] } : {})
   };
-  return { makeCombined: () => rows.map(r => ({ ...r, keywords: [...r.keywords] })), links, params, totalTokens, rowTokens };
+  return { makeCombined: () => rows.map(r => ({ ...r, keywords: [...r.keywords] })), links, params, totalTokens, rowTokens, mode };
 }
 
 /**
@@ -278,7 +284,7 @@ describe("recall 순위 후 예산 선택", () => {
     assert.ok(strictGains > 0, "점수 합이 커진 시드가 하나도 없다");
   });
 
-  it("예산이 묶여도 연결 파편의 기준은 검색 순서 절단이고, 연결 파편까지 예산 안에서 고른다(시드 200개)", async () => {
+  it("예산이 묶여도 태그 없는 검색의 연결 기준은 off와 같고, 연결 파편까지 예산 안에서 고른다(시드 200개)", async () => {
     let linkedRuns = 0;
     for (let seed = 2001; seed <= 2200; seed++) {
       const scenario = randomScenario(seed);
@@ -287,7 +293,7 @@ describe("recall 순위 후 예산 선택", () => {
       const off = await runWith(scenario, "off", params);
       const on  = await runWith(scenario, "on", params);
 
-      assert.deepStrictEqual(on.linkSeeds, off.linkSeeds, `seed ${seed}: 연결 기준이 다르다`);
+      if (scenario.mode !== "tagged") assert.deepStrictEqual(on.linkSeeds, off.linkSeeds, `seed ${seed}: 연결 기준이 다르다`);
       assert.ok(tokenSum(on.result.fragments) <= params.tokenBudget, `seed ${seed}: 연결 파편 포함 예산 초과`);
       if (on.linkSeeds.length > 0) linkedRuns++;
     }
@@ -335,6 +341,30 @@ describe("recall 순위 후 예산 선택", () => {
     const sumOf = (ids) => ids.reduce((sum, id) => sum + scoreOf(rows.find(r => r.id === id)), 0);
     assert.ok(sumOf(on.sideEffects[0].ids) >= sumOf(off.sideEffects[0].ids) - 1e-9);
     assert.ok(tokenSum(on.sideEffects[0].ids.map(id => rows.find(r => r.id === id))) <= params.tokenBudget);
+  });
+
+  it("저장 토큰 수가 실제보다 작아도 정확한 합은 예산 이하이고, 저장값은 응답과 off 경로에 나타나지 않는다", async () => {
+    const now  = new Date(ANCHOR).toISOString();
+    const rows = Array.from({ length: 40 }, (_, i) => ({
+      id: `s${String(i).padStart(3, "0")}`, content: `저장 토큰 수 시험 본문 ${i} `.repeat(3 + (i % 5)), keywords: ["k"],
+      importance: 0.3 + (i % 7) / 10, created_at: now, _rrfScore: 1 - i / 100, agent_id: "default", workspace: null
+    }));
+    const storedTokens = new Map(rows.map(r => [r.id, 3]));
+    const storedCalls  = [];
+    const scenario     = { makeCombined: () => rows.map(r => ({ ...r, keywords: [...r.keywords] })), storedTokens, storedCalls };
+    const params       = { tokenBudget: 300, includeLinks: false, excludeSeen: false, anchorTime: ANCHOR, pageSize: 50 };
+
+    const on = await runWith(scenario, "on", params);
+    assert.ok(storedCalls.length === 1 && storedCalls[0].length > 0, "on 경로가 저장 토큰 수를 묻지 않았다");
+    assert.ok(tokenSum(on.result.fragments) <= params.tokenBudget);
+    assert.equal(on.result.totalTokens, tokenSum(on.result.fragments));
+    assert.ok(on.result.fragments.length > 0);
+    assert.ok(on.result.fragments.every(f => !("_storedTokens" in f)));
+
+    storedCalls.length = 0;
+    const off = await runWith(scenario, "off", params);
+    assert.equal(storedCalls.length, 0);
+    assert.ok(off.result.fragments.every(f => !("_storedTokens" in f)));
   });
 
   it("superseded 후보는 예산을 쓰지 않는다", async () => {
