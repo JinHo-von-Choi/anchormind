@@ -242,6 +242,8 @@ MCP `memory_consolidate` 도구는 master 키 세션 전용이다. 일반 키 �
 | 스크립트 | 목적 | 호출 조건 | 빈도 |
 |-|-|-|-|
 | `scripts/migrate.js` | DB 마이그레이션 자동 실행 및 synthetic-query 보조 임베딩 차원 정합화 | 서버 업그레이드, 초기 설치 | 버전 업그레이드 시 1회 |
+| `scripts/ops/backup.sh` | agent_memory 스키마 `pg_dump -Fc`, 체크섬, 행 수 매니페스트, 역할 정의 덤프 (`--dir`, `--keep`, `--dry-run`). 절차는 `docs/operations/backup-restore.md` | 일일 백업, 마이그레이션 반영 직전 | 하루 1회와 마이그레이션 전 |
+| `scripts/ops/restore-verify.mjs` | 덤프를 일회용 시험 서버(35433)에 복원해 행 수, `schema_migrations` 최댓값, HNSW 색인을 매니페스트와 대조하고 JSON으로 출력 | 복구 훈련 | 분기 1회 이상 |
 | `scripts/backfill-embeddings.js` | embedding IS NULL 파편에 임베딩 일괄 생성 | EMBEDDING_PROVIDER 변경 후, 임베딩 API 장애 복구 후 | 조건부 1회 |
 | `scripts/backfill-morpheme-dict.js` | morpheme_dict의 embedding NULL 행 일괄 재임베딩 (`--dry-run`·`--batch`·`--sleep-ms`·`--max`) | 형태소 사전 NULL 행 누적 확인 시 (backfill-embeddings는 fragments 전용이라 이 테이블을 다루지 않음) | 조건부 1회 |
 | `scripts/check-embedding-consistency.js` | 설정 차원과 DB 실제 벡터 차원 일치 검증 | 서버 기동 시 자동 실행 (server.js 내부 호출) | 기동마다 자동 |
