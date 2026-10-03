@@ -30,6 +30,10 @@ RPO 24시간은 일 1회 백업의 간격에서 나오는 값이다. RTO 2시간
 
 저장 위치에서 스크립트가 지우는 파일은 자기 이름 규칙(`memento-<시각>[-<라벨>].<종류>`와 그 `.partial`)에 맞는 것뿐이다. 이름이 다른 파일은 보관 정리와 실패 뒤 정리에서 건드리지 않는다. 그래도 백업 전용 디렉터리를 쓴다.
 
+저장 위치에 관리 대상 이름의 심볼릭 링크가 있으면 링크를 따라가 쓰거나 지우게 되므로 스크립트는 아무것도 쓰거나 지우지 않고 종료 코드 2로 멈춘다(링크를 직접 치운 뒤 다시 실행한다). 쓸 이름이 이미 파일로 있어도 덮어쓰지 않고 멈춘다. 새 파일은 배타적으로 만들며, 잠금은 파일이 아니라 저장 위치 디렉터리에 건다. 관리 대상 이름의 디렉터리는 계획에서 빼고 `foreign entry skipped`로 알린다.
+
+이번 실행이 쓴 벌은 보관 정리에서 항상 보호된다. 같은 시각이거나 더 늦은 시각의 벌(시계가 뒤로 갔거나 다른 곳에서 복사해 넣은 벌)도 이번 실행이 지우지 않는다. `--dry-run`과 실제 실행은 같은 계획 함수를 같은 입력으로 쓰므로 삭제 목록이 같다.
+
 ---
 
 ## 클라이언트 도구
@@ -124,6 +128,7 @@ gpg --batch --trust-model always --encrypt --recipient <키 ID> --output - "$lat
 복원할 때는 개인키가 있는 곳에서 복호화한 뒤 훈련 입력으로 쓴다. `.dump.sha256`은 복호화한 평문 덤프 기준이다.
 
 ```bash
+umask 077
 gpg --decrypt memento-<시각>.dump.gpg > memento-<시각>.dump
 ```
 
@@ -254,12 +259,13 @@ node scripts/ops/restore-verify.mjs --dump <저장 위치>/memento-<시각>.dump
 - 추출 파일에 기억 원문이 들어 있다. 작업 디렉터리는 600/700 권한으로 만들고 끝나면 지운다.
 - 삭제 목록(`ERASED_IDS`)은 한 줄에 id 하나인 파일이다.
 
-`IDS`에는 따옴표로 감싼 id 목록을 넣는다. 조건으로 고르려면 복구본에서 실행되는 하위 질의를 넣어도 된다(예: `IDS="SELECT id FROM agent_memory.fragments WHERE topic = '<주제>'"`). 아래를 파일로 저장해 실행한다(대조에서 걸리면 `exit`으로 끝난다).
+`IDS`에는 따옴표로 감싼 id 목록을 넣는다. 조건으로 고르려면 복구본에서 실행되는 하위 질의를 넣어도 된다(예: `IDS="SELECT id FROM agent_memory.fragments WHERE topic = '<주제>'"`). 아래를 파일로 저장해 실행한다(대조에서 걸리면 `exit`으로 끝난다). 임시 디렉터리는 어떤 경로로 끝나도 지워진다. 목록 파일이 없거나 읽을 수 없는 경우, 비어 있는 경우(`ALLOW_EMPTY_ERASED_IDS=yes`가 아닐 때), 대조 도구가 실패한 경우, 복구본에 대상 id가 없는 경우에는 운영에 아무것도 쓰지 않고 중단한다. 목록 파일의 CRLF 줄바꿈과 빈 줄은 무시한다.
 
 ```bash
 SCRATCH_DB=<복구본 이름>
 IDS="'<id1>','<id2>'"
 ERASED_IDS=<삭제 목록 파일>
+ALLOW_EMPTY_ERASED_IDS=no   # 삭제한 id 가 정말 하나도 없을 때만 yes
 
 set -euo pipefail
 scratch() { PGHOST=localhost PGPORT=35433 PGUSER=memento PGPASSWORD=memento_test psql -X -v ON_ERROR_STOP=1 -d "$SCRATCH_DB" "$@"; }
@@ -267,14 +273,24 @@ prod()    { psql -X -v ON_ERROR_STOP=1 "$@"; }   # 운영 접속은 PG 환경변
 
 umask 077
 WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
 
-[ -f "$ERASED_IDS" ] || { echo "삭제 목록 파일이 없다: $ERASED_IDS" >&2; exit 1; }
-scratch -At -c "SELECT id FROM agent_memory.fragments WHERE id IN ($IDS)" > "$WORK/ids.txt"
-if grep -Fx -f "$ERASED_IDS" "$WORK/ids.txt" >&2; then
-  echo "삭제 목록에 있는 id 가 대상에 들어 있어 중단한다" >&2
-  rm -rf "$WORK"
+# 삭제 목록 대조. 목록을 읽을 수 없거나 비어 있거나 대조 도구가 실패하면 모두 중단한다.
+[ -f "$ERASED_IDS" ] && [ -r "$ERASED_IDS" ] || { echo "삭제 목록 파일이 없거나 읽을 수 없다: $ERASED_IDS" >&2; exit 1; }
+tr -d '\r' < "$ERASED_IDS" | sed '/^[[:space:]]*$/d' > "$WORK/erased.txt"
+if [ ! -s "$WORK/erased.txt" ] && [ "$ALLOW_EMPTY_ERASED_IDS" != "yes" ]; then
+  echo "삭제 목록이 비어 있어 중단한다 (삭제한 id 가 없다면 ALLOW_EMPTY_ERASED_IDS=yes)" >&2
   exit 1
 fi
+scratch -At -c "SELECT id FROM agent_memory.fragments WHERE id IN ($IDS)" | tr -d '\r' > "$WORK/ids.txt"
+[ -s "$WORK/ids.txt" ] || { echo "복구본에 대상 id 가 없어 중단한다" >&2; exit 1; }
+status=0
+grep -Fx -f "$WORK/erased.txt" "$WORK/ids.txt" >&2 || status=$?
+case "$status" in
+  0) echo "삭제 목록에 있는 id 가 대상에 들어 있어 중단한다" >&2; exit 1 ;;
+  1) ;;
+  *) echo "삭제 목록 대조에 실패해 중단한다 (grep 종료 코드 $status)" >&2; exit 1 ;;
+esac
 
 scratch -c "COPY (SELECT * FROM agent_memory.fragments WHERE id IN ($IDS)) TO STDOUT WITH (FORMAT csv)" > "$WORK/fragments.csv"
 scratch -c "COPY (SELECT * FROM agent_memory.fragment_links WHERE from_id IN ($IDS) OR to_id IN ($IDS)) TO STDOUT WITH (FORMAT csv)" > "$WORK/links.csv"
@@ -345,8 +361,6 @@ UPDATE agent_memory.fragments f
     OR f.id IN (SELECT from_id FROM stage_links UNION SELECT to_id FROM stage_links);
 COMMIT;
 SQL
-
-rm -rf "$WORK"
 ```
 
 각 `INSERT`의 `INSERT 0 N`이 기대한 건수인지 확인한다. 외래 키(`superseded_by`) 오류로 트랜잭션이 멈추면 참조 대상 id를 `IDS`에 더해 다시 실행한다. 되살린 행은 PostgreSQL 경로(L2, L3 검색)로 바로 검색된다. Redis L1 키워드 색인에는 반영되지 않으며 서버 재시작 때의 워밍업 범위(최근 5000건)에서 채워진다.
