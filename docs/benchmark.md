@@ -258,7 +258,7 @@ node scripts/measure/recall-metrics.mjs --target localhost:35433/<복구본_DB> 
 
 `--target`은 일회용 시험 서버(포트 35433의 시험 컨테이너, 또는 `DB_LANE_SERVER_ALLOW=<host:port>`로 명시한 한 곳)의 데이터베이스여야 하며, 그렇지 않으면 접속 전에 종료 코드 3으로 거부한다. 연결 설정은 `--target`만으로 정해지고 Redis, 캐시, 지표 수집은 꺼진다. 운영 DB에는 접속하지 않는다. 복구본에서 recall이 접근 기록을 남기므로 실행마다 새 복구본에서 시작한다.
 
-출력 JSON에서 `metrics`, `rows`, `coverage`, `labels`는 같은 DB와 같은 세트에서 같은 값이고, 시각과 지연은 `volatile` 아래에 있다. 질의 문장만 보내면 임베딩 off에서 어휘 채널이 비므로 `--query-keywords whitespace`(기본)는 질의를 공백으로 나눈 키워드를 함께 보낸다. 항목의 `keywords` 필드는 이 값보다 우선한다. recall은 기본으로 `includeLinks=false`로 부르며, `--include-links on`이면 연결 파편도 결과에 합류한다.
+출력 JSON에서 `metrics`, `rows`, `coverage`, `labels`는 같은 DB와 같은 세트에서 같은 값이고, 시각과 지연은 `volatile` 아래에 있다. 질의 문장만 보내면 임베딩 off에서 keywords 경로(L2)가 비므로 `--query-keywords whitespace`(기본)는 질의를 공백으로 나눈 키워드를 함께 보낸다. 항목의 `keywords` 필드는 이 값보다 우선한다. 본문 어휘 채널(`MEMENTO_LEXICAL_CHANNEL`, 기본 `on`)은 질의 문장만으로 `content_tokens` 후보를 얻으므로, 채널의 효과는 같은 세트를 새 복구본 두 개에서 `MEMENTO_LEXICAL_CHANNEL=off`와 `on`으로 실행하고 `--compare`로 비교한다(`--query-keywords none`이면 keywords 경로 없이 채널만 본다). recall은 기본으로 `includeLinks=false`로 부르며, `--include-links on`이면 연결 파편도 결과에 합류한다.
 
 ### 비교 규칙
 
