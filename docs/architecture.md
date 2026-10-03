@@ -59,7 +59,7 @@ server.js  (HTTP 서버)
             │   ├── write-gate-metrics.js 관문 판정 지표 `memento_write_gate_total{entry,outcome}`
             │   ├── FragmentImporter.js   가져오기 행을 관문에 통과시켜 FragmentWriter로 기록 (admin 가져오기와 CLI 가져오기 공용)
             │   ├── FragmentWriter.js     파편 쓰기. 의미 메서드(insert, update)는 관문을 거친 값만 받고, 내부 메타데이터는 updateInternal로 쓰며 의미 열 9개는 쓸 수 없다 (delete, incrementAccess, touchLinked 포함)
-            │   ├── FragmentFactory.js    파편 생성, 유효성 검증, PII 마스킹 규칙(`maskSensitiveText`)과 유형별 절삭(`limitContentLength`)
+            │   ├── FragmentFactory.js    파편 생성, 유효성 검증, PII 마스킹 진입점(`maskSensitiveText`, 규칙은 `lib/security`의 표)과 유형별 절삭(`limitContentLength`)
             │   ├── affect.js             정서 태그 허용값 집합과 `sanitizeAffect` 정규화 (FragmentFactory, FragmentWriter가 공유)
             │   ├── FragmentStore.js      PostgreSQL CRUD 파사드 (FragmentReader + FragmentWriter 위임)
             │   ├── RememberPostProcessor.js remember() 후처리 파이프라인 (임베딩/형태소/링크/assertion/시간링크/평가큐/ProactiveRecall 포함)
@@ -124,10 +124,11 @@ lib/
 ├── gemini.js          Google Gemini API/CLI 클라이언트 (geminiCLIJson, isGeminiCLIAvailable)
 ├── compression.js     응답 압축 (gzip/deflate)
 ├── metrics.js         Prometheus 메트릭 수집 (prom-client). 거부 경로 전용 카운터 4종: `memento_auth_denied_total{reason}` (인증 거부), `memento_cors_denied_total{reason}` (CORS 거부), `memento_rbac_denied_total{tool,reason}` (RBAC 거부), `memento_tenant_isolation_blocked_total{component}` (테넌트 격리 차단)
-├── logger.js          Winston 로거 (daily rotate). REDACT_PATTERNS 기반 redactor format: Authorization Bearer 토큰, mmcp_ API 키, mmcp_session 쿠키, OAuth code/refresh_token/access_token 자동 마스킹 (7개 패턴). content 필드 200자 초과 시 head 50 + tail 50 트리밍
+├── logger.js          Winston 로거 (daily rotate). REDACT_PATTERNS 기반 redactor format: `lib/security/sensitivePatterns.js` 표의 로그용 항목(Authorization Bearer 토큰, mmcp_ API 키, mmcp_session 쿠키, OAuth code/refresh_token/access_token, 공용 토큰 규칙) 자동 마스킹. content 필드 200자 초과 시 head 50 + tail 50 트리밍
 ├── openapi.js         OpenAPI 3.1.0 스펙 생성기. `ENABLE_OPENAPI=true` 시 `GET /openapi.json` 활성화. 인증 레벨 기반 도구 목록 필터: master key → 전체 경로(Admin REST API 포함), API key → permissions 기반 도구 목록
 ├── rate-limiter.js    IP 기반 sliding window rate limiter
 ├── rbac.js            RBAC 권한 검사 (read/write/admin 도구 레벨 권한 적용)
+├── security/          민감 정보 탐지. `sensitivePatterns.js`(저장 경로와 로그가 같이 쓰는 규칙 표, 다른 모듈을 가져오지 않는 잎 모듈)와 `SensitiveScanner.js`(본문 필드와 keywords를 가리고 규칙 이름을 보고하는 순수 함수)
 ├── http-handlers.js   HTTP 핸들러 re-export 허브. 실제 구현은 lib/handlers/ 하위 모듈
 ├── scheduler.js       주기 작업 스케줄러 (setInterval 작업 관리)
 ├── scheduler-registry.js 스케줄러 작업 레지스트리 (작업별 성공/실패 추적)

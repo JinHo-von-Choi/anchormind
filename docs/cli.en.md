@@ -280,7 +280,7 @@ Options:
 
 Local mode (no `--remote`) passes the same semantic write gate as the server remember and writes through FragmentWriter.
 
-- Email addresses, password fields, mobile phone numbers and API key shapes are masked.
+- Email addresses, password fields, mobile phone numbers, API keys and tokens, private keys, resident registration numbers and card numbers are masked (`MEMENTO_SENSITIVE_SCAN`).
 - Content longer than 300 characters (1000 for episode) is truncated when stored.
 - Supplied keywords are lowercased and merged with keywords extracted from the content.
 - When the same content already exists, no new row is created and the existing fragment id is printed.
@@ -408,7 +408,7 @@ node bin/memento.js import --input out.jsonl --idempotent --dry-run
 
 Each row passes the semantic write gate (outside the transaction) and is written through FragmentWriter in its own transaction.
 
-- Email addresses, password fields, mobile phone numbers and API key shapes are masked, and content longer than 300 characters (1000 for episode) is truncated when stored. Keywords are lowercased.
+- Email addresses, password fields, mobile phone numbers, API keys and tokens, private keys, resident registration numbers and card numbers are masked, and content longer than 300 characters (1000 for episode) is truncated when stored. Keywords are lowercased.
 - Rows the gate does not accept (missing or too short content, more than 4000 characters, malformed keywords, policy violations on a hard-gate key) are counted as errors and the import continues with the next row.
 - A row whose content already exists points to the existing fragment, creates nothing and is counted as skipped.
 - A row whose id already exists is counted as skipped with `--idempotent`, otherwise as an error.

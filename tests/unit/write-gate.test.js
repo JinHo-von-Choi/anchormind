@@ -25,6 +25,7 @@ import {
   isGateEligible,
   WriteInputError
 } from "../../lib/memory/write/WriteGate.js";
+import { SymbolicPolicyViolationError } from "../../lib/symbolic/errors.js";
 
 /** 단계 시험용 상태 */
 function stateOf({ op = "create", fields = {}, base = null, draft = null, keyId = null } = {}) {
@@ -87,6 +88,131 @@ describe("sensitiveStep", () => {
   it("본문이 없으면 상태를 그대로 돌려준다", () => {
     const state = stateOf({ op: "update", fields: { importance: 0.4 } });
     assert.equal(sensitiveStep(state), state);
+  });
+});
+
+describe("sensitiveStep 규칙 표와 필드", () => {
+  const token = `ghp_${"a1".repeat(18)}`;
+
+  it("본문 필드 전체와 keywords를 가리고 규칙과 필드 이름만 경고로 남긴다", () => {
+    const next = sensitiveStep(stateOf({
+      fields: { content: `토큰 ${token} 사용`, topic: "ops", contextSummary: "연락 ops@example.com", goal: `Bearer ${"k7".repeat(10)}`, keywords: ["deploy", token] }
+    }));
+    assert.ok(!JSON.stringify(next.fields).includes(token));
+    assert.ok(!next.fields.contextSummary.includes("ops@example.com"));
+    assert.equal(next.fields.topic, "ops");
+    assert.equal(next.fields.keywords[0], "deploy");
+
+    const rules = next.violations.map(v => v.rule).sort();
+    assert.deepEqual(rules, ["sensitive.bearer_token", "sensitive.email", "sensitive.github_token"]);
+    const github = next.violations.find(v => v.rule === "sensitive.github_token");
+    assert.equal(github.severity, "high");
+    assert.equal(github.detail, "fields: content, keywords");
+    assert.ok(!JSON.stringify(next.violations).includes(token));
+  });
+
+  it("갱신은 context_summary 열 이름을 검사한다", () => {
+    const next = sensitiveStep(stateOf({ op: "update", fields: { context_summary: "ops@example.com", contextSummary: "ops@example.com" } }));
+    assert.ok(next.fields.context_summary.includes("[REDACTED_EMAIL]"));
+    assert.equal(next.fields.contextSummary, "ops@example.com");
+  });
+
+  it("탐지가 없으면 상태를 그대로 돌려준다", () => {
+    const state = stateOf({ fields: { content: "민감 정보가 없는 평범한 본문", keywords: ["a"] } });
+    assert.equal(sensitiveStep(state), state);
+  });
+
+  it("off는 기존 4개 규칙을 content에만 적용하고 경고를 남기지 않는다", () => {
+    const state = stateOf({ fields: { content: `메일 ops@example.com 토큰 ${token}`, goal: "ops@example.com", keywords: [token] } });
+    const next  = sensitiveStep(state, { sensitiveScanMode: () => "off" });
+    assert.ok(next.fields.content.includes("[REDACTED_EMAIL]"));
+    assert.ok(next.fields.content.includes(token));
+    assert.equal(next.fields.goal, "ops@example.com");
+    assert.deepEqual(next.fields.keywords, [token]);
+    assert.deepEqual(next.violations, []);
+  });
+
+  it("이미 가린 값을 다시 거치면 경고가 생기지 않는다", () => {
+    const once  = sensitiveStep(stateOf({ fields: { content: "password: hunter2 와 ops@example.com" } }));
+    const twice = sensitiveStep({ ...stateOf({ fields: once.fields }) });
+    assert.deepEqual(twice.violations, []);
+  });
+});
+
+describe("민감 정보 탐지 판정", () => {
+  const token      = `ghp_${"a1".repeat(18)}`;
+  const request    = (extra = {}) => ({
+    entry : WRITE_ENTRIES.REMEMBER,
+    op    : "create",
+    fields: { content: `배포 토큰은 ${token} 이다`, type: "fact", topic: "t" },
+    build : (input) => ({ ...input, validation_warnings: [] }),
+    ...extra
+  });
+  const emailOnly  = () => request({ fields: { content: "담당자 연락처는 ops@example.com 이다", type: "fact", topic: "t" } });
+
+  it("mask 기본값은 저장하고 후보의 validation_warnings에 규칙 이름만 남긴다", async () => {
+    const gate = new WriteGate({ getHardGate: async () => false });
+    const out  = await gate.check(request({ ctx: { keyId: "k1" } }));
+    assert.ok(!out.draft.content.includes(token));
+    assert.deepEqual(out.draft.validation_warnings.map(v => v.rule), ["sensitive.github_token"]);
+    assert.ok(!JSON.stringify(out.draft.validation_warnings).includes(token));
+    assert.deepEqual(out.warnings, ["sensitive.github_token"]);
+  });
+
+  it("hard gate 키는 고신뢰 탐지에서 거부한다", async () => {
+    const gate = new WriteGate({ getHardGate: async () => true });
+    await assert.rejects(
+      () => gate.check(request({ ctx: { keyId: "k1" } })),
+      (err) => err instanceof SymbolicPolicyViolationError && err.violations.includes("sensitive.github_token")
+    );
+  });
+
+  it("hard gate 키도 저신뢰 탐지(이메일)는 경고로만 다룬다", async () => {
+    const gate = new WriteGate({ getHardGate: async () => true });
+    const out  = await gate.check({ ...emailOnly(), ctx: { keyId: "k1" } });
+    assert.deepEqual(out.warnings, ["sensitive.email"]);
+  });
+
+  it("reject는 키 정보가 없어도 고신뢰 탐지에서 거부한다", async () => {
+    const gate = new WriteGate({ sensitiveScanMode: () => "reject" });
+    await assert.rejects(
+      () => gate.check(request()),
+      (err) => err instanceof SymbolicPolicyViolationError && err.violations.join() === "sensitive.github_token" && !err.message.includes(token)
+    );
+  });
+
+  it("reject도 저신뢰 탐지(이메일)는 거부하지 않는다", async () => {
+    const gate = new WriteGate({ sensitiveScanMode: () => "reject" });
+    const out  = await gate.check(emailOnly());
+    assert.deepEqual(out.warnings, ["sensitive.email"]);
+  });
+
+  it("reject의 dryRun은 거부하지 않고 규칙 이름만 돌려준다", async () => {
+    const gate = new WriteGate({ sensitiveScanMode: () => "reject" });
+    const out  = await gate.check(request({ mode: "dryRun" }));
+    assert.deepEqual(out.warnings, ["sensitive.github_token"]);
+  });
+
+  it("off는 새 규칙을 적용하지 않는다", async () => {
+    const gate = new WriteGate({ sensitiveScanMode: () => "off", getHardGate: async () => true });
+    const out  = await gate.check(request({ ctx: { keyId: "k1" } }));
+    assert.ok(out.draft.content.includes(token));
+    assert.deepEqual(out.warnings, []);
+  });
+
+  it("관문 스위치가 off이면 탐지 방식이 reject여도 새 규칙을 적용하지 않는다", async () => {
+    const gate = new WriteGate({ sensitiveScanMode: () => "reject", enabled: () => false });
+    const out  = await gate.check(request());
+    assert.ok(out.draft.content.includes(token));
+    assert.deepEqual(out.warnings, []);
+  });
+
+  it("갱신은 바뀐 열의 탐지를 경고하고 reject에서 거부한다", async () => {
+    const update = { entry: WRITE_ENTRIES.AMEND, op: "update", fields: { goal: `Bearer ${"k7".repeat(10)}` }, base: { type: "fact" } };
+    const mask   = await new WriteGate().check(update);
+    assert.deepEqual(mask.warnings, ["sensitive.bearer_token"]);
+    assert.ok(mask.fields.goal.includes("REDACTED"));
+    await assert.rejects(() => new WriteGate({ sensitiveScanMode: () => "reject" }).check(update), SymbolicPolicyViolationError);
   });
 });
 
@@ -216,7 +342,7 @@ describe("WriteGate.check", () => {
     assert.ok(!built.content.includes("hunter2"));
     assert.ok(!built.content.includes("010-1234-5678"));
     assert.equal(out.draft.content, built.content);
-    assert.deepEqual(out.warnings, []);
+    assert.deepEqual(out.warnings, ["sensitive.email", "sensitive.password_field", "sensitive.phone_kr"]);
   });
 
   it("갱신은 현재 행에 바뀐 값을 겹친 후보를 판정한다", async () => {
@@ -230,7 +356,8 @@ describe("WriteGate.check", () => {
     assert.equal(out.draft.id, "f1");
     assert.equal(out.draft.type, "decision");
     assert.ok(out.fields.content.includes("[REDACTED_EMAIL]"));
-    assert.deepEqual(out.warnings, ["decisionHasRationale"]);
+    assert.ok(out.warnings.includes("decisionHasRationale"));
+    assert.ok(out.warnings.includes("sensitive.email"));
   });
 
   it("생성 위반은 후보의 validation_warnings에 쌓인다", async () => {

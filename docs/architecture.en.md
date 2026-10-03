@@ -56,7 +56,7 @@ server.js  (HTTP server)
             |   +-- write-gate-metrics.js Gate verdict metric `memento_write_gate_total{entry,outcome}`
             |   +-- FragmentImporter.js   Passes import rows through the gate and writes them with FragmentWriter (shared by admin import and CLI import)
             |   +-- FragmentWriter.js     Fragment writes. The semantic methods (insert, update) accept only gated values; internal metadata goes through updateInternal, which cannot write the 9 semantic columns (also delete, incrementAccess, touchLinked)
-            |   +-- FragmentFactory.js    Fragment creation, validation, PII masking rules (`maskSensitiveText`) and per-type truncation (`limitContentLength`)
+            |   +-- FragmentFactory.js    Fragment creation, validation, PII masking entry point (`maskSensitiveText`, rules come from the `lib/security` table) and per-type truncation (`limitContentLength`)
             |   +-- affect.js             Allowed affect tag values and `sanitizeAffect` normalization (shared by FragmentFactory and FragmentWriter)
             |   +-- FragmentStore.js      PostgreSQL CRUD facade (delegates to FragmentReader + FragmentWriter)
             |   +-- RememberPostProcessor.js remember() post-processing pipeline (embedding/morpheme/linking/assertion/temporal linking/evaluation queue/ProactiveRecall)
@@ -121,10 +121,11 @@ lib/
 +-- gemini.js          Google Gemini API/CLI client (geminiCLIJson, isGeminiCLIAvailable)
 +-- compression.js     Response compression (gzip/deflate)
 +-- metrics.js         Prometheus metric collection (prom-client). 4 denial-path counters: `memento_auth_denied_total{reason}` (auth denial), `memento_cors_denied_total{reason}` (CORS denial), `memento_rbac_denied_total{tool,reason}` (RBAC denial), `memento_tenant_isolation_blocked_total{component}` (tenant isolation block)
-+-- logger.js          Winston logger (daily rotate). REDACT_PATTERNS-based redactor format: auto-masking of Authorization Bearer tokens, mmcp_ API keys, mmcp_session cookies, OAuth code/refresh_token/access_token (7 patterns). content field trimmed to head 50 + tail 50 when exceeding 200 chars
++-- logger.js          Winston logger (daily rotate). REDACT_PATTERNS-based redactor format: auto-masking with the log entries of the `lib/security/sensitivePatterns.js` table (Authorization Bearer tokens, mmcp_ API keys, mmcp_session cookies, OAuth code/refresh_token/access_token, shared token rules). content field trimmed to head 50 + tail 50 when exceeding 200 chars
 +-- openapi.js         OpenAPI 3.1.0 spec generator. Enabled when `ENABLE_OPENAPI=true` via `GET /openapi.json`. Auth-level-based tool list filtering: master key -> all paths (including Admin REST API), API key -> permissions-based tool list
 +-- rate-limiter.js    IP-based sliding window rate limiter
 +-- rbac.js            RBAC authorization (read/write/admin tool-level permissions)
++-- security/          Sensitive data detection. `sensitivePatterns.js` (the rule table shared by the storage path and the logger, a leaf module with no imports) and `SensitiveScanner.js` (pure functions that mask content fields and keywords and report rule names)
 +-- http-handlers.js   HTTP handler re-export hub. Actual implementations in lib/handlers/ submodules
 +-- scheduler.js       Periodic task scheduler (setInterval task management)
 +-- scheduler-registry.js Scheduler task registry (per-task success/failure tracking)
