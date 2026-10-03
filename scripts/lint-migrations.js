@@ -16,7 +16,7 @@ import fs   from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  LARGE_TABLES, IndexManifestError, loadManifest, manifestNames
+  LARGE_TABLES, IndexManifestError, loadManifest, manifestTables
 } from "./ops/index-manifest.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -132,7 +132,7 @@ export function stripSqlComments(sql) {
 
 const IDENT           = String.raw`(?:"[^"]+"|\w+)(?:\.(?:"[^"]+"|\w+))*`;
 const INDEX_STATEMENT = new RegExp(
-  String.raw`CREATE\s+(UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?(IF\s+NOT\s+EXISTS\s+)?(${IDENT})\s+ON\s+(?:ONLY\s+)?(${IDENT})`,
+  String.raw`CREATE\s+(UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?(IF\s+NOT\s+EXISTS\s+)?(?:(${IDENT})\s+)?ON\s+(?:ONLY\s+)?(${IDENT})`,
   "gi"
 );
 
@@ -145,14 +145,14 @@ function lastIdentifier(text) {
  * 주석을 지운 SQL 에서 CREATE INDEX 문을 찾는다.
  *
  * @param {string} sql 주석을 지운 SQL
- * @returns {Array<{name: string, table: string, unique: boolean, ifNotExists: boolean, line: number}>}
+ * @returns {Array<{name: string|null, table: string, unique: boolean, ifNotExists: boolean, line: number}>} 이름 없는 문은 name 이 null
  */
 export function extractIndexStatements(sql) {
   const found = [];
 
   for (const m of sql.matchAll(INDEX_STATEMENT)) {
     found.push({
-      name:        lastIdentifier(m[3]),
+      name:        m[3] === undefined ? null : lastIdentifier(m[3]),
       table:       lastIdentifier(m[4]),
       unique:      m[1] !== undefined,
       ifNotExists: m[2] !== undefined,
@@ -179,27 +179,46 @@ function lintLines(filename, content) {
   return violations;
 }
 
+/** 대형 표 색인 문 하나의 등록 위반. 이름이 없거나 목록에 없거나 다른 표로 등록된 경우. */
+function registrationViolation(filename, idx, registered) {
+  const base = { file: filename, line: idx.line };
+  if (idx.name === null) {
+    return {
+      ...base, rule: "large-index-unregistered",
+      message: `대형 표 ${idx.table} 의 색인 문에 이름이 없다. 이름을 붙여 scripts/ops/index-manifest.json 에 등록하고 `
+             + `scripts/ops/online-index.mjs 로 먼저 만들 것.`,
+    };
+  }
+  if (!registered.has(idx.name)) {
+    return {
+      ...base, rule: "large-index-unregistered",
+      message: `대형 표 ${idx.table} 의 색인 ${idx.name} 이 scripts/ops/index-manifest.json 에 등록되어 있지 않다. `
+             + `등록하고 scripts/ops/online-index.mjs 로 먼저 만들 것.`,
+    };
+  }
+  if (registered.get(idx.name) !== idx.table) {
+    return {
+      ...base, rule: "large-index-table-mismatch",
+      message: `색인 ${idx.name} 은 작업 목록에 표 ${registered.get(idx.name)} 로 등록되어 있으나 문장은 ${idx.table} 을 대상으로 한다.`,
+    };
+  }
+  return null;
+}
+
 /** 대형 표 색인 문의 등록과 IF NOT EXISTS 위반. */
 function lintLargeIndexes(filename, stripped, registered) {
   const violations = [];
 
   for (const idx of extractIndexStatements(stripped)) {
     if (!LARGE_TABLES.includes(idx.table)) continue;
-    if (!registered.has(idx.name)) {
-      violations.push({
-        rule:    "large-index-unregistered",
-        file:    filename,
-        line:    idx.line,
-        message: `대형 표 ${idx.table} 의 색인 ${idx.name} 이 scripts/ops/index-manifest.json 에 등록되어 있지 않다. `
-               + `등록하고 scripts/ops/online-index.mjs 로 먼저 만들 것.`,
-      });
-    }
+    const registration = registrationViolation(filename, idx, registered);
+    if (registration) violations.push(registration);
     if (!idx.ifNotExists) {
       violations.push({
         rule:    "large-index-if-not-exists",
         file:    filename,
         line:    idx.line,
-        message: `대형 표 ${idx.table} 의 색인 ${idx.name} 문에 IF NOT EXISTS 가 없다. `
+        message: `대형 표 ${idx.table} 의 색인 ${idx.name ?? "(이름 없음)"} 문에 IF NOT EXISTS 가 없다. `
                + `운영 절차로 먼저 만든 색인과 같은 이름의 IF NOT EXISTS 문만 둘 것.`,
       });
     }
@@ -232,7 +251,7 @@ function lintConcurrently(filename, stripped) {
  *
  * @param {string}      filename
  * @param {string}      content
- * @param {Set<string>} registeredIndexes 작업 목록에 등록된 색인 이름
+ * @param {Map<string, string>} registeredIndexes 작업 목록에 등록된 색인 이름과 표
  * @returns {Array<{rule: string, file: string, line: number, message: string}>}
  */
 export function lintMigrationContent(filename, content, registeredIndexes) {
@@ -271,7 +290,7 @@ function lintFile(filepath, registeredIndexes) {
 /** 작업 목록을 읽어 등록된 색인 이름을 돌려준다. 형식 위반이면 메시지를 내고 종료한다. */
 function loadRegisteredIndexes() {
   try {
-    return manifestNames(loadManifest());
+    return manifestTables(loadManifest());
   } catch (err) {
     if (!(err instanceof IndexManifestError)) throw err;
     process.stderr.write(`FAIL  scripts/ops/index-manifest.json  ${err.message}\n`);

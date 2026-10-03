@@ -15,11 +15,11 @@ import {
   extractIndexStatements,
   lintMigrationContent
 } from "../../scripts/lint-migrations.js";
-import { loadManifest, manifestNames, LARGE_TABLES } from "../../scripts/ops/index-manifest.mjs";
+import { loadManifest, manifestTables, LARGE_TABLES } from "../../scripts/ops/index-manifest.mjs";
 
 const ROOT          = path.resolve(import.meta.dirname, "../..");
 const MIGRATION_DIR = path.join(ROOT, "lib/memory/migrations");
-const KNOWN         = new Set(["idx_known_fragments", "idx_known_links"]);
+const KNOWN         = new Map([["idx_known_fragments", "fragments"], ["idx_known_links", "fragment_links"]]);
 
 function ruleIds(filename, sql, names = KNOWN) {
   return lintMigrationContent(filename, sql, names).map(v => v.rule);
@@ -65,6 +65,16 @@ describe("대형 표 색인 등록과 IF NOT EXISTS", () => {
     ["ON ONLY",                            "CREATE INDEX IF NOT EXISTS idx_new_seven ON ONLY agent_memory.fragments (workspace);", ["large-index-unregistered"]],
     ["여러 줄 문장",                       "CREATE INDEX IF NOT EXISTS\n  idx_new_eight\n  ON agent_memory.fragments\n  USING gin (keywords);", ["large-index-unregistered"]],
     ["소문자 문장",                        "create index if not exists idx_new_nine on agent_memory.fragments (workspace);", ["large-index-unregistered"]],
+    ["이름 없는 fragments 색인",           "CREATE INDEX ON agent_memory.fragments (workspace);", ["large-index-unregistered", "large-index-if-not-exists"]],
+    ["이름 없는 UNIQUE 색인, 스키마 없음", "CREATE UNIQUE INDEX ON fragments (content_hash);", ["large-index-unregistered", "large-index-if-not-exists"]],
+    ["이름 없는 색인, 따옴표 식별자",      'CREATE INDEX ON "agent_memory"."fragment_links" (weight);', ["large-index-unregistered", "large-index-if-not-exists"]],
+    ["이름 없는 색인, ON ONLY",            "CREATE INDEX ON ONLY agent_memory.fragments (workspace);", ["large-index-unregistered", "large-index-if-not-exists"]],
+    ["이름 없는 색인, IF NOT EXISTS",      "CREATE INDEX IF NOT EXISTS ON agent_memory.case_events (case_id);", ["large-index-unregistered"]],
+    ["이름 없는 색인, 여러 줄",            "CREATE UNIQUE INDEX\n  ON agent_memory.search_events\n  (created_at);", ["large-index-unregistered", "large-index-if-not-exists"]],
+    ["이름 없는 작은 표 색인은 대상이 아니다", "CREATE INDEX ON agent_memory.api_keys (id);", []],
+    ["등록된 이름을 다른 대형 표에 씀",    "CREATE INDEX IF NOT EXISTS idx_known_fragments ON agent_memory.fragment_links (weight);", ["large-index-table-mismatch"]],
+    ["등록된 이름을 다른 대형 표에 씀, 스키마 없음", "CREATE INDEX IF NOT EXISTS idx_known_links ON fragments (workspace);", ["large-index-table-mismatch"]],
+    ["등록된 이름을 작은 표에 쓰면 대상이 아니다", "CREATE INDEX IF NOT EXISTS idx_known_links ON agent_memory.api_keys (id);", []],
     ["IF NOT EXISTS 누락, 등록됨",         "CREATE INDEX idx_known_links ON agent_memory.fragment_links (weight);", ["large-index-if-not-exists"]],
     ["IF NOT EXISTS 누락, 미등록",         "CREATE INDEX idx_new_ten ON agent_memory.fragments (workspace);", ["large-index-unregistered", "large-index-if-not-exists"]],
     ["작은 표 색인은 대상이 아니다",       "CREATE INDEX idx_small ON agent_memory.api_keys (id);", []],
@@ -103,6 +113,13 @@ describe("적용 번호", () => {
   });
 });
 
+describe("extractIndexStatements 이름 없는 문", () => {
+  it("이름이 없으면 name 이 null 이고 표를 읽는다", () => {
+    const found = extractIndexStatements("CREATE INDEX ON ONLY agent_memory.fragments (x);\nCREATE INDEX ON only_t (y);");
+    assert.deepEqual(found.map(f => [f.name, f.table]), [[null, "fragments"], [null, "only_t"]]);
+  });
+});
+
 describe("stripSqlComments", () => {
   it("줄 수를 유지하며 주석만 지운다", () => {
     const out = stripSqlComments("a -- x\nb /* y\nz */ c\n'--keep' d");
@@ -122,7 +139,7 @@ describe("extractIndexStatements", () => {
 
 describe("작업 목록과 현재 마이그레이션", () => {
   it("050 미만 마이그레이션이 만든 대형 표 색인은 모두 등록되어 있다", () => {
-    const names = manifestNames(loadManifest());
+    const names = manifestTables(loadManifest());
     const missing = [];
     for (const file of fs.readdirSync(MIGRATION_DIR).filter(f => /^migration-\d{3}-/.test(f))) {
       const content = stripSqlComments(fs.readFileSync(path.join(MIGRATION_DIR, file), "utf8"));

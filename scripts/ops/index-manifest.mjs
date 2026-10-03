@@ -132,6 +132,16 @@ export function manifestNames(manifest) {
 }
 
 /**
+ * 등록된 색인 이름과 표의 대응.
+ *
+ * @param {{indexes: Array<{name: string, table: string}>}} manifest
+ * @returns {Map<string, string>}
+ */
+export function manifestTables(manifest) {
+  return new Map(manifest.indexes.map(entry => [entry.name, entry.table]));
+}
+
+/**
  * 스크립트가 만들 수 있는 항목(definition 이 있는 항목)을 이름으로 찾는다.
  *
  * @param {{indexes: object[]}} manifest
