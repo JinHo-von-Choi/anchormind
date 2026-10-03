@@ -37,7 +37,7 @@ The fastest path for someone new to this repository is to hand the work to an AI
 After the assistant finishes, all of the following must hold:
 
 - `.env` exists, with `MEMENTO_ACCESS_KEY`, `POSTGRES_*`, and `REDIS_*` populated
-- `npm run migrate` succeeds through `migration-054`
+- `npm run migrate` succeeds through `migration-060`
 - `node bin/memento.js health` returns OK for DB, Redis, and the embedding provider
 - The AI client lists `mcp__*__remember`, `recall`, and `reflect`
 - A `context` call returns a valid response (zero fragments is fine; so does `memory_stats` with a master key)
@@ -298,7 +298,10 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-057-fragment-provenance.sq
 # Review decision table and review_state value constraint
 psql $DATABASE_URL -f lib/memory/migrations/migration-058-review-decisions.sql
 
-# admin accounts, role bindings, database sessions, recovery codes, external identities
+# api_keys lifecycle columns and api_key_secrets table
+psql $DATABASE_URL -f lib/memory/migrations/migration-059-api-key-lifecycle.sql
+
+# Admin accounts, role bindings, database sessions, recovery codes, external identities
 psql $DATABASE_URL -f lib/memory/migrations/migration-060-admin-users.sql
 ```
 

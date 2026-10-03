@@ -147,7 +147,7 @@ server.js  (HTTP server)
             +-- anchorPolicy.js           Pure anchor decision functions: change kind (set, clear), permission and per-key limit decision, non-identifying principal label of context lines (`k:` + first 4 characters of the key id sha256)
             +-- CaseEventStore.js         Semantic milestone log (case_events CRUD, DAG edges, evidence join)
             +-- memory-schema.sql         PostgreSQL schema definition
-            +-- migrations/               52 DB migration SQL files (migration-001 through migration-054; 046 and 053 are unused), applied sequentially against the schema_migrations table. Used by `scripts/migrate.js` and `scripts/lint-migrations.js`
+            +-- migrations/               59 DB migration SQL files (migration-001 through migration-060; 046 is unused), applied sequentially against the schema_migrations table. Used by `scripts/migrate.js` and `scripts/lint-migrations.js`
 ```
 
 Supporting modules:
@@ -1397,7 +1397,7 @@ lib/memory/
 +-- embedding/     EmbeddingWorker, EmbeddingCache, MorphemeIndex, MorphemeTokenizer, LexicalTokens
 +-- signals/       SpreadingActivation, CaseRewardBackprop, NLIClassifier, MemoryEvaluator, SearchMetrics, SearchEventAnalyzer, SearchEventRecorder, EvaluationMetrics, SearchParamAdaptor
 +-- processors/    MemoryRememberer, MemoryRecaller, MemoryReflector, MemoryLinker, ReflectProcessor, AutoReflect, EpisodeContinuityService, SessionActivityTracker
-+-- migrations/    52 migration SQL files (001 through 054; 046 and 053 unused)
++-- migrations/    59 migration SQL files (001 through 060; 046 unused)
 ```
 
 Modules kept directly at the root are MemoryManager, ModeRegistry, keyId, keyScope, QuotaChecker, CaseEventStore, FragmentIndex, and contentGuard. No re-export shim exists for modules moved into the subdirectories above — import paths follow the actual file locations directly.

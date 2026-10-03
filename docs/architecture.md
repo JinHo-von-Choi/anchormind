@@ -151,7 +151,7 @@ server.js  (HTTP 서버)
             ├── anchorPolicy.js           앵커 판정 순수 함수. 앵커 변경 종류(set, clear), 권한과 키별 상한 판정, context 주입 줄의 비식별 주체 표지(`k:` + 키 id sha256 앞 4자)
             ├── CaseEventStore.js         semantic milestone 로그 (case_events CRUD, DAG 엣지, 증거 조인)
             ├── memory-schema.sql         PostgreSQL 스키마 정의
-            └── migrations/               DB 마이그레이션 SQL 52개 (migration-001 ~ migration-054, 046, 053 결번, schema_migrations 테이블 기준 순차 적용). `scripts/migrate.js`·`scripts/lint-migrations.js`가 이 경로를 사용
+            └── migrations/               DB 마이그레이션 SQL 59개 (migration-001 ~ migration-060, 046 결번, schema_migrations 테이블 기준 순차 적용). `scripts/migrate.js`·`scripts/lint-migrations.js`가 이 경로를 사용
 ```
 
 지원 모듈:
@@ -1492,7 +1492,7 @@ lib/memory/
 ├── embedding/     EmbeddingWorker, EmbeddingCache, MorphemeIndex, MorphemeTokenizer, LexicalTokens
 ├── signals/       SpreadingActivation, CaseRewardBackprop, NLIClassifier, MemoryEvaluator, SearchMetrics, SearchEventAnalyzer, SearchEventRecorder, EvaluationMetrics, SearchParamAdaptor
 ├── processors/    MemoryRememberer, MemoryRecaller, MemoryReflector, MemoryLinker, ReflectProcessor, AutoReflect, EpisodeContinuityService, SessionActivityTracker
-└── migrations/    마이그레이션 SQL 52개 (001 ~ 054, 046, 053 결번)
+└── migrations/    마이그레이션 SQL 59개 (001 ~ 060, 046 결번)
 ```
 
 루트 직속으로 유지되는 모듈은 MemoryManager, ModeRegistry, keyId, keyScope, QuotaChecker, CaseEventStore, FragmentIndex, contentGuard이다. 위 서브디렉토리로 이동한 모듈에 대한 재-export 심(re-export shim)은 존재하지 않는다 — 임포트 경로는 실제 파일 위치를 그대로 따른다.

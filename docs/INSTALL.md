@@ -37,7 +37,7 @@
 위 프롬프트를 받은 AI가 정상적으로 처리했다면 다음이 모두 충족되어야 한다.
 
 - `.env` 파일이 생성되고 `MEMENTO_ACCESS_KEY`·`POSTGRES_*`·`REDIS_*` 키가 모두 채워져 있다
-- `npm run migrate`가 `migration-054`까지 통과한다
+- `npm run migrate`가 `migration-060`까지 통과한다
 - `node bin/memento.js health`가 DB/Redis/임베딩 제공자 모두 OK를 반환한다
 - AI 클라이언트 도구 목록에 `mcp__*__remember`·`recall`·`reflect`가 노출된다
 - `context` 호출이 기억 0건이라도 정상 응답을 반환한다 (master 키의 `memory_stats`도 같다)
@@ -178,6 +178,7 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-055-api-keys-egress-policy
 psql $DATABASE_URL -f lib/memory/migrations/migration-056-admin-audit-events.sql                    # admin_audit_events 감사 해시 체인 표 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-057-fragment-provenance.sql                    # 파편 출처, 신뢰 등급, 검토 상태 열
 psql $DATABASE_URL -f lib/memory/migrations/migration-058-review-decisions.sql                       # 검토 결정 기록 표, review_state 값 제약
+psql $DATABASE_URL -f lib/memory/migrations/migration-059-api-key-lifecycle.sql                      # api_keys 수명 열, api_key_secrets 표 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-060-admin-users.sql                           # 관리자 계정, 역할 바인딩, DB 세션, 복구 코드, 외부 신원 표 추가
 ```
 
