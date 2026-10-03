@@ -28,8 +28,10 @@ import { scopeViolations } from "./_admin-checks.js";
  * 검사에서 빼는 관리 모듈과 사유.
  * ApiKeyStore.js는 키 저장소다. 파편 질의는 키 삭제 보호와 키별 파편 수 집계이며 key_id로 한정되고,
  * 호출하는 관리 라우트(key.manage, 전역 범위)는 판정 범위가 전체일 때만 열린다. ScopeFilter.js는 술어 생성기 자신이다.
+ * ReviewStore.js는 검토 대기열 저장소다. 호출하는 /review 라우트(review.decide)는 라우트 표에서 전역 범위라
+ * 판정 범위가 전체일 때만 열린다.
  */
-const EXEMPT = new Set(["ApiKeyStore.js", "ScopeFilter.js"]);
+const EXEMPT = new Set(["ApiKeyStore.js", "ScopeFilter.js", "ReviewStore.js"]);
 
 const ADMIN_DIR  = path.join(ROOT, "lib", "admin");
 const adminFiles = readdirSync(ADMIN_DIR).filter((f) => f.endsWith(".js") && !EXEMPT.has(f));

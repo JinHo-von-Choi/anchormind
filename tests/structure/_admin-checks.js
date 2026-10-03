@@ -169,6 +169,8 @@ export const NON_DATA_IMPORTS = Object.freeze({
   "../memory/read/DeterministicRanking.js": null,
   "../memory/schema.js"                 : null,
   "../memory/ModeRegistry.js"           : null,
+  "../llm/EgressPolicy.js"              : ["validateEgressPolicy", "EgressPolicyValidationError"],
+  "../llm/registry.js"                  : ["listProviderNames"],
   "../memory/transfer/exportFormat.js"  : null,
   "../memory/transfer/importRecords.js" : null,
   "../memory/transfer/importErrors.js"  : null,

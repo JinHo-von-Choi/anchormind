@@ -59,6 +59,7 @@ mock.module("../../lib/logging/audit.js", {
 });
 
 const { handleKeys }                           = await import("../../lib/admin/admin-keys.js");
+const { requireCapability, masterPrincipal }   = await import("../../lib/admin/AdminAuthz.js");
 const {
   getSymbolicHardGate,
   getAllowedWorkspaces,
@@ -79,11 +80,13 @@ function fakeRes() {
   };
 }
 
-async function call(method, pathname, body) {
+/** 라우터가 하듯 요청에 주체를 묶은 뒤 처리기를 부른다. 기본 주체는 마스터 키다. */
+async function call(method, pathname, body, principal = masterPrincipal()) {
   const req = Readable.from(body === undefined ? [] : [Buffer.from(typeof body === "string" ? body : JSON.stringify(body))]);
   req.method  = method;
   req.headers = {};
   const res     = fakeRes();
+  requireCapability(req, fakeRes(), { principal, cap: "key.policy" });
   const handled = await handleKeys(req, res, new URL(`http://localhost${ADMIN_BASE}${pathname}`));
   return { res, handled };
 }
@@ -285,6 +288,23 @@ describe("PATCH /keys/:id/policy egress_policy", () => {
     assert.equal(res.statusCode, 409);
     assert.match(res.body.error, /migration-055/);
     assert.equal(audits.length, 0);
+  });
+});
+
+describe("PATCH /keys/:id/policy egress.policy 능력", () => {
+  const limited = { kind: "admin_session", id: "u-1", bindings: [{ role: "admin", workspace: null }], deny: ["egress.policy"] };
+
+  it("egress.policy 능력이 없는 주체의 egress_policy 변경은 403이고 아무 열도 바꾸지 않는다", async () => {
+    const { res } = await call("PATCH", `/keys/${KEY_ID}/policy`, { egress_policy: { local_only: true }, default_mode: "recall-only" }, limited);
+    assert.equal(res.statusCode, 403);
+    assert.equal(res.body.cap, "egress.policy");
+    assert.equal(updates().length, 0);
+  });
+
+  it("같은 주체도 egress_policy가 없는 정책 변경은 key.policy로 처리한다", async () => {
+    const { res } = await call("PATCH", `/keys/${KEY_ID}/policy`, { default_mode: "recall-only" }, limited);
+    assert.equal(res.statusCode, 200);
+    assert.equal(updates().length, 1);
   });
 });
 
