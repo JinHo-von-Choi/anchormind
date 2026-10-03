@@ -24,6 +24,9 @@ const wm                     = await import("../../lib/memory/WorkingMemoryRows.
 const { processMorphemeBackfill } = await import("../../lib/memory/consolidate/MorphemeBackfill.js");
 const { createApiKey, deleteApiKey } = await import("../../lib/admin/ApiKeyStore.js");
 const { handleKeys }         = await import("../../lib/admin/admin-keys.js");
+const { SessionLinker }      = await import("../../lib/memory/link/SessionLinker.js");
+const { FragmentIndex }      = await import("../../lib/memory/FragmentIndex.js");
+const { FragmentStore }      = await import("../../lib/memory/write/FragmentStore.js");
 const { ADMIN_BASE }         = await import("../../lib/admin/admin-auth.js");
 
 const TAG    = `wm${Date.now().toString(36)}`;
@@ -309,5 +312,46 @@ describe("API 키 삭제", () => {
     }
     const row = await client.query("SELECT 1 FROM agent_memory.fragments WHERE id = $1", [id]);
     assert.equal(row.rowCount, 0);
+  });
+});
+
+describe("세션 ID를 공유하는 다른 키", () => {
+  async function seedShared() {
+    seq += 1;
+    const session = `${TAG}-shared-${seq}`;
+    const k1 = (await createApiKey({ name: `${TAG}-sh-1-${seq}` })).id;
+    const k2 = (await createApiKey({ name: `${TAG}-sh-2-${seq}` })).id;
+    const ids = {
+      k1    : await writeWmRow({ session, key: k1, content: `키 하나의 세션 항목 ${TAG} 충분히 길게 적는다` }),
+      k2    : await writeWmRow({ session, key: k2, content: `키 둘의 세션 항목 ${TAG} 충분히 길게 적는다` }),
+      master: await writeWmRow({ session, key: null, content: `master의 세션 항목 ${TAG} 충분히 길게 적는다` })
+    };
+    return { session, k1, k2, ids };
+  }
+
+  it("세션 종합은 호출한 키의 항목만 모으고 다른 키와 master의 항목을 evict 대상에 넣지 않는다", async () => {
+    const { session, k1, ids } = await seedShared();
+    const linker = new SessionLinker(new FragmentStore(), new FragmentIndex());
+    const groups = await linker.consolidateSessionFragments(session, "default", k1);
+    assert.deepEqual(groups.flatMap(g => g.wmItemIds), [ids.k1]);
+    assert.ok(!JSON.stringify(groups).includes("키 둘의"));
+    assert.ok(!JSON.stringify(groups).includes("master의"));
+  });
+
+  it("키 없는 요청은 key_id가 없는 항목만 모은다", async () => {
+    const { session, ids } = await seedShared();
+    const linker = new SessionLinker(new FragmentStore(), new FragmentIndex());
+    const groups = await linker.consolidateSessionFragments(session, "default", null);
+    assert.deepEqual(groups.flatMap(g => g.wmItemIds), [ids.master]);
+  });
+
+  it("한 키의 종합 결과를 evict해도 다른 키의 행은 그대로다", async () => {
+    const { session, k1, ids } = await seedShared();
+    const index  = new FragmentIndex();
+    const linker = new SessionLinker(new FragmentStore(), index);
+    const groups = await linker.consolidateSessionFragments(session, "default", k1);
+    await index.evictWorkingMemoryItems(session, groups.flatMap(g => g.wmItemIds));
+    const left = (await wm.listWorkingMemoryRows(session)).map(i => i.id).sort();
+    assert.deepEqual(left, [ids.k2, ids.master].sort());
   });
 });

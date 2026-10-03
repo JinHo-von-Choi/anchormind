@@ -49,7 +49,7 @@ function makeEnv({ wmItems = [], failOnce = [], batchErrors = null } = {}) {
   const rows       = new Map();
   const byHash     = new Map();
   const sessionIds = new Map();
-  let   wm         = [...wmItems];
+  let   wm         = wmItems.map(w => ({ agent_id: "default", key_id: null, ...w }));
   let   seq        = 0;
   const pendingFail = new Set(failOnce);
 

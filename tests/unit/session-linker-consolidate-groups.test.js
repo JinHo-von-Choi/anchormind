@@ -36,7 +36,7 @@ function makeLinker({ ids = [], rows = [], wmItems = [] } = {}) {
   };
   const index = {
     getSessionFragments: mock.fn(async () => ids),
-    getWorkingMemory   : mock.fn(async () => wmItems),
+    getWorkingMemory   : mock.fn(async () => wmItems.map(w => ({ agent_id: "default", key_id: null, ...w }))),
   };
   return new SessionLinker(store, index);
 }
@@ -173,5 +173,43 @@ describe("SessionLinker.consolidateSessionFragments — 그룹 분리", () => {
     const linker = makeLinker({ ids: ["blank-1"], rows });
     const groups = await linker.consolidateSessionFragments("sess-8", "default", null);
     assert.equal(groups, null);
+  });
+});
+
+describe("SessionLinker.consolidateSessionFragments: 키와 에이전트 범위", () => {
+  const item = (id, extra = {}) => ({
+    id, type: "fact", topic: "shared", content: `${id} 본문 충분히 길게 적는다`,
+    agent_id: "default", key_id: null, workspace: null, ...extra
+  });
+  const consumed = (groups) => groups.flatMap(g => g.wmItemIds).sort();
+
+  it("같은 세션 ID를 쓰는 다른 키의 항목은 종합하지도 evict 대상에 넣지도 않는다", async () => {
+    const wmItems = [item("k1-a", { key_id: "K1" }), item("k2-a", { key_id: "K2" }), item("master-a")];
+    const groups  = await makeLinker({ wmItems }).consolidateSessionFragments("sess", "default", "K1");
+    assert.deepEqual(consumed(groups), ["k1-a"]);
+    assert.ok(!JSON.stringify(groups).includes("k2-a"));
+  });
+
+  it("키 없는 요청(master)은 key_id가 없는 항목만 종합한다", async () => {
+    const wmItems = [item("k1-a", { key_id: "K1" }), item("master-a")];
+    const groups  = await makeLinker({ wmItems }).consolidateSessionFragments("sess", "default", null);
+    assert.deepEqual(consumed(groups), ["master-a"]);
+  });
+
+  it("키 요청은 key_id가 없는 항목을 종합하지 않는다", async () => {
+    const groups = await makeLinker({ wmItems: [item("master-a")] }).consolidateSessionFragments("sess", "default", "K1");
+    assert.equal(groups, null);
+  });
+
+  it("같은 키 안에서 다른 에이전트의 항목은 종합하지 않고 default 항목은 종합한다", async () => {
+    const wmItems = [item("mine", { key_id: "K1", agent_id: "a1" }), item("other", { key_id: "K1", agent_id: "a2" }), item("shared", { key_id: "K1" })];
+    const groups  = await makeLinker({ wmItems }).consolidateSessionFragments("sess", "a1", "K1");
+    assert.deepEqual(consumed(groups), ["mine", "shared"]);
+  });
+
+  it("에이전트 정보가 없는 항목은 종합하지 않는다", async () => {
+    const linker = makeLinker({});
+    linker.index.getWorkingMemory = async () => [{ id: "bare", type: "fact", content: "에이전트 정보 없는 항목 충분히 길게", key_id: "K1" }];
+    assert.equal(await linker.consolidateSessionFragments("sess", "default", "K1"), null);
   });
 });
