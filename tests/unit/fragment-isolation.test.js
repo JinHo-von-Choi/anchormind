@@ -70,7 +70,7 @@ function makeBatchClient(capturedSqls) {
         return { rows: [] };
       }
       if (s.startsWith("SET LOCAL")) return { rows: [] };
-      if (s.includes("PG_INDEX")) return { rows: LEGACY_INDEXES.map(name => ({ name })) };
+      if (s.includes("PG_INDEX")) return { rows: LEGACY_INDEXES.map(name => ({ name, valid: true })) };
       if (s.startsWith("SELECT") && s.includes("FRAGMENT_LIMIT")) {
         return { rows: [] }; // quota 없음
       }
@@ -138,14 +138,14 @@ describe("FragmentWriter — content_hash 테넌트 격리", () => {
 
   it("insert(): keyId=null → ON CONFLICT (content_hash) WHERE key_id IS NULL", () => {
     assert.ok(
-      conflictClause(new Set(LEGACY_INDEXES), null).includes("ON CONFLICT (content_hash) WHERE key_id IS NULL"),
+      conflictClause({ existing: new Set(LEGACY_INDEXES), valid: new Set(LEGACY_INDEXES) }, null).includes("ON CONFLICT (content_hash) WHERE key_id IS NULL"),
       "master path must use partial index clause: ON CONFLICT (content_hash) WHERE key_id IS NULL"
     );
   });
 
   it("insert(): keyId non-null → ON CONFLICT (key_id, content_hash) WHERE key_id IS NOT NULL", () => {
     assert.ok(
-      conflictClause(new Set(LEGACY_INDEXES), "key-abc").includes("ON CONFLICT (key_id, content_hash) WHERE key_id IS NOT NULL"),
+      conflictClause({ existing: new Set(LEGACY_INDEXES), valid: new Set(LEGACY_INDEXES) }, "key-abc").includes("ON CONFLICT (key_id, content_hash) WHERE key_id IS NOT NULL"),
       "DB API key path must use partial index clause: ON CONFLICT (key_id, content_hash) WHERE key_id IS NOT NULL"
     );
   });

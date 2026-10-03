@@ -13,14 +13,20 @@ import assert                        from "node:assert/strict";
 import {
   DEDUP_INDEXES, DEDUP_INDEX_NAMES, DEDUP_INDEX_STATE_TTL_MS,
   effectiveDedupScope, conflictIndex, conflictClause, workspaceKey, pickDuplicate,
-  foldKey, splitLookupHits, isDedupIndexError, loadDedupIndexes, invalidateDedupIndexes
+  foldKey, splitLookupHits, isDedupIndexError, loadDedupIndexes, invalidateDedupIndexes,
+  normalizeWorkspace, resolveUniqueConflict, lookupRequired
 } from "../../lib/memory/write/DedupScope.js";
 import { dedupScope } from "../../lib/config.js";
 
-const LEGACY = new Set([DEDUP_INDEXES.keyLegacy, DEDUP_INDEXES.masterLegacy]);
-const BOTH   = new Set(DEDUP_INDEX_NAMES);
-const SCOPED = new Set([DEDUP_INDEXES.keyScoped, DEDUP_INDEXES.masterScoped]);
-const NONE   = new Set();
+/** 색인 상태. invalid는 pg_index에 남아 있지만 indisvalid가 아닌 색인이다. */
+const st = (names, invalid = []) => ({ existing: new Set([...names, ...invalid]), valid: new Set(names) });
+
+const LEGACY = st([DEDUP_INDEXES.keyLegacy, DEDUP_INDEXES.masterLegacy]);
+const BOTH   = st(DEDUP_INDEX_NAMES);
+const SCOPED = st([DEDUP_INDEXES.keyScoped, DEDUP_INDEXES.masterScoped]);
+const NONE   = st([]);
+/** DROP INDEX CONCURRENTLY가 키 범위 색인의 indisvalid만 내린 상태(기다리는 중이거나 중단됨) */
+const DROPPING = st([DEDUP_INDEXES.keyScoped, DEDUP_INDEXES.masterScoped], [DEDUP_INDEXES.keyLegacy, DEDUP_INDEXES.masterLegacy]);
 
 describe("판정 범위와 ON CONFLICT 대상", () => {
   it("키 범위 색인이 있으면 설정과 무관하게 키 범위다", () => {
@@ -38,8 +44,28 @@ describe("판정 범위와 ON CONFLICT 대상", () => {
     }
   });
 
+  it("무효 상태로 남은 키 범위 색인도 판정 범위를 키 범위로 두고 ON CONFLICT 대상에서는 빠진다", () => {
+    for (const keyId of ["k1", null]) {
+      assert.equal(effectiveDedupScope("workspace", DROPPING, keyId), "key");
+      assert.equal(lookupRequired(DROPPING, keyId), true);
+    }
+    assert.equal(conflictIndex(DROPPING, "k1"), DEDUP_INDEXES.keyScoped);
+    assert.equal(conflictIndex(DROPPING, null), DEDUP_INDEXES.masterScoped);
+    const onlyInvalid = st([], [DEDUP_INDEXES.keyLegacy]);
+    assert.equal(effectiveDedupScope("workspace", onlyInvalid, "k1"), "key");
+    assert.equal(conflictIndex(onlyInvalid, "k1"), null);
+    assert.equal(conflictClause(onlyInvalid, "k1"), "");
+  });
+
+  it("사전 조회는 유효한 키 범위 색인이 ON CONFLICT 대상일 때만 생략한다", () => {
+    assert.equal(lookupRequired(LEGACY, "k1"), false);
+    assert.equal(lookupRequired(BOTH, null), false);
+    assert.equal(lookupRequired(SCOPED, "k1"), true);
+    assert.equal(lookupRequired(NONE, "k1"), true);
+  });
+
   it("경로별 색인만 본다(마스터 색인은 키 경로에 영향이 없다)", () => {
-    const masterOnlyLegacy = new Set([DEDUP_INDEXES.masterLegacy, DEDUP_INDEXES.keyScoped]);
+    const masterOnlyLegacy = st([DEDUP_INDEXES.masterLegacy, DEDUP_INDEXES.keyScoped]);
     assert.equal(effectiveDedupScope("workspace", masterOnlyLegacy, "k1"), "workspace");
     assert.equal(effectiveDedupScope("workspace", masterOnlyLegacy, null), "key");
     assert.equal(conflictIndex(masterOnlyLegacy, "k1"), DEDUP_INDEXES.keyScoped);
@@ -72,11 +98,17 @@ describe("기존 행 선택", () => {
     { id: "w2", workspace: "ws-b" }
   ];
 
-  it("NULL과 ''는 같은 칸이다", () => {
+  it("NULL, '', 공백뿐인 값은 같은 칸이고 저장 값은 NULL이다", () => {
     assert.equal(workspaceKey(null), "");
     assert.equal(workspaceKey(undefined), "");
     assert.equal(workspaceKey(""), "");
+    assert.equal(workspaceKey("  "), "");
     assert.equal(workspaceKey("ws"), "ws");
+    assert.equal(normalizeWorkspace(""), null);
+    assert.equal(normalizeWorkspace(" \t "), null);
+    assert.equal(normalizeWorkspace(undefined), null);
+    assert.equal(normalizeWorkspace("ws-a"), "ws-a");
+    assert.equal(normalizeWorkspace(" ws-a "), " ws-a ");
   });
 
   it("같은 workspace 행을 먼저 고른다", () => {
@@ -146,11 +178,34 @@ describe("색인 오류 판정", () => {
   });
 });
 
+describe("다시 판정한 뒤의 23505 정리", () => {
+  const rows = [{ id: "a", workspace: "ws-a", content_hash: "h" }, { id: "g", workspace: null, content_hash: "h" }];
+  const run  = async () => ({ rows });
+  const dup  = (constraint) => Object.assign(new Error("dup"), { code: "23505", constraint });
+
+  it("키 범위 색인이 막았으면 키 범위로 기존 행을 돌려준다", async () => {
+    const row = await resolveUniqueConflict(async () => ({ rows: [rows[0]] }), dup(DEDUP_INDEXES.keyLegacy), { keyId: "k", contentHash: "h", workspace: "ws-b" });
+    assert.equal(row.id, "a");
+  });
+
+  it("workspace 범위 색인이 막았으면 같은 칸 행을 돌려준다", async () => {
+    const row = await resolveUniqueConflict(run, dup(DEDUP_INDEXES.keyScoped), { keyId: "k", contentHash: "h", workspace: "ws-a" });
+    assert.equal(row.id, "a");
+  });
+
+  it("판정 색인이 아닌 오류와 기존 행이 없는 경우는 원래 오류를 던진다", async () => {
+    const other = dup("idx_fragments_idempotency_tenant");
+    await assert.rejects(() => resolveUniqueConflict(run, other, { keyId: "k", contentHash: "h", workspace: null }), e => e === other);
+    const lost = dup(DEDUP_INDEXES.keyScoped);
+    await assert.rejects(() => resolveUniqueConflict(async () => ({ rows: [] }), lost, { keyId: "k", contentHash: "h", workspace: "x" }), e => e === lost);
+  });
+});
+
 describe("색인 상태 기억", () => {
   let calls;
-  const run = (names) => async (sql, params) => {
+  const run = (names, invalid = []) => async (sql, params) => {
     calls.push({ sql, params });
-    return { rows: names.map(name => ({ name })) };
+    return { rows: [...names.map(name => ({ name, valid: true })), ...invalid.map(name => ({ name, valid: false }))] };
   };
 
   beforeEach(() => {
@@ -158,11 +213,13 @@ describe("색인 상태 기억", () => {
     invalidateDedupIndexes();
   });
 
-  it("유효한 판정 색인만 묻고 결과를 기억한다", async () => {
-    const present = await loadDedupIndexes(run([DEDUP_INDEXES.keyScoped]), 1000);
-    assert.deepEqual([...present], [DEDUP_INDEXES.keyScoped]);
+  it("남아 있는 판정 색인과 그중 유효한 색인을 따로 읽고 결과를 기억한다", async () => {
+    const state = await loadDedupIndexes(run([DEDUP_INDEXES.keyScoped], [DEDUP_INDEXES.keyLegacy]), 1000);
+    assert.deepEqual([...state.existing].sort(), [DEDUP_INDEXES.keyLegacy, DEDUP_INDEXES.keyScoped].sort());
+    assert.deepEqual([...state.valid], [DEDUP_INDEXES.keyScoped]);
     assert.match(calls[0].sql, /pg_index/);
-    assert.match(calls[0].sql, /indisvalid/);
+    assert.match(calls[0].sql, /indisvalid AS valid/);
+    assert.doesNotMatch(calls[0].sql, /AND i\.indisvalid/);
     assert.deepEqual(calls[0].params, [DEDUP_INDEX_NAMES]);
     await loadDedupIndexes(run([]), 1000 + DEDUP_INDEX_STATE_TTL_MS - 1);
     assert.equal(calls.length, 1);
@@ -171,10 +228,10 @@ describe("색인 상태 기억", () => {
   it("기억 시간이 지나거나 버리면 다시 읽는다", async () => {
     await loadDedupIndexes(run([DEDUP_INDEXES.keyLegacy]), 1000);
     const later = await loadDedupIndexes(run([DEDUP_INDEXES.keyScoped]), 1000 + DEDUP_INDEX_STATE_TTL_MS);
-    assert.deepEqual([...later], [DEDUP_INDEXES.keyScoped]);
+    assert.deepEqual([...later.valid], [DEDUP_INDEXES.keyScoped]);
     invalidateDedupIndexes();
     const fresh = await loadDedupIndexes(run([]), 1000 + DEDUP_INDEX_STATE_TTL_MS);
-    assert.equal(fresh.size, 0);
+    assert.equal(fresh.existing.size, 0);
     assert.equal(calls.length, 3);
   });
 });

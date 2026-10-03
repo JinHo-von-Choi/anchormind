@@ -151,6 +151,45 @@ describe("batch: 운영 단계로 색인이 바뀐 직후", () => {
   });
 });
 
+describe("batch: 키 범위 색인이 무효 상태로 남았을 때", () => {
+  it("키 범위로 사전 조회해 다른 workspace의 기존 id를 돌려주고 오류를 내지 않는다", async () => {
+    db = makeFakeDb({ indexes: STATES.scoped, invalid: STATES.legacy, rows: [seed("existing", "ws-a")] });
+    const { results } = await run([item("ws-b"), item("ws-c")]);
+    assert.deepEqual(results.map(r => r.id), ["existing", "existing"]);
+    assert.equal(db.rows.length, 1);
+  });
+
+  it("다른 요청이 먼저 넣은 행이 23505를 내면 트랜잭션을 다시 실행해 기존 id를 돌려준다", async () => {
+    db = makeFakeDb({ indexes: STATES.scoped, invalid: STATES.legacy });
+    let injected = false;
+    const original = db.query;
+    db.query = async (sql, params) => {
+      const result = await original(sql, params);
+      if (!injected && String(sql).startsWith("SELECT id, workspace, content_hash")) {
+        injected = true;
+        db.rows.push(seed("racer", "ws-a"));
+      }
+      return result;
+    };
+    const { results } = await run([item("ws-b")]);
+    assert.equal(results[0].id, "racer");
+    assert.equal(db.rows.length, 1);
+  });
+});
+
+describe("batch: workspace 값 정규화", () => {
+  it("''로 저장한 뒤 전역 요청은 같은 파편이다", async () => {
+    db = makeFakeDb({ indexes: STATES.scoped });
+    const first  = await run([item("")]);
+    assert.equal(db.byId(first.results[0].id).workspace, null);
+    const second = await run([item(null)]);
+    const third  = await run([item("  ")]);
+    assert.equal(second.results[0].id, first.results[0].id);
+    assert.equal(third.results[0].id, first.results[0].id);
+    assert.equal(db.rows.length, 1);
+  });
+});
+
 describe("batch: 판정 색인이 없을 때", () => {
   it("ON CONFLICT 없이 사전 조회로 같은 칸 중복을 가른다", async () => {
     db = makeFakeDb({ indexes: [], rows: [seed("existing", "ws-a")] });

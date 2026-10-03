@@ -5,8 +5,9 @@
  * 작성일: 2026-10-03
  *
  * FragmentWriter와 BatchRememberProcessor가 보내는 질의 중 중복 판정에 관계된 것만 흉내 낸다.
- * 유일 색인 집합을 정해 두면 PostgreSQL처럼
- *   - ON CONFLICT 대상 색인이 없으면 42P10
+ * 유일 색인 집합(indexes: 유효, invalid: indisvalid가 내려갔지만 유일성은 강제하는 색인)을 정해 두면
+ * PostgreSQL처럼
+ *   - ON CONFLICT 대상 색인이 유효 색인에 없으면 42P10
  *   - 대상 색인과 충돌하면 기존 행을 병합(importance 큰 값, is_anchor OR)하고 기존 id 반환
  *   - 대상이 아닌 색인과 충돌하면 그 색인 이름을 담은 23505
  *   - 한 문장이 같은 기존 행을 두 번 고치면 21000
@@ -52,17 +53,19 @@ function insertedRows(sql, params) {
 }
 
 /**
- * @param {{ indexes: string[], rows?: Object[] }} opts
+ * @param {{ indexes: string[], invalid?: string[], rows?: Object[] }} opts
  */
-export function makeFakeDb({ indexes, rows = [] }) {
+export function makeFakeDb({ indexes, invalid = [], rows = [] }) {
   const db = {
     rows      : rows.map(r => ({ importance: 0.5, is_anchor: false, workspace: null, ...r })),
     indexes   : new Set(indexes),
+    invalid   : new Set(invalid),
     statements: [],
     inTx      : false,
     aborted   : false
   };
 
+  const enforced    = () => [...db.indexes, ...db.invalid];
   const conflictsOn = (index, row, exceptId) => {
     const key = INDEX_KEYS[index](row);
     if (key === null) return null;
@@ -93,7 +96,7 @@ export function makeFakeDb({ indexes, rows = [] }) {
         out.push({ id: existing.id });
         continue;
       }
-      for (const index of db.indexes) {
+      for (const index of enforced()) {
         const k = INDEX_KEYS[index](row);
         if (k !== null && visible().some(r => INDEX_KEYS[index](r) === k)) {
           throw pgError("23505", `duplicate key value violates unique constraint "${index}"`, index);
@@ -112,7 +115,7 @@ export function makeFakeDb({ indexes, rows = [] }) {
     if (!row) return { rows: [] };
     if (match) {
       const next = { ...row, content_hash: params[Number(match[1]) - 1] };
-      for (const index of db.indexes) {
+      for (const index of enforced()) {
         if (conflictsOn(index, next, row.id)) {
           throw pgError("23505", `duplicate key value violates unique constraint "${index}"`, index);
         }
@@ -143,7 +146,9 @@ export function makeFakeDb({ indexes, rows = [] }) {
     if (db.aborted) throw pgError("25P02", "current transaction is aborted, commands ignored until end of transaction block");
     if (text.startsWith("SAVEPOINT") || text.startsWith("RELEASE SAVEPOINT") || text.startsWith("SET ")) return { rows: [] };
 
-    if (text.includes("pg_index")) return { rows: [...db.indexes].map(name => ({ name })) };
+    if (text.includes("pg_index")) {
+      return { rows: [...[...db.indexes].map(name => ({ name, valid: true })), ...[...db.invalid].map(name => ({ name, valid: false }))] };
+    }
     if (text.startsWith("SELECT id, workspace, content_hash")) return lookup(text, params);
     if (/FROM agent_memory\.fragments WHERE id = \$1 FOR UPDATE/.test(text)) {
       return { rows: db.rows.filter(r => r.id === params[0]).map(r => ({ agent_id: "default", ...r })) };

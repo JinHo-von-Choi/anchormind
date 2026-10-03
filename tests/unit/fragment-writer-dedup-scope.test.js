@@ -197,6 +197,75 @@ describe("insert: 운영 단계로 색인이 바뀐 직후", () => {
   });
 });
 
+describe("insert: 키 범위 색인이 무효 상태로 남았을 때(DROP INDEX CONCURRENTLY 대기 또는 중단)", () => {
+  for (const keyId of ["key-1", null]) {
+    it(`${keyId ? "키 보유" : "마스터"} 경로: 키 범위로 판정하고 오류를 내지 않는다`, async () => {
+      db = makeFakeDb({ indexes: STATES.scoped, invalid: STATES.legacy });
+      const first  = await insert(fragment("ws-a", { keyId }));
+      const second = await insert(fragment("ws-b", { keyId }));
+      assert.equal(second, first);
+      assert.equal(db.rows.length, 1);
+    });
+  }
+
+  it("기억한 상태가 두 색인 모두 유효였다가 키 범위 색인이 무효로 바뀌어도 키 범위로 판정한다", async () => {
+    db = makeFakeDb({ indexes: STATES.both });
+    const first = await insert(fragment("ws-a"));
+    db.indexes = new Set(STATES.scoped);
+    db.invalid = new Set(STATES.legacy);
+    const fresh = await insert(fragment("ws-c", { content: "키 범위 색인이 무효로 바뀐 뒤 처음 저장하는 본문" }));
+    assert.equal(db.byId(fresh).workspace, "ws-c");
+    assert.equal(await insert(fragment("ws-b")), first);
+    assert.equal(db.rows.length, 2);
+  });
+
+  it("외부 트랜잭션: 사전 조회 뒤 다른 workspace에 먼저 들어간 행은 23505 뒤 기존 id로 돌려준다", async () => {
+    db = makeFakeDb({ indexes: STATES.scoped, invalid: STATES.legacy });
+    let injected = false;
+    const original = db.query;
+    db.query = async (sql, params) => {
+      const result = await original(sql, params);
+      if (!injected && String(sql).startsWith("SELECT id, workspace, content_hash")) {
+        injected = true;
+        db.rows.push(row("racer", "ws-a"));
+      }
+      return result;
+    };
+    const client = db.client();
+    await client.query("BEGIN");
+    const id = await insert(fragment("ws-b"), client);
+    await client.query("COMMIT");
+    assert.equal(id, "racer");
+    assert.equal(db.rows.length, 1);
+  });
+
+  it("다시 판정한 뒤에도 키 범위 색인이 막으면 키 범위의 기존 행을 돌려준다", async () => {
+    db = makeFakeDb({ indexes: STATES.scoped, invalid: STATES.legacy });
+    let   lookups  = 0;
+    const original = db.query;
+    db.query = async (sql, params) => {
+      const result = await original(sql, params);
+      if (!String(sql).startsWith("SELECT id, workspace, content_hash")) return result;
+      lookups++;
+      if (lookups === 1) db.rows.push(row("racer", "ws-a"));
+      return lookups <= 2 ? { rows: [] } : result;
+    };
+    assert.equal(await insert(fragment("ws-b")), "racer");
+    assert.equal(lookups, 3, "두 번의 판정과 23505 뒤 다시 읽기");
+  });
+});
+
+describe("insert: workspace 값 정규화", () => {
+  it("''와 공백뿐인 workspace는 NULL로 저장하고 전역 파편과 같은 칸이다", async () => {
+    db = makeFakeDb({ indexes: STATES.scoped });
+    const first = await insert(fragment(""));
+    assert.equal(db.byId(first).workspace, null);
+    assert.equal(await insert(fragment("   ")), first);
+    assert.equal(await insert(fragment(null)), first);
+    assert.equal(db.rows.length, 1);
+  });
+});
+
 describe("insert: 판정 색인이 없을 때", () => {
   it("ON CONFLICT 없이 저장하고 사전 조회로 같은 칸 중복을 막는다", async () => {
     db = makeFakeDb({ indexes: [] });
@@ -241,11 +310,19 @@ describe("amend: 바뀐 본문의 해시 충돌 판정", () => {
     assert.deepEqual(await amend("b", TEXT), { merged: true, existingId: "a" });
   });
 
-  it("기억한 상태보다 색인이 늘어 23505가 나면 오류를 전하고 다음 판정은 색인을 다시 읽는다", async () => {
+  it("기억한 상태보다 색인이 늘어 UPDATE가 23505를 받으면 막은 색인의 범위로 병합 신호를 낸다", async () => {
     db = makeFakeDb({ indexes: STATES.scoped, rows: [row("a", "ws-a"), row("b", "ws-b", { content: OTHER })] });
     await insert(fragment("ws-c", { content: "색인 상태를 기억시키는 세 번째 시험 파편 본문" }));
     db.indexes = new Set(STATES.both);
-    await assert.rejects(() => amend("b", TEXT), err => err.code === "23505");
+    assert.deepEqual(await amend("b", TEXT), { merged: true, existingId: "a" });
+    assert.equal(db.byId("b").content_hash, computeContentHash(OTHER));
+  });
+
+  it("무효 상태로 남은 키 범위 색인이 있으면 키 범위로 병합 신호를 낸다", async () => {
+    db = makeFakeDb({
+      indexes: STATES.scoped, invalid: STATES.legacy,
+      rows   : [row("a", "ws-a"), row("b", "ws-b", { content: OTHER })]
+    });
     assert.deepEqual(await amend("b", TEXT), { merged: true, existingId: "a" });
   });
 });
