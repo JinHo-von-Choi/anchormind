@@ -95,6 +95,7 @@ export const SWITCHES = Object.freeze([
   boolOn("MEMENTO_QUERY_PROFILE_ENABLED", "검색", "질의 의도별 검색 프로파일을 적용한다"),
   boolOn("MEMENTO_KEYWORD_SEMANTIC_FALLBACK", "검색", "keywords만 있는 recall에 시맨틱 보조 검색을 더한다"),
   boolOn("MEMENTO_WORKSPACE_DECAY", "검색", "workspace가 다른 파편의 순위 점수를 낮춘다"),
+  enumOf("MEMENTO_RANK_BEFORE_BUDGET", ["on", "off"], "on", "검색", "recall이 최종 점수를 매긴 뒤 토큰 예산 안에서 파편을 고른다", { off: ["off"] }),
   offDisables("MEMENTO_VECTOR_FORCE_INDEX", "검색", "벡터 검색에 인덱스 강제 planner 힌트를 쓴다"),
   boolOff("ENABLE_SPREADING_ACTIVATION", "검색", "recall의 contextText로 활성 확산 검색을 한다"),
   boolOff("MEMENTO_SYNTHETIC_QUERY_ENABLED", "검색", "파편 저장 시 LLM으로 합성 역질의를 만들어 색인한다"),

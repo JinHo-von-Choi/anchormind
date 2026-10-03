@@ -355,6 +355,23 @@ describe("MemoryManager.remember — affect 전달", async () => {
 // ---------------------------------------------------------------------------
 // 7. MemoryManager.recall — affect 필터 전달 (mock search)
 // ---------------------------------------------------------------------------
+/**
+ * 검색 대역. search()와 예산 선택용 searchCandidates()가 같은 처리기를 쓴다.
+ * searchCandidates의 finalize는 고른 후보를 그대로 결과로 돌려준다.
+ */
+function stubSearch(mm, handler) {
+  mm.search.search           = mock.fn(handler);
+  mm.search.searchCandidates = mock.fn(async (q) => {
+    const result = await handler(q);
+    return {
+      candidates : result.fragments,
+      baselineIds: new Set(result.fragments.map(f => f.id)),
+      tokenBudget: q.tokenBudget,
+      finalize   : async (selected) => ({ ...result, fragments: selected, count: selected.length })
+    };
+  });
+}
+
 describe("MemoryManager.recall — affect 필터 전달", async () => {
 
   it("recall(affect='frustration') 시 search.search에 affect가 전달된다", async () => {
@@ -362,7 +379,7 @@ describe("MemoryManager.recall — affect 필터 전달", async () => {
     const mm = MemoryManager.create({});
 
     let capturedSearchQuery = null;
-    mm.search.search = mock.fn(async (q) => {
+    stubSearch(mm, async (q) => {
       capturedSearchQuery = q;
       return { fragments: [], totalTokens: 0, searchPath: "L2:0", count: 0, _searchEventId: null };
     });
@@ -384,7 +401,7 @@ describe("MemoryManager.recall — affect 필터 전달", async () => {
     const mm = MemoryManager.create({});
 
     let capturedSearchQuery = null;
-    mm.search.search = mock.fn(async (q) => {
+    stubSearch(mm, async (q) => {
       capturedSearchQuery = q;
       return { fragments: [], totalTokens: 0, searchPath: "L2:0", count: 0, _searchEventId: null };
     });
@@ -421,7 +438,7 @@ describe("Affective tagging — 테넌트 격리 회귀 검증", async () => {
     };
 
     mm.store.getLinkedFragments = mock.fn(async () => []);
-    mm.search.search = mock.fn(async (q) => {
+    stubSearch(mm, async (q) => {
       /** keyId 격리: key-B로 조회 시 key-A 파편 반환 안 함 */
       const keyArr  = Array.isArray(q.keyId) ? q.keyId : (q.keyId ? [q.keyId] : []);
       const allowed = keyArr.length > 0
@@ -452,7 +469,7 @@ describe("Affective tagging — 테넌트 격리 회귀 검증", async () => {
     ];
 
     mm.store.getLinkedFragments = mock.fn(async () => []);
-    mm.search.search = mock.fn(async (q) => {
+    stubSearch(mm, async (q) => {
       /** 마스터(keyId=null): 모든 파편 반환 */
       const keyArr    = Array.isArray(q.keyId) ? q.keyId : (q.keyId ? [q.keyId] : []);
       const filtered  = keyArr.length > 0

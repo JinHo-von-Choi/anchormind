@@ -35,7 +35,7 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | true, false (any other value is false) | MEMENTO_CONFIG_STRICT |
 | true, false (any other value fails startup in `MEMORY_CONFIG` validation) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (any other value is off) | MEMENTO_ADMIN_AUTH_BACKOFF |
-| on, off (any other value is on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK |
+| on, off (any other value is on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET |
 | mask, reject, off (any other value is mask) | MEMENTO_SENSITIVE_SCAN |
 | workspace, key (any other value is workspace) | MEMENTO_DEDUP_SCOPE |
 | true, false (any value other than false is true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
@@ -137,6 +137,7 @@ The name, documented default, purpose and category of each feature switch are in
 | MEMENTO_API_KEY_DELETE_GUARD | true | Refuses API key deletion with 409 while the key still owns fragments or link reconsolidation records. `false` deletes without the check |
 | MEMENTO_CASE_BACKPROP_ENABLED | false | When true, enables CaseRewardBackprop, which back-propagates tool_feedback reward signals along case_id fragment chains. Adjust importance scores of cause fragments based on outcome quality |
 | MEMENTO_STORAGE | pgvector | Storage backend name. Currently `pgvector` only; this value does not affect behavior. |
+| MEMENTO_RANK_BEFORE_BUDGET | on | recall budget selection switch. With `on`, the search layer returns candidates without a token budget cut (at most 200), recall merges linked fragments, scores every item with the final score (`computeRecallScore`) and then selects within `tokenBudget`. When all candidates fit, all are kept; otherwise one item per section (exact match, keyword supplement, linked, other) that fits the remaining budget is taken first (highest final score), then the rest is filled in order of MMR gain (relevance weight 0.7) per token. Of the solution that starts empty and the solution that starts from the search-order cut, the one with the larger final score sum is used. Linked fragments are selected within the budget too. The number of items that entered budget selection and the number kept are recorded in `search_events.candidate_count` and `budget_kept` (migration 052). With `off`, the search layer cuts the budget in search order and linked fragments are added outside the budget. Read at call time |
 | MEMENTO_KEYWORD_SEMANTIC_FALLBACK | true | Set `false` to disable the L3 semantic supplement for keywords-only recall queries without text. When active, one embedding of the normalized keywords text runs in parallel with L2, recovering fragments whose stored keywords lack the query terms via content matching |
 | MEMENTO_KEYWORD_FALLBACK_TIMEOUT_MS | 1500 | Upper bound (ms, clamped 100-60000) for the keyword-supplement L3 run. On timeout it resolves to an empty result and leaves `L3kw:timeout` in searchPath |
 | MEMENTO_CONTEXT_ANCHOR_LIMIT | 20 | Overall maximum number of anchor (isAnchor) fragments always included in context responses. The default changes from 10 to 20. Clamped to 1-30; falls back to 20 on parse failure. Anchors are not trimmed by tokenBudget, so this count cap is the only injection limit. Set 10 to retain the prior injection count |
@@ -1107,6 +1108,7 @@ Run `npm run migrate` to execute unapplied migrations in order. History is manag
 | 048 | migration-048-case-events-case-closed.sql | Adds `case_closed` to the `case_events.event_type` CHECK |
 | 049 | migration-049-align-synthetic-query-embedding.sql | History marker. The DDL that aligns the `fragment_synthetic_query.embedding` dimension with `fragments.embedding` is applied by `scripts/migrate.js` after the numbered migrations |
 | 050 | migration-050-dedup-scope-workspace.sql | Adds the per key and workspace content_hash unique indexes `uq_frag_hash_ws_per_key` and `uq_frag_hash_ws_master`. Production databases create them first with `scripts/ops/online-index.mjs`; the key-scope indexes are dropped in an operational step ([operations/online-migration.md](operations/online-migration.md#중복-판정-범위-전환)) |
+| 052 | migration-052-search-events-budget.sql | `search_events.candidate_count`, `budget_kept` (candidate count and kept count of recall budget selection, nullable). Searches that do not go through budget selection record NULL |
 | 054 | migration-054-outbox-events.sql | `outbox_events` table (transactional outbox: topic, aggregate_id, payload, available_at, attempts, processed_at, last_error, dead_at, claim_token) with partial indexes for pending, processed and dead-letter rows |
 
 ---

@@ -35,7 +35,7 @@
 | true, false (그 밖의 값은 false) | MEMENTO_CONFIG_STRICT |
 | true, false (그 밖의 값은 `MEMORY_CONFIG` 검증에서 기동 실패) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (그 밖의 값은 off) | MEMENTO_ADMIN_AUTH_BACKOFF |
-| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK |
+| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET |
 | mask, reject, off (그 밖의 값은 mask) | MEMENTO_SENSITIVE_SCAN |
 | workspace, key (그 밖의 값은 workspace) | MEMENTO_DEDUP_SCOPE |
 | true, false (false가 아닌 값은 true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
@@ -137,6 +137,7 @@
 | MEMENTO_API_KEY_DELETE_GUARD | true | API 키 삭제 전에 그 키의 파편과 재공고화 이력을 확인하고, 있으면 409로 거부한다. `false`면 확인 없이 삭제 |
 | MEMENTO_CASE_BACKPROP_ENABLED | false | true 시 CaseRewardBackprop 활성화. case verification 이벤트마다 증거 파편 importance를 자동 역전파. 비활성 시 호출 자체가 no-op(DB·메트릭 영향 0). DAG 일관성 베이스라인 확보 후 활성화 권장 |
 | MEMENTO_STORAGE | pgvector | 저장소 백엔드 이름. 현재 `pgvector` 하나이며 이 값은 동작에 영향을 주지 않는다. |
+| MEMENTO_RANK_BEFORE_BUDGET | on | recall 예산 선택 스위치. `on`이면 검색 계층이 토큰 예산으로 자르지 않은 후보(최대 200건)에 연결 파편을 합쳐 최종 점수(`computeRecallScore`)를 매긴 뒤 `tokenBudget` 안에서 고른다. 후보 전체가 예산 안이면 모두 고르고, 넘으면 구획(정확 일치, keywords 보조, 연결, 그 밖)마다 남은 예산에 들어가는 최고 점수 항목 하나를 먼저 고른 뒤 MMR 이득(관련성 0.7) 대비 토큰이 큰 순서로 채운다. 빈 집합에서 시작한 해와 검색 순서 절단 결과에서 시작한 해 가운데 최종 점수 합이 큰 쪽을 쓴다. 연결 파편도 예산 안에서 고르며, 예산 선택에 들어간 후보 수와 고른 수를 `search_events.candidate_count`, `budget_kept`(마이그레이션 052)에 기록한다. `off`이면 검색 계층이 검색 순서대로 예산을 자른 뒤 연결 파편을 예산 밖에서 더한다. 호출 시점에 읽는다 |
 | MEMENTO_KEYWORD_SEMANTIC_FALLBACK | true | `false` 설정 시 text 없는 keywords-only recall의 L3 시맨틱 보조 경로를 비활성화. 활성 시 정규화된 keywords 합성 텍스트 임베딩 1회가 L2와 병렬 수행되어 저장 keywords에 없는 용어도 content 기반으로 회수된다 |
 | MEMENTO_KEYWORD_FALLBACK_TIMEOUT_MS | 1500 | keywords 보조 L3 실행 상한(ms, 100~60000 클램프). 초과 시 빈 결과로 대체하고 searchPath에 `L3kw:timeout`을 남긴다 |
 | MEMENTO_CONTEXT_ANCHOR_LIMIT | 20 | context 응답에 항상 포함되는 앵커(isAnchor) 파편의 전체 최대 개수. 종전 기본값 10에서 20으로 변경되었다. 1~30 범위로 클램프되며 파싱 실패 시 20. 앵커는 tokenBudget 절삭 대상이 아니므로 이 개수 상한이 유일한 주입량 제한이다. 종전 주입량이 필요하면 10으로 설정한다 |
@@ -1187,6 +1188,7 @@ EMBEDDING_DIMENSIONS=768
 | 048 | migration-048-case-events-case-closed.sql | `case_events.event_type` CHECK에 `case_closed` 추가 |
 | 049 | migration-049-align-synthetic-query-embedding.sql | 이력 표식. `fragment_synthetic_query.embedding` 차원을 `fragments.embedding`에 맞추는 DDL은 `scripts/migrate.js`가 번호 마이그레이션 뒤에 적용 |
 | 050 | migration-050-dedup-scope-workspace.sql | 키와 workspace 단위 content_hash 유일 색인 `uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master` 추가. 운영 DB는 `scripts/ops/online-index.mjs`로 먼저 만들고, 키 범위 색인은 운영 단계로 지운다([operations/online-migration.md](operations/online-migration.md#중복-판정-범위-전환)) |
+| 052 | migration-052-search-events-budget.sql | `search_events.candidate_count`, `budget_kept`(recall 예산 선택의 후보 수와 선택 수, nullable). 예산 선택을 거치지 않은 검색은 NULL |
 | 054 | migration-054-outbox-events.sql | `outbox_events` 표(트랜잭션 outbox: topic, aggregate_id, payload, available_at, attempts, processed_at, last_error, dead_at, claim_token)와 대기, 완료, dead-letter 부분 색인 |
 
 ---
