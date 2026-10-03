@@ -29,7 +29,8 @@ const ROWS = [
   { id: "k-active",   name: "agent-a", status: "active",   permissions: ["read", "write"],           anchors_created: 120 },
   { id: "k-granted",  name: "agent-b", status: "active",   permissions: ["read", "write", "anchor"], anchors_created: 40 },
   { id: "k-admin",    name: "agent-c", status: "active",   permissions: ["admin"],                   anchors_created: 3 },
-  { id: "k-inactive", name: "agent-d", status: "inactive", permissions: ["read", "write"],           anchors_created: 2 }
+  { id: "k-inactive", name: "agent-d", status: "inactive", permissions: ["read", "write"],           anchors_created: 2 },
+  { id: "k-readonly", name: "agent-e", status: "active",   permissions: ["read"],                    anchors_created: 1 }
 ];
 
 /** 연결 대역. failOn이 문장 앞부분과 같으면 그 문장에서 실패한다. */
@@ -87,14 +88,16 @@ describe("인자와 분류", () => {
     assert.match(GRANT_SQL, /array_append\(permissions, 'anchor'\)/);
     assert.match(GRANT_SQL, /id = ANY\(\$1::text\[\]\)/);
     assert.match(GRANT_SQL, /status = 'active'/);
+    assert.match(GRANT_SQL, /'write' = ANY\(permissions\)/);
     assert.match(GRANT_SQL, /NOT \('anchor' = ANY\(permissions\)\)/);
   });
 
-  it("키를 부여, 이미 보유, 비활성으로 분류한다", () => {
+  it("키를 부여, 이미 보유, 비활성, write 없음으로 분류한다", () => {
     assert.equal(classifyKey(ROWS[0]), "grant");
     assert.equal(classifyKey(ROWS[1]), "skip_has_permission");
     assert.equal(classifyKey(ROWS[2]), "skip_has_permission");
     assert.equal(classifyKey(ROWS[3]), "skip_inactive");
+    assert.equal(classifyKey(ROWS[4]), "skip_no_write");
   });
 });
 
@@ -114,9 +117,10 @@ describe("dry-run 출력 구조", () => {
       assert.deepEqual(Object.keys(key).sort(), ["action", "anchorsCreated", "id", "name", "permissions", "status"]);
     }
     assert.deepEqual(report.keys.map(k => [k.id, k.action]), [
-      ["k-active", "grant"], ["k-granted", "skip_has_permission"], ["k-admin", "skip_has_permission"], ["k-inactive", "skip_inactive"]
+      ["k-active", "grant"], ["k-granted", "skip_has_permission"], ["k-admin", "skip_has_permission"],
+      ["k-inactive", "skip_inactive"], ["k-readonly", "skip_no_write"]
     ]);
-    assert.deepEqual(report.summary, { candidates: 4, toGrant: 1, granted: 0 });
+    assert.deepEqual(report.summary, { candidates: 5, toGrant: 1, granted: 0 });
 
     assert.deepEqual(client.calls.map(c => c.sql), [CANDIDATES_SQL]);
     assert.deepEqual(client.calls[0].params, [90]);
@@ -134,7 +138,7 @@ describe("--apply", () => {
     const report = JSON.parse(out.join("\n"));
     assert.equal(report.mode, "apply");
     assert.deepEqual(report.granted, ["k-active"]);
-    assert.deepEqual(report.summary, { candidates: 4, toGrant: 1, granted: 1 });
+    assert.deepEqual(report.summary, { candidates: 5, toGrant: 1, granted: 1 });
   });
 
   it("부여할 키가 없으면 갱신하지 않는다", async () => {

@@ -6,10 +6,12 @@
  * 작성일: 2026-10-03
  *
  * 목적: 최근 90일 동안 앵커 파편(is_anchor, created_at)을 만든 키를 찾아, 활성이고 anchor 권한이 없는
- *       키에만 anchor를 덧붙인다. 앵커 지정은 anchor 권한으로 분리되어 있으므로(MEMENTO_ANCHOR_PERMISSION)
+ *       키 가운데 write 권한이 있는 키에만 anchor를 덧붙인다. 앵커 지정은 anchor 권한으로 분리되어 있으므로(MEMENTO_ANCHOR_PERMISSION)
  *       앵커를 실제로 쓰는 키가 배포 직후에도 앵커를 계속 지정하게 한다.
  * 출력: 대상 키(id, 이름, 상태, 권한, 90일 앵커 수, 처리)와 집계를 JSON 한 덩어리로 표준 출력에 쓴다.
- *       처리 값은 grant(부여 대상), skip_has_permission(anchor 또는 admin 보유), skip_inactive(비활성 키).
+ *       처리 값은 grant(부여 대상), skip_has_permission(anchor 또는 admin 보유), skip_inactive(비활성 키),
+ *       skip_no_write(write 권한 없음). 기간 안의 앵커에는 정리 작업의 자동 앵커 승격으로 앵커가 된 파편도
+ *       들어간다(is_anchor와 created_at만 보므로 지정 경로를 가리지 않는다).
  *
  * 접속 대상: --url 또는 표준 PG 환경변수(PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD).
  *            환경 파일은 읽지 않는다. 대상이 명시되지 않으면 실행하지 않는다.
@@ -37,16 +39,17 @@ export const CANDIDATES_SQL =
   + `GROUP BY k.id, k.name, k.status, k.permissions `
   + `ORDER BY anchors_created DESC, k.id`;
 
-/** 대상 키에 anchor를 덧붙인다. 활성이고 anchor가 없는 키만 바뀐다. $1은 키 id 배열이다. */
+/** 대상 키에 anchor를 덧붙인다. 활성이고 write가 있으며 anchor가 없는 키만 바뀐다. $1은 키 id 배열이다. */
 export const GRANT_SQL =
   `UPDATE ${SCHEMA}.api_keys SET permissions = array_append(permissions, 'anchor') `
-  + `WHERE id = ANY($1::text[]) AND status = 'active' AND NOT ('anchor' = ANY(permissions)) `
+  + `WHERE id = ANY($1::text[]) AND status = 'active' AND 'write' = ANY(permissions) `
+  + `AND NOT ('anchor' = ANY(permissions)) `
   + `RETURNING id, name, permissions`;
 
 const USAGE = [
   "사용법: node scripts/grant-anchor-permission.js [--apply] [--url <postgres 주소>]",
   "  (옵션 없음)            최근 90일 앵커를 만든 키와 처리 예정을 JSON으로 출력하고 쓰지 않는다",
-  "  --apply                활성이고 anchor가 없는 대상 키에 anchor를 부여한다",
+  "  --apply                활성이고 write가 있으며 anchor가 없는 대상 키에 anchor를 부여한다",
   "  --url <postgres 주소>  접속 대상. 없으면 PGHOST, PGDATABASE 등 표준 PG 환경변수"
 ].join("\n");
 
@@ -79,11 +82,12 @@ export function parseGrantArgs(argv) {
  * 대상 키의 처리를 정한다.
  *
  * @param {{status: string, permissions: string[]}} row
- * @returns {"grant"|"skip_has_permission"|"skip_inactive"}
+ * @returns {"grant"|"skip_has_permission"|"skip_inactive"|"skip_no_write"}
  */
 export function classifyKey(row) {
-  if (row.status !== "active")             return "skip_inactive";
-  if (hasAnchorPermission(row.permissions)) return "skip_has_permission";
+  if (row.status !== "active")                  return "skip_inactive";
+  if (hasAnchorPermission(row.permissions))      return "skip_has_permission";
+  if (!(row.permissions ?? []).includes("write")) return "skip_no_write";
   return "grant";
 }
 

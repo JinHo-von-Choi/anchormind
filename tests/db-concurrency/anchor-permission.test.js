@@ -73,15 +73,17 @@ describe("anchor 권한 실서버", () => {
     const old      = await createApiKey({ name: `lane-old-${tag}`,      permissions: ["read", "write"] });
     const inactive = await createApiKey({ name: `lane-inactive-${tag}`, permissions: ["read", "write"] });
     const plain    = await createApiKey({ name: `lane-plain-${tag}`,    permissions: ["read", "write"] });
+    const readOnly = await createApiKey({ name: `lane-readonly-${tag}`, permissions: ["read"] });
     await seedKeyFragments(recent.id, 2, { ageDays: 10 });
     await seedKeyFragments(old.id, 2, { ageDays: 120 });
     await seedKeyFragments(inactive.id, 1, { ageDays: 5 });
     await seedKeyFragments(plain.id, 4, { anchor: false, ageDays: 5 });
+    await seedKeyFragments(readOnly.id, 1, { ageDays: 3 });
     await directQuery("UPDATE agent_memory.api_keys SET status = 'inactive' WHERE id = $1", [inactive.id]);
 
     const dry  = await runGrant();
-    const mine = (report) => Object.fromEntries(report.keys.filter(k => [recent.id, old.id, inactive.id, plain.id].includes(k.id)).map(k => [k.id, k.action]));
-    assert.deepEqual(mine(dry), { [recent.id]: "grant", [inactive.id]: "skip_inactive" });
+    const mine = (report) => Object.fromEntries(report.keys.filter(k => [recent.id, old.id, inactive.id, plain.id, readOnly.id].includes(k.id)).map(k => [k.id, k.action]));
+    assert.deepEqual(mine(dry), { [recent.id]: "grant", [inactive.id]: "skip_inactive", [readOnly.id]: "skip_no_write" });
     assert.deepEqual((await getAnchorState(recent.id)).permissions, ["read", "write"]);
 
     const applied = await runGrant(["--apply"]);
@@ -90,6 +92,7 @@ describe("anchor 권한 실서버", () => {
     for (const other of [old, inactive, plain]) {
       assert.deepEqual((await getAnchorState(other.id)).permissions, ["read", "write"]);
     }
+    assert.deepEqual((await getAnchorState(readOnly.id)).permissions, ["read"]);
 
     const again = await runGrant(["--apply"]);
     assert.equal(again.granted.includes(recent.id), false);
