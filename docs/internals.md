@@ -701,7 +701,7 @@ initialize 이후 모든 요청에서 `MCP-Protocol-Version` 헤더를 검사한
 
 MCP 2026-07-28 개정을 먼저 시도하는 클라이언트는 400 본문이 그 개정이 정한 오류(`-32020` HeaderMismatch, `-32021` MissingRequiredClientCapability, `-32022` UnsupportedProtocolVersion)가 아니면 initialize로 돌아간다. `-32000`은 구현 정의 구간(`-32000`~`-32019`)이므로 이 응답은 레거시 서버의 응답으로 판정된다. 서버는 `-32020`~`-32099` 구간의 코드를 내보내지 않고 `server/discover`를 처리하지 않는다(`tests/structure/protocol-era.test.js`).
 
-응답과 별개로 `classifyModernProtocolAttempt`가 MCP-Protocol-Version 헤더가 지원 목록 밖인지(`header`), `params._meta`에 `io.modelcontextprotocol/protocolVersion`이 있는지(`meta`), 둘 다인지(`header_and_meta`) 판정해 지표에 남긴다.
+응답과 별개로 `classifyModernProtocolAttempt`가 MCP-Protocol-Version 헤더가 지원 목록 밖인지(`header`), `params._meta`에 `io.modelcontextprotocol/protocolVersion`이 있는지(`meta`), 둘 다인지(`header_and_meta`) 판정해 지표에 남긴다. 본문이 배열이면 원소 중 하나라도 `_meta` 버전을 가지면 `meta` 신호로 보고 요청 하나를 한 번 센다.
 
 메트릭: `memento_modern_protocol_attempts_total` (label: `signal`)
 

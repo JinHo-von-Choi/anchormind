@@ -681,7 +681,7 @@ A request other than initialize that arrives without a session ID is not dispatc
 
 A client that tries the MCP 2026-07-28 revision first falls back to initialize when the 400 body is not an error defined by that revision (`-32020` HeaderMismatch, `-32021` MissingRequiredClientCapability, `-32022` UnsupportedProtocolVersion). `-32000` lies in the implementation-defined range (`-32000` to `-32019`), so this response identifies a legacy server. The server emits no code in the `-32020` to `-32099` range and does not handle `server/discover` (`tests/structure/protocol-era.test.js`).
 
-Independently of the response, `classifyModernProtocolAttempt` records whether the MCP-Protocol-Version header is outside the supported list (`header`), whether `params._meta` carries `io.modelcontextprotocol/protocolVersion` (`meta`), or both (`header_and_meta`).
+Independently of the response, `classifyModernProtocolAttempt` records whether the MCP-Protocol-Version header is outside the supported list (`header`), whether `params._meta` carries `io.modelcontextprotocol/protocolVersion` (`meta`), or both (`header_and_meta`). For an array (batch) body, the `meta` signal applies when any element carries the `_meta` version, and the request is counted once.
 
 Metric: `memento_modern_protocol_attempts_total` (label: `signal`)
 

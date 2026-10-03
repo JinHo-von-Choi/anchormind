@@ -107,7 +107,7 @@ outbox 게이지는 작업자를 돌리는 프로세스만 갱신한다. 작업�
 |-|-|-|
 | `memento_modern_protocol_attempts_total` | `signal` | 세션 없는 비initialize 요청 중 MCP-Protocol-Version 헤더가 지원 목록 밖이거나(`header`) `params._meta`에 `io.modelcontextprotocol/protocolVersion`이 있는(`meta`) 요청 수. 둘 다면 `header_and_meta`. 이 요청들은 세지는 것과 별개로 400과 JSON-RPC `-32000`("Session required")을 받는다 |
 
-`signal` 값은 `header`, `meta`, `header_and_meta` 세 값이고 기록 함수가 그 밖의 값을 `unknown`으로 닫는다. 지원 목록 안의 헤더나 헤더 없음만으로는 세지 않는다. 분모로 쓰는 `mcp_protocol_version_negotiations_total`은 `/mcp`와 레거시 SSE 경로의 initialize를 모두 센다.
+`signal` 값은 `header`, `meta`, `header_and_meta` 세 값이고 기록 함수가 그 밖의 값을 `unknown`으로 닫는다. 지원 목록 안의 헤더나 헤더 없음만으로는 세지 않는다. 본문이 배열(일괄 요청)이면 원소 중 하나라도 `_meta`에 프로토콜 버전을 가지면 `meta` 신호로 보고 요청 하나를 한 번 센다. 세션 없는 initialize는 세지 않는다. 분모로 쓰는 `mcp_protocol_version_negotiations_total`은 `/mcp`와 레거시 SSE 경로의 initialize를 모두 센다.
 
 ### 행 잠금 지표
 
