@@ -46,17 +46,30 @@ const INDEX_DDL = {
   [DEDUP_INDEXES.masterScoped]: `CREATE UNIQUE INDEX IF NOT EXISTS ${DEDUP_INDEXES.masterScoped} ON ${SCHEMA}.fragments (content_hash, (COALESCE(workspace, ''))) WHERE key_id IS NULL`
 };
 
+const KEY_ALIAS    = "fragments_new_key_id_content_hash_idx";
+const MASTER_ALIAS = "fragments_new_content_hash_idx";
+
 const STATES = {
-  legacy: [DEDUP_INDEXES.keyLegacy, DEDUP_INDEXES.masterLegacy],
-  both  : Object.values(DEDUP_INDEXES),
-  scoped: [DEDUP_INDEXES.keyScoped, DEDUP_INDEXES.masterScoped]
+  legacy     : [DEDUP_INDEXES.keyLegacy, DEDUP_INDEXES.masterLegacy],
+  both       : Object.values(DEDUP_INDEXES),
+  scoped     : [DEDUP_INDEXES.keyScoped, DEDUP_INDEXES.masterScoped],
+  alias      : [KEY_ALIAS, MASTER_ALIAS],
+  aliasScoped: [KEY_ALIAS, MASTER_ALIAS, DEDUP_INDEXES.keyScoped, DEDUP_INDEXES.masterScoped]
 };
 
-/** 판정 색인을 state 구성으로 맞춘다. 표를 비우고 모든 판정 색인(무효 상태 포함)을 지운 뒤 만든다. */
+/** 표를 다시 만든 설치의 키 범위 색인. 이름만 다르고 정의는 키 범위 색인과 같다. */
+const ALIAS_DDL = {
+  [KEY_ALIAS]   : `CREATE UNIQUE INDEX ${KEY_ALIAS} ON ${SCHEMA}.fragments (key_id, content_hash) WHERE key_id IS NOT NULL`,
+  [MASTER_ALIAS]: `CREATE UNIQUE INDEX ${MASTER_ALIAS} ON ${SCHEMA}.fragments (content_hash) WHERE key_id IS NULL`
+};
+
+/** 판정 색인을 state 구성으로 맞춘다. 표를 비우고 모든 판정 색인(무효 상태, 다른 이름 포함)을 지운 뒤 만든다. */
 async function setIndexes(state) {
   await directQuery(`DELETE FROM ${SCHEMA}.fragments`);
-  for (const name of Object.values(DEDUP_INDEXES)) await directQuery(`DROP INDEX IF EXISTS ${SCHEMA}.${name}`);
-  for (const name of STATES[state]) await directQuery(INDEX_DDL[name]);
+  for (const name of [...Object.values(DEDUP_INDEXES), ...Object.keys(ALIAS_DDL)]) {
+    await directQuery(`DROP INDEX IF EXISTS ${SCHEMA}.${name}`);
+  }
+  for (const name of STATES[state]) await directQuery(INDEX_DDL[name] ?? ALIAS_DDL[name]);
   invalidateDedupIndexes();
   assert.deepEqual(await validIndexes(), [...STATES[state]].sort());
 }
@@ -65,7 +78,7 @@ async function validIndexes() {
   const { rows } = await directQuery(
     `SELECT c.relname AS name FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
       WHERE c.relnamespace = '${SCHEMA}'::regnamespace AND c.relname = ANY($1::text[]) AND i.indisvalid
-      ORDER BY 1`, [Object.values(DEDUP_INDEXES)]);
+      ORDER BY 1`, [[...Object.values(DEDUP_INDEXES), KEY_ALIAS, MASTER_ALIAS]]);
   return rows.map(r => r.name);
 }
 
@@ -431,6 +444,100 @@ describe("마무리 스크립트", () => {
     assert.equal(await run(), 0);
     assert.deepEqual(await validIndexes(), [...STATES.scoped].sort());
     assert.equal(await run(), 0);
+  });
+});
+
+describe("키 범위 색인이 다른 이름으로만 있는 설치", () => {
+  for (const state of ["alias", "aliasScoped"]) {
+    for (const keyId of [KEY, null]) {
+      it(`${state} 색인, ${keyId ? "키 보유" : "마스터"} 경로: 다른 workspace의 같은 본문은 오류 없이 기존 파편이다`, async () => {
+        await setIndexes(state);
+        const first = await insert("ws-a", { keyId });
+        assert.equal(await insert("ws-b", { keyId }), first, "remember");
+        assert.equal(await insertAtomic("ws-c", { keyId }), first, "원자 remember");
+        assert.equal(await rowCount(), 1);
+        const batched = await batch(["ws-a", "ws-b"], keyId);
+        assert.equal(batched.results[1].id, batched.results[0].id, "batch_remember");
+        assert.equal(await rowCount(), 2, "batch 와 remember 는 content_hash 형식이 달라 따로 남는다");
+      });
+    }
+  }
+
+  it("amend 도 키 범위로 판정한다", async () => {
+    await setIndexes("aliasScoped");
+    const a = await insert("ws-a");
+    const b = await insert("ws-b", { content: OTHER });
+    assert.deepEqual(await amend(b, TEXT), { merged: true, existingId: a });
+  });
+
+  it("마무리 스크립트가 다른 이름의 색인을 지우면 두 workspace의 같은 본문이 따로 저장된다", async () => {
+    await setIndexes("aliasScoped");
+    const out  = [];
+    const code = await finishDedupScope(["--confirm", "--url", LANE_URL()], {}, { out: l => out.push(l), err: l => out.push(l) });
+    assert.equal(code, 0, out.join("\n"));
+    assert.ok(out.some(l => l.includes(`${KEY_ALIAS} 을 지웠다`)));
+    assert.ok(out.some(l => l.includes(`${MASTER_ALIAS} 을 지웠다`)));
+    assert.equal(await indexFlags(KEY_ALIAS), null);
+    assert.equal(await indexFlags(MASTER_ALIAS), null);
+    invalidateDedupIndexes();
+    for (const keyId of [KEY, null]) {
+      const first = await insert("ws-a", { keyId });
+      assert.notEqual(await insert("ws-b", { keyId }), first);
+    }
+    assert.equal(await rowCount(), 4);
+  });
+
+  it("마무리 스크립트가 지우는 동안 동시 쓰기의 클라이언트 오류가 0건이다", { timeout: 60_000 }, async () => {
+    await setIndexes("aliasScoped");
+    invalidateDedupIndexes();
+    await insert("ws-a");
+    const contents = ["동시 쓰기 실서버 시험 본문 하나", "동시 쓰기 실서버 시험 본문 둘", TEXT];
+    const spaces   = ["ws-a", "ws-b", "ws-c", null];
+    const errors   = [];
+    let   writes   = 0;
+    let   finished = false;
+
+    /** 키 보유와 마스터 경로의 remember, 원자 remember, batch_remember 를 돌아가며 실행한다. */
+    async function writerLoop(seed) {
+      for (let i = seed; !finished || i < seed + 12; i++) {
+        const opts = { keyId: i % 3 === 0 ? null : KEY, content: contents[i % contents.length] };
+        const ws   = spaces[i % spaces.length];
+        try {
+          if (i % 4 === 0)      await insertAtomic(ws, opts);
+          else if (i % 4 === 1) await batch([ws, spaces[(i + 1) % spaces.length]], opts.keyId, opts.content);
+          else                  await insert(ws, opts);
+          writes++;
+        } catch (err) {
+          errors.push(`${err.code ?? ""} ${err.constraint ?? ""} ${err.message}`);
+        }
+      }
+    }
+
+    const reader  = await holdReader();
+    const writers = [0, 1, 2, 3].map(n => writerLoop(n * 5));
+    const out     = [];
+    const running = finishDedupScope(["--confirm", "--url", LANE_URL(), "--retry-wait-ms", "100"], {},
+      { out: l => out.push(l), err: l => out.push(l) });
+    await waitUntil(async () => (await indexFlags(KEY_ALIAS))?.valid === false);
+    const atInvalid = writes;
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const duringDrop = writes - atInvalid;
+    await reader.release();
+    const code = await running;
+    finished = true;
+    await Promise.all(writers);
+
+    assert.equal(code, 0, out.join("\n"));
+    assert.deepEqual(errors, []);
+    assert.ok(duringDrop > 0, "DROP INDEX CONCURRENTLY 가 기다리는 동안에도 쓰기가 끝난다");
+    assert.ok(writes >= 48, `쓰기 ${writes}건`);
+    assert.equal(await indexFlags(KEY_ALIAS), null);
+    assert.equal(await indexFlags(MASTER_ALIAS), null);
+    const { rows } = await directQuery(
+      `SELECT key_id, COALESCE(workspace, '') AS ws, content_hash, count(*)::int AS n
+         FROM ${SCHEMA}.fragments GROUP BY 1, 2, 3 HAVING count(*) > 1`
+    );
+    assert.deepEqual(rows, []);
   });
 });
 
