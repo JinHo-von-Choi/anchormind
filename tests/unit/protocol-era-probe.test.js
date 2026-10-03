@@ -30,7 +30,7 @@ describe("checkDotenvPath", () => {
     assert.equal(checkDotenvPath("/tmp/x/probe.env", { exists, tmpRoot: "/tmp" }), "/tmp/x/probe.env");
   });
 
-  it("미설정, 임시 디렉터리 밖의 있는 파일, 임시 디렉터리 자체, 상위 경로 우회는 거부한다", () => {
+  it("미설정, 임시 디렉터리 밖의 있는 파일, 임시 디렉터리 자체, 상위 경로로 나가는 경로는 거부한다", () => {
     const cases = [undefined, "", "/srv/app/.env.test", "/tmp", "/tmp/../srv/app/.env.test"];
     for (const value of cases) {
       assert.throws(() => checkDotenvPath(value, { exists: (p) => p === "/tmp" || exists(p), tmpRoot: "/tmp" }), { name: "ProbeConfigError" }, String(value));

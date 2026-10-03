@@ -108,7 +108,7 @@ describe("anchormind hook과 작업 디렉터리의 .env", () => {
     assert.equal(r.envReads, "");
   });
 
-  it("다른 명령은 이전처럼 작업 디렉터리의 .env를 읽는다(사전 적재 모듈이 읽기를 기록한다)", async () => {
+  it("다른 명령은 작업 디렉터리의 .env를 읽는다(사전 적재 모듈이 읽기를 기록한다)", async () => {
     const log = path.join(dir, "probe-other.log");
     const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(MEMENTO_CLI_|DOTENV_)/.test(k)));
     const code = await new Promise((resolve) => {
