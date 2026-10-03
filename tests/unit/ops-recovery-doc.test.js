@@ -116,6 +116,27 @@ describe("문서의 단일 파편 복구 스크립트: 삭제 목록 대조", ()
     assert.equal(prodWrote, false);
   });
 
+  it("목록의 id 앞뒤 공백(스페이스, 탭)은 무시하고 일치로 판정한다", () => {
+    for (const list of ["other\nfrag-2 \n", "other\n  frag-2\n", "other\n\tfrag-2\t\n", "other\r\n frag-2 \r\n"]) {
+      const { res, prodWrote } = run({ list });
+      assert.equal(res.status, 1, JSON.stringify(list));
+      assert.match(res.stderr, /삭제 목록에 있는 id/);
+      assert.equal(prodWrote, false);
+    }
+  });
+
+  it("복구본이 돌려준 id 의 앞뒤 공백도 무시하고 일치로 판정한다", () => {
+    const { res, prodWrote } = run({ list: "frag-2\n", ids: " frag-1\t\nfrag-2  \n" });
+    assert.equal(res.status, 1);
+    assert.equal(prodWrote, false);
+  });
+
+  it("공백만 있는 줄은 빈 줄로 보고, 공백이 낀 다른 id 는 일치로 보지 않는다", () => {
+    const { res, prodWrote } = run({ list: "  \n\t\nfrag 2\nunrelated \n" });
+    assert.equal(res.status, 0, res.stderr);
+    assert.equal(prodWrote, true);
+  });
+
   it("목록 파일이 없으면 중단한다", () => {
     const { res, prodWrote, leftovers } = run({ list: null });
     assert.equal(res.status, 1);

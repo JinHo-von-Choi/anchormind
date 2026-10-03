@@ -446,7 +446,7 @@ DATABASE_URL=$DATABASE_URL node scripts/backfill-embeddings.js
 | 변수 | 기본값 | 설명 |
 |-|-|-|
 | MEMENTO_BACKUP_DIR | `$XDG_STATE_HOME/memento-mcp/backups`, 없으면 `$HOME/.local/state/memento-mcp/backups` | 백업 저장 위치. 저장소 밖의 경로여야 한다(저장소 안쪽, 파일 시스템 루트, 홈 디렉터리 자체는 거부). `--dir` 인자가 우선한다 |
-| MEMENTO_BACKUP_KEEP_DAYS | 14 | 보관할 날짜 수. 1 이상의 정수. `--keep` 인자가 우선한다 |
+| MEMENTO_BACKUP_KEEP_DAYS | 14 | 보관할 날짜 수. 1 이상 9999 이하의 정수. `--keep` 인자가 우선한다 |
 
 ---
 
