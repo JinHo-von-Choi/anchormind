@@ -32,6 +32,7 @@ const ALLOWED = {
   "admin/admin-keys.js": 1,
   "admin/admin-memory.js": 12,
   "admin/admin-routes.js": 6,
+  "admin/ReviewStore.js": 6, // 검토 대기 목록, 결정 대상 행 잠금과 승인, 거절 상태 변경, 자동 거절의 잠금과 갱신. 결정 기록 표와 같은 트랜잭션에 쓰므로 데이터 계층 객체를 거치지 않는다
   "cli/inspect.js": 1,
   "cli/stats.js": 5,
   "memory/FragmentIndex.js": 1,

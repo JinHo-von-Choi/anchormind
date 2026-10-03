@@ -43,7 +43,9 @@ const LABEL_PARAMS = new Map([
   ["recordClaim",                   [0, 1]],
   ["recordRememberDuplicate",       [0]],
   ["recordWriteGate",               [0, 1]],
-  ["recordCoreTrustExcluded",       [0]]
+  ["recordCoreTrustExcluded",       [0]],
+  ["recordReviewFlag",              [0, 1]],
+  ["recordReviewDecision",          [0]]
 ]);
 
 /** 기록 함수 안에서 protocolVersionLabel로 값을 닫는 함수 */
@@ -88,6 +90,9 @@ const REVIEWED = new Map([
   ["lib/memory/write/WriteGate.js|recordWarning|v.severity || \"low\"",             "PolicyRules 심각도 상수"],
   ["lib/memory/write/WriteGate.js|recordGateBlock|rule",                          "PolicyRules 규칙 이름, workspace 판정 규칙 이름, 민감 정보 규칙 표의 이름, hard gate 조회 실패 상수"],
   ["lib/memory/write/WriteGate.js|recordWriteGate|state.entry",                    "호출자가 WRITE_ENTRIES 상수로 넘기는 진입점 이름"],
+  ["lib/memory/write/WriteGate.js|recordReviewFlag|state.entry",                   "검토 단계가 REVIEW_ENTRIES 안의 진입점에서만 표지를 단다"],
+  ["lib/memory/write/WriteGate.js|recordReviewFlag|reason",                        "ReviewQueue.REVIEW_REASONS 상수"],
+  ["lib/admin/ReviewStore.js|recordReviewDecision|decision",                       "REVIEW_DECISIONS 검증 뒤에만 도달하고 기록 함수가 닫힌 집합 밖을 other로 닫는다"],
   ["lib/memory/processors/RememberDuplicate.js|recordRememberDuplicate|kind",      "classifyDuplicate가 돌려주는 네 값이고 기록 함수가 그 밖의 값을 unknown으로 닫는다"],
   ["lib/handlers/mcp-handler.js|recordModernProtocolAttempt|signal",              "classifyModernProtocolAttempt가 돌려주는 세 값이고 기록 함수가 그 밖의 값을 unknown으로 닫는다"],
   ["lib/memory/write/RememberPostProcessor.js|recordClaim|c.extractor ?? \"morpheme-rule\"", "ClaimExtractor 추출기 이름"],
