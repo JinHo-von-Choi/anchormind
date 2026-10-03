@@ -288,12 +288,14 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-055-api-keys-egress-policy
 
 # admin_audit_events audit hash chain table
 psql $DATABASE_URL -f lib/memory/migrations/migration-056-admin-audit-events.sql
+
 # Fragment provenance, trust tier and review state columns
 psql $DATABASE_URL -f lib/memory/migrations/migration-057-fragment-provenance.sql
 
 # Review decision table and review_state value constraint
 psql $DATABASE_URL -f lib/memory/migrations/migration-058-review-decisions.sql
 
+# admin accounts, role bindings, database sessions, recovery codes, external identities
 psql $DATABASE_URL -f lib/memory/migrations/migration-060-admin-users.sql
 ```
 
