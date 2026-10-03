@@ -21,8 +21,9 @@ mock.module("../../lib/tools/db.js", {
   namedExports: {
     ...realDb,
     queryWithAgentVector: async (agent, sql, params, opts) => {
-      if (/gc_candidates/.test(sql)) {
-        gcSql.push(sql);
+      const gcText = opts?.lock?.sql ?? sql;
+      if (/gc_candidates/.test(gcText)) {
+        gcSql.push(gcText);
         return { rows: [], rowCount: 7 };
       }
       return dbRef.fake.queryWithAgentVector(agent, sql, params, opts);
