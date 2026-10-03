@@ -36,7 +36,7 @@ async function gaugeValues(gauge) {
 
 function stubRun({ column = true, rows = [], fail = null } = {}) {
   const calls = [];
-  const run   = async (sql, params) => {
+  const run   = async (sql) => {
     calls.push(sql);
     if (sql.includes("column_present")) return { rows: [{ column_present: column, indexes: [] }] };
     if (fail) throw fail;

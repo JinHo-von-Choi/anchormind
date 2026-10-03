@@ -18,13 +18,13 @@
  * 종료 코드: 0 성공, 1 실행 실패, 2 인자, 대상, 선행 조건 거부.
  *
  * 사용 예:
- *   PGHOST=... PGDATABASE=... PGUSER=... PGPASSWORD=... node scripts/ops/backfill-content-tokens.mjs
- *   PGHOST=... PGDATABASE=... PGUSER=... PGPASSWORD=... node scripts/ops/backfill-content-tokens.mjs --confirm
+ *   PGHOST=... PGDATABASE=... PGUSER=... PGPASSWORD=... node scripts/backfill-content-tokens.mjs
+ *   PGHOST=... PGDATABASE=... PGUSER=... PGPASSWORD=... node scripts/backfill-content-tokens.mjs --confirm
  */
 
 import os   from "node:os";
 import path from "node:path";
-import { resolveTarget, OnlineIndexUsageError } from "./online-index-plan.mjs";
+import { resolveTarget, OnlineIndexUsageError } from "./ops/online-index-plan.mjs";
 
 export const DEFAULT_JOB        = "content-tokens";
 export const DEFAULT_BATCH_SIZE = 200;
@@ -59,7 +59,7 @@ const TABLES_SQL    = "SELECT to_regclass($1) AS watermark, to_regclass($2) AS f
 const WATERMARK_SQL = "SELECT last_id, rows_done::text AS rows_done, status FROM agent_memory.backfill_watermarks WHERE job = $1";
 
 const USAGE = [
-  "사용법: node scripts/ops/backfill-content-tokens.mjs [--confirm] [옵션]",
+  "사용법: node scripts/backfill-content-tokens.mjs [--confirm] [옵션]",
   "  (기본)                  미리보기. 키별 미채움 수와 작업 상태만 출력하고 쓰지 않는다",
   "  --confirm               실행(배포 전 백업 완료가 전제다)",
   "  --dry-run               미리보기(--confirm보다 우선)",
@@ -186,11 +186,11 @@ export function makePrepareBatch(run, tokenize) {
 
 /** lib 모듈을 불러와 실행 의존성을 만든다. prepareEnvironment 뒤에만 부른다. */
 async function loadRuntime() {
-  const config     = await import("../../lib/config.js");
-  const db         = await import("../../lib/tools/db.js");
-  const backfill   = await import("../../lib/memory/consolidate/resumableBackfill.js");
-  const schema     = await import("../../lib/memory/LexicalSchema.js");
-  const tokens     = await import("../../lib/memory/embedding/LexicalTokens.js");
+  const config     = await import("../lib/config.js");
+  const db         = await import("../lib/tools/db.js");
+  const backfill   = await import("../lib/memory/consolidate/resumableBackfill.js");
+  const schema     = await import("../lib/memory/LexicalSchema.js");
+  const tokens     = await import("../lib/memory/embedding/LexicalTokens.js");
   return {
     config               : { DB_HOST: config.DB_HOST, DB_PORT: config.DB_PORT, DB_NAME: config.DB_NAME },
     run                  : (sql, params) => db.queryWithAgentVector("system", sql, params),

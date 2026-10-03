@@ -15,7 +15,7 @@ import os               from "node:os";
 import {
   parseBackfillArgs, prepareEnvironment, buildBatchParams, makePrepareBatch, main,
   BACKFILL_WHERE, BACKFILL_SET, CANDIDATE_SQL, DEFAULT_JOB, DEFAULT_BATCH_SIZE, BackfillUsageError
-} from "../../scripts/ops/backfill-content-tokens.mjs";
+} from "../../scripts/backfill-content-tokens.mjs";
 
 const TARGET_ENV = { PGHOST: "db.internal.test", PGPORT: "6543", PGDATABASE: "memento", PGUSER: "ops", PGPASSWORD: "s3cret-pw" };
 

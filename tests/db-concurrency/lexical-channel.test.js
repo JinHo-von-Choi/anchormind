@@ -31,7 +31,7 @@ const { loadLexicalSchema, resetLexicalSchema } = await import("../../lib/memory
 const { buildLexicalTsquery }           = await import("../../lib/memory/embedding/LexicalTokens.js");
 const { ensureBackfillTables, runResumableBackfill } = await import("../../lib/memory/consolidate/resumableBackfill.js");
 const { contentTokenDocument }          = await import("../../lib/memory/embedding/LexicalTokens.js");
-const backfillScript                    = await import("../../scripts/ops/backfill-content-tokens.mjs");
+const backfillScript                    = await import("../../scripts/backfill-content-tokens.mjs");
 
 const RUN    = `lx-${crypto.randomBytes(4).toString("hex")}`;
 const KEY_A  = `${RUN}-a`;
