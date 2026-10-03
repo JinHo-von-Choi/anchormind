@@ -656,7 +656,7 @@ Fragment-based memory storage. Store exactly one atomic fact in 1-2 sentences. I
 | importance | number | - | Importance 0-1 (type-specific default if not provided) |
 | source | string | - | Source (session ID, tool name, etc.) |
 | linkedTo | string[] | - | List of existing fragment IDs to link to |
-| scope | string | - | Storage scope. permanent=long-term memory (default), session=session working memory (destroyed on session end) |
+| scope | string | - | Storage scope. permanent=long-term memory (default), session=session working memory (kept for 24 hours, consumed by session synthesis). Requires `sessionId`; without it the fragment is stored as permanent. Passes the same semantic write gate as permanent storage |
 | isAnchor | boolean | - | Pin important fragment. When true, excluded from importance decay and expiration deletion. |
 | supersedes | string[] | - | List of existing fragment IDs to replace. Specified fragments have their valid_to set and importance halved. |
 | contextSummary | string | - | Context/background summary of how this memory arose (1-2 sentences). Returned alongside the fragment on recall to restore context. |
@@ -735,6 +735,8 @@ With violations (soft gate, stored):
 Warnings are soft gates and do not block storage. When `api_keys.symbolic_hard_gate=true`, fragments triggering warnings are rejected. `fragmentHasWorkspace` is only included in the hard-gate-eligible set when `MEMENTO_WORKSPACE_GATE=true`; by default (`false`) it never blocks storage even on hard-gate-enabled keys.
 
 `workspaceNotAllowed` — recorded when a fragment's workspace falls outside the API key's `allowed_workspaces` set (severity: medium). Evaluated unconditionally, independent of `MEMENTO_SYMBOLIC_POLICY_RULES`. It is a pure warning that never blocks storage and is always excluded from the hard-gate-eligible set.
+
+A `scope=session` response reports the storage path in `working_memory`. `redis` means Redis working memory. `postgres-fallback` means Redis was not ready and the fragment was stored as a PostgreSQL working memory row (`MEMENTO_WM_PG_FALLBACK=on`, the default); `_meta.hints` then carries `working_memory_fallback`. `none` means Redis was not ready and the fallback is off, so nothing was stored; `_meta.hints` carries `working_memory_unavailable`, and the fragment must be stored with `scope=permanent` to be kept. Fallback rows do not appear in `recall`, consolidation or quota counts, and are read by `context` and `reflect` (`sessionId`). Policy warnings are reported in `validation_warnings`.
 
 Fragments also record the resolution source of their workspace as `workspace_source`: `explicit` (workspace given in the request), `key_default` (the API key's default_workspace was applied), or `unscoped` (neither was available).
 

@@ -673,7 +673,7 @@ reason code 목록 (최대 3개):
 | importance | number | - | 중요도 0~1 (미입력 시 type별 기본값) |
 | source | string | - | 출처 (세션 ID, 도구명 등) |
 | linkedTo | string[] | - | 연결할 기존 파편 ID 목록 |
-| scope | string | - | 저장 범위. permanent=장기 기억(기본), session=세션 워킹 메모리(세션 종료 시 소멸) |
+| scope | string | - | 저장 범위. permanent=장기 기억(기본), session=세션 워킹 메모리(보관 시간 24시간, 세션 종합 때 소비). `sessionId`가 있어야 하며 없으면 permanent로 저장된다. 영구 저장과 같은 의미 쓰기 관문을 거친다 |
 | isAnchor | boolean | - | 중요 파편 고정 여부. true 시 중요도 감쇠(decay) 및 만료 삭제 대상에서 제외됨. |
 | supersedes | string[] | - | 대체할 기존 파편 ID 목록. 지정된 파편은 valid_to가 설정되고 importance가 반감된다. |
 | contextSummary | string | - | 이 기억이 생긴 맥락/배경 요약 (1-2문장). recall 시 함께 반환되어 전후관계를 복원한다. |
@@ -752,6 +752,8 @@ violations 있는 경우 (soft gate — 저장됨):
 경고는 soft gate이므로 저장을 차단하지 않는다. `api_keys.symbolic_hard_gate=true` 설정 시 경고 발생 파편은 저장 거부된다. 이 경우 아래 에러 코드가 반환된다. `fragmentHasWorkspace`는 `MEMENTO_WORKSPACE_GATE=true`일 때만 hard gate 대상에 포함되며, 기본값(`false`)에서는 hard gate 활성 키에서도 저장을 차단하지 않는다.
 
 `workspaceNotAllowed` — 파편의 workspace가 API 키의 `allowed_workspaces` 허가 집합 밖일 때 기록되는 경고(severity: medium). `MEMENTO_SYMBOLIC_POLICY_RULES` 설정과 무관하게 항상 평가되며, 저장을 거부하지 않는 순수 경고로 hard gate 대상에서 항상 제외된다.
+
+`scope=session` 응답은 저장 경로를 `working_memory`로 알린다. `redis`는 Redis 작업 기억, `postgres-fallback`은 Redis가 준비되지 않아 `MEMENTO_WM_PG_FALLBACK=on`(기본)의 PostgreSQL 작업 기억 행으로 저장했다는 뜻이며 `_meta.hints`에 `working_memory_fallback`이 실린다. `none`은 Redis가 준비되지 않았고 대체 경로가 꺼져 있어 저장하지 못했다는 뜻이며 `_meta.hints`에 `working_memory_unavailable`이 실린다. 이 경우 `scope=permanent`로 저장해야 기억이 남는다. 대체 경로 행은 `recall`, 통합, 할당량 집계에 나타나지 않고 `context`와 `reflect`(`sessionId`)가 읽는다. 정책 경고는 `validation_warnings`로 알린다.
 
 파편에는 workspace 해석 출처가 `workspace_source`로 함께 기록된다: `explicit`(요청에 workspace 명시) · `key_default`(API 키의 default_workspace 적용) · `unscoped`(둘 다 없어 미지정).
 
