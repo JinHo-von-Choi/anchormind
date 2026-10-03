@@ -24,7 +24,7 @@ const { renderKeyInspector, KEY_PERMISSION_TOGGLES } = await import("../../asset
 
 describe("권한 목록 검증", () => {
   it("서버가 받는 권한 값에 trusted_origin이 있다", () => {
-    assert.deepEqual([...KEY_PERMISSION_VALUES], ["read", "write", TRUSTED_ORIGIN_PERMISSION]);
+    assert.deepEqual([...KEY_PERMISSION_VALUES], ["read", "write", TRUSTED_ORIGIN_PERMISSION, "review_off", "review_all"]);
   });
 
   it("read 또는 write와 함께면 받는다", () => {

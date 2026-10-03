@@ -70,8 +70,32 @@ export function keyInUseMessage(data) {
 /** default_mode로 지정할 수 있는 preset. 서버가 받는 목록과 같다(requiresMaster preset 제외). */
 export const KEY_MODE_OPTIONS = ["recall-only", "write-only", "onboarding"];
 
-/** 키 상세의 권한 토글. 서버가 받는 권한 값과 같다(trusted_origin은 출처 신뢰 등급 상한). */
-export const KEY_PERMISSION_TOGGLES = ["read", "write", "trusted_origin"];
+/**
+ * 키 상세의 권한 토글. 서버가 받는 권한 값과 같다(trusted_origin은 출처 신뢰 등급 상한,
+ * review_off와 review_all은 검토 대기열 방식이며 하나만 둘 수 있다).
+ */
+export const KEY_PERMISSION_TOGGLES = ["read", "write", "trusted_origin", "review_off", "review_all"];
+
+/** 함께 둘 수 없는 검토 방식 표지 */
+const REVIEW_TOGGLES = ["review_off", "review_all"];
+
+/**
+ * 권한 하나를 토글한 다음 목록. 검토 방식 표지를 켜면 다른 검토 방식 표지를 끈다.
+ *
+ * @param {string[]} permissions
+ * @param {string}   value
+ * @returns {string[]}
+ */
+export function togglePermission(permissions, value) {
+  const current = new Set(permissions || []);
+  if (current.has(value)) {
+    current.delete(value);
+  } else {
+    if (REVIEW_TOGGLES.includes(value)) REVIEW_TOGGLES.forEach(m => current.delete(m));
+    current.add(value);
+  }
+  return Array.from(current);
+}
 
 /** allowed_workspaces 입력 한도. 서버 검증과 같다. */
 export const KEY_WORKSPACE_LIMITS = { count: 64, length: 128 };
@@ -593,9 +617,7 @@ export function renderKeyInspector(key, container) {
       (active ? "bg-primary/20 text-primary border-primary/30" : "bg-transparent text-slate-600 border-white/10");
     btn.textContent = p.toUpperCase();
     btn.addEventListener("click", async () => {
-      const current = new Set(key.permissions || []);
-      if (current.has(p)) current.delete(p); else current.add(p);
-      const perms = Array.from(current);
+      const perms = togglePermission(key.permissions, p);
       if (!perms.length) { showToast("At least one permission required", "warning"); return; }
       const r = await api("/keys/" + key.id + "/permissions", { method: "PUT", body: { permissions: perms } });
       if (r.ok) { showToast("Permissions updated", "success"); key.permissions = perms; renderKeys(container); }

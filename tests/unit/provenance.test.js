@@ -201,19 +201,19 @@ describe("서버 주입 문맥", () => {
   it("세션 문맥에서 클라이언트 이름과 키 상한을 만든다", () => {
     assert.deepEqual(
       provenanceContext({ _clientName: "cursor", _isMaster: false, _permissions: ["read", "write"] }),
-      { clientName: "cursor", trustCap: 2 }
+      { clientName: "cursor", trustCap: 2, reviewMode: null }
     );
-    assert.deepEqual(provenanceContext({ _isMaster: true, _permissions: null }), { clientName: null, trustCap: 3 });
-    assert.deepEqual(provenanceContext({}), { clientName: null, trustCap: 2 });
-    assert.deepEqual(provenanceContext(null), { clientName: null, trustCap: 2 });
+    assert.deepEqual(provenanceContext({ _isMaster: true, _permissions: null }), { clientName: null, trustCap: 3, reviewMode: null });
+    assert.deepEqual(provenanceContext({}), { clientName: null, trustCap: 2, reviewMode: null });
+    assert.deepEqual(provenanceContext(null), { clientName: null, trustCap: 2, reviewMode: null });
   });
 
   it("서버가 넘긴 _provenance가 있으면 그 값을 정규화해 쓴다", () => {
     assert.deepEqual(
       provenanceContext({ _provenance: { clientName: "c\u0000", trustCap: 3 }, _isMaster: false }),
-      { clientName: "c_", trustCap: 3 }
+      { clientName: "c_", trustCap: 3, reviewMode: null }
     );
-    assert.deepEqual(provenanceContext({ _provenance: { trustCap: 9 } }), { clientName: null, trustCap: 2 });
+    assert.deepEqual(provenanceContext({ _provenance: { trustCap: 9 } }), { clientName: null, trustCap: 2, reviewMode: null });
   });
 });
 
