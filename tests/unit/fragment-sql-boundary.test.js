@@ -54,7 +54,7 @@ const ALLOWED = {
   "memory/read/CaseRecall.js": 2,
   "memory/CaseEventStore.js": 1,
   "memory/read/ContextBuilder.js": 1,
-  "memory/read/FragmentReader.js": 15,
+  "memory/read/FragmentReader.js": 16, // recall 예산 선택의 저장 토큰 수 조회(getStoredTokenCounts)
   "memory/read/HistoryReconstructor.js": 1,
   "memory/read/KeyNameEnricher.js": 1,
   "memory/read/RecallSuggestionEngine.js": 2,
