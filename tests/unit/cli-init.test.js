@@ -15,9 +15,12 @@ import fs                                      from "node:fs";
 import os                                      from "node:os";
 import path                                    from "node:path";
 import { fileURLToPath }                       from "node:url";
+import { spawn }                               from "node:child_process";
+import { EventEmitter }                        from "node:events";
 
 import init, { planInit, InitError, INIT_TARGETS } from "../../lib/cli/init.js";
 import { diffLines }                               from "../../lib/cli/_lineDiff.js";
+import { createOutput }                            from "../../lib/cli/_stdout.js";
 
 const ROOT     = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SENTINEL = "sentinel-key-value-0123456789abcdef";
@@ -204,6 +207,108 @@ describe("anchormind init 실행", () => {
       for (const [name, value] of [["MEMENTO_CLI_KEY", saved.a], ["CLAUDE_PLUGIN_OPTION_API_KEY", saved.b]]) {
         if (value === undefined) delete process.env[name]; else process.env[name] = value;
       }
+    }
+  });
+});
+
+describe("init 쓰기의 경로와 실패 처리", () => {
+  let run;
+  beforeEach(() => { run = makeRun(); });
+  afterEach(() => fs.rmSync(run.base, { recursive: true, force: true }));
+
+  it("대상 아래 중간 디렉터리가 심볼릭 링크면 그 아래 파일을 쓰지 않는다", async () => {
+    const outside = path.join(run.base, "outside");
+    fs.mkdirSync(outside);
+    fs.mkdirSync(run.dir);
+    fs.symlinkSync(outside, path.join(run.dir, "plugins"), "dir");
+
+    await init({ _: [], target: "claude", dir: run.dir }, run.deps);
+    assert.match(run.text(), /blocked\s+plugins\/anchormind\/\.mcp\.json/);
+
+    await assert.rejects(init({ _: [], target: "claude", dir: run.dir, write: true, force: true }, run.deps), InitError);
+    assert.deepEqual(fs.readdirSync(outside), []);
+    assert.equal(fs.existsSync(path.join(run.dir, ".claude-plugin")), false);
+  });
+
+  it("쓸 수 없는 위치가 있으면 아무것도 쓰기 전에 실패한다", async () => {
+    const denied = { ...fs, accessSync: () => { throw Object.assign(new Error("denied"), { code: "EACCES" }); } };
+    await assert.rejects(
+      init({ _: [], target: "codex", dir: run.dir, write: true }, { ...run.deps, fs: denied }),
+      (err) => err instanceof InitError && /not writable/.test(err.message)
+    );
+    assert.deepEqual(listFiles(run.base), []);
+  });
+
+  it("쓰는 도중 실패하면 이번 실행이 만든 파일을 지우고 바꾼 파일을 되돌린 뒤 InitError를 던진다", async () => {
+    const mine = path.join(run.dir, "plugins", "anchormind", ".mcp.json");
+    fs.mkdirSync(path.dirname(mine), { recursive: true });
+    fs.writeFileSync(mine, "mine\n");
+    let renames = 0;
+    const flaky = {
+      ...fs,
+      renameSync: (from, to) => {
+        renames++;
+        if (renames === 4) throw Object.assign(new Error("disk full"), { code: "ENOSPC" });
+        return fs.renameSync(from, to);
+      }
+    };
+
+    await assert.rejects(
+      init({ _: [], target: "claude", dir: run.dir, write: true, force: true }, { ...run.deps, fs: flaky }),
+      (err) => err instanceof InitError && /ENOSPC/.test(err.message) && /run the command again/.test(err.message)
+    );
+    assert.deepEqual(listFiles(run.dir), ["plugins/anchormind/.mcp.json"]);
+    assert.equal(fs.readFileSync(mine, "utf8"), "mine\n");
+  });
+
+  it("PATH에 anchormind가 없으면 경고하고, 있으면 경고하지 않는다", async () => {
+    const bin = path.join(run.base, "bin");
+    fs.mkdirSync(bin);
+    await init({ _: [], target: "codex", dir: run.dir }, { ...run.deps, searchPath: bin, pathExt: "" });
+    assert.match(run.text(), /anchormind was not found on PATH/);
+
+    run.out.length = 0;
+    fs.writeFileSync(path.join(bin, "anchormind"), "#!/bin/sh\n", { mode: 0o755 });
+    await init({ _: [], target: "codex", dir: run.dir }, { ...run.deps, searchPath: bin, pathExt: "" });
+    assert.doesNotMatch(run.text(), /not found on PATH/);
+  });
+});
+
+describe("닫힌 표준 출력", () => {
+  it("EPIPE 뒤의 쓰기는 버리고 던지지 않는다. 다른 출력 오류는 다음 쓰기에서 던진다", () => {
+    const stream = new EventEmitter();
+    const sent   = [];
+    stream.write = (t) => sent.push(t);
+    const out    = createOutput(stream, { onError: () => {} });
+    out.write("a");
+    stream.emit("error", Object.assign(new Error("closed"), { code: "EPIPE" }));
+    out.write("b");
+    assert.deepEqual(sent, ["a"]);
+    assert.equal(out.isClosed(), true);
+
+    const other = new EventEmitter();
+    other.write = () => {};
+    const out2  = createOutput(other, { onError: () => {} });
+    other.emit("error", Object.assign(new Error("no space"), { code: "ENOSPC" }));
+    assert.throws(() => out2.write("x"), /no space/);
+  });
+
+  it("init --write의 출력을 받는 쪽이 닫혀도 파일을 모두 쓰고 종료 코드 0으로 끝난다", async () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "anchormind-init-pipe-"));
+    try {
+      const dir   = path.join(base, "target");
+      const child = spawn(process.execPath, [path.join(ROOT, "bin", "memento.js"), "init", "--target", "claude", "--dir", dir, "--write"], {
+        env: { ...process.env, UPDATE_CHECK_DISABLED: "true" }
+      });
+      child.stdout.destroy();
+      let stderr = "";
+      child.stderr.on("data", (d) => { stderr += d; });
+      const code = await new Promise(resolve => child.on("close", resolve));
+      assert.equal(code, 0, stderr);
+      assert.doesNotMatch(stderr, /EPIPE/);
+      assert.deepEqual(listFiles(dir), planInit({ target: "claude", dir }).files.map(f => f.path).sort());
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true });
     }
   });
 });
