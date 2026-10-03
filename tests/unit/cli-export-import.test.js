@@ -27,6 +27,29 @@ function removeTempFile(file) {
   try { fs.unlinkSync(file); } catch { /* ignore */ }
 }
 
+
+/** ---- 헬퍼: importRows를 대역 의존성으로 실행 ---- */
+async function runLines(lines, { dryRun = false, idempotent = false, writer = null } = {}) {
+  const { importRows }                  = await import("../../lib/cli/import.js");
+  const { importProfile, IMPORT_DEFAULTS } = await import("../../lib/memory/write/FragmentImporter.js");
+  const { WriteGate }                   = await import("../../lib/memory/write/WriteGate.js");
+  const statements = [];
+  const client     = { query: async (sql) => { statements.push(String(sql).split(/\s/)[0]); return { rows: [] }; }, release() {} };
+  const report = await importRows(lines, {
+    profile        : importProfile(IMPORT_DEFAULTS.cli, { owner: true }),
+    entry          : "cli_import",
+    gate           : new WriteGate(),
+    writer         : writer ?? { insertDetailed: async (f) => ({ id: f.id, created: true }) },
+    linkStore      : { restoreLink: async () => ({ created: true }) },
+    pool           : { connect: async () => client },
+    withTransaction: async (_pool, fn) => fn(client),
+    idempotent,
+    dryRun,
+    log            : () => {}
+  });
+  return { report, statements };
+}
+
 /** ---- export.js 테스트 ---- */
 describe("M6: export.js", () => {
   it("usage export가 존재하고 Usage: 포함", async () => {
@@ -43,20 +66,15 @@ describe("M6: export.js", () => {
     assert.strictEqual(typeof mod.default, "function", "default export는 함수여야 함");
   });
 
-  it("JSONL 출력 필드 목록이 소스에 포함됨", async () => {
-    const src = fs.readFileSync(
-      new URL("../../lib/cli/export.js", import.meta.url).pathname,
-      "utf8"
-    );
+  it("형식 버전 1 열 목록이 문서화된 17개 열이다", async () => {
+    const { V1_FRAGMENT_COLUMNS } = await import("../../lib/memory/transfer/exportFormat.js");
     const requiredFields = [
       "id", "content", "topic", "type", "keywords", "importance",
       "source", "agent_id", "created_at", "is_anchor",
       "case_id", "idempotency_key",
       "goal", "outcome", "phase", "resolution_status", "assertion_status",
     ];
-    for (const field of requiredFields) {
-      assert.ok(src.includes(field), `export.js SELECT에 '${field}' 필드가 있어야 함`);
-    }
+    assert.deepEqual([...V1_FRAGMENT_COLUMNS], requiredFields);
   });
 });
 
@@ -76,48 +94,50 @@ describe("M6: import.js", () => {
     assert.strictEqual(typeof mod.default, "function", "default export는 함수여야 함");
   });
 
-  it("JSON parse 에러 처리 — 소스 내 에러 핸들링 확인", async () => {
-    const src = fs.readFileSync(
-      new URL("../../lib/cli/import.js", import.meta.url).pathname,
-      "utf8"
-    );
-    assert.ok(src.includes("JSON parse error"), "JSON parse 에러 메시지가 소스에 있어야 함");
-    assert.ok(src.includes("errors++"),         "에러 카운터 증가 로직이 있어야 함");
+  it("JSON으로 해석할 수 없는 줄은 invalid_json으로 거부하고 다음 줄을 처리한다", async () => {
+    const { report } = await runLines([
+      "{not json",
+      JSON.stringify({ id: "ok-1", content: "Redis on 6380 for cache", topic: "infra" })
+    ]);
+    const summary = report.toJSON();
+    assert.deepEqual(summary.rejected_by_reason, { invalid_json: 1 });
+    assert.equal(summary.imported, 1);
   });
 
-  it("--dry-run 플래그 처리 — INSERT 없이 검증만", async () => {
-    const src = fs.readFileSync(
-      new URL("../../lib/cli/import.js", import.meta.url).pathname,
-      "utf8"
+  it("--dry-run은 같은 경로로 처리하고 트랜잭션을 되돌린다", async () => {
+    const { report, statements } = await runLines(
+      [JSON.stringify({ id: "ok-1", content: "Redis on 6380 for cache", topic: "infra" })],
+      { dryRun: true }
     );
-    assert.ok(src.includes("dryRun"), "dry-run 처리 로직이 있어야 함");
-    assert.ok(src.includes("dryRun ? null"), "dry-run 시 pool이 null로 분기돼야 함");
+    assert.equal(report.toJSON().imported, 1);
+    assert.equal(statements[0], "BEGIN");
+    assert.equal(statements.at(-1), "ROLLBACK");
+    assert.ok(!statements.includes("COMMIT"));
   });
 
-  it("--idempotent 플래그: 같은 id로 거부된 행은 skipped, 플래그가 없으면 errors로 센다", async () => {
-    const { importRows }                                      = await import("../../lib/cli/import.js");
-    const { checkImportRow, writeImportRow, IMPORT_DEFAULTS } = await import("../../lib/memory/write/FragmentImporter.js");
-    const { WriteGate }                                       = await import("../../lib/memory/write/WriteGate.js");
+  it("--idempotent 플래그: 같은 id로 거부된 행은 duplicates, 플래그가 없으면 id_conflict로 거부한다", async () => {
     const conflict = Object.assign(new Error("duplicate key value violates unique constraint"), { code: "23505" });
-    const deps = (idempotent) => ({
-      checkImportRow,
-      writeImportRow,
-      withTransaction: (_pool, fn) => fn({}),
-      pool    : {},
-      entry   : "cli_import",
-      gate    : new WriteGate(),
-      writer  : { insert: async () => { throw conflict; } },
-      defaults: IMPORT_DEFAULTS.cli,
-      idempotent,
-      dryRun  : false
-    });
-    const lines = [JSON.stringify({ id: "test-1", content: "Redis on 6380 for cache", topic: "infra" })];
+    const lines    = [JSON.stringify({ id: "test-1", content: "Redis on 6380 for cache", topic: "infra" })];
+    const writer   = { insertDetailed: async () => { throw conflict; } };
 
-    const skipped = await importRows(lines, deps(true));
-    assert.deepEqual([skipped.imported, skipped.skipped, skipped.errors], [0, 1, 0]);
+    const skipped = (await runLines(lines, { idempotent: true, writer })).report.toJSON();
+    assert.deepEqual([skipped.imported, skipped.duplicates, skipped.rejected], [0, 1, 0]);
 
-    const failed = await importRows(lines, deps(false));
-    assert.deepEqual([failed.imported, failed.skipped, failed.errors], [0, 0, 1]);
+    const failed = (await runLines(lines, { idempotent: false, writer })).report.toJSON();
+    assert.deepEqual([failed.imported, failed.duplicates, failed.rejected], [0, 0, 1]);
+    assert.deepEqual(failed.rejected_by_reason, { id_conflict: 1 });
+  });
+
+  it("되살리기 가져오기는 감사 로그에 요약 한 줄을 남긴다", async () => {
+    const { auditRestoreImport } = await import("../../lib/cli/import.js");
+    const calls = [];
+    await auditRestoreImport(
+      { imported: 4, duplicates: 1, rejected: 0, transformed: 2 },
+      { keyId: null, dryRun: false, audit: async (operation, fields) => { calls.push({ operation, fields }); } }
+    );
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].operation, "cli import restore");
+    assert.match(calls[0].fields.details, /restore=trusted .*key=master imported=4 duplicates=1 rejected=0 transformed=2/);
   });
 
   it("임시 JSONL 파일 생성/파싱 기능 정상 동작 확인", () => {

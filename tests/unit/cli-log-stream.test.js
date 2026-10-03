@@ -50,12 +50,12 @@ describe("consoleStderrLevels", () => {
 describe("CLI 표준 출력", () => {
   it("import --dry-run --json은 표준 출력에 JSON만 쓰고 로그는 표준 오류로 보낸다", () => {
     const file = path.join(os.tmpdir(), `memento-cli-log-${process.pid}-${Date.now()}.jsonl`);
-    fs.writeFileSync(file, `${JSON.stringify({ content: "담당자 메일은 ops-team@example.com 이다", topic: "ops" })}\n`);
+    fs.writeFileSync(file, `${JSON.stringify({ content: "짧음", topic: "ops" })}\n`);
     try {
       const out = runCli(["import", "--dry-run", "--json", "--input", file]);
       assert.equal(out.status, 0, out.stderr);
       const summary = JSON.parse(out.stdout);
-      assert.equal(summary.imported, 1);
+      assert.deepEqual([summary.imported, summary.rejected], [0, 1]);
       assert.match(out.stderr, /Winston logger initialized/, "로거가 실제로 적재되었는지 확인한다");
     } finally {
       fs.rmSync(file, { force: true });

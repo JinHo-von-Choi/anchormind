@@ -338,11 +338,12 @@ describe("GET /search-events", () => {
 /* ── GET /export?key_ids ── */
 describe("GET /export key_ids", () => {
   it("key_ids는 key_id = ANY + valid_to IS NULL로 반출한다", async () => {
-    queryResults = [{ rows: [{ id: "f1", content: "c" }] }];
+    queryResults = [{ rows: [{ filename: "migration-049-x.sql" }] }, { rows: [{ id: "f1", content: "c" }] }];
     const res = fakeRes();
-    await handleExport({ method: "GET" }, res, makeUrl(`${ADMIN_BASE}/export?key_ids=a,b`));
+    await handleExport({ method: "GET", headers: {} }, res, makeUrl(`${ADMIN_BASE}/export?key_ids=a,b`));
     assert.equal(res.statusCode, 200);
-    const call = queryCalls[0];
+    const call = queryCalls.find(c => /FROM agent_memory\.fragments WHERE/.test(c.sql));
+    assert.ok(call, "파편 조회 질의가 없다");
     assert.match(call.sql, /key_id = ANY/);
     assert.match(call.sql, /valid_to IS NULL/);
     assert.ok(call.params.some(p => Array.isArray(p) && p.length === 2));

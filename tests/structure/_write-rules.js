@@ -93,7 +93,7 @@ export function findSemanticCalls(file, scan) {
   const sites = [];
 
   for (const call of scan.calls) {
-    if (!call.receiver || !["insert", "update", "create"].includes(call.method)) continue;
+    if (!call.receiver || !["insert", "insertDetailed", "update", "create"].includes(call.method)) continue;
     const byName  = RECEIVER_NAME.test(call.receiver) && call.method !== "create";
     if (!byName && !bound.has(call.receiver)) continue;
 

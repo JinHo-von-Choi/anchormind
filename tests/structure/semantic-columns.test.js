@@ -25,7 +25,7 @@ import { findSemanticSql }                       from "./_write-rules.js";
 
 /** FragmentWriter의 의미 메서드. 관문을 통과한 값만 받는다. */
 const SEMANTIC_METHODS = Object.freeze({
-  "lib/memory/write/FragmentWriter.js": ["insert", "_prepareInsertRow", "_runInsert", "update", "_diffUpdatableFields", "_runUpdate"]
+  "lib/memory/write/FragmentWriter.js": ["insert", "insertDetailed", "_prepareInsertRow", "_runInsert", "update", "_diffUpdatableFields", "_runUpdate"]
 });
 
 /**

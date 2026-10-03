@@ -29,11 +29,9 @@ const LIB  = path.resolve(HERE, "..", "..", "lib");
 /** 파일별 fragments 직접 접근 허용 개수. */
 const ALLOWED = {
   "admin/ApiKeyStore.js": 2, // 키 삭제 전 그 키의 파편 수(닫힌 파편 포함)를 키 행 잠금과 같은 트랜잭션에서 센다
-  "admin/admin-export.js": 1,
   "admin/admin-keys.js": 1,
   "admin/admin-memory.js": 12,
   "admin/admin-routes.js": 6,
-  "cli/export.js": 2,
   "cli/inspect.js": 1,
   "cli/stats.js": 5,
   "memory/FragmentIndex.js": 1,
@@ -47,7 +45,7 @@ const ALLOWED = {
   "memory/embedding/SyntheticQueryWorker.js": 3,
   "memory/link/ContradictionDetector.js": 12,
   "memory/link/GraphLinker.js": 11,
-  "memory/link/LinkStore.js": 7,
+  "memory/link/LinkStore.js": 9, // 가져온 링크의 양 끝 linked_to 갱신은 id 순 잠금 CTE와 갱신 문장을 함께 쓴다
   "memory/link/TemporalLinker.js": 1,
   "memory/processors/EpisodeContinuityService.js": 1,
   "memory/processors/MemoryRecaller.js": 1,
@@ -65,6 +63,7 @@ const ALLOWED = {
   "memory/signals/CaseRewardBackprop.js": 1,
   "memory/signals/RecallBenchmark.js": 1,
   "memory/signals/SpreadingActivation.js": 2,
+  "memory/transfer/FragmentExporter.js": 1, // 내보내기는 호출자가 넘긴 조건과 연결로 파편 열 전체를 id 순 묶음으로 읽는다. 관리 API와 CLI가 함께 쓴다
   "memory/write/BatchRememberProcessor.js": 1,
   "memory/write/ConflictResolver.js": 2,
   "memory/write/FragmentWriter.js": 27, // archive 전에 현재 파편을 FOR UPDATE로 재조회, 접근 기록 갱신 3경로와 linked_to 정리 2경로는 id 순 잠금 CTE와 갱신 문장을 함께 쓴다

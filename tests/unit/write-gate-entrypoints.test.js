@@ -57,7 +57,12 @@ const writerHolder = { inserted: [], idFor: (f) => f.id };
 mock.module("../../lib/memory/write/FragmentWriter.js", {
   namedExports: {
     FragmentWriter: class {
-      async insert(f) { writerHolder.inserted.push(f); return writerHolder.idFor(f); }
+      async insertDetailed(f) {
+        writerHolder.inserted.push(f);
+        const id = writerHolder.idFor(f);
+        return { id, created: id === f.id };
+      }
+      async restoreVersion() {}
     }
   }
 });
@@ -72,7 +77,8 @@ const { handleMemory }           = await import("../../lib/admin/admin-memory.js
 const { handleImport }           = await import("../../lib/admin/admin-export.js");
 const { importRows }             = await import("../../lib/cli/import.js");
 const { rememberLocal }          = await import("../../lib/cli/remember.js");
-const { checkImportRow, writeImportRow, IMPORT_DEFAULTS, buildImportFragment } = await import("../../lib/memory/write/FragmentImporter.js");
+const { importProfile, IMPORT_DEFAULTS, buildImportFragment } = await import("../../lib/memory/write/FragmentImporter.js");
+const { loadImportRuntime }      = await import("../../lib/memory/transfer/importRuntime.js");
 const { teardownTestResources }  = await import("../_lifecycle.js");
 
 after(async () => { await teardownTestResources(); });
@@ -404,6 +410,21 @@ describe("AutoReflect", () => {
   });
 });
 
+/** 트랜잭션 client 대역. 호출 문장 첫 단어를 기록한다. */
+function fakeClient(statements = []) {
+  return { query: async (sql) => { statements.push(String(sql).split(/\s/)[0]); return { rows: [] }; }, release() {} };
+}
+
+/** admin 가져오기를 대역 의존성(DB 연결 없는 트랜잭션)으로 실행한다. */
+async function adminImport(body, search = "") {
+  const res = fakeRes();
+  await handleImport(jsonReq("POST", body), res, new URL(`http://localhost${ADMIN_BASE}/import${search}`), {
+    loadRuntime    : async (kind, opts) => ({ ...(await loadImportRuntime(kind, opts)), withTransaction: async (_pool, fn) => fn(fakeClient()) }),
+    queueEmbeddings: async () => async (ids) => ids.length
+  });
+  return res;
+}
+
 describe("admin import", () => {
   beforeEach(() => {
     writerHolder.inserted = [];
@@ -411,41 +432,53 @@ describe("admin import", () => {
   });
 
   it("행마다 민감 정보를 마스킹해 기록한다", async () => {
-    const res = fakeRes();
-    await handleImport(
-      jsonReq("POST", { fragments: MASKING_TABLE.map(([, content]) => ({ content, topic: "ops", type: "fact" })) }),
-      res, new URL(`http://localhost${ADMIN_BASE}/import`)
-    );
+    const res = await adminImport({ fragments: MASKING_TABLE.map(([, content]) => ({ content, topic: "ops", type: "fact" })) });
     assert.equal(res.statusCode, 200, res.body);
-    assert.deepEqual(JSON.parse(res.body), { imported: MASKING_TABLE.length, skipped: 0 });
+    const body = JSON.parse(res.body);
+    assert.deepEqual([body.imported, body.duplicates, body.rejected, body.errors], [MASKING_TABLE.length, 0, 0, 0]);
     MASKING_TABLE.forEach(([, , secret, marker], i) => assertMasked(writerHolder.inserted[i]?.content, secret, marker));
   });
 
-  it("관문이 받아들이지 않은 행과 이미 있는 본문은 skipped로 센다", async () => {
+  it("관문이 받아들이지 않은 행은 rejected, 이미 있는 본문은 duplicates로 센다", async () => {
     writerHolder.idFor = (f) => (f.content.startsWith("이미") ? "frag-existing" : f.id);
-    const res = fakeRes();
-    await handleImport(jsonReq("POST", { fragments: [
+    const res = await adminImport({ fragments: [
       { content: "짧음", topic: "ops", type: "fact" },
       { content: "이미 저장된 본문과 같은 내용이다", topic: "ops", type: "fact" },
       { content: "새로 가져오는 본문 하나를 적는다", topic: "ops", type: "fact" }
-    ] }), res, new URL(`http://localhost${ADMIN_BASE}/import`));
-    assert.deepEqual(JSON.parse(res.body), { imported: 1, skipped: 2 });
+    ] });
+    const body = JSON.parse(res.body);
+    assert.deepEqual([body.imported, body.duplicates, body.rejected], [1, 1, 1]);
+    assert.deepEqual(body.rejected_by_reason, { input_invalid: 1 });
+  });
+
+  it("행의 key_id는 읽지 않고 key_id 매개변수 없이는 마스터 범위로 기록한다", async () => {
+    const res = await adminImport({ fragments: [
+      { content: "다른 키 소속으로 적힌 가져오기 본문", topic: "ops", type: "fact", key_id: "key-9", is_anchor: true }
+    ] });
+    const body = JSON.parse(res.body);
+    assert.equal(body.imported, 1);
+    assert.equal(writerHolder.inserted[0].key_id, null);
+    assert.equal(body.ignored.key_id, 1);
   });
 });
 
 /** CLI 가져오기 의존성 */
-function cliImportDeps({ inserted = [], dryRun = false, order = [] } = {}) {
+function cliImportDeps({ inserted = [], dryRun = false, order = [], statements = [] } = {}) {
+  const gate      = new WriteGate();
+  const realCheck = gate.check.bind(gate);
+  gate.check      = (...a) => { order.push("gate"); return realCheck(...a); };
+  const client    = fakeClient(statements);
   return {
-    checkImportRow : (...a) => { order.push("gate"); return checkImportRow(...a); },
-    writeImportRow,
-    withTransaction: (_pool, fn) => { order.push("transaction"); return fn({ query: async () => ({ rows: [] }) }); },
-    pool    : {},
-    entry   : "cli_import",
-    gate    : new WriteGate(),
-    writer  : { insert: async (f) => { inserted.push(f); return f.id; } },
-    defaults: IMPORT_DEFAULTS.cli,
-    idempotent: false,
-    dryRun
+    profile        : importProfile(IMPORT_DEFAULTS.cli, { owner: true }),
+    entry          : "cli_import",
+    gate,
+    writer         : { insertDetailed: async (f) => { inserted.push(f); return { id: f.id, created: true }; } },
+    linkStore      : { restoreLink: async () => ({ created: true }) },
+    pool           : { connect: async () => client },
+    withTransaction: (_pool, fn) => { order.push("transaction"); return fn(client); },
+    idempotent     : false,
+    dryRun,
+    log            : () => {}
   };
 }
 
@@ -453,23 +486,24 @@ describe("CLI import", () => {
   it("줄마다 민감 정보를 마스킹해 기록한다", async () => {
     const inserted = [];
     const lines    = MASKING_TABLE.map(([, content]) => JSON.stringify({ content, topic: "ops" }));
-    const counts   = await importRows(lines, cliImportDeps({ inserted }));
-    assert.equal(counts.imported, MASKING_TABLE.length);
+    const report   = (await importRows(lines, cliImportDeps({ inserted }))).toJSON();
+    assert.equal(report.imported, MASKING_TABLE.length);
     MASKING_TABLE.forEach(([, , secret, marker], i) => assertMasked(inserted[i]?.content, secret, marker));
   });
 
-  it("관문이 받아들이지 않은 줄은 errors로 세고 기록하지 않는다", async () => {
+  it("관문이 받아들이지 않은 줄은 rejected로 세고 기록하지 않는다", async () => {
     const inserted = [];
-    const counts   = await importRows([JSON.stringify({ content: "짧음", topic: "ops" })], cliImportDeps({ inserted }));
-    assert.deepEqual([counts.imported, counts.errors], [0, 1]);
+    const report   = (await importRows([JSON.stringify({ content: "짧음", topic: "ops" })], cliImportDeps({ inserted }))).toJSON();
+    assert.deepEqual([report.imported, report.rejected, report.errors], [0, 1, 0]);
     assert.equal(inserted.length, 0);
   });
 
-  it("dry-run은 관문 검증만 하고 기록하지 않는다", async () => {
-    const inserted = [];
-    const counts   = await importRows([JSON.stringify({ content: MASKING_TABLE[0][1], topic: "ops" })], cliImportDeps({ inserted, dryRun: true }));
-    assert.equal(counts.imported, 1);
-    assert.equal(inserted.length, 0);
+  it("dry-run은 행을 처리하되 트랜잭션을 되돌려 남기지 않는다", async () => {
+    const statements = [];
+    const report     = (await importRows([JSON.stringify({ content: MASKING_TABLE[0][1], topic: "ops" })], cliImportDeps({ dryRun: true, statements }))).toJSON();
+    assert.equal(report.imported, 1);
+    assert.equal(statements.at(-1), "ROLLBACK");
+    assert.ok(!statements.includes("COMMIT"));
   });
 });
 
@@ -493,16 +527,24 @@ describe("CLI remember 로컬 모드", () => {
 });
 
 describe("buildImportFragment", () => {
-  it("admin 기본값은 행의 key_id를 쓰고 CLI 기본값은 마스터로 기록한다", () => {
+  const owner = (defaults, extra = {}) => importProfile(defaults, { owner: true, ...extra });
+
+  it("대상 키는 프로필이 정하고 행의 key_id는 읽지 않는다", () => {
     const row = { id: "f1", content: "본문", topic: "t", key_id: "key-9", agent_id: null };
-    assert.equal(buildImportFragment(row, IMPORT_DEFAULTS.admin).key_id, "key-9");
-    assert.equal(buildImportFragment(row, IMPORT_DEFAULTS.cli).key_id, null);
-    assert.equal(buildImportFragment(row, IMPORT_DEFAULTS.admin).agent_id, "default");
-    assert.equal(buildImportFragment(row, IMPORT_DEFAULTS.cli).source, "import");
+    assert.equal(buildImportFragment(row, owner(IMPORT_DEFAULTS.admin)).key_id, null);
+    assert.equal(buildImportFragment(row, owner(IMPORT_DEFAULTS.cli, { keyId: "key-1" })).key_id, "key-1");
+    assert.equal(buildImportFragment(row, owner(IMPORT_DEFAULTS.admin)).agent_id, "default");
+    assert.equal(buildImportFragment(row, owner(IMPORT_DEFAULTS.cli)).source, "import");
+  });
+
+  it("is_anchor는 owner 프로필에서만 행의 값을 따른다", () => {
+    const row = { content: "본문", topic: "t", is_anchor: true };
+    assert.equal(buildImportFragment(row, importProfile(IMPORT_DEFAULTS.cli, { owner: false })).is_anchor, false);
+    assert.equal(buildImportFragment(row, owner(IMPORT_DEFAULTS.cli)).is_anchor, true);
   });
 
   it("id가 없으면 새 id를 만든다", () => {
-    const built = buildImportFragment({ content: "본문", topic: "t" }, IMPORT_DEFAULTS.cli);
+    const built = buildImportFragment({ content: "본문", topic: "t" }, owner(IMPORT_DEFAULTS.cli));
     assert.match(built.id, /^[0-9a-f-]{36}$/);
   });
 });
@@ -513,79 +555,101 @@ describe("가져오기 행 오류 격리", () => {
     writerHolder.idFor    = (f) => f.id;
   });
 
-  it("admin 가져오기는 형식이 잘못된 행을 skipped로 세고 나머지를 기록한다", async () => {
-    const res = fakeRes();
-    await handleImport(jsonReq("POST", { fragments: [
+  it("admin 가져오기는 형식이 잘못된 행을 rejected로 세고 나머지를 기록한다", async () => {
+    const res = await adminImport({ fragments: [
       null,
       { content: "키워드 형식이 잘못된 행이다", topic: "ops", type: "fact", keywords: [{ bad: true }] },
       { content: 12345, topic: "ops", type: "fact" },
       { content: "정상적으로 가져오는 본문 하나", topic: "ops", type: "fact" }
-    ] }), res, new URL(`http://localhost${ADMIN_BASE}/import`));
+    ] });
     assert.equal(res.statusCode, 200, res.body);
-    assert.deepEqual(JSON.parse(res.body), { imported: 1, skipped: 3 });
+    const body = JSON.parse(res.body);
+    assert.deepEqual([body.imported, body.rejected], [1, 3]);
+    assert.deepEqual(body.rejected_by_reason, { invalid_record: 1, input_invalid: 1, invalid_row: 1 });
   });
 
-  it("admin 가져오기는 같은 id가 이미 있는 행을 skipped로 세고 응답을 끝까지 돌려준다", async () => {
+  it("admin 가져오기는 같은 id가 이미 있는 행을 id_conflict로 거부하고 응답을 끝까지 돌려준다", async () => {
     writerHolder.idFor = (f) => {
       if (f.id === "dup-id") throw Object.assign(new Error("duplicate key value violates unique constraint"), { code: "23505" });
       return f.id;
     };
-    const res = fakeRes();
-    await handleImport(jsonReq("POST", { fragments: [
+    const res = await adminImport({ fragments: [
       { id: "dup-id", content: "같은 id로 다른 본문을 가져온다", topic: "ops", type: "fact" },
       { id: "new-id", content: "새 id로 가져오는 본문 하나다", topic: "ops", type: "fact" }
-    ] }), res, new URL(`http://localhost${ADMIN_BASE}/import`));
+    ] });
     assert.equal(res.statusCode, 200, res.body);
-    assert.deepEqual(JSON.parse(res.body), { imported: 1, skipped: 1 });
+    const body = JSON.parse(res.body);
+    assert.deepEqual([body.imported, body.rejected], [1, 1]);
+    assert.deepEqual(body.rejected_by_reason, { id_conflict: 1 });
   });
 
-  it("admin 가져오기는 행 값 때문에 DB가 거부한 행을 skipped로 세고 다음 행을 기록한다", async () => {
+  it("admin 가져오기는 행 값 때문에 DB가 거부한 행을 database_rejected로 세고 다음 행을 기록한다", async () => {
     writerHolder.idFor = (f) => {
       if (f.id === "bad-type") throw Object.assign(new Error("violates check constraint \"fragments_type_check\""), { code: "23514" });
       return f.id;
     };
-    const res = fakeRes();
-    await handleImport(jsonReq("POST", { fragments: [
+    const res = await adminImport({ fragments: [
       { id: "bad-type", content: "허용되지 않은 유형으로 가져오는 본문", topic: "ops", type: "note" },
       { id: "ok-row",   content: "정상 유형으로 가져오는 본문 하나다",   topic: "ops", type: "fact" }
-    ] }), res, new URL(`http://localhost${ADMIN_BASE}/import`));
+    ] });
     assert.equal(res.statusCode, 200, res.body);
-    assert.deepEqual(JSON.parse(res.body), { imported: 1, skipped: 1 });
+    const body = JSON.parse(res.body);
+    assert.deepEqual([body.imported, body.rejected], [1, 1]);
+    assert.deepEqual(body.rejected_by_reason, { database_rejected: 1 });
     assert.deepEqual(writerHolder.inserted.map(f => f.id), ["bad-type", "ok-row"]);
   });
 
-  it("admin 가져오기는 연결 오류면 요청을 실패시킨다", async () => {
-    writerHolder.idFor = () => { throw Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }); };
-    const res = fakeRes();
-    await handleImport(jsonReq("POST", { fragments: [
+  it("admin 가져오기는 연결 오류면 지금까지의 집계를 partial에 담아 500으로 응답한다", async () => {
+    writerHolder.idFor = (f) => {
+      if (f.content.startsWith("연결")) throw Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
+      return f.id;
+    };
+    const res = await adminImport({ fragments: [
+      { content: "먼저 정상으로 가져온 본문 하나이다", topic: "ops", type: "fact" },
       { content: "연결이 끊긴 상태에서 가져오는 본문", topic: "ops", type: "fact" }
-    ] }), res, new URL(`http://localhost${ADMIN_BASE}/import`));
+    ] });
     assert.equal(res.statusCode, 500);
+    assert.equal(JSON.parse(res.body).partial.imported, 1);
   });
 
-  it("CLI 가져오기는 행 값 때문에 DB가 거부한 행을 errors로 세고 다음 행을 기록한다", async () => {
+  it("CLI 가져오기는 행 값 때문에 DB가 거부한 행을 rejected로 세고 다음 행을 기록한다", async () => {
     const inserted = [];
     const deps     = cliImportDeps({ inserted });
-    deps.writer    = { insert: async (f) => {
+    deps.writer    = { insertDetailed: async (f) => {
       if (f.content.startsWith("거부")) throw Object.assign(new Error("violates check constraint"), { code: "23514" });
       inserted.push(f);
-      return f.id;
+      return { id: f.id, created: true };
     } };
-    const counts = await importRows([
+    const report = (await importRows([
       JSON.stringify({ content: "거부될 assertion 값을 가진 본문", topic: "ops", assertion_status: "maybe" }),
       JSON.stringify({ content: "정상적으로 가져오는 본문 하나", topic: "ops" })
-    ], deps);
-    assert.deepEqual([counts.imported, counts.errors], [1, 1]);
+    ], deps)).toJSON();
+    assert.deepEqual([report.imported, report.rejected], [1, 1]);
+    assert.deepEqual(report.rejected_by_reason, { database_rejected: 1 });
   });
 
-  it("CLI 가져오기는 관문을 트랜잭션 전에 거치고 잘못된 행은 errors로 센다", async () => {
+  it("CLI 가져오기는 연결 오류를 errors로 세고 다음 줄을 계속 처리한다", async () => {
+    const deps  = cliImportDeps();
+    let   calls = 0;
+    deps.writer = { insertDetailed: async (f) => {
+      if (calls++ === 0) throw Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
+      return { id: f.id, created: true };
+    } };
+    const report = (await importRows([
+      JSON.stringify({ content: "연결이 끊겨 기록하지 못하는 본문", topic: "ops" }),
+      JSON.stringify({ content: "정상적으로 가져오는 본문 하나", topic: "ops" })
+    ], deps)).toJSON();
+    assert.deepEqual([report.imported, report.errors, report.rejected], [1, 1, 0]);
+  });
+
+  it("CLI 가져오기는 관문을 트랜잭션 전에 거치고 잘못된 행은 rejected로 센다", async () => {
     const order  = [];
     const lines  = [
       JSON.stringify({ content: "키워드 형식이 잘못된 행이다", topic: "ops", keywords: [{ bad: true }] }),
       JSON.stringify({ content: "정상적으로 가져오는 본문 하나", topic: "ops" })
     ];
-    const counts = await importRows(lines, cliImportDeps({ order }));
-    assert.deepEqual([counts.imported, counts.errors], [1, 1]);
+    const report = (await importRows(lines, cliImportDeps({ order }))).toJSON();
+    assert.deepEqual([report.imported, report.rejected], [1, 1]);
     assert.deepEqual(order, ["gate", "gate", "transaction"]);
   });
 });

@@ -164,7 +164,7 @@ describe("GET /export 안전장치", () => {
   });
 
   it("confirm=full이면 전체 반출 허용", async () => {
-    queryResults = [{ rows: [{ id: "f1", content: "c" }] }];
+    queryResults = [{ rows: [{ filename: "migration-049-x.sql" }] }, { rows: [{ id: "f1", content: "c" }] }];
     const res = fakeRes();
     await handleExport(
       { method: "GET" }, res, makeUrl(`${ADMIN_BASE}/export?confirm=full`)
@@ -174,16 +174,17 @@ describe("GET /export 안전장치", () => {
   });
 
   it("key_id + topic은 topic ILIKE로 바인딩된다", async () => {
-    queryResults = [{ rows: [] }];
+    queryResults = [{ rows: [{ filename: "migration-049-x.sql" }] }, { rows: [] }];
     const res = fakeRes();
     await handleExport(
       { method: "GET" }, res, makeUrl(`${ADMIN_BASE}/export?key_id=key-1&topic=mem&type=fact`)
     );
     assert.equal(res.statusCode, 200);
-    const call = queryCalls[0];
+    const call = queryCalls.find(c => /FROM agent_memory\.fragments WHERE/.test(c.sql));
+    assert.ok(call, "파편 조회 질의가 없다");
     assert.match(call.sql, /topic ILIKE/);
     assert.match(call.sql, /type = /);
-    assert.deepEqual(call.params, ["key-1", "%mem%", "fact"]);
+    assert.deepEqual(call.params.slice(0, 3), ["key-1", "%mem%", "fact"]);
   });
 
   it("group_id 멤버가 없으면 빈 스트림으로 종료한다", async () => {
