@@ -18,7 +18,7 @@
 - `MEMENTO_SESSION_ID_POLICY`(`warn`, `enforce`, 기본 `warn`): MCP 세션 ID 수신 처리. `warn`은 쿼리스트링 ID와 서버 발급 형식(UUID)이 아닌 ID의 자동 복구를 경고 로그로 기록하고 정상 처리한다. `enforce`는 쿼리 ID에 400, UUID가 아닌 ID의 복구에 404를 돌려준다. 헤더로 보낸 UUID 세션과 `/message?sessionId=`는 영향이 없다.
 - `MEMENTO_RESERVED_AGENT_IDS`(`warn`, `enforce`, 기본 `warn`): 내부 작업 전용 agentId(`system`, `admin`) 처리 방식. `warn`은 API 키 요청의 예약 agentId에 경고 로그(키 앞 8자 포함)만 남기고, `enforce`는 FORBIDDEN(-32001)으로 거부한다. master 키는 두 방식 모두 허용한다.
 - `OAUTH_ACCESS_TOKEN_TTL_SECONDS`(양의 정수, 기본 미설정): OAuth 접근 토큰 수명(초). 미설정이면 `SESSION_TTL_MINUTES * 60`을 쓴다. 리프레시 토큰 수명은 영향받지 않는다.
-- `MEMENTO_DCR_MAX_PER_HOUR`(기본 100, 0은 상한 없음): `/register`의 시간당 등록 상한(프로세스 단위). 초과하면 429와 `Retry-After: 3600`을 돌려준다.
+- `MEMENTO_DCR_MAX_PER_HOUR`(기본 100, 0은 상한 없음): `/register`의 시간당 등록 상한(프로세스 단위). 초과하면 429를 돌려준다.
 - `node scripts/purge-oauth-clients.js`: 한 번도 쓰이지 않은 오래된 동적 등록 클라이언트를 정리한다. 기본은 미리보기이고 `--execute`로 삭제한다. `--older-than-days`(기본 30)를 받으며 키에 묶인 클라이언트는 제외한다.
 - `MEMENTO_ADMIN_AUTH_BACKOFF`(`on`, `off`, 기본 `off`): `on`이면 관리 인증이 연속 5회 실패한 뒤 1, 2, 4초 순으로 최대 60초까지 다음 시도를 늦추고, 지연 중에는 올바른 키도 429(`Retry-After`)를 받는다. 실패 기록은 이 값과 무관하게 남는다.
 - `MEMENTO_REMEMBER_DUPLICATE_GUARD`(기본 `false`): `true`면 `remember`가 같은 키 범위의 기존 파편과 같은 본문을 받았을 때 기존 파편에 후처리, TTL 조정, 재색인을 하지 않고 응답의 `existing`, `duplicate`(`same_scope`, `other_workspace`, `closed`, `unknown`)로 상태만 알린다.
@@ -32,9 +32,10 @@
 - 기동 점검 실패는 `[Startup]` 오류 로그로, 리랭커 사전 적재 실패는 `[Reranker] preload failed (non-fatal)` 경고로 남는다.
 - `MEMENTO_DECAY_MIN_DELTA`(기본 0): 묶음 갱신에서 감쇠량이 이 값보다 작은 행을 건너뛴다. 마지막 감쇠 후 24시간이 지난 행은 항상 갱신한다. 숫자가 아니거나 음수인 값은 0으로 처리하고 경고를 남기며 1을 넘는 값은 1로 제한한다. `MEMENTO_SCORE_UPDATE_BATCH`가 0이면 적용하지 않는다.
 - `MEMENTO_UTILITY_MIN_DELTA`(기본 0): 묶음 갱신에서 저장된 `utility_score`와의 차이가 이 값 이하인 행을 다시 쓰지 않는다. 값 처리와 적용 조건은 `MEMENTO_DECAY_MIN_DELTA`와 같다.
-- `node scripts/import-cycles.js`: `lib`, `config`, `server.js`의 상대 경로 import에서 크기 2 이상의 순환을 찾아 정적 import만 본 결과와 동적 import를 포함한 결과를 따로 출력한다. 단위 시험은 정적 순환이 없고 동적 포함 순환이 허용 목록 안에 있는지 확인한다.
+- `node scripts/import-cycles.js`: `lib`, `config`, `scripts`, `bin`, `server.js`의 상대 경로 import에서 크기 2 이상의 순환을 찾아 정적 import만 본 결과와 동적 import를 포함한 결과를 따로 출력한다. 단위 시험은 정적 순환이 없고 동적 포함 순환이 허용 목록 안에 있는지 확인한다.
 - `docs/operations/monitoring.md`: 공유 Prometheus 인스턴스용 스크레이프 잡과 경보 규칙. 문서의 규칙이 참조하는 지표 이름과 라벨은 단위 시험이 등록된 지표와 대조한다.
 - 지표 `mcp_session_rotation_total{outcome}`(`rotated`, `not_found`, `expired`, `forbidden`, `unavailable`, `error`)와 `mcp_rotate_rate_limited_total`: 세션 회전 요청의 결과와 rate limit 거부를 센다.
+- 지표 `mcp_sse_rate_limited_total`: IP 한도로 거부된 `GET /sse` 요청 수를 센다. 거부는 주소를 담지 않는 `[SSE] connection request rejected by IP rate limit` 경고 로그로도 남는다.
 - `MEMENTO_LLM_CLI_TOOL_APPROVAL`(`none`, `all`, 기본 `none`): gemini-cli, copilot-cli, opencode-cli의 도구 실행 승인 방식. 기본에서 세 CLI는 제한된 승인으로 실행된다. gemini는 `-y` 없이, copilot은 쓰기, 셸, URL 도구와 내장 MCP를 거부하는 인자와 함께, opencode는 `OPENCODE_PERMISSION={"*":"deny"}`로 실행되며, 세 CLI 모두 서버 작업 디렉터리가 아닌 빈 임시 디렉터리에서 시작한다. `all`이면 gemini `-y`, copilot `--allow-all-tools`를 쓰고 서버 작업 디렉터리에서 실행하며 opencode에는 승인 관련 설정을 더하지 않는다.
 - 벤치마크 `isolated` 모드는 격리 키 `benchmark-harness-key`(상태 `inactive`) 행을 `api_keys`에 한 번 만든다. `--save-baseline`은 임베딩 provider, 모델, 차원을 기준선 파일에 함께 기록하고, `--baseline` 비교는 모델이나 차원이 다르면 경고한다.
 
@@ -71,6 +72,16 @@
 - 벤치마크 CLI는 적재 전에 대상 DB(host, port, database)를 한 줄로 출력한다. 임베딩된 파편이 0건인 실행(`--no-seed` 포함)은 `--save-baseline`을 거부한다. 기준선 갱신 절차와 측정 조건은 `docs/benchmark.md`에 있다.
 - 모듈 사이에 정적 import 순환이 없다. 공용 부분은 `lib/safe-compare.js`, `lib/memory/write/affect.js`, `lib/embeddings/normalize.js`가 가진다.
 - 설정 문서(`docs/configuration.md`, `docs/configuration.en.md`)와 `.env.example`에 숫자, 열거, 불리언 환경 변수의 허용 범위와 와치독 환경 변수(`MEMENTO_WATCHDOG_*`)를 싣는다.
+- `/register`의 시간당 상한은 유효한 API 키를 Bearer로 제시한 등록과 그 밖의 등록을 같은 값으로 따로 센다. 429의 `Retry-After`는 현재 창이 끝나기까지 남은 초(올림, 최소 1, 최대 3600)다.
+- 클라이언트 IP로 채택한 `X-Forwarded-For` 항목이 IPv4 또는 IPv6 주소 표기가 아니거나 45자를 넘으면 소켓 주소를 쓴다. 이 경우 값을 담지 않은 `[Proxy] forwarded address entry is not a valid IP address` 경고를 프로세스당 한 번 남긴다.
+- 도구 인자 점검 경고는 `[ToolArgs] <도구>: <오류> (key=<키 ID 또는 master 또는 none> sid=<세션 ID 앞 8자> ua=<User-Agent>)` 형식으로 호출자를 표기한다. User-Agent는 제어 문자와 키 형태 토큰을 제거하고 64자로 줄이며, 값이 없으면 `unknown`이다.
+- 기동 시 설정 점검(`MEMENTO_CONFIG_STRICT`)이 호출 시점에 읽는 스위치도 본다. 대상은 도구 인자 점검, 세션 ID 처리, 예약 agentId, 관리 인증 지연, 키 삭제와 중복 저장 보호, OAuth 리디렉션 점검, CORS, 프레임 옵션, SSE 쿼리 키, CLI 도구 승인 같은 열거형과 true, false 스위치(Redis, 캐시, 재통합, 리랭커, 인증 비활성화, OpenAPI, 동적 등록 계열 포함)다. 허용되지 않은 값은 기동 점검 목록에 올라가며 실제 적용되는 값은 달라지지 않는다.
+- 파라미터를 선언하지 않은 도구는 저장소 제약 위반에도 파라미터 이름을 말하지 않고 `Internal error`를 돌려주며 `code`를 붙이지 않는다. `batch_remember`의 항목 `type` 제약은 `Invalid arguments for batch_remember: type: must be one of ...` 형식으로 안내한다.
+- 세션 회전 요청은 `mcp_session_rotation_total`을 요청당 한 번만 센다. 성공 응답 전송이 실패해도 `rotated` 외의 결과를 더하지 않는다.
+- `node scripts/import-cycles.js`의 허용 목록은 항목마다 사유를 가지며, 더 이상 순환이 아닌 항목은 시험이 실패시킨다. 존재하지 않는 파일을 가리키는 상대 경로 import는 `unresolved relative imports`로 출력되고, 검사 범위에 `scripts`와 `bin`이 들어간다.
+- `npm run release`가 안내하는 `gh release create` 명령은 notes 파일 경로를 셸 인용으로 출력한다.
+- `docs/operations/monitoring.md`의 엔드포인트 표에 `/health` 행을 싣고, `/metrics`가 Bearer 없이 401을 돌려주며 `/health/live`와 `/health/ready`는 키 없이 호출함을 적는다.
+- 벤치마크 CLI는 `--no-seed` 실행에서 `--save-baseline`을 거부할 때 `--no-seed`를 사유로 안내한다.
 
 ### Removed
 
