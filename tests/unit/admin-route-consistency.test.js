@@ -271,11 +271,11 @@ function collectGuidePaths() {
   const clean = (raw) => raw.replace(/[.,;:)`]+$/, "").replace(/:[A-Za-z_]+/g, PARAM).split("?")[0].replace(/\/+$/, "");
   const skip  = (p) => p === "" || /\*|\.\.\.|^\/(assets|images)(\/|$)/.test(p);
 
-  for (const m of text.matchAll(/\/v1\/internal\/model\/nothing((?:\/[\w:\-.*]*)*)/g)) {
+  for (const m of text.matchAll(/\/v1\/internal\/model\/nothing((?:\/[\w:.*-]*)*)/g)) {
     const p = clean(m[1]);
     if (!skip(p) && !m[1].includes("*")) found.add(p);
   }
-  for (const m of text.matchAll(/\b(?:GET|POST|PUT|PATCH|DELETE) (\/memory\/[\w/:\-]+)/g)) found.add(clean(m[1]));
+  for (const m of text.matchAll(/\b(?:GET|POST|PUT|PATCH|DELETE) (\/memory\/[\w/:-]+)/g)) found.add(clean(m[1]));
   return [...found].sort();
 }
 
