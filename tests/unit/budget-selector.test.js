@@ -157,6 +157,31 @@ describe("selectWithinBudget", () => {
     assert.ok(strict > 500, `점수 합이 커진 시드가 적다: ${strict}`);
   });
 
+  it("구획 단계는 점수 0인 항목에 예산을 쓰지 않는다", () => {
+    const pool = [
+      frag("s1", 1.0, 50),
+      frag("s2", 0.9, 50),
+      frag("z", 0, 40, { _source: "linked" })
+    ];
+    const selection = selectWithinBudget(pool, { budget: 100, scoreOf });
+    assert.deepEqual(idsOf(selection), ["s1", "s2"]);
+  });
+
+  it("입력 순서를 바꿔도 같은 선택을 낸다(점수 합 동률, 시드 3000개)", () => {
+    const levels = [0.1, 0.2, 0.3, 0.6, 0.7];
+    for (let seed = 1; seed <= 3000; seed++) {
+      const rng  = createRng(seed);
+      const n    = 2 + Math.floor(rng() * 10);
+      const pool = Array.from({ length: n }, (_, i) => frag(`f${i}`, levels[Math.floor(rng() * levels.length)], 1 + Math.floor(rng() * 3)));
+      const budget   = 1 + Math.floor(rng() * pool.reduce((sum, f) => sum + f.estimated_tokens, 0));
+      const baseline = new Set(trimInSearchOrder(pool, budget).map(f => f.id));
+      const forward  = selectWithinBudget(pool, { budget, scoreOf, baselineIds: baseline });
+      const backward = selectWithinBudget([...pool].reverse(), { budget, scoreOf, baselineIds: baseline });
+      assert.deepEqual(idsOf(backward), idsOf(forward), `seed ${seed}`);
+      assert.equal(backward.score, forward.score, `seed ${seed}`);
+    }
+  });
+
   it("같은 입력은 같은 선택을 낸다", () => {
     const rng  = createRng(7);
     const pool = Array.from({ length: 50 }, (_, i) => frag(`f${i}`, rng(), 1 + Math.floor(rng() * 50), {
