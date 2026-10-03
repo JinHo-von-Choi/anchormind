@@ -1,4 +1,4 @@
--- migration-054-outbox-events.sql
+-- migration-052-outbox-events.sql
 --
 -- 작성자: 최진호
 -- 작성일: 2026-10-03
