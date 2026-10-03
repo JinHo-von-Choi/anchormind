@@ -169,6 +169,7 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-045-fragment-rls.sql      
 psql $DATABASE_URL -f lib/memory/migrations/migration-047-agent-scope-audit.sql                     # search_events 검색 범위 컬럼 + fragment_versions agent snapshot 컬럼
 psql $DATABASE_URL -f lib/memory/migrations/migration-048-case-events-case-closed.sql               # case_events.event_type에 case_closed 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-049-align-synthetic-query-embedding.sql       # synthetic query 임베딩 정합 마커 (DDL은 scripts/migrate.js가 적용)
+psql $DATABASE_URL -f lib/memory/migrations/migration-054-outbox-events.sql                         # outbox_events 표 추가
 ```
 
 migration-046은 결번이다. 수동 적용보다 `npm run migrate`를 권장한다(적용 이력과 opclass 치환을 자동 처리).

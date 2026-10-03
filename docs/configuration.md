@@ -1140,6 +1140,7 @@ EMBEDDING_DIMENSIONS=768
 | 047 | migration-047-agent-scope-audit.sql | `search_events.effective_agent_scope`, `include_peer_agents`, `fragment_versions`와 `case_events`의 `agent_id`, `workspace` snapshot 컬럼 |
 | 048 | migration-048-case-events-case-closed.sql | `case_events.event_type` CHECK에 `case_closed` 추가 |
 | 049 | migration-049-align-synthetic-query-embedding.sql | 이력 표식. `fragment_synthetic_query.embedding` 차원을 `fragments.embedding`에 맞추는 DDL은 `scripts/migrate.js`가 번호 마이그레이션 뒤에 적용 |
+| 054 | migration-054-outbox-events.sql | `outbox_events` 표(트랜잭션 outbox: topic, aggregate_id, payload, available_at, attempts, processed_at, last_error, dead_at, claim_token)와 대기, 완료, dead-letter 부분 색인 |
 
 ---
 

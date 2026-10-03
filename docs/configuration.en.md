@@ -1060,6 +1060,7 @@ Run `npm run migrate` to execute unapplied migrations in order. History is manag
 | 047 | migration-047-agent-scope-audit.sql | `search_events.effective_agent_scope`, `include_peer_agents`, and `agent_id`, `workspace` snapshot columns on `fragment_versions` and `case_events` |
 | 048 | migration-048-case-events-case-closed.sql | Adds `case_closed` to the `case_events.event_type` CHECK |
 | 049 | migration-049-align-synthetic-query-embedding.sql | History marker. The DDL that aligns the `fragment_synthetic_query.embedding` dimension with `fragments.embedding` is applied by `scripts/migrate.js` after the numbered migrations |
+| 054 | migration-054-outbox-events.sql | `outbox_events` table (transactional outbox: topic, aggregate_id, payload, available_at, attempts, processed_at, last_error, dead_at, claim_token) with partial indexes for pending, processed and dead-letter rows |
 
 ---
 

@@ -270,6 +270,9 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-048-case-events-case-close
 
 # Synthetic query embedding alignment marker (the DDL is applied by scripts/migrate.js)
 psql $DATABASE_URL -f lib/memory/migrations/migration-049-align-synthetic-query-embedding.sql
+
+# outbox_events table
+psql $DATABASE_URL -f lib/memory/migrations/migration-054-outbox-events.sql
 ```
 
 There is no migration-046. Prefer `npm run migrate`, which records applied files and substitutes the vector opclass automatically.
