@@ -45,7 +45,8 @@ const LABEL_PARAMS = new Map([
   ["recordWriteGate",               [0, 1]],
   ["recordCoreTrustExcluded",       [0]],
   ["recordReviewFlag",              [0, 1]],
-  ["recordReviewDecision",          [0]]
+  ["recordReviewDecision",          [0]],
+  ["recordWorkspaceReadAuthz",      [0, 1, 2]]
 ]);
 
 /** 기록 함수 안에서 protocolVersionLabel로 값을 닫는 함수 */
@@ -64,6 +65,7 @@ const METRIC_MODULES = new Set([
   "lib/memory/consolidate/split-metrics.js",
   "lib/memory/write/write-gate-metrics.js",
   "lib/memory/read/provenance-metrics.js",
+  "lib/memory/read/read-authz-metrics.js",
   "lib/outbox/outbox-metrics.js",
   "lib/hooks/hook-metrics.js"
 ]);
@@ -103,6 +105,9 @@ const REVIEWED = new Map([
   ["lib/memory/write/WriteGate.js|recordReviewFlag|state.entry",                   "검토 단계가 REVIEW_ENTRIES 안의 진입점에서만 표지를 단다"],
   ["lib/memory/write/WriteGate.js|recordReviewFlag|reason",                        "ReviewQueue.REVIEW_REASONS 상수"],
   ["lib/admin/ReviewStore.js|recordReviewDecision|decision",                       "REVIEW_DECISIONS 검증 뒤에만 도달하고 기록 함수가 닫힌 집합 밖을 other로 닫는다"],
+  ["lib/memory/read/WorkspaceReadAuthz.js|recordWorkspaceReadAuthz|surface",       "허가 도구 표의 도구 이름, resources/read, mode_preset이고 기록 함수가 그 밖의 값을 other로 닫는다"],
+  ["lib/memory/read/WorkspaceReadAuthz.js|recordWorkspaceReadAuthz|reason",        "decideWorkspaceRead의 거부 사유 상수와 preset 사유 상수이고 기록 함수가 그 밖의 값을 other로 닫는다"],
+  ["lib/memory/read/WorkspaceReadAuthz.js|recordWorkspaceReadAuthz|outcome",       "would_deny 또는 denied"],
   ["lib/memory/processors/RememberDuplicate.js|recordRememberDuplicate|kind",      "classifyDuplicate가 돌려주는 네 값이고 기록 함수가 그 밖의 값을 unknown으로 닫는다"],
   ["lib/handlers/mcp-handler.js|recordModernProtocolAttempt|signal",              "classifyModernProtocolAttempt가 돌려주는 세 값이고 기록 함수가 그 밖의 값을 unknown으로 닫는다"],
   ["lib/memory/write/RememberPostProcessor.js|recordClaim|c.extractor ?? \"morpheme-rule\"", "ClaimExtractor 추출기 이름"],

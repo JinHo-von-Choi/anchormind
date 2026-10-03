@@ -35,6 +35,7 @@ const RUNTIME = {
   MEMENTO_API_KEY_DELETE_GUARD:             "keys.isApiKeyDeleteGuardEnabled()",
   MEMENTO_REDIS_SESSION_FAIL_CLOSED:        "cfg.REDIS_SESSION_FAIL_CLOSED",
   MEMENTO_SESSION_ID_POLICY:                "cfg.sessionIdPolicy()",
+  MEMENTO_WORKSPACE_READ_AUTHZ:             "cfg.workspaceReadAuthzMode()",
   MCP_STRICT_ORIGIN:                        "cfg.STRICT_ORIGIN",
   MCP_ALLOW_AUTO_DCR_REGISTER:              "cfg.ALLOW_AUTO_DCR_REGISTER",
   MCP_REJECT_NONAPIKEY_OAUTH:               "cfg.REJECT_NONAPIKEY_OAUTH",

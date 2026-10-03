@@ -67,6 +67,7 @@ export const SWITCHES = Object.freeze([
   boolOff("MEMENTO_REDIS_SESSION_FAIL_CLOSED", "인증", "Redis 세션 저장 실패 시 메모리 대체 없이 요청을 실패시킨다"),
   enumOf("MEMENTO_SESSION_ID_POLICY", ["warn", "enforce"], "warn", "인증", "세션 ID 수신 규칙 위반을 기록만 하거나 거부한다"),
   enumOf("MEMENTO_OAUTH_REDIRECT_CHECK", ["warn", "enforce"], "warn", "인증", "OAuth 오류 응답의 리다이렉트 대상 확인을 기록만 하거나 거부한다"),
+  enumOf("MEMENTO_WORKSPACE_READ_AUTHZ", ["off", "warn", "enforce"], "warn", "인증", "API 키 allowed_workspaces 밖 읽기와 master 전용 preset 요청을 기록만 하거나 거부한다", { off: ["off"], exception: "보안 집행" }),
   enumOf("MEMENTO_CORS_MODE", ["reflect", "observe", "allowlist"], "observe", "네트워크", "허용 Origin 목록이 없을 때의 교차 출처 응답 방식"),
   enumOf("MEMENTO_FRAME_OPTIONS", ["deny"], "off", "네트워크", "응답에 X-Frame-Options DENY를 붙인다", { off: ["off"] }),
   enumOf("MEMENTO_SSE_QUERY_KEY", ["allow", "deny"], "allow", "네트워크", "SSE 쿼리스트링 키 수신을 허용하거나 거부한다"),
