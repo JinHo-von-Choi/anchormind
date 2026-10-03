@@ -200,6 +200,18 @@ describe("검토 단계: 갱신", () => {
     assert.equal(draft.is_anchor, false);
   });
 
+  it("검토 대기 파편의 앵커 지정 갱신은 새 사유가 없어도(스위치 off 포함) 보류한다", async () => {
+    const pending = { ...base, review_state: "pending", review_reason: "instruction_override" };
+    for (const review of [true, false]) {
+      const { fields } = await update({ is_anchor: true }, { baseRow: pending, g: gate({ review }) });
+      assert.equal(Object.hasOwn(fields, "is_anchor"), false, String(review));
+      assert.deepEqual(parseReviewReason(fields.review_reason), ["instruction_override", ANCHOR_REQUEST_MARK]);
+      assert.equal(fields.review_state, "pending");
+    }
+    const { fields } = await update({ is_anchor: true });
+    assert.equal(fields.is_anchor, true, "검토 대상 아닌 파편은 그대로 지정한다");
+  });
+
   it("앵커 해제는 검토 대기여도 그대로 적용한다", async () => {
     const { fields } = await update({ is_anchor: false, content: OVERRIDE }, { baseRow: { ...base, is_anchor: true } });
     assert.equal(fields.is_anchor, false);
