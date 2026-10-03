@@ -70,6 +70,9 @@ export function keyInUseMessage(data) {
 /** default_mode로 지정할 수 있는 preset. 서버가 받는 목록과 같다(requiresMaster preset 제외). */
 export const KEY_MODE_OPTIONS = ["recall-only", "write-only", "onboarding"];
 
+/** 키 상세의 권한 토글. 서버가 받는 권한 값과 같다(trusted_origin은 출처 신뢰 등급 상한). */
+export const KEY_PERMISSION_TOGGLES = ["read", "write", "trusted_origin"];
+
 /** allowed_workspaces 입력 한도. 서버 검증과 같다. */
 export const KEY_WORKSPACE_LIMITS = { count: 64, length: 128 };
 
@@ -583,7 +586,7 @@ export function renderKeyInspector(key, container) {
 
   const permBtns = document.createElement("div");
   permBtns.className = "flex gap-1";
-  ["read", "write"].forEach(p => {
+  KEY_PERMISSION_TOGGLES.forEach(p => {
     const btn = document.createElement("button");
     const active = (key.permissions || []).includes(p);
     btn.className = "px-2 py-0.5 text-[10px] font-bold rounded-sm border " +

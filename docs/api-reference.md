@@ -36,11 +36,11 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | GET | /v1/internal/model/nothing/activity | 최근 파편 활동 로그 (10건) |
 | GET | /v1/internal/model/nothing/metrics-summary | 대시보드 메트릭 요약 |
 | GET | /v1/internal/model/nothing/keys | API 키 목록 조회. 정책 열(`default_mode`, `allowed_workspaces`, `symbolic_hard_gate`)을 포함한다 |
-| POST | /v1/internal/model/nothing/keys | API 키 생성. 원시 키는 응답에서 단 1회 반환. `permissions`는 `read`, `write`로만 이뤄진 비어 있지 않은 배열이며 생략하면 `DEFAULT_PERMISSIONS`. 빈 배열, `null`, 그 밖의 값은 400 |
+| POST | /v1/internal/model/nothing/keys | API 키 생성. 원시 키는 응답에서 단 1회 반환. `permissions`는 `read`, `write` 중 하나 이상을 담은 배열이며 출처 신뢰 표지 `trusted_origin`을 함께 둘 수 있다. 생략하면 `DEFAULT_PERMISSIONS`. 빈 배열, `null`, `trusted_origin`만 있는 배열, 그 밖의 값은 400 |
 | PUT | /v1/internal/model/nothing/keys/:id | API 키 상태 변경 (active ↔ inactive) |
 | GET | /v1/internal/model/nothing/keys/:id/stats | API 키별 사용 통계 |
 | PUT | /v1/internal/model/nothing/keys/:id/daily-limit | API 키 일일 호출 제한 변경. 마스터 키 인증 필요 |
-| PUT | /v1/internal/model/nothing/keys/:id/permissions | API 키 권한 변경 |
+| PUT | /v1/internal/model/nothing/keys/:id/permissions | API 키 권한 변경. 허용 값은 POST와 같다(`read`, `write` 중 하나 이상, 선택 `trusted_origin`). `trusted_origin`이 있는 키는 remember의 `origin` 주장으로 신뢰 등급 3까지 쓸 수 있고, 없는 키는 2가 상한이다(`MEMENTO_PROVENANCE`) |
 | PUT | /v1/internal/model/nothing/keys/:id/fragment-limit | API 키 파편 할당량 변경 |
 | PATCH | /v1/internal/model/nothing/keys/:id/workspace | API 키의 default_workspace 변경. `{ workspace: "name" }` 또는 `{ workspace: null }` (null=해제) |
 | PATCH | /v1/internal/model/nothing/keys/:id/policy | API 키 정책 열 변경. 본문은 `default_mode`, `allowed_workspaces`, `symbolic_hard_gate` 중 하나 이상. 아래 절 참조 |
@@ -714,6 +714,7 @@ reason code 목록 (최대 3개):
 | assertionStatus | string | - | 파편의 신뢰도 수준 (observed, inferred, verified, rejected). 기본값: observed |
 | affect | string | - | 기억 당시의 정서 상태 태그. 기본값: neutral. 유효값: neutral, frustration, confidence, surprise, doubt, satisfaction |
 | idempotencyKey | string | - | 재시도 안전 식별자 (최대 128자). 같은 key_id 범위에서 동일 값으로 remember를 반복 호출하면 새 파편을 생성하지 않고 기존 파편 id를 반환한다. 클라이언트 재시도·네트워크 중복 방지 목적. |
+| origin | string | - | 기억의 출처 주장: user_stated, agent_inferred, tool_output, external_content, consolidation, import. 서버는 이 값과 initialize의 `clientInfo.name`, 키 상한으로 `trust_tier`(0~3)를 정한다. 등급은 출처 등급(user_stated 3, external_content 1, 그 밖 2)과 키 상한(권한 `trusted_origin` 또는 마스터 키 3, 그 밖 2) 중 작은 값이고, 1 이하는 context의 ANCHOR와 CORE 주입에서 빠진다. 허용 밖의 값은 `-32602`. 미지정이면 출처 없음(등급 2). `MEMENTO_PROVENANCE=off`이면 무시된다 |
 | dryRun | boolean | - | true 설정 시 변경을 실제 적용하지 않고 실행 계획만 반환. 할당량·충돌 검사 결과를 파편 생성 없이 미리 확인할 수 있다. |
 
 `affect` 사용 예:
@@ -843,7 +844,7 @@ violations 있는 경우 (soft gate — 저장됨):
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| fragments | object[] | O | 저장할 파편 배열 (최대 200건). 각 항목은 content(string, 필수, 최대 4000자, 초과 시 해당 항목 `-32602` 거부), topic(string, 필수), type(string, 필수), importance(number), keywords(string[]), workspace(string), idempotencyKey(string, 최대 128자) 포함. |
+| fragments | object[] | O | 저장할 파편 배열 (최대 200건). 각 항목은 content(string, 필수, 최대 4000자, 초과 시 해당 항목 `-32602` 거부), topic(string, 필수), type(string, 필수), importance(number), keywords(string[]), workspace(string), idempotencyKey(string, 최대 128자), origin(string, remember의 `origin`과 같은 값과 규칙, 허용 밖의 값은 그 항목만 실패) 포함. |
 | workspace | string | - | 배치 기본 워크스페이스. 개별 파편에 workspace 미지정 시 이 값으로 대체. 미지정 시 키의 default_workspace 적용. |
 | agentId | string | - | 에이전트 ID (에이전트 구분용) |
 | stream | boolean | - | deprecated: 더 이상 SSE progress 이벤트를 보내지 않는다. batch_remember는 표준 단일 JSON 응답으로 반환된다. 이 파라미터는 하위 호환성을 위해 유지되지만 동작에 영향을 주지 않는다. |

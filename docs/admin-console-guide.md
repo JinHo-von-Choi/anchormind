@@ -106,7 +106,9 @@ Tailwind CSS와 d3 스크립트는 외부 CDN이 아니라 서버가 `assets/adm
 3. GENERATE AND VIEW SECRET 클릭
 4. 표시되는 전체 키를 반드시 복사하여 안전한 곳에 저장한다. 이 키는 다시 표시되지 않는다.
 
-`POST /v1/internal/model/nothing/keys`의 `permissions`는 `read`, `write`로만 이뤄진 비어 있지 않은 배열이어야 하며 생략하면 기본 권한이 적용된다. 빈 배열이나 `null`은 400으로 거절된다.
+`POST /v1/internal/model/nothing/keys`의 `permissions`는 `read`, `write` 중 하나 이상을 담은 배열이어야 하며 출처 신뢰 표지 `trusted_origin`을 함께 둘 수 있다. 생략하면 기본 권한이 적용된다. 빈 배열이나 `null`은 400으로 거절되고, `trusted_origin`만 있는 배열도 400이다.
+
+키 상세의 PERMISSIONS 토글(READ, WRITE, TRUSTED_ORIGIN)은 `PUT /v1/internal/model/nothing/keys/:id/permissions`로 저장된다. TRUSTED_ORIGIN을 켠 키는 remember의 `origin` 주장(`user_stated`)으로 신뢰 등급 3까지 기록할 수 있고, 끈 키는 2가 상한이다(`MEMENTO_PROVENANCE`).
 
 키 행을 클릭하면 우측에 상세 패널이 열린다:
 - Daily Rate Limit -- 일일 호출 제한을 인라인으로 편집한다. 숫자 입력 필드에 값을 입력하면 변경 즉시 `PUT /v1/internal/model/nothing/keys/:id/daily-limit` API로 저장된다.

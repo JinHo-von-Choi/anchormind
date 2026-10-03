@@ -33,11 +33,11 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | GET | /v1/internal/model/nothing/activity | Recent fragment activity log (10 entries) |
 | GET | /v1/internal/model/nothing/metrics-summary | Dashboard metrics summary |
 | GET | /v1/internal/model/nothing/keys | API key list. Includes the policy columns (`default_mode`, `allowed_workspaces`, `symbolic_hard_gate`) |
-| POST | /v1/internal/model/nothing/keys | Create API key. Raw key returned in response exactly once. `permissions` is a non-empty array of `read` and `write` only and defaults to `DEFAULT_PERMISSIONS` when omitted; an empty array, `null` or any other value returns 400 |
+| POST | /v1/internal/model/nothing/keys | Create API key. Raw key returned in response exactly once. `permissions` is an array with at least one of `read` and `write`, optionally with the provenance trust marker `trusted_origin`, and defaults to `DEFAULT_PERMISSIONS` when omitted; an empty array, `null`, an array with only `trusted_origin` or any other value returns 400 |
 | PUT | /v1/internal/model/nothing/keys/:id | Change API key status (active <-> inactive) |
 | GET | /v1/internal/model/nothing/keys/:id/stats | Per-key usage statistics |
 | PUT | /v1/internal/model/nothing/keys/:id/daily-limit | Change API key daily call limit. Master key required |
-| PUT | /v1/internal/model/nothing/keys/:id/permissions | Change API key permissions |
+| PUT | /v1/internal/model/nothing/keys/:id/permissions | Change API key permissions. Accepted values are the same as for POST (at least one of `read` and `write`, optionally `trusted_origin`). A key with `trusted_origin` can reach trust tier 3 through the `origin` claim of remember; other keys are capped at 2 (`MEMENTO_PROVENANCE`) |
 | PUT | /v1/internal/model/nothing/keys/:id/fragment-limit | Change API key fragment quota |
 | PATCH | /v1/internal/model/nothing/keys/:id/workspace | Change API key's default_workspace. `{ workspace: "name" }` or `{ workspace: null }` (null=unset) |
 | PATCH | /v1/internal/model/nothing/keys/:id/policy | Change API key policy columns. The body carries at least one of `default_mode`, `allowed_workspaces`, `symbolic_hard_gate`. See the section below |
@@ -697,6 +697,7 @@ Fragment-based memory storage. Store exactly one atomic fact in 1-2 sentences. I
 | assertionStatus | string | - | Fragment confidence level (observed, inferred, verified, rejected). Default: observed |
 | affect | string | - | Emotional state tag at the time of storing this memory. Default: neutral. Valid values: neutral, frustration, confidence, surprise, doubt, satisfaction |
 | idempotencyKey | string | - | Retry-safe identifier (max 128 characters). Repeated calls with the same value within the same key_id scope return the existing fragment id without creating a new fragment. For client retry and network deduplication. |
+| origin | string | - | Claimed source of the memory: user_stated, agent_inferred, tool_output, external_content, consolidation, import. The server sets `trust_tier` (0 to 3) from this value, the initialize `clientInfo.name` and the key cap. The tier is the smaller of the origin tier (user_stated 3, external_content 1, others 2) and the key cap (3 with the `trusted_origin` permission or the master key, otherwise 2); tier 1 or lower is left out of the ANCHOR and CORE injection of context. Values outside the list return `-32602`. Omitted means no origin (tier 2). Ignored with `MEMENTO_PROVENANCE=off` |
 | dryRun | boolean | - | When true, returns an execution plan without applying changes. Inspect quota and conflict check results before fragment creation. |
 
 `affect` usage example:
@@ -826,7 +827,7 @@ Store multiple fragments at once (for bulk memory input). Batch INSERTs up to 20
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| fragments | object[] | Y | Array of fragments to store (max 200). Each item includes content (string, required, max 4000 characters — an item exceeding it is rejected with `-32602`), topic (string, required), type (string, required), importance (number), keywords (string[]), workspace (string), idempotencyKey (string, max 128 chars). |
+| fragments | object[] | Y | Array of fragments to store (max 200). Each item includes content (string, required, max 4000 characters; an item exceeding it is rejected with `-32602`), topic (string, required), type (string, required), importance (number), keywords (string[]), workspace (string), idempotencyKey (string, max 128 chars), origin (string, same values and rules as the remember `origin`; a value outside the list fails only that item). |
 | workspace | string | - | Batch default workspace. Used for individual fragments without a workspace. Key's default_workspace applied if not specified. |
 | agentId | string | - | Agent ID (for agent scoping) |
 | stream | boolean | - | Deprecated: no longer emits SSE progress events. batch_remember returns a standard single JSON response. This parameter is retained for backward compatibility but has no effect on behavior. |
