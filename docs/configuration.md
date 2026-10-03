@@ -79,9 +79,9 @@
 | MEMENTO_DB_LOCK_RETRY_MAX | 3 | 파편 행을 여러 개 잠그는 쓰기 트랜잭션이 교착(40P01)이나 잠금 대기 상한(55P03)으로 끝났을 때 처음부터 다시 실행하는 최대 횟수. 재시도 전 대기는 25ms에서 두 배씩 늘어 400ms를 넘지 않으며 그 범위의 절반에서 상한 사이 임의 값이다. 0이면 재시도하지 않는다. 0 이상 10 이하의 정수만 받고 그 밖은 기본값. 재시도 수는 `memento_db_deadlock_retries_total`(operation 라벨)로 노출된다 |
 | MEMENTO_DECAY_MIN_DELTA | 0 | 감쇠량이 이 값보다 작은 행을 건너뛴다. 마지막 감쇠 후 24시간이 지난 행은 항상 갱신(하한 0.05에 닿은 행은 이 상한 때문에 대략 네 번에 한 번 다시 쓰인다). 숫자가 아니거나 음수인 값은 0으로 처리하고 경고를 남기며 1을 넘는 값은 1로 제한한다. `MEMENTO_SCORE_UPDATE_BATCH`가 0이면 적용하지 않는다 |
 | MEMENTO_UTILITY_MIN_DELTA | 0 | 저장값과의 차이가 이 값 이하인 utility_score를 다시 쓰지 않는다. 숫자가 아니거나 음수인 값은 0으로 처리하고 경고를 남기며 1을 넘는 값은 1로 제한한다. `MEMENTO_SCORE_UPDATE_BATCH`가 0이면 적용하지 않는다 |
-| MEMENTO_GC_THROUGHPUT | on | 만료 파편 정리의 처리량 스위치. `on`이면 정리 단계 `expired_delete`가 후보를 100건 청크로 반복해 주기당 삭제 상한(`MEMENTO_GC_MAX_DELETE_PER_CYCLE`), 시간 예산(`MEMENTO_GC_TIME_BUDGET_MS`), 후보 소진 중 먼저 닿는 것에서 멈춘다. 청크마다 별도 트랜잭션에서 대상 행을 id 오름차순으로 잠근 뒤 잠근 행만 지우며(잠금 대기 상한 3초, 교착과 잠금 대기 초과는 `MEMENTO_DB_LOCK_RETRY_MAX`까지 재실행), 청크가 실패하면 그때까지 지운 수를 돌려주고 다음 주기가 이어간다. `off`이면 주기당 `gc.maxDeletePerCycle`(50)건을 한 문장으로 지운다. 호출 시점에 읽는다 |
+| MEMENTO_GC_THROUGHPUT | on | 만료 파편 정리의 처리량 스위치. `on`이면 정리 단계 `expired_delete`가 후보를 100건 청크로 반복해 주기당 삭제 상한(`MEMENTO_GC_MAX_DELETE_PER_CYCLE`), 시간 예산(`MEMENTO_GC_TIME_BUDGET_MS`), 후보 소진 중 먼저 닿는 것에서 멈춘다. 청크마다 별도 트랜잭션에서 대상 행을 id 오름차순으로 잠근 뒤 잠근 행만 지우며(잠금 대기 상한 3초, 교착과 잠금 대기 초과는 `MEMENTO_DB_LOCK_RETRY_MAX`까지 재실행), 청크가 실패하면 그때까지 지운 수를 돌려주고 다음 주기가 이어간다. 다른 정리 주기나 `forget`이 청크 도중에 대상 행을 먼저 지우면 그 청크가 요청보다 적게 지워 이번 주기가 일찍 끝날 수 있다(안전하며 다음 주기가 이어간다). 청크의 잠금 대기 상한은 `fragment_links`와 버전 행의 연쇄 삭제에도 적용되고, 재시도(`MEMENTO_DB_LOCK_RETRY_MAX`)까지 겹치면 청크 하나가 시간 예산을 넘어 약 12초 더 기다릴 수 있다. `off`이면 주기당 `gc.maxDeletePerCycle`(50)건을 한 문장으로 지운다. 호출 시점에 읽는다 |
 | MEMENTO_GC_MAX_DELETE_PER_CYCLE | 4000 | 만료 파편 정리가 한 주기(`CONSOLIDATE_INTERVAL_MS`, 기본 6시간)에 지우는 최대 건수. 기본값은 30일 일평균 파편 유입(약 1900건)의 두 배 이상이다. 100 이상 100000 이하의 정수만 받고 그 밖은 기본값이다. `MEMENTO_GC_THROUGHPUT=off`이면 쓰지 않는다. 호출 시점에 읽는다 |
-| MEMENTO_GC_TIME_BUDGET_MS | 60000 | 만료 파편 정리 한 주기에서 새 청크를 시작할 수 있는 시간(ms). 청크 하나는 항상 끝까지 실행한다. 1000 이상 600000 이하의 정수만 받고 그 밖은 기본값이다. `MEMENTO_GC_THROUGHPUT=off`이면 쓰지 않는다. 정리 주기가 끝날 때 남은 만료 후보 수(상한 100000에서 세기를 멈추는 근사값)를 `memento_gc_backlog` 게이지에 기록한다. 호출 시점에 읽는다 |
+| MEMENTO_GC_TIME_BUDGET_MS | 60000 | 만료 파편 정리 한 주기에서 새 청크를 시작할 수 있는 시간(ms). 청크 하나는 항상 끝까지 실행한다. 1000 이상 600000 이하의 정수만 받고 그 밖은 기본값이다. `MEMENTO_GC_THROUGHPUT=off`이면 쓰지 않는다. 정리 주기가 끝날 때 남은 만료 후보 수(상한 100000에서 세기를 멈추는 근사값)를 `memento_gc_backlog` 게이지에 기록한다. 게이지는 동시에 도는 정리 주기 사이에서 마지막으로 쓴 값이 남고 첫 정리 주기 전에는 0이다. 호출 시점에 읽는다 |
 | MEMENTO_RUNTIME | (없음) | `docker`면 Docker 설치로 판정한다 |
 | GITHUB_TOKEN | (없음) | 업데이트 확인 시 GitHub API 인증 토큰 |
 | WORKER_ID | single | health 응답의 workerId 표기 |
@@ -599,11 +599,6 @@ export const MEMORY_CONFIG = {
     errorResolvedPolicy    : {
       maxAgeDays           : 30,     // [해결됨] error 파편 삭제 기준 (일)
       maxImportance        : 0.3     // 이 값 미만이면 삭제 대상
-    },
-    splitChildPolicy: {
-      maxImportance      : 0.3,  // split 자식이 이 importance 미만이면 GC 후보 (branch 1)
-      orphanAgeDays      : 30,   // 생성 후 이 일수 경과 + 무접근 시 삭제 (branch 1)
-      tombstonedGraceDays: 7     // 부모가 tombstone된 split 자식의 유예 일수 (branch 2)
     }
   },
   reflectionPolicy: {

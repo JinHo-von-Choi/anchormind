@@ -274,11 +274,6 @@ export const MEMORY_CONFIG = {
     errorResolvedPolicy    : {
       maxAgeDays           : 30,
       maxImportance        : 0.3
-    },
-    splitChildPolicy: {
-      maxImportance     : 0.3, // split 자식이 이 importance 미만이면 GC 후보 (branch 1)
-      orphanAgeDays     : 30,  // 생성 후 이 일수 경과 + 무접근 시 삭제 (branch 1)
-      tombstonedGraceDays: 7   // 부모가 tombstone된 split 자식의 유예 일수 (branch 2)
     }
   },
   /** 시맨틱 중복 제거 정책 (consolidate 사이클) */
