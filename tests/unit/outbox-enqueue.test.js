@@ -12,7 +12,7 @@ import { describe, it, afterEach } from "node:test";
 import assert                      from "node:assert/strict";
 
 import {
-  enqueue, enqueueStandalone, normalizeOutboxEvent, idempotencyKey,
+  enqueue, enqueueStandalone, enqueueAutocommit, normalizeOutboxEvent, idempotencyKey,
   OutboxValidationError, OutboxTransactionRequiredError, PAYLOAD_MAX_BYTES
 } from "../../lib/outbox/Outbox.js";
 
@@ -189,6 +189,47 @@ describe("enqueueStandalone", () => {
     const result = await enqueueStandalone({ connect: async () => { borrowed = true; return fakeClient(); } }, EVENT);
     assert.equal(result, null);
     assert.equal(borrowed, false);
+  });
+});
+
+describe("enqueueAutocommit", () => {
+  /** query만 있는 풀 대역 */
+  const queryPool = ({ rows = [{ id: "9" }], error = null } = {}) => {
+    const calls = [];
+    return {
+      calls,
+      connect: async () => { throw new Error("connect must not be used"); },
+      async query(sql, params) {
+        calls.push({ sql: String(sql).trim(), params });
+        if (error) throw error;
+        return { rows, rowCount: rows.length };
+      }
+    };
+  };
+
+  it("INSERT 문장 하나로 기록하고 BEGIN과 COMMIT을 보내지 않는다", async () => {
+    const pool   = queryPool();
+    const result = await enqueueAutocommit(pool, EVENT);
+    assert.deepEqual(result, { id: "9" });
+    assert.equal(pool.calls.length, 1);
+    assert.match(pool.calls[0].sql, /^INSERT INTO/i);
+  });
+
+  it("기록 오류를 그대로 던진다", async () => {
+    const failure = new Error("insert failed");
+    await assert.rejects(enqueueAutocommit(queryPool({ error: failure }), EVENT), (err) => err === failure);
+  });
+
+  it("이벤트 검사는 스위치보다 먼저이고 off이면 질의하지 않는다", async () => {
+    process.env.MEMENTO_OUTBOX = "off";
+    const pool = queryPool();
+    await assert.rejects(enqueueAutocommit(pool, { topic: "a.b", payload: [1] }), OutboxValidationError);
+    assert.equal(await enqueueAutocommit(pool, EVENT), null);
+    assert.equal(pool.calls.length, 0);
+  });
+
+  it("query가 없는 인자는 거부한다", async () => {
+    await assert.rejects(enqueueAutocommit({}, EVENT), OutboxTransactionRequiredError);
   });
 });
 

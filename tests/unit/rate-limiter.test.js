@@ -22,6 +22,16 @@ describe("RateLimiter", () => {
     assert.strictEqual(limiter.allow("1.2.3.4"), false);
   });
 
+  it("peek은 요청을 기록하지 않고 한 번 더 받을 수 있는지만 알려 준다", () => {
+    assert.ok(limiter.peek("9.9.9.9"));
+    limiter.allow("9.9.9.9");
+    limiter.allow("9.9.9.9");
+    assert.ok(limiter.peek("9.9.9.9"));
+    assert.ok(limiter.peek("9.9.9.9"));
+    limiter.allow("9.9.9.9");
+    assert.strictEqual(limiter.peek("9.9.9.9"), false);
+  });
+
   it("isolates different IPs", () => {
     limiter.allow("1.2.3.4");
     limiter.allow("1.2.3.4");
