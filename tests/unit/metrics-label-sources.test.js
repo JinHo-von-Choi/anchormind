@@ -42,7 +42,8 @@ const LABEL_PARAMS = new Map([
   ["recordWarning",                 [0, 1]],
   ["recordClaim",                   [0, 1]],
   ["recordRememberDuplicate",       [0]],
-  ["recordWriteGate",               [0, 1]]
+  ["recordWriteGate",               [0, 1]],
+  ["recordCoreTrustExcluded",       [0]]
 ]);
 
 /** 기록 함수 안에서 protocolVersionLabel로 값을 닫는 함수 */
@@ -59,6 +60,7 @@ const METRIC_MODULES = new Set([
   "lib/memory/consolidate/gate-metrics.js",
   "lib/memory/consolidate/split-metrics.js",
   "lib/memory/write/write-gate-metrics.js",
+  "lib/memory/read/provenance-metrics.js",
   "lib/outbox/outbox-metrics.js"
 ]);
 

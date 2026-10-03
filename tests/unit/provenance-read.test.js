@@ -46,7 +46,15 @@ mock.module("../../lib/tools/db.js", {
 const { tool_recall }    = await import("../../lib/tools/memory.js");
 const { ContextBuilder } = await import("../../lib/memory/read/ContextBuilder.js");
 const { anchorProvenanceSql, dropLowTrust, withOriginMeta } = await import("../../lib/memory/read/ContextTrust.js");
-const { contextAnnotation } = await import("../../lib/memory/read/ContextLines.js");
+const { contextAnnotation, contextAnnotationTokens } = await import("../../lib/memory/read/ContextLines.js");
+const { contextResponse }   = await import("../../lib/tools/context-response.js");
+const { coreTrustExcludedTotal } = await import("../../lib/memory/read/provenance-metrics.js");
+
+/** reason별 core 제외 지표 값 */
+async function counterValue(reason) {
+  const { values } = await coreTrustExcludedTotal.get();
+  return values.find(v => v.labels.reason === reason)?.value ?? 0;
+}
 const { buildAnswerPack }   = await import("../../lib/memory/read/AnswerPack.js");
 
 const fragment = (id, extra = {}) => ({
@@ -76,7 +84,7 @@ describe("주입 제외 술어", () => {
     });
   });
 
-  it("core 후보에서 등급 1 이하만 뺀다", () => {
+  it("core 후보에서 등급 1 이하와 조회 결과에 없는 파편을 뺀다", () => {
     const map = new Map([
       ["error", [{ id: "t0" }, { id: "t1" }, { id: "t2" }]],
       ["fact", [{ id: "t3" }, { id: "unknown" }, { id: "null" }]]
@@ -85,10 +93,18 @@ describe("주입 제외 술어", () => {
       ["t0", { trustTier: 0 }], ["t1", { trustTier: 1 }], ["t2", { trustTier: 2 }],
       ["t3", { trustTier: 3 }], ["null", { trustTier: null }]
     ]);
-    const kept = dropLowTrust(map, provenance);
+    const { typeFragMap: kept, excluded } = dropLowTrust(map, provenance);
     assert.deepEqual(kept.get("error").map(f => f.id), ["t2"]);
-    assert.deepEqual(kept.get("fact").map(f => f.id), ["t3", "unknown", "null"]);
+    assert.deepEqual(kept.get("fact").map(f => f.id), ["t3", "null"]);
+    assert.deepEqual(excluded, { lowTrust: 2, missing: 1 });
     assert.deepEqual(map.get("error").map(f => f.id), ["t0", "t1", "t2"], "입력 맵은 그대로다");
+  });
+
+  it("빈 조회 결과(조회 실패)면 모든 후보를 뺀다", () => {
+    const map = new Map([["error", [{ id: "a" }, { id: "b" }]]]);
+    const { typeFragMap: kept, excluded } = dropLowTrust(map, new Map());
+    assert.deepEqual(kept.get("error"), []);
+    assert.deepEqual(excluded, { lowTrust: 0, missing: 2 });
   });
 
   it("주석 필드에 출처를 더한다", () => {
@@ -109,7 +125,7 @@ describe("context 주입 줄의 출처 주석", () => {
 });
 
 /** 앵커 한 개와 유형별 core 파편 두 개(낮은 등급 하나)를 돌려주는 ContextBuilder */
-function makeBuilder(queries) {
+function makeBuilder(queries, { failLookup = false, dropRow = null } = {}) {
   const recall = async params => {
     if (params.topic === "session_reflect") return { fragments: [] };
     return {
@@ -132,10 +148,11 @@ function makeBuilder(queries) {
         }] };
       }
       if (isSourceSql(sql)) {
+        if (failLookup) throw new Error("synthetic core provenance failure");
         return { rows: [
           { id: "low", source: null, origin: "external_content", trust_tier: 1 },
           { id: "ok", source: null, origin: "tool_output", trust_tier: 2 }
-        ] };
+        ].filter(row => row.id !== dropRow) };
       }
       return { rows: [] };
     }
@@ -164,6 +181,46 @@ describe("ContextBuilder 주입 제외", () => {
     assert.ok(!("origin" in result.fragments[0]), "앵커 응답 파편에는 origin이 드러나지 않는다");
   });
 
+  it("등급 조회에 성공하면 coreSelection은 partial이 아니고 뺀 수를 싣는다", async () => {
+    const result = await makeBuilder([]).build({ types: ["error"] });
+    assert.deepEqual(result._coreSelection, { partial: false, loadStatus: { trust: true }, excluded: { lowTrust: 1, missing: 0 } });
+  });
+
+  it("등급 조회가 실패하면 core 후보를 모두 빼고 partial과 지표를 남긴다", async () => {
+    const before = await counterValue("lookup_failed");
+    const result = await makeBuilder([], { failLookup: true }).build({ types: ["error"] });
+    assert.ok(!result.injectionText.includes("ok body"), result.injectionText);
+    assert.ok(!result.injectionText.includes("low body"), result.injectionText);
+    assert.ok(result.injectionText.includes("anchor body"), "앵커는 SQL 술어로 거르므로 그대로다");
+    assert.deepEqual(result._coreSelection, { partial: true, loadStatus: { trust: false }, excluded: { lowTrust: 0, missing: 2 } });
+    assert.equal(await counterValue("lookup_failed"), before + 2);
+  });
+
+  it("조회 결과에 없는 core 파편은 뺀다", async () => {
+    const result = await makeBuilder([], { dropRow: "ok" }).build({ types: ["error"] });
+    assert.ok(!result.injectionText.includes("ok body"), result.injectionText);
+    assert.equal(result._coreSelection.excluded.missing, 1);
+  });
+
+  it("context 도구 응답은 coreSelection을 _meta에 싣는다", () => {
+    const selection = { partial: true, loadStatus: { trust: false }, excluded: { lowTrust: 0, missing: 2 } };
+    const response  = contextResponse({ fragments: [], _anchorSelection: { partial: false }, _coreSelection: selection });
+    assert.deepEqual(response._meta.coreSelection, selection);
+    assert.ok(!("_coreSelection" in response));
+    assert.ok(!("coreSelection" in contextResponse({ fragments: [] })._meta), "없으면 싣지 않는다");
+  });
+
+  it("출처를 싣는 주석의 선택 비용은 가장 긴 출처까지 센다", () => {
+    const longest = contextAnnotation(
+      { created_at: "2026-12-31T00:00:00Z", assertion_status: "observed", origin: "external_content" },
+      { withOrigin: true }
+    );
+    assert.equal(longest.length, 41);
+    assert.equal(contextAnnotationTokens({ withOrigin: true }), Math.ceil(longest.length / 4));
+    assert.equal(contextAnnotationTokens({ withOrigin: true }), 11);
+    assert.equal(contextAnnotationTokens(), 6);
+  });
+
   it("structured 응답의 core에도 낮은 등급 파편이 없다", async () => {
     const result = await makeBuilder([]).build({ types: ["error"], structured: true });
     assert.ok(!JSON.stringify(result.core).includes("low body"));
@@ -178,6 +235,7 @@ describe("ContextBuilder 주입 제외", () => {
     assert.equal(queries.filter(isSourceSql).length, 0);
     assert.ok(result.injectionText.includes("- low body (2026-09-20, observed)"), result.injectionText);
     assert.ok(result.injectionText.includes("- ok body (2026-09-21, observed)"), result.injectionText);
+    assert.ok(!("_coreSelection" in result));
   });
 });
 

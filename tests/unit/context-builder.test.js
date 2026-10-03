@@ -10,6 +10,7 @@
 
 import { describe, it, mock, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { poolWithProvenance } from "./_provenance-pool.js";
 
 import {
   ContextBuilder,
@@ -439,13 +440,11 @@ describe("ContextBuilder.build()", () => {
       recall: recallMock,
       store : storeMock,
       index : indexMock,
-      getPool: () => ({
-        query: async () => ({
-          rows: Array.from({ length: 10 }, (_, index) =>
-            frag(`anchor-${index}`, "fact", "a".repeat(900), { is_anchor: true })
-          )
-        })
-      })
+      getPool: () => poolWithProvenance(async () => ({
+        rows: Array.from({ length: 10 }, (_, index) =>
+          frag(`anchor-${index}`, "fact", "a".repeat(900), { is_anchor: true })
+        )
+      }))
     });
 
     const result = await builder.build({
@@ -484,11 +483,9 @@ describe("ContextBuilder.build()", () => {
       recall: recallMock,
       store: storeMock,
       index: indexMock,
-      getPool: () => ({
-        query: async () => ({
-          rows: [frag("shared", "fact", "anchor owner", { is_anchor: true, importance: 1 })]
-        })
-      })
+      getPool: () => poolWithProvenance(async () => ({
+        rows: [frag("shared", "fact", "anchor owner", { is_anchor: true, importance: 1 })]
+      }))
     });
 
     const result = await builder.build({ structured: true, types: ["fact"], tokenBudget: 1 });

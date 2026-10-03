@@ -11,6 +11,7 @@
 
 import { describe, it, mock, afterEach } from "node:test";
 import assert                            from "node:assert/strict";
+import { poolWithProvenance }             from "./_provenance-pool.js";
 
 import {
   CONTEXT_ANNOTATION_MAX_CHARS, CONTEXT_ANNOTATION_TOKENS, contextAnnotation, formatUtcDate, renderContextSectionLines
@@ -127,14 +128,12 @@ describe("ContextBuilder 주입 줄과 MEMENTO_CONTEXT_ANNOTATE", () => {
         }]
       };
     });
-    const pool = {
-      query: async () => ({
-        rows: [{
-          id: "anchor-1", content: "anchor body", type: "fact", topic: "t", importance: 0.9, workspace: null,
-          created_at: "2026-09-10T10:00:00Z", assertion_status: "verified", candidate_count: 1
-        }]
-      })
-    };
+    const pool = poolWithProvenance(async () => ({
+      rows: [{
+        id: "anchor-1", content: "anchor body", type: "fact", topic: "t", importance: 0.9, workspace: null,
+        created_at: "2026-09-10T10:00:00Z", assertion_status: "verified", candidate_count: 1
+      }]
+    }));
     return new ContextBuilder({
       recall,
       store  : { searchBySource: mock.fn(async () => []) },

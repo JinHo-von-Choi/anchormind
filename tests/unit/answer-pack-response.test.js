@@ -16,8 +16,7 @@ process.env.DOTENV_CONFIG_PATH      ??= ".env.test";
 process.env.MEMENTO_METRICS_DEFAULT ??= "off";
 process.env.REDIS_ENABLED           ??= "false";
 process.env.CACHE_ENABLED           ??= "false";
-/** 출처 열을 싣는 동작은 provenance-read.test.js가 본다. 여기서는 꾸러미 v0 형태만 본다. */
-process.env.MEMENTO_PROVENANCE      ??= "off";
+const savedProvenance = process.env.MEMENTO_PROVENANCE;
 
 const state = { result: null, queries: [], failProvenance: false };
 
@@ -63,6 +62,8 @@ const fragment = (id, extra = {}) => ({
 });
 
 beforeEach(() => {
+  if (savedProvenance === undefined) delete process.env.MEMENTO_PROVENANCE;
+  else process.env.MEMENTO_PROVENANCE = savedProvenance;
   state.queries        = [];
   state.failProvenance = false;
   state.result         = {
@@ -73,7 +74,7 @@ beforeEach(() => {
 });
 
 describe("recall format", () => {
-  it("format이 없으면 기존 응답 shape이고 출처 조회를 하지 않는다", async () => {
+  it("format이 없으면 fragments 응답이고 기본(MEMENTO_PROVENANCE=on)은 출처 열 조회 한 번만 한다", async () => {
     const response = await tool_recall({ keywords: ["k"] });
 
     assert.equal(response.success, true);
@@ -81,6 +82,22 @@ describe("recall format", () => {
     assert.equal(response.fragments.length, 2);
     assert.ok(!("format" in response));
     assert.ok(!("pack" in response));
+    const lookups = state.queries.filter(q => isProvenanceSql(q.sql));
+    assert.equal(lookups.length, 1);
+    assert.match(lookups[0].sql, /f\.origin, f\.trust_tier/);
+    assert.doesNotMatch(lookups[0].sql, /superseded_by/);
+    for (const f of response.fragments) assert.ok(!("origin" in f) && !("trust_tier" in f), "NULL 출처 행은 필드가 없다");
+  });
+
+  it("fields가 origin과 trust_tier를 모두 빼면 출처 열을 조회하지 않는다", async () => {
+    await tool_recall({ keywords: ["k"], fields: ["id", "content"] });
+    assert.equal(state.queries.filter(q => isProvenanceSql(q.sql)).length, 0);
+  });
+
+  it("MEMENTO_PROVENANCE=off이면 format이 없을 때 출처 조회를 하지 않는다", async () => {
+    process.env.MEMENTO_PROVENANCE = "off";
+    const response = await tool_recall({ keywords: ["k"] });
+    assert.equal(response.fragments.length, 2);
     assert.equal(state.queries.filter(q => isProvenanceSql(q.sql)).length, 0);
   });
 
@@ -103,6 +120,16 @@ describe("recall format", () => {
     assert.deepEqual(byId.get("new").supersedes, ["old"]);
     assert.equal(byId.get("new").source, "session");
     assert.doesNotMatch(response.pack.text, /abc-123/);
+    for (const item of response.pack.items) assert.equal(item.origin, null, "기본(on)은 NULL 출처 항목에도 origin: null이 있다");
+    assert.doesNotMatch(response.pack.text, /origin=/);
+  });
+
+  it("MEMENTO_PROVENANCE=off이면 꾸러미 항목에 origin 키가 없다", async () => {
+    process.env.MEMENTO_PROVENANCE = "off";
+    const response = await tool_recall({ keywords: ["k"], format: "pack" });
+    for (const item of response.pack.items) assert.ok(!("origin" in item));
+    const source = state.queries.find(q => /\bf\.source\b/.test(q.sql));
+    assert.doesNotMatch(source.sql, /origin|trust_tier/);
   });
 
   it("pack.estimatedTokens는 직렬화한 꾸러미를 countTokens로 센 값이고 정책 문단은 text에만 있다", async () => {
@@ -183,8 +210,12 @@ describe("loadPackProvenance", () => {
     };
     const provenance = await loadPackProvenance(["a", "b"], {}, () => pool);
 
-    assert.deepEqual(provenance.get("a"), { source: "tool:remember", supersededBy: [], supersedes: ["y", "z"] });
-    assert.deepEqual(provenance.get("b"), { source: null, supersededBy: ["a"], supersedes: [] });
+    assert.deepEqual(provenance.get("a"), { source: "tool:remember", origin: null, supersededBy: [], supersedes: ["y", "z"] });
+    assert.deepEqual(provenance.get("b"), { source: null, origin: null, supersededBy: ["a"], supersedes: [] });
+
+    process.env.MEMENTO_PROVENANCE = "off";
+    const off = await loadPackProvenance(["a", "b"], {}, () => pool);
+    assert.deepEqual(off.get("a"), { source: "tool:remember", supersededBy: [], supersedes: ["y", "z"] });
   });
 
   it("체인은 상대 파편의 created_at 내림차순, 같으면 id 오름차순으로 다섯 개까지 싣는다", async () => {
