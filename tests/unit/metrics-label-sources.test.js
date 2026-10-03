@@ -64,6 +64,7 @@ const REVIEWED = new Map([
   ["lib/handlers/health-handler.js|recordHttpRequest|req.method",                 "Node HTTP 파서가 http.METHODS(35개) 밖 메서드를 400으로 끊는다"],
   ["lib/handlers/health-handler.js|recordHttpRequest|statusCode",                 "200 또는 503"],
   ["lib/handlers/mcp-handler.js|recordHttpRequest|req.method",                    "Node HTTP 파서가 http.METHODS(35개) 밖 메서드를 400으로 끊는다"],
+  ["lib/handlers/session-handler.js|recordSessionRotation|failure.outcome",       "ROTATE_FAILURES 표의 고정 outcome 문자열(not_found, expired, forbidden, unavailable)"],
   ["lib/jsonrpc.js|recordRbacDenied|name",                                        "TOOL_REGISTRY.get(name) 통과 후에만 도달한다"],
   ["lib/jsonrpc.js|recordRbacDenied|`requires_${required}`",                      "checkPermission이 돌려주는 권한 이름"],
   ["lib/jsonrpc.js|recordToolExecution|name",                                     "TOOL_REGISTRY.get(name) 통과 후에만 도달한다"],
