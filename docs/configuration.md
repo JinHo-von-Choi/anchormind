@@ -38,7 +38,7 @@
 | true, false (그 밖의 값은 false) | MEMENTO_CONFIG_STRICT |
 | true, false (그 밖의 값은 `MEMORY_CONFIG` 검증에서 기동 실패) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (그 밖의 값은 off) | MEMENTO_ADMIN_AUTH_BACKOFF |
-| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE, MEMENTO_PROVENANCE, MEMENTO_REVIEW_QUEUE, MEMENTO_HOOK_ENDPOINTS, MEMENTO_FORGET_CASCADE |
+| on, off (그 밖의 값은 on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE, MEMENTO_PROVENANCE, MEMENTO_REVIEW_QUEUE, MEMENTO_HOOK_ENDPOINTS, MEMENTO_FORGET_CASCADE, MEMENTO_EGRESS_POLICY |
 | mask, reject, off (그 밖의 값은 mask) | MEMENTO_SENSITIVE_SCAN |
 | workspace, key (그 밖의 값은 workspace) | MEMENTO_DEDUP_SCOPE |
 | true, false (false가 아닌 값은 true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
@@ -256,6 +256,36 @@ REDIS_ENABLED=true면 Redis에 상태 저장, 아니면 in-memory.
 ```
 
 키가 없는 provider의 기본 슬롯 한도는 10이다. `LLM_CONCURRENCY` env 설정 시 기본값과 병합(merge)된다.
+
+##### 외부 전송 정책
+
+기억 내용을 LLM 제공자로 보내는 모든 호출(모순 판정 상향 `contradiction`, AutoReflect `auto_reflect`, 품질 평가 `evaluate`, 긴 파편 분할 `split`, 합성 역질의 `synthetic_query`, LLM 형태소 분석 `morpheme`)은 `lib/llm/EgressGate.js`의 관문을 지난다. 관문은 호출 문맥(단계, 키, workspace)의 정책으로 제공자 체인을 거르고, 외부 제공자에게는 `SensitiveScanner`로 가린 프롬프트를 보내며, 보내기 전에 outbox에 감사 이벤트(`audit.llm.egress`: 키, 제공자, 단계, 바이트, 가린 규칙 수, workspace. 본문은 담지 않는다)를 남긴다. 감사 기록에 실패하면 그 제공자에게 보내지 않고 다음 제공자로 넘어간다.
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| MEMENTO_EGRESS_POLICY | on | `on`이면 위 관문이 동작한다. `off`이면 정책 조회, 제공자 거르기, 전송 전 마스킹, 감사 이벤트, 외부 전송 지표가 모두 빠지고 구성된 체인을 그대로 쓴다(되돌리기용). 호출 시점에 읽는다 |
+| MEMENTO_EGRESS_LOCAL_HOSTS | (없음) | 로컬 제공자로 볼 호스트 이름(쉼표 구분, 대소문자 무시). 루프백 주소(`localhost`, `127.0.0.0/8`, `::1`)는 지정하지 않아도 로컬이다. 예: 같은 망의 Ollama 호스트 |
+
+제공자 분류: HTTP 제공자는 접속 주소(`baseUrl`)의 호스트가 루프백이거나 `MEMENTO_EGRESS_LOCAL_HOSTS`에 있으면 로컬, 그 밖(주소 없음, 해석 불가 포함)은 외부다. CLI 제공자(`gemini-cli`, `agy-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`, `opencode-cli`)는 항상 외부다. 분류는 이 프로세스가 접속하는 곳을 본다. 로컬 주소의 중계 서버가 외부로 다시 보내는 구성은 로컬로 분류된다.
+
+정책 값은 `api_keys.egress_policy`(jsonb, migration-055)에 두고 `PATCH /v1/internal/model/nothing/keys/:id/policy`의 `egress_policy` 필드로 바꾼다.
+
+```json
+{
+  "local_only": false,
+  "approved_providers": ["codex-cli", "ollama"],
+  "workspaces": { "private-notes": { "local_only": true } }
+}
+```
+
+- 필드는 모두 생략할 수 있다. `null`은 정책 없음이다. 값은 workspace 재정의, 키 값, 단계 기본값 순으로 정한다.
+- 단계 기본값: 위 6개 단계는 정책이 없으면 구성된 제공자를 그대로 쓴다(전송 감사만 더해진다). 등록되지 않은 단계와 단계를 밝히지 않은 호출은 로컬만 쓴다. 키나 workspace에서 `local_only: false`를 명시하면 그런 단계도 외부 제공자를 쓴다.
+- 판정: 로컬 제공자는 항상 허용한다. `local_only`가 참이면 외부 제공자는 모두 막는다. `approved_providers`가 `null`(생략)이면 구성된 외부 제공자를 모두, 목록이면 목록에 든 외부 제공자만 허용한다. 문맥에 workspace가 둘 이상이면(모순 판정의 두 파편) 하나라도 막으면 막는다.
+- 실패 정책: 거른 뒤 남는 제공자가 없으면 외부로 대체하지 않고 그 단계를 건너뛴다(`EgressSkippedError`). 정책을 읽지 못했거나 저장된 값이 규칙에 맞지 않을 때도 건너뛴다. 로컬 제공자가 실패해도 외부로 넘어가지 않는다.
+- master 키와 키를 알 수 없는 호출(LLM 형태소 분석의 검색어, 세션 레코드가 없는 관리 콘솔 일괄 reflect)은 정책 없이 단계 기본값을 쓴다.
+- 정책 조회는 키별로 30초 캐시한다. 변경은 이 프로세스의 캐시를 바로 비우고, 다른 인스턴스에는 늦어도 약 30초 안에 적용된다.
+
+지표: `memento_llm_egress_calls_total{stage,provider,provider_class,outcome}`(outcome: `sent`, `denied`, `audit_failed`), `memento_llm_egress_bytes_total{stage,provider_class}`, `memento_llm_egress_skipped_total{stage,reason}`(reason: `local_only`, `not_approved`, `policy_unavailable`, `policy_invalid`), `memento_llm_egress_masked_total{stage}`.
 
 ##### Token Usage Cap
 

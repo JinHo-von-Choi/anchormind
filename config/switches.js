@@ -134,6 +134,7 @@ export const SWITCHES = Object.freeze([
   /* LLM */
   boolOn("LLM_CONCURRENCY_ENABLED", "LLM", "LLM 호출 동시성 세마포어를 쓴다"),
   enumOf("MEMENTO_LLM_CLI_TOOL_APPROVAL", ["none", "all"], "none", "LLM", "CLI provider의 도구 실행 승인 제한을 푼다", { off: ["none"] }),
+  enumOf("MEMENTO_EGRESS_POLICY", ["on", "off"], "on", "LLM", "키와 workspace의 외부 전송 정책으로 LLM 제공자를 거르고 외부 전송 전에 마스킹하고 감사 이벤트를 남긴다", { off: ["off"] }),
 
   /* 운영 */
   enumOf("MEMENTO_OUTBOX", ["on", "off"], "on", "운영", "변경 트랜잭션 안에서 outbox 이벤트를 기록하고 작업자가 처리기로 전달한다", { off: ["off"] }),

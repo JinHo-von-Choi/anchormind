@@ -32,7 +32,9 @@ mock.module("../../lib/config.js", {
     LLM_CHAIN_TIMEOUT_MS           : 0,
     LLM_CONCURRENCY_ENABLED        : false,
     LLM_CONCURRENCY_WAIT_MS        : 30_000,
-    getConcurrencyLimit            : () => 1
+    getConcurrencyLimit            : () => 1,
+    egressPolicyEnabled            : () => false,
+    EGRESS_LOCAL_HOSTS             : []
   }
 });
 

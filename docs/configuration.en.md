@@ -38,7 +38,7 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | true, false (any other value is false) | MEMENTO_CONFIG_STRICT |
 | true, false (any other value fails startup in `MEMORY_CONFIG` validation) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (any other value is off) | MEMENTO_ADMIN_AUTH_BACKOFF |
-| on, off (any other value is on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE, MEMENTO_PROVENANCE, MEMENTO_REVIEW_QUEUE, MEMENTO_HOOK_ENDPOINTS, MEMENTO_FORGET_CASCADE |
+| on, off (any other value is on) | MEMENTO_WRITE_GATE, MEMENTO_OUTBOX, MEMENTO_OUTBOX_WORKER, MEMENTO_WM_PG_FALLBACK, MEMENTO_RANK_BEFORE_BUDGET, MEMENTO_GC_THROUGHPUT, MEMENTO_CONTEXT_ANNOTATE, MEMENTO_PROVENANCE, MEMENTO_REVIEW_QUEUE, MEMENTO_HOOK_ENDPOINTS, MEMENTO_FORGET_CASCADE, MEMENTO_EGRESS_POLICY |
 | mask, reject, off (any other value is mask) | MEMENTO_SENSITIVE_SCAN |
 | workspace, key (any other value is workspace) | MEMENTO_DEDUP_SCOPE |
 | true, false (any value other than false is true) | MEMENTO_API_KEY_DELETE_GUARD, MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE, LLM_CONCURRENCY_ENABLED, MCP_REJECT_NONAPIKEY_OAUTH |
@@ -261,6 +261,36 @@ When REDIS_ENABLED=true, state is stored in Redis; otherwise in-memory.
 ```
 
 The default slot limit for providers not listed is 10. When `LLM_CONCURRENCY` is set, it is merged with the defaults.
+
+##### Egress Policy
+
+Every call that sends memory content to an LLM provider (contradiction escalation `contradiction`, AutoReflect `auto_reflect`, quality evaluation `evaluate`, long fragment split `split`, synthetic queries `synthetic_query`, LLM morpheme analysis `morpheme`) passes the gate in `lib/llm/EgressGate.js`. The gate filters the provider chain with the policy of the call context (stage, key, workspace), sends a prompt masked by `SensitiveScanner` to external providers, and records an audit event in the outbox before sending (`audit.llm.egress`: key, provider, stage, bytes, number of masked rules, workspaces; no content). When the audit write fails, the gate does not send to that provider and moves on to the next one.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| MEMENTO_EGRESS_POLICY | on | `on` runs the gate above. `off` skips policy lookup, provider filtering, masking before transfer, audit events and egress metrics, and uses the configured chain as is (rollback). Read at call time |
+| MEMENTO_EGRESS_LOCAL_HOSTS | (none) | Host names treated as local providers (comma separated, case insensitive). Loopback addresses (`localhost`, `127.0.0.0/8`, `::1`) are local without being listed. Example: an Ollama host on the same network |
+
+Provider classification: an HTTP provider is local when the host of its endpoint (`baseUrl`) is loopback or listed in `MEMENTO_EGRESS_LOCAL_HOSTS`; anything else (including no address or an unparsable one) is external. CLI providers (`gemini-cli`, `agy-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`, `opencode-cli`) are always external. The classification looks at where this process connects; a relay on a local address that forwards elsewhere is classified as local.
+
+The policy lives in `api_keys.egress_policy` (jsonb, migration-055) and is changed through the `egress_policy` field of `PATCH /v1/internal/model/nothing/keys/:id/policy`.
+
+```json
+{
+  "local_only": false,
+  "approved_providers": ["codex-cli", "ollama"],
+  "workspaces": { "private-notes": { "local_only": true } }
+}
+```
+
+- Every field is optional. `null` means no policy. A value comes from the workspace override, then the key value, then the stage default.
+- Stage default: without a policy the six stages above keep using the configured providers (only the transfer audit is added). Unregistered stages and calls that do not name a stage use local providers only. An explicit `local_only: false` on the key or workspace lets such stages use external providers.
+- Decision: local providers are always allowed. When `local_only` is true every external provider is denied. When `approved_providers` is `null` (omitted) every configured external provider is allowed; when it is a list only the listed external providers are allowed. When the context carries more than one workspace (the two fragments of a contradiction check), a denial for any of them denies.
+- Failure policy: when no provider is left after filtering, the stage is skipped without falling back to an external provider (`EgressSkippedError`). The stage is also skipped when the policy cannot be read or the stored value does not follow the rules. A failing local provider does not fall back to an external one.
+- The master key and calls without a known key (search text in LLM morpheme analysis, admin console bulk reflect of sessions without a session record) use the stage default without a policy.
+- Policy lookups are cached per key for 30 seconds. A change clears this process's cache at once and reaches other instances within about 30 seconds.
+
+Metrics: `memento_llm_egress_calls_total{stage,provider,provider_class,outcome}` (outcome: `sent`, `denied`, `audit_failed`), `memento_llm_egress_bytes_total{stage,provider_class}`, `memento_llm_egress_skipped_total{stage,reason}` (reason: `local_only`, `not_approved`, `policy_unavailable`, `policy_invalid`), `memento_llm_egress_masked_total{stage}`.
 
 ##### Token Usage Cap
 
