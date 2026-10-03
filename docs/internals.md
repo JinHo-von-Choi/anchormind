@@ -900,3 +900,4 @@ server.js의 onFatal은 `gracefulShutdown("uncaughtException", { exitCode: 1 })`
 - 처리기는 같은 이벤트를 두 번 이상 받을 수 있다(임대 만료 뒤 재점유, 시간 초과한 처리기와 재시도의 겹침, 임대 안에 반영되지 못한 완료 기록). `event.idempotencyKey`(`topic:id`)로 멱등을 보장한다.
 - 처리기는 15초 안에 끝내고 `signal`이 중단되면 하던 일을 멈춘다. 재시도해도 성공할 수 없는 입력에는 `OutboxPermanentError`를 던져 곧바로 dead-letter로 보낸다.
 - 처리기는 이벤트 사이의 순서를 가정하지 않는다. 순서가 필요한 소비자(예: 단일 해시 체인)는 자기 기록 시점에 순번을 정한다.
+- 훅 회고(topic `hook.reflect`): 생산자는 `lib/handlers/hook-handler.js`(`enqueueStandalone`, aggregateId는 키, 클라이언트, 세션 id, 이벤트의 해시), 소비자는 `lib/hooks/hook-reflect-consumer.js`다. 소비자는 `lib/scheduler.js`가 작업자 기동 직전에 `registerHookReflectConsumer()`로 등록하고, `topic:id`가 아니라 aggregateId를 `idempotency_records`에 선점해 다른 이벤트로 들어온 같은 세션과 이벤트도 한 번만 회고한다. payload는 민감 정보를 가린 발췌 본문을 담는다. 요청 경로가 회고를 직접 부르지 않는다는 규칙은 `tests/structure/hook-endpoints.test.js`가 본다.
