@@ -312,6 +312,38 @@ describe("retryBackfillFailures", () => {
   });
 });
 
+describe("묶음별 값(prepareBatch)", () => {
+  it("묶음마다 직전 watermark로 값을 만들고 그 값을 $4부터 전달한다", async () => {
+    const seen = [];
+    const spec = {
+      ...SPEC, params: undefined,
+      prepareBatch: async ({ afterId, batchSize, clock, onlyId }) => {
+        seen.push({ afterId, batchSize, onlyId, clock: clock instanceof Date });
+        return [`after:${afterId}`];
+      }
+    };
+    await runResumableBackfill(spec);
+    assert.deepEqual(seen.map(s => s.afterId), ["", "f002", "f004", "f005"]);
+    assert.ok(seen.every(s => s.batchSize === 2 && s.onlyId === undefined && s.clock));
+    assert.deepEqual(db.batchCalls.map(c => c.params[3]), ["after:", "after:f002", "after:f004", "after:f005"]);
+  });
+
+  it("실패 행 재시도는 행 하나의 값을 onlyId로 만든다", async () => {
+    db.badIds = new Set(["f003"]);
+    const seen = [];
+    const spec = { ...SPEC, params: undefined, prepareBatch: async ({ onlyId }) => { seen.push(onlyId); return ["v"]; } };
+    await runResumableBackfill(spec);
+    db.badIds = new Set();
+    seen.length = 0;
+    assert.deepEqual(await retryBackfillFailures(spec), { resolved: 1, stillFailing: 0 });
+    assert.deepEqual(seen, ["f003"]);
+  });
+
+  it("prepareBatch가 함수가 아니면 거부한다", async () => {
+    await assert.rejects(runResumableBackfill({ ...SPEC, prepareBatch: "x" }), BackfillError);
+  });
+});
+
 describe("입력과 선행 조건", () => {
   const badJobs = ["", "Upper", "has space", "a/b", "x".repeat(65), null, 7];
   for (const job of badJobs) {
