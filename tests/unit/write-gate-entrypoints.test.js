@@ -539,6 +539,45 @@ describe("가져오기 행 오류 격리", () => {
     assert.deepEqual(JSON.parse(res.body), { imported: 1, skipped: 1 });
   });
 
+  it("admin 가져오기는 행 값 때문에 DB가 거부한 행을 skipped로 세고 다음 행을 기록한다", async () => {
+    writerHolder.idFor = (f) => {
+      if (f.id === "bad-type") throw Object.assign(new Error("violates check constraint \"fragments_type_check\""), { code: "23514" });
+      return f.id;
+    };
+    const res = fakeRes();
+    await handleImport(jsonReq("POST", { fragments: [
+      { id: "bad-type", content: "허용되지 않은 유형으로 가져오는 본문", topic: "ops", type: "note" },
+      { id: "ok-row",   content: "정상 유형으로 가져오는 본문 하나다",   topic: "ops", type: "fact" }
+    ] }), res, new URL(`http://localhost${ADMIN_BASE}/import`));
+    assert.equal(res.statusCode, 200, res.body);
+    assert.deepEqual(JSON.parse(res.body), { imported: 1, skipped: 1 });
+    assert.deepEqual(writerHolder.inserted.map(f => f.id), ["bad-type", "ok-row"]);
+  });
+
+  it("admin 가져오기는 연결 오류면 요청을 실패시킨다", async () => {
+    writerHolder.idFor = () => { throw Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }); };
+    const res = fakeRes();
+    await handleImport(jsonReq("POST", { fragments: [
+      { content: "연결이 끊긴 상태에서 가져오는 본문", topic: "ops", type: "fact" }
+    ] }), res, new URL(`http://localhost${ADMIN_BASE}/import`));
+    assert.equal(res.statusCode, 500);
+  });
+
+  it("CLI 가져오기는 행 값 때문에 DB가 거부한 행을 errors로 세고 다음 행을 기록한다", async () => {
+    const inserted = [];
+    const deps     = cliImportDeps({ inserted });
+    deps.writer    = { insert: async (f) => {
+      if (f.content.startsWith("거부")) throw Object.assign(new Error("violates check constraint"), { code: "23514" });
+      inserted.push(f);
+      return f.id;
+    } };
+    const counts = await importRows([
+      JSON.stringify({ content: "거부될 assertion 값을 가진 본문", topic: "ops", assertion_status: "maybe" }),
+      JSON.stringify({ content: "정상적으로 가져오는 본문 하나", topic: "ops" })
+    ], deps);
+    assert.deepEqual([counts.imported, counts.errors], [1, 1]);
+  });
+
   it("CLI 가져오기는 관문을 트랜잭션 전에 거치고 잘못된 행은 errors로 센다", async () => {
     const order  = [];
     const lines  = [

@@ -42,7 +42,7 @@ mock.module("../../lib/config.js", {
     reservedAgentIdsMode: () => "warn",
     LLM_PRIMARY            : "gemini-cli",
     LLM_FALLBACKS          : [],
-    /** FragmentWriter가 요구 — 이 테스트는 DB 경로를 타지 않으므로 값은 무의미 */
+    /** FragmentWriter가 요구한다. 이 테스트는 DB 경로를 타지 않으므로 값은 무의미 */
     buildSearchPath        : () => "agent_memory, public"
   }
 });
@@ -75,7 +75,7 @@ mock.module("../../lib/memory/consolidate/split-metrics.js", {
   }
 });
 
-/** 주체 앵커 게이트 무력화 — 이 테스트의 관심사가 아니며 형태소 분석기 로드도 피한다. */
+/** 주체 앵커 게이트 무력화: 이 테스트의 관심사가 아니며 형태소 분석기 로드도 피한다. */
 mock.module("../../lib/memory/consolidate/proper-nouns.js", {
   namedExports: { extractSubjectAnchors: async () => [] }
 });
