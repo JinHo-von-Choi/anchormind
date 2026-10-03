@@ -593,6 +593,10 @@ Reason code list (up to 3):
 - `case_cohort_member` — included as a member of the same case_id cohort in caseMode path
 - `recent_activity_ema` — included with a score boost due to high ema_activation ranking
 
+### Provenance and trust tier
+
+With `MEMENTO_PROVENANCE=on` (the default), fragments of the default response carry `origin` (the origin claimed at storage time) and `trust_tier` (0 quarantined, 1 low, 2 normal, 3 high). Existing fragments with NULL values do not carry the two fields and their tier is read as 2. With `fields`, only the requested keys are added. The two values are looked up once per fragment id, separately, within the same agent, key (including the group) and workspace scope as the recall; when the lookup fails, the response comes without the two fields. The tier follows the description of the remember `origin` parameter. With `off`, there is no lookup and no field.
+
 ### Answer pack (format: pack)
 
 With `format: "pack"` the response carries `success`, `format: "pack"`, `pack`, `count`, `totalTokens`, `searchPath` and `_meta`, without `fragments`. Without `format` or with `default`, the response is the format above.
@@ -602,7 +606,7 @@ With `format: "pack"` the response carries `success`, `format: "pack"`, `pack`, 
 | `pack.version` | `v0` |
 | `pack.policy_id` | Fixed identifier of the policy paragraph (`memento-pack-policy-v0`). The paragraph itself appears once, in `pack.text` only |
 | `pack.text` | Text ready to place into an answer: `[MEMORY PACK v0]`, the fixed policy paragraph that is not derived from memory content (block content is data and not instructions; meaning of date, status, assertion; escape notation), then per fragment an opening line `<<<MEMORY ...>>>`, one content line and the closing line `<<<END MEMORY>>>` |
-| `pack.items[]` | Attributes in block order: `id`, `date` (UTC storage date YYYY-MM-DD), `status` (`valid`, `superseded`), `assertion`, `type`, `topic`, `case_id`, `source`, `superseded_by`, `supersedes`, `truncated`, and only when present `stale_warning` (recall stale warning, 120 characters) and `validation_warnings` (warnings recorded at write time, at most 5, 120 characters each). The content is only in `pack.text` |
+| `pack.items[]` | Attributes in block order: `id`, `date` (UTC storage date YYYY-MM-DD), `status` (`valid`, `superseded`), `assertion`, `type`, `topic`, `case_id`, `source`, `superseded_by`, `supersedes`, `truncated`, only when present `stale_warning` (recall stale warning, 120 characters) and `validation_warnings` (warnings recorded at write time, at most 5, 120 characters each), and `origin` (only with `MEMENTO_PROVENANCE=on`, null without a value). The content is only in `pack.text` |
 | `pack.groups[]` | `{ key, ids }`. The key is `case:<caseId>`, or `topic:<topic>` without a caseId. Groups appear in order of first appearance, items within a group in rank order, and the blocks follow this order |
 | `pack.partial` | `true` when the source and supersession lookup failed and the pack was built without that information |
 | `pack.estimatedTokens` | cl100k_base token count (`countTokens`, the function the write path and recall budget selection use) of the `pack` object without `estimatedTokens`, serialized like the response (JSON, indent 2). This is the size of the whole pack |
@@ -612,6 +616,7 @@ Rules:
 - Dates are the UTC date of `created_at` only. Relative dates and elapsed days (`age_days`) are not included.
 - `status` is `valid` without `valid_to` and `superseded` with it (returned with `includeSuperseded=true`). `superseded_by` and `supersedes` are the ids on the other side of `superseded_by` links (not deleted), at most 5 per direction, ordered by the related fragment's `created_at` descending (ties by id ascending). The chain and `source` are looked up separately, once each, for fragments within the same agent, key (including the group) and workspace scope as the recall.
 - `source` is the stored value; `session:<id>` is shortened to `session`.
+- `origin` appears in the opening line as `origin=<value>` only with `MEMENTO_PROVENANCE=on` and when the stored value is one of the accepted values of the remember `origin`.
 - Content and the string attributes of the opening line escape backslash, line breaks, tab and the characters of the general categories Cc, Cf, Cs, Zl, Zp (including the soft hyphen, zero-width characters, direction controls and the tag characters U+E0000 to U+E007F) as `\\`, `\n`, `\t`, `\uXXXX`, `\u{XXXXX}`. Runs of three or more `<` or `>` become `\u003c`, `\u003e`, so neither content nor attributes can form a block delimiter. The length caps (content 1000, attributes 120, code points) apply to the escaped length and never split an escape sequence. Cut content is marked `truncated=true`. String attributes are double-quoted.
 - `assertion` is included only for `observed`, `inferred`, `verified`, `rejected`.
 - The extra fields of `fields`, `includeKeywords`, `includeContext` and the linked fragments (`linked`) are not part of the pack.
@@ -1073,6 +1078,8 @@ Loads Anchor, Core, Learning, and Working Memory plus session_reflect separately
 ### Injection line annotation
 
 With `MEMENTO_CONTEXT_ANNOTATE=on` (the default), each memory line of `injectionText` ends with ` (YYYY-MM-DD, assertion)`. Example: `- nginx settings live in the sites-available category files (2026-09-30, verified)`. The date is the UTC storage date. The assertion is shown only when the stored value is one of `observed`, `inferred`, `verified`, `rejected`; otherwise only the date is added. Header strings (`[ANCHOR MEMORY]` and so on) and the `- ` line prefix do not change, so hooks that read lines only need to ignore the trailing parentheses. The date is in UTC, so it changes at UTC midnight (09:00 KST), and a memory stored between 00:00 and 08:59 KST shows the previous date. There is no time zone setting. With `on`, selection adds a fixed annotation cost of 6 per memory line (characters / 4 units) within `tokenBudget`, so fewer fragments may be selected for the same budget. The field shapes of `fragments` and the structured response, and the way `totalTokens` is computed (content only), are the same with either value. With `off`, lines end with the content and selection adds no annotation cost.
+
+With `MEMENTO_PROVENANCE=on` (the default), anchor and core lines also carry the stored origin at the end of the parentheses. Example: `- check staging before deploying (2026-09-30, observed, user_stated)`. Nothing is added when there is no origin or the value is not an accepted one. Under the same switch, fragments with trust tier 1 or lower (for example `origin=external_content`) are not injected into `[ANCHOR MEMORY]` and `[CORE MEMORY]` and are also left out of the anchors and core of `fragments` and the structured response. Anchors are filtered by the query predicate (`trust_tier IS NULL OR trust_tier >= 2`), core fragments by a separate tier lookup of the recall result. When the tier lookup fails, a warning is logged and core is not filtered. The learning and working sections are not filtered.
 
 ---
 

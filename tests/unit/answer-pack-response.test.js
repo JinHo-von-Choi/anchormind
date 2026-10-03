@@ -16,6 +16,8 @@ process.env.DOTENV_CONFIG_PATH      ??= ".env.test";
 process.env.MEMENTO_METRICS_DEFAULT ??= "off";
 process.env.REDIS_ENABLED           ??= "false";
 process.env.CACHE_ENABLED           ??= "false";
+/** 출처 열을 싣는 동작은 provenance-read.test.js가 본다. 여기서는 꾸러미 v0 형태만 본다. */
+process.env.MEMENTO_PROVENANCE      ??= "off";
 
 const state = { result: null, queries: [], failProvenance: false };
 

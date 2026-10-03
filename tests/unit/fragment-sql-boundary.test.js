@@ -51,13 +51,13 @@ const ALLOWED = {
   "memory/link/TemporalLinker.js": 1,
   "memory/processors/EpisodeContinuityService.js": 1,
   "memory/processors/MemoryRecaller.js": 1,
-  "memory/read/AnswerPackLoader.js": 1, // 답 꾸러미 source 조회는 대체 체인 조회와 함께 recall의 agent, 키, workspace 범위 절을 공유한다. FragmentReader 메서드로 옮기면 그 범위 절을 중복한다
   "memory/read/CaseRecall.js": 2,
   "memory/CaseEventStore.js": 1,
   "memory/read/ContextBuilder.js": 1,
   "memory/read/FragmentReader.js": 16, // recall 예산 선택의 저장 토큰 수 조회(getStoredTokenCounts)
   "memory/read/HistoryReconstructor.js": 1,
   "memory/read/KeyNameEnricher.js": 1,
+  "memory/read/ProvenanceLoader.js": 1, // 답 꾸러미, recall 응답, context core 후보의 출처 열(source, origin, trust_tier)을 대체 체인 조회와 같은 recall의 agent, 키, workspace 범위 절로 읽는다. 답 꾸러미 source 조회를 옮겨 와 AnswerPackLoader에는 직접 접근이 없다. FragmentReader 메서드로 옮기면 그 범위 절을 중복한다
   "memory/read/RecallSuggestionEngine.js": 2,
   "memory/read/StitchSourceLoader.js": 1,
   "memory/read/SyntheticQuerySearch.js": 1,

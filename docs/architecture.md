@@ -47,7 +47,9 @@ server.js  (HTTP 서버)
             │   ├── ContextBuilder.js     context() 로직 전담. effective workspace의 Anchor 예약분을 우선 선택한 뒤 후보를 anchor > core > learning > working 순으로 ID 중복 제거하고, 앵커와 비앵커 최소 슬롯을 보장한 공통 토큰 선택 결과로 flat/structured/injectionText를 조립
             │   ├── ContextLines.js       context 주입 줄 렌더러(순수 함수). 헤더와 줄 머리 `- `는 고정이고 `MEMENTO_CONTEXT_ANNOTATE=on`이면 기억 줄 끝에 ` (YYYY-MM-DD, assertion)`을 붙인다
             │   ├── AnswerPack.js         recall `format:"pack"` 답 꾸러미 v0 렌더러(순수 함수). 고정 정책 문단, `<<<MEMORY ...>>>` 구분자 블록, 본문 이스케이프와 1000자 상한, UTC 날짜, caseId/topic 묶음
-            │   ├── AnswerPackLoader.js   답 꾸러미 출처(source)와 대체 체인(superseded_by 링크) 조회. recall과 같은 agent, 키, workspace 술어
+            │   ├── AnswerPackLoader.js   답 꾸러미 출처(source)와 대체 체인(superseded_by 링크) 조회. recall과 같은 agent, 키, workspace 술어. 기본 형식 recall 응답에 `origin`, `trust_tier`를 싣는다(`MEMENTO_PROVENANCE`)
+            │   ├── ProvenanceLoader.js   파편 id의 출처 열(source, origin, trust_tier) 조회와 recall 범위 술어. 꾸러미, recall 응답, context core 거르기가 함께 쓴다. 풀은 호출자가 넘긴다
+            │   ├── ContextTrust.js       context 주입 제외(신뢰 등급 1 이하)의 앵커 SQL 조각, core 후보 거르기, 주석 출처 필드(순수 함수)
             │   ├── GraphNeighborSearch.js L2.5 그래프 이웃 검색 (fragment_links 1-hop 양방향 UNION, tanh 포화 스코어링 + 관계 유형별 부스트)
             │   ├── HistoryReconstructor.js case_id/entity 기반 서사 재구성 (ordered_timeline, causal_chains, unresolved_branches)
             │   ├── BudgetSelector.js     recall 토큰 예산 선택(`MEMENTO_RANK_BEFORE_BUDGET`). 검색 순서 절단(`trimInSearchOrder`)과 최종 점수 기반 선택(`selectWithinBudget`)을 순수 함수로 둔다
@@ -124,6 +126,7 @@ server.js  (HTTP 서버)
             ├── FragmentIndex.js          Redis L1 인덱스 관리, getFragmentIndex() 싱글톤 팩토리. 작업 기억 저장소를 Redis와 PostgreSQL 대체 경로 중에서 고른다
             ├── WorkingMemoryRows.js      Redis가 준비되지 않았을 때의 작업 기억 행(`source=wm-fallback`) 읽기, 정리, 키별 상한(`MEMENTO_WM_PG_FALLBACK`, `MEMENTO_WM_FALLBACK_MAX_ROWS`)
             ├── WorkingMemorySql.js       작업 기억 행 식별 값과 조회, 집계에서 그 행을 빼는 SQL 조건
+            ├── provenance.js             파편 출처와 신뢰 등급 판정(순수 함수). 허용 origin, 출처별 등급, 키 상한(`trusted_origin` 권한 또는 마스터 키 3, 그 밖 2), NULL을 2로 보는 주입 제외 술어와 같은 문턱의 SQL 조각, 관측 클라이언트 표기, INSERT 열 조각
             ├── keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` 공유 헬퍼. key_id 범위 WHERE 절 생성. FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js에서 공유 사용
             ├── CaseEventStore.js         semantic milestone 로그 (case_events CRUD, DAG 엣지, 증거 조인)
             ├── memory-schema.sql         PostgreSQL 스키마 정의
@@ -215,6 +218,7 @@ lib/tools/
 ├── memory-schemas.js  도구 스키마 정의 (inputSchema)
 ├── tool-head.js  모든 도구의 name, title, MCP 힌트(`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)
 ├── recall-response-params.js recall 응답 형태 파라미터(`fields`, `format`) 스키마 조각
+├── origin-param.js remember와 batch_remember 항목의 `origin` 파라미터 스키마 조각
 ├── tool-error.js 도구 응답의 오류 문구 변환. 의도한 업무 오류는 그대로, 드라이버·운영체제·실행 오류는 고정 문구로 바꾸고, 저장소 CHECK 제약 위반은 파라미터 이름과 허용 값을 담은 `INVALID_ARGUMENT` 안내로 바꾼다
 ├── db.js        PostgreSQL 연결 풀, 에이전트 세션 변수 설정 쿼리 헬퍼 (MCP 미노출). getPrimaryPool(), getBatchPool(), queryWithAgentVector(). `opts.lock`을 주면 같은 트랜잭션에서 잠금 문장을 먼저 실행하고 잠근 id를 $1로 갱신 문장을 실행한다
 ├── lock-retry.js 교착(40P01)과 잠금 대기 상한(55P03)으로 끝난 트랜잭션의 재실행(`MEMENTO_DB_LOCK_RETRY_MAX`)과 `memento_db_deadlock_retries_total`, `memento_db_write_failures_total` 지표
