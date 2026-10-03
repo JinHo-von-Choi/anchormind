@@ -64,7 +64,7 @@ const ALLOWED = {
   "memory/read/StitchSourceLoader.js": 1,
   "memory/read/SyntheticQuerySearch.js": 1,
   "memory/read/TopicResolver.js": 1,
-  "memory/read/quotaQueries.js": 2, // 키별 파편 수와 키별 앵커 수(앵커 상한) 회계
+  "memory/read/quotaQueries.js": 1,
   "memory/signals/CaseRewardBackprop.js": 1,
   "memory/signals/RecallBenchmark.js": 1,
   "memory/signals/SpreadingActivation.js": 2,
