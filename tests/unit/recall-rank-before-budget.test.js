@@ -294,7 +294,7 @@ describe("recall 순위 후 예산 선택", () => {
     assert.ok(linkedRuns > 100, `연결 조회가 일어난 시드가 적다: ${linkedRuns}`);
   });
 
-  it("검색 후보는 RANK_CANDIDATE_LIMIT건까지만 예산 선택에 들어간다", async () => {
+  it("검색 후보는 상한까지와 상한 밖의 검색 순서 절단 결과만 예산 선택에 들어간다", async () => {
     const now      = new Date(ANCHOR).toISOString();
     const scenario = {
       makeCombined: () => Array.from({ length: RANK_CANDIDATE_LIMIT + 50 }, (_, i) => ({
@@ -302,9 +302,39 @@ describe("recall 순위 후 예산 선택", () => {
         created_at: now, estimated_tokens: 1, agent_id: "default", workspace: null
       }))
     };
-    const on = await runWith(scenario, "on", { tokenBudget: 100000, includeLinks: false, excludeSeen: false, anchorTime: ANCHOR });
-    assert.equal(on.sideEffects[0].ctx.candidateCount, RANK_CANDIDATE_LIMIT);
-    assert.equal(on.result.totalCount, RANK_CANDIDATE_LIMIT);
+    const base = { includeLinks: false, excludeSeen: false, anchorTime: ANCHOR };
+
+    /** 예산이 묶이고 검색 순서 절단이 상한 안에서 끝나면 후보는 상한 수다 */
+    const binding = await runWith(scenario, "on", { ...base, tokenBudget: 100 });
+    assert.equal(binding.sideEffects[0].ctx.candidateCount, RANK_CANDIDATE_LIMIT);
+    assert.equal(binding.result.totalCount, 100);
+
+    /** 모두 예산 안이면 검색 순서 절단이 전부를 고르므로 상한 밖 후보도 들어가고 off와 같다 */
+    const onAll  = await runWith(scenario, "on", { ...base, tokenBudget: 100000 });
+    const offAll = await runWith(scenario, "off", { ...base, tokenBudget: 100000 });
+    assert.equal(onAll.sideEffects[0].ctx.candidateCount, RANK_CANDIDATE_LIMIT + 50);
+    assert.deepStrictEqual(onAll.result, offAll.result);
+  });
+
+  it("상한 밖까지 이어지는 검색 순서 절단보다 점수 합이 작지 않다(태그 후보 230건)", async () => {
+    const now  = new Date(ANCHOR).toISOString();
+    const rows = Array.from({ length: 230 }, (_, i) => ({
+      id: `c${String(i).padStart(4, "0")}`, content: "x", keywords: ["k"], importance: 0.5,
+      rerankerScore: 1 - i / 1000, _rrfScore: 1 - i / 1000, created_at: now,
+      estimated_tokens: i >= 200 ? 1 : 60, agent_id: "default", workspace: null,
+      ...(i === 0 ? { _kwExact: true } : {})
+    }));
+    const scenario = { makeCombined: () => rows.map(r => ({ ...r, keywords: [...r.keywords] })) };
+    const params   = { tokenBudget: 1000, includeLinks: false, excludeSeen: false, anchorTime: ANCHOR, pageSize: 50 };
+    const scoreOf  = buildRecallScorer(params, ANCHOR, null);
+
+    const off = await runWith(scenario, "off", params);
+    const on  = await runWith(scenario, "on", params);
+
+    assert.ok(off.sideEffects[0].ids.some(id => id >= "c0200"), "off가 상한 밖 후보를 고르지 않았다");
+    const sumOf = (ids) => ids.reduce((sum, id) => sum + scoreOf(rows.find(r => r.id === id)), 0);
+    assert.ok(sumOf(on.sideEffects[0].ids) >= sumOf(off.sideEffects[0].ids) - 1e-9);
+    assert.ok(tokenSum(on.sideEffects[0].ids.map(id => rows.find(r => r.id === id))) <= params.tokenBudget);
   });
 
   it("superseded 후보는 예산을 쓰지 않는다", async () => {
