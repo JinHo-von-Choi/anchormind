@@ -60,6 +60,7 @@ server.js  (HTTP 서버)
             │   ├── FragmentImporter.js   가져오기 행을 관문에 통과시켜 FragmentWriter로 기록. 대상 키 프로필(owner, restore)을 적용한다 (admin 가져오기와 CLI 가져오기 공용)
             │   ├── DedupScope.js         content_hash 중복 판정 범위(`MEMENTO_DEDUP_SCOPE`). 유효 판정 색인을 읽어 판정 범위, ON CONFLICT 대상, 사전 조회, batch 접기 키를 정한다
             │   ├── FragmentWriter.js     파편 쓰기. 의미 메서드(insert, update)는 관문을 거친 값만 받고, 내부 메타데이터는 updateInternal로 쓰며 의미 열 9개는 쓸 수 없다 (delete, incrementAccess, touchLinked 포함)
+            │   ├── rowLock.js            여러 파편 행 쓰기의 id 순 잠금 문장(`fragmentRowLock`)과 잠근 행 삭제 문장
             │   ├── FragmentFactory.js    파편 생성, 유효성 검증, PII 마스킹 진입점(`maskSensitiveText`, 규칙은 `lib/security`의 표)과 유형별 절삭(`limitContentLength`)
             │   ├── affect.js             정서 태그 허용값 집합과 `sanitizeAffect` 정규화 (FragmentFactory, FragmentWriter가 공유)
             │   ├── FragmentStore.js      PostgreSQL CRUD 파사드 (FragmentReader + FragmentWriter 위임)
@@ -198,7 +199,8 @@ lib/tools/
 ├── reconstruct.js  reconstruct_history, search_traces 도구 핸들러 (Narrative Reconstruction)
 ├── memory-schemas.js  도구 스키마 정의 (inputSchema)
 ├── tool-error.js 도구 응답의 오류 문구 변환. 의도한 업무 오류는 그대로, 드라이버·운영체제·실행 오류는 고정 문구로 바꾸고, 저장소 CHECK 제약 위반은 파라미터 이름과 허용 값을 담은 `INVALID_ARGUMENT` 안내로 바꾼다
-├── db.js        PostgreSQL 연결 풀, 에이전트 세션 변수 설정 쿼리 헬퍼 (MCP 미노출). getPrimaryPool(), getBatchPool(), queryWithAgentVector()
+├── db.js        PostgreSQL 연결 풀, 에이전트 세션 변수 설정 쿼리 헬퍼 (MCP 미노출). getPrimaryPool(), getBatchPool(), queryWithAgentVector(). `opts.lock`을 주면 같은 트랜잭션에서 잠금 문장을 먼저 실행하고 잠근 id를 $1로 갱신 문장을 실행한다
+├── lock-retry.js 교착(40P01)과 잠금 대기 상한(55P03)으로 끝난 트랜잭션의 재실행(`MEMENTO_DB_LOCK_RETRY_MAX`)과 `memento_db_deadlock_retries_total`, `memento_db_write_failures_total` 지표
 ├── embedding.js OpenAI 텍스트 임베딩 생성
 ├── stats.js     접근 통계 수집 및 저장
 ├── pool-gate.js 백그라운드 작업의 Primary 풀 점유 상한 관리

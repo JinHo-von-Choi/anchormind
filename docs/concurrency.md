@@ -14,9 +14,9 @@ write 경로별 lock 종류·격리 수준·재시도 정책을 한 페이지로
 |consolidate.merge_duplicates|`MemoryConsolidator._mergeDuplicates`|advisory 없음. `queryWithAgentVector("system", …)`로 에이전트 범위 해제|개별 UPDATE/DELETE. `WHERE key_id = $X`로 키 범위 강제|cycle 단위 LIMIT 50으로 1회 실행, 미처리분은 다음 cycle에서 처리|GROUP BY (key_id, workspace, content_hash) + scope mismatch 어설션 + key_id 조건부 UPDATE/DELETE|`tests/unit/consolidator-merge-tenant-scope.test.js`|
 |consolidate.semantic_dedup|`MemoryConsolidator._semanticDedup`|advisory 없음|개별 쿼리|cycle 단위 LIMIT|topic·key_id 범위 안 KNN cos>=0.92|`tests/unit/semantic-dedup.test.js`|
 |consolidate.detect_contradictions|`MemoryConsolidator._detectContradictions`|advisory 없음|개별 쿼리|`resetCheckedPairs()`로 cycle 시작 시 추적 초기화|NLI + LLM 하이브리드. `pending_contradictions` 큐로 후처리 분리|`tests/unit/detect-supersessions.test.js`|
-|link.createLinks|`LinkStore.createLinks` (`lib/memory/link/LinkStore.js`)|쌍마다 `pg_advisory_xact_lock`(sortedKey 순) + multi-row INSERT. 이어서 양방향 `linked_to` 갱신은 대상 파편 행을 id 오름차순으로 `FOR NO KEY UPDATE` 잠근 한 문장으로 수행|링크 INSERT는 단일 트랜잭션(`lock_timeout=5s`). `linked_to` 갱신은 별도 문장이며 실패하면 경고 로그만 남기고 링크 삽입 결과는 유지|advisory 획득 실패 시 단건 fallback|`(from_id, to_id)` UNIQUE로 중복 차단. `linked_to`는 쌍의 상대 id만 받는다|`tests/unit/session-linker-batch.test.js`, `tests/unit/linkstore-create-links-sql.test.js`, `tests/unit/linkstore-create-links-linked-to.test.js`, `tests/db-concurrency/linked-to-pairs.test.js`|
-|forget (linked_to 정리)|`FragmentWriter`의 `linked_to` 제거 경로|대상 행을 id 오름차순으로 `FOR NO KEY UPDATE` 잠근 뒤 `array_remove`. `MEMENTO_SCORE_UPDATE_BATCH`와 무관하게 항상 id 순|단일 문장|호출자 책임|잠금 순서를 recall 부수효과(`incrementAccess`, `touchLinked`)와 같은 id 오름차순으로 맞춰 교착을 막는다|`tests/db-concurrency/lock-order.test.js`|
-|consolidate.importance_decay, utility_score_update|`FragmentGC.decayImportance`, `MemoryConsolidator._updateUtilityScores` (`lib/memory/consolidate/idOrderedUpdate.js`)|`MEMENTO_SCORE_UPDATE_BATCH`(기본 200) 크기의 id 오름차순 묶음마다 `FOR NO KEY UPDATE` 잠금 후 갱신. 0이면 단일 UPDATE 문장|묶음마다 커밋하며 모든 묶음이 첫 조회의 기준 시각 하나를 사용|호출자 책임. 다음 consolidate 주기가 다시 처리|저장값이 바뀌는 행만 갱신. 감쇠와 utility는 `MEMENTO_DECAY_MIN_DELTA`, `MEMENTO_UTILITY_MIN_DELTA` 미만 변화 행을 건너뜀|`tests/unit/id-ordered-update.test.js`, `tests/db-concurrency/score-update-lock-order.test.js`, `tests/db-concurrency/score-update-noop.test.js`, `tests/db-concurrency/score-update-min-delta.test.js`|
+|link.createLinks|`LinkStore.createLinks` (`lib/memory/link/LinkStore.js`)|쌍마다 `pg_advisory_xact_lock`(sortedKey 순) + multi-row INSERT. 이어서 양방향 `linked_to` 갱신은 대상 파편 행을 id 오름차순으로 `FOR NO KEY UPDATE` 잠그는 문장과 잠근 행만 갱신하는 문장을 한 트랜잭션으로 수행|링크 INSERT는 단일 트랜잭션(`lock_timeout=5s`). `linked_to` 갱신은 별도 트랜잭션이며 실패하면 경고 로그만 남기고 링크 삽입 결과는 유지|advisory 획득 실패 시 단건 fallback|`(from_id, to_id)` UNIQUE로 중복 차단. `linked_to`는 쌍의 상대 id만 받는다|`tests/unit/session-linker-batch.test.js`, `tests/unit/linkstore-create-links-sql.test.js`, `tests/unit/linkstore-create-links-linked-to.test.js`, `tests/db-concurrency/linked-to-pairs.test.js`|
+|forget (linked_to 정리, 일괄 삭제)|`FragmentWriter.delete`, `deleteMany`, `deleteByAgent`|`linked_to` 정리는 대상 행을 id 오름차순으로 `FOR NO KEY UPDATE` 잠근 뒤 다음 문장에서 `array_remove`. 여러 행 삭제는 id 오름차순 `FOR UPDATE` 잠금 뒤 삭제. `MEMENTO_SCORE_UPDATE_BATCH`와 무관하게 항상 id 순|잠금 문장과 쓰기 문장을 한 트랜잭션으로|잠금 충돌은 `MEMENTO_DB_LOCK_RETRY_MAX`까지 트랜잭션 재실행|잠금 순서를 recall 부수효과(`incrementAccess`, `touchLinked`)와 같은 id 오름차순으로 맞춰 교착을 막는다|`tests/db-concurrency/lock-order.test.js`|
+|consolidate.importance_decay, utility_score_update|`FragmentGC.decayImportance`, `MemoryConsolidator._updateUtilityScores` (`lib/memory/consolidate/idOrderedUpdate.js`)|`MEMENTO_SCORE_UPDATE_BATCH`(기본 200) 크기의 id 오름차순 묶음마다 `FOR NO KEY UPDATE` 잠금 문장 뒤 잠근 행만 갱신. 0이면 단일 UPDATE 문장|묶음마다 커밋하며 모든 묶음이 첫 조회의 기준 시각 하나를 사용|묶음 단위 잠금 충돌 재실행. 그 밖은 호출자 책임이며 다음 consolidate 주기가 다시 처리|저장값이 바뀌는 행만 갱신. 감쇠와 utility는 `MEMENTO_DECAY_MIN_DELTA`, `MEMENTO_UTILITY_MIN_DELTA` 미만 변화 행을 건너뜀|`tests/unit/id-ordered-update.test.js`, `tests/db-concurrency/score-update-lock-order.test.js`, `tests/db-concurrency/score-update-noop.test.js`, `tests/db-concurrency/score-update-min-delta.test.js`|
 |link.autoLinkSessionFragments|`SessionLinker.autoLinkSessionFragments`|sortedKey 사전식 정렬로 deadlock 방지|개별 쿼리|`wouldCreateCycle` 캐시로 동일 cycle 내 재계산 회피|cycle detection 사전 검사|`tests/integration/session-linker-deadlock.test.js`|
 |reflect|`MemoryReflector.reflect` → `BatchRememberProcessor.process`|상속(batchRemember)|상속|상속|상속 + idempotencyKey 권장|`tests/integration/reflect-large-payload.test.js`|
 |LLM dispatch|`dispatchChain` (`lib/llm/index.js`)|`getSemaphore(chainKey, limit, waitMs)` per provider chainKey|단일 fetch|429 / semaphore timeout 시 다음 fallback provider로|`provider|baseUrl|model|apiKeyHash` 단위 독립 sem|`tests/unit/llm-dispatcher-concurrency.test.js`, `tests/unit/llm-dispatcher-no-inline-mirror.test.js`|
@@ -28,7 +28,39 @@ write 경로별 lock 종류·격리 수준·재시도 정책을 한 페이지로
 
 ## 행 잠금 순서
 
-파편 행을 여러 개 잠그는 경로는 모두 id 오름차순으로 잠근다. recall 부수효과(`incrementAccess`, `touchLinked`), 임베딩 일괄 갱신, 링크 일괄 생성의 `linked_to` 갱신, `forget`의 `linked_to` 정리, 감쇠와 utility 점수 갱신(`idOrderedUpdate.js`)이 같은 순서를 쓰므로 서로 다른 순서로 같은 파편 집합을 잠그다 생기는 교착이 없다. 점수 갱신은 묶음마다 커밋해 한 번에 잡는 행 잠금을 묶음 크기로 제한한다. 이 순서는 `npm run test:db`의 `tests/db-concurrency/`가 실제 PostgreSQL에서 확인한다. 이 레인은 실행마다 전용 데이터베이스를 만들고 지우며 `npm test`에는 포함되지 않는다.
+파편 행을 여러 개 갱신하거나 지우는 경로는 모두 같은 규칙을 따른다.
+
+1. 대상 행은 `SELECT id FROM fragments WHERE <대상 조건> ORDER BY id FOR NO KEY UPDATE`(삭제는 `FOR UPDATE`) 문장 하나로 id 오름차순으로 잠근다.
+2. 쓰기는 같은 트랜잭션의 다음 문장에서 잠근 id 배열(`$1`)만 대상으로 한다(`WHERE id = ANY($1)`).
+3. 1과 2는 `queryWithAgentVector(agentId, 쓰기 문장, params, { lock })`로 실행한다(`lib/tools/db.js`). 잠금 문장은 `fragmentRowLock`(`lib/memory/write/rowLock.js`)으로 만든다. 잠근 행이 없으면 쓰기 문장을 보내지 않는다.
+4. 트랜잭션이 교착(40P01)이나 잠금 대기 상한(55P03)으로 끝나면 `withLockRetry`(`lib/tools/lock-retry.js`)가 트랜잭션 전체를 처음부터 다시 실행한다. 상한은 `MEMENTO_DB_LOCK_RETRY_MAX`(기본 3), 대기는 25ms에서 두 배씩 늘어 400ms를 넘지 않으며 그 절반에서 상한 사이 임의 값이다. 재실행마다 `memento_db_deadlock_retries_total{operation}`이 오른다.
+
+잠금과 쓰기를 한 문장(`WITH locked AS (... FOR NO KEY UPDATE) UPDATE ... FROM locked`)으로 합치지 않는다. 그 문장은 행을 id 순으로 잠그더라도 갱신 단계가 문장 시작 시점 스냅숏이 보는 행 버전을 다시 건드린다. 그 사이 다른 트랜잭션이 행을 갱신해 잠금 단계가 새 버전을 잠갔고, 이전 버전의 xmax가 커밋된 갱신과 살아 있는 키 공유 잠금(외래키 검사, `FOR KEY SHARE`)을 담은 multixact이면 갱신 단계는 이전 버전의 튜플 잠금을 기다린다. 같은 이전 버전의 튜플 잠금을 쥔 채 새 버전을 기다리는 다른 트랜잭션이 있으면 두 트랜잭션이 서로를 기다린다. 튜플 잠금 대기열은 행이 아니라 행 버전의 물리 위치마다 있으므로 id 순서로는 이 순환을 막을 수 없다. 쓰기를 다음 문장으로 나누면 그 문장의 스냅숏은 이미 잠근 최신 버전을 보고, 쓰기 단계는 자기 잠금만 확인하므로 어떤 잠금도 기다리지 않는다. 대기는 모두 id 순 잠금 문장 안에서만 일어난다.
+
+|경로|진입점|잠금 문장의 대상 조건|강도|쓰기 문장|operation|
+|-|-|-|-|-|-|
+|접근 기록(EMA, noEma)|`FragmentWriter.incrementAccess`|`id = ANY(ids)`|NO KEY UPDATE|access_count, accessed_at, EMA|access|
+|연결 파편 접근 기록|`FragmentWriter.touchLinked`|co_retrieved 이웃, 키와 workspace 범위|NO KEY UPDATE|accessed_at|touch_linked|
+|임베딩 일괄 저장|`EmbeddingWorker._embedChunk`|묶음의 id|NO KEY UPDATE|embedding(VALUES 대응)|embedding|
+|링크 일괄 생성의 linked_to|`LinkStore.createLinks`|쌍의 양 끝 id|NO KEY UPDATE|linked_to 합집합|link_sync|
+|forget의 linked_to 정리|`FragmentWriter.delete`, `deleteMany`|linked_to에 지울 id를 가진 행|NO KEY UPDATE|linked_to 제거|unlink|
+|일괄 삭제|`FragmentWriter.deleteMany`, `deleteByAgent`|id 목록(키 범위), agent_id|UPDATE|DELETE|delete|
+|GC 삭제|`FragmentGC.deleteExpired`, `FragmentWriter`의 GC 경로, `ConsolidatorGC.purgeStaleReflections`|후보 CTE의 id|UPDATE|DELETE ... RETURNING|gc_delete|
+|감쇠, utility 묶음|`idOrderedUpdate.updateOneBatch`|조건 + `id > 마지막 id` + LIMIT 묶음 크기|NO KEY UPDATE|호출자가 넘긴 SET|score_batch|
+|활성화 확산|`SpreadingActivation` 큐 처리|`id = ANY(ids)`, 키와 workspace 범위|NO KEY UPDATE|EMA, accessed_at, access_count|activation|
+|tool_feedback EMA|`MemoryRecaller.toolFeedback`|`id = ANY(fragment_ids)`, 키 범위|NO KEY UPDATE|EMA|feedback|
+|case 보상 역전파|`CaseRewardBackprop.backprop`|case 증거 파편, 키 범위|NO KEY UPDATE|importance, quality_verified|case_reward|
+|병합의 linked_to 교체|`MemoryConsolidator._mergeDuplicates`|linked_to에 제거 id를 가진 같은 키의 행|NO KEY UPDATE|array_replace|merge_links|
+|TTL 계층 전환|`FragmentGC.transitionTTL`(5문장)|각 전환 조건|NO KEY UPDATE|ttl_tier|tier|
+|EMA 감쇠|`FragmentGC.decayEmaActivation`(2문장)|미접근 기간 조건|NO KEY UPDATE|ema_activation|ema_decay|
+|앵커 승격|`MemoryConsolidator._promoteAnchors`|접근 수와 중요도 조건|NO KEY UPDATE|is_anchor|anchor_promotion|
+|stale 중요도 하향|`ConsolidatorGC.calibrateByFeedback`|피드백 없는 오래된 행|NO KEY UPDATE|importance|stale_importance|
+
+한 트랜잭션에서 여러 문장을 쓰는 병합(`MemoryConsolidator`의 semantic_dedup 병합)은 첫 문장에서 두 행을 id 순으로 `FOR NO KEY UPDATE` 잠근 뒤 같은 두 행만 쓴다. 행 하나만 다루는 문장(amend의 `FOR UPDATE` 재조회와 갱신, supersede의 `valid_to` 설정, 단건 링크와 단건 `linked_to` 갱신, 분할 원본 닫기)은 기다리는 동안 다른 행 잠금을 쥐지 않으므로 순환에 들 수 없다.
+
+남는 경우: 단건 링크 INSERT(`LinkStore.createLink`, `GraphLinker`의 co_retrieved)는 외래키 검사로 두 끝 파편에 키 공유 잠금을 쌍의 순서대로 건다. 키 공유 잠금은 위 표의 NO KEY UPDATE 잠금과 충돌하지 않고 삭제의 UPDATE 잠금과만 충돌하므로, 같은 두 파편을 동시에 지우는 일괄 삭제와만 겹칠 수 있다. `MEMENTO_SCORE_UPDATE_BATCH=0`의 단일 UPDATE 문장 경로는 되돌림용으로 남아 있으며 id 순 잠금을 쓰지 않는다.
+
+이 규칙은 `npm run test:db`의 `tests/db-concurrency/`가 실제 PostgreSQL에서 확인한다. `tuple-lock-cycle.test.js`는 위 순환을 세션 순서를 고정해 재현하고, `lock-order.test.js`와 `writer-mix.test.js`는 쓰기 경로를 겹쳐 실행해 서버 교착 집계가 0인지 본다. 이 레인은 실행마다 전용 데이터베이스를 만들고 지우며 `npm test`에는 포함되지 않는다.
 
 ## 재시도 정책 정리
 
@@ -39,13 +71,14 @@ write 경로별 lock 종류·격리 수준·재시도 정책을 한 페이지로
 |semaphore wait timeout|해당 provider 실패로 기록 후 다음 fallback. `LLM_CONCURRENCY_WAIT_MS` (기본 30000ms)|
 |policy violation (hard gate)|`SymbolicPolicyViolationError` throw. 호출자가 처리. atomic 경로에서도 트랜잭션 시작 전에 throw|
 |fragment_limit exceeded|`atomic` 경로에서 ROLLBACK 후 `code: "fragment_limit_exceeded"` Error throw|
+|교착(40P01), 잠금 대기 상한(55P03)|잠금 문장을 앞세운 쓰기 트랜잭션 전체를 `MEMENTO_DB_LOCK_RETRY_MAX`(기본 3)까지 다시 실행. `memento_db_deadlock_retries_total{operation}` 증가와 경고 로그. 상한을 넘으면 마지막 오류를 던진다|
 
 ## 새 경로 추가 규약
 
 1. 코드 본문에 동시성 가드를 명시적으로 작성한다. 에이전트 범위 해제(`agent_id='system'`)가 필요하면 키 scope(`WHERE key_id = $X`)를 같은 함수 안에 강제한다.
 2. 본 문서 매트릭스에 행을 추가한다. 회귀 테스트 파일을 같은 PR에서 신설·등재한다.
 3. deadlock·TOCTOU 가드가 의심되는 경우 통합 테스트로 박제한다(`tests/integration/<topic>-concurrency.test.js`).
-4. 여러 파편 행을 잠그는 경로는 대상을 id 오름차순으로 잠그고, 교착 시험을 `tests/db-concurrency/`에 등재한다.
+4. 여러 파편 행을 쓰는 경로는 `queryWithAgentVector`의 `lock` 옵션으로 대상을 id 오름차순으로 먼저 잠그고 다음 문장에서 잠근 행만 쓴다. `operation` 이름을 `LOCK_RETRY_OPERATIONS`에 더하고 위 표에 행을 추가하며, 교착 시험을 `tests/db-concurrency/`에 등재한다.
 5. `docs/features.md`의 관련 모듈 행이 영향받으면 함께 갱신한다.
 
 ## Read 경로 매트릭스
@@ -75,6 +108,7 @@ read 경로는 write 경로와 달리 row-level lock을 사용하지 않는다. 
 |`LLM_CONCURRENCY_WAIT_MS`|`30000`|semaphore 슬롯 대기 timeout|
 |`LLM_CONCURRENCY`|JSON|chainKey 또는 provider name 기준 limit override|
 |`LLM_CHAIN_TIMEOUT_MS`|`0`|chain deadline. `0`이면 무제한|
+|`MEMENTO_DB_LOCK_RETRY_MAX`|`3`|잠금 충돌로 끝난 여러 행 쓰기 트랜잭션의 재실행 상한. 0이면 재시도하지 않음. 0~10 밖은 3|
 |`MEMENTO_SCORE_UPDATE_BATCH`|`200`|감쇠와 utility 갱신의 id 오름차순 묶음 크기. 0이면 단일 UPDATE 문장. 10000을 넘으면 10000|
 |`MEMENTO_DECAY_MIN_DELTA`|`0`|감쇠량이 이 값보다 작은 행을 건너뜀(마지막 감쇠 후 24시간이 지난 행은 항상 갱신)|
 |`MEMENTO_UTILITY_MIN_DELTA`|`0`|저장된 utility_score와의 차이가 이 값 이하인 행을 다시 쓰지 않음|

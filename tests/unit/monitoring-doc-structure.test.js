@@ -16,6 +16,7 @@ import { register, protocolVersionLabel } from "../../lib/metrics.js";
 import { SUPPORTED_PROTOCOL_VERSIONS }     from "../../lib/protocol-versions.js";
 import "../../lib/memory/consolidate/split-metrics.js";
 import "../../lib/outbox/outbox-metrics.js";
+import "../../lib/tools/lock-retry.js";
 
 const DOC_URL = new URL("../../docs/operations/monitoring.md", import.meta.url);
 const DOC     = readFileSync(DOC_URL, "utf8");

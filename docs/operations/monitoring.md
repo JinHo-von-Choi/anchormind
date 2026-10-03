@@ -61,6 +61,9 @@ groups:
       - alert: MementoSplitStepFailures
         expr: sum(increase(memento_consolidate_split_step_failed_total[6h])) > 0
         labels: { severity: info, component: memento-mcp }
+      - alert: MementoDbLockRetries
+        expr: sum(increase(memento_db_deadlock_retries_total[1h])) > 0
+        labels: { severity: info, component: memento-mcp }
       - alert: MementoProtocolVersionOther
         expr: sum(increase(mcp_protocol_version_negotiations_total{requested_version="other"}[1h])) > 0
         labels: { severity: info, component: memento-mcp }
@@ -83,12 +86,22 @@ groups:
 | MementoMCPDown | 스크레이프가 2분간 실패한다 |
 | MementoAuthStoreErrors | API 키 저장소 조회가 키 판정 전에 실패한다(`operation` 라벨로 구분) |
 | MementoSplitStepFailures | 장문 파편 분할의 커밋 단계가 실패한다(`step` 라벨로 구분) |
+| MementoDbLockRetries | 파편 행을 여러 개 잠그는 쓰기 트랜잭션이 교착(40P01)이나 잠금 대기 상한(55P03)으로 끝나 다시 실행됐다(`operation` 라벨로 경로 구분). 재실행은 결과를 바꾸지 않으며, 지속되면 `docs/concurrency.md`의 잠금 순서를 벗어난 경로를 찾는다 |
 | MementoProtocolVersionOther | 지원 목록에 없는 프로토콜 버전을 요청한 협상이 있다 |
 | MementoOutboxDeadLetter | 재시도 한도를 넘었거나 재시도 불가로 판정된 outbox 이벤트가 있다. 원인을 고친 뒤 되돌리는 절차는 [configuration.md](../configuration.md#outbox) |
 | MementoOutboxLag | 전달 예정 시각이 지난 outbox 대기 행 중 가장 오래된 행이 5분 넘게 전달되지 않았다(작업자 처리량 부족, 점유되지 않는 topic). 재시도하는 행은 다음 예정 시각이 미래라 지연에 들어가지 않으므로, 처리기 반복 실패는 `memento_outbox_failed_total`과 dead-letter 건수(`memento_outbox_dead_letter`, MementoOutboxDeadLetter)로 본다 |
 | MementoOutboxStatsStale | 어느 프로세스도 5분 넘게 outbox 게이지를 갱신하지 않았다(모든 인스턴스의 작업자 정지, `MEMENTO_OUTBOX_WORKER=off`, 작업자 회차 실패). `MEMENTO_OUTBOX=off`로 기능을 끈 배치에서는 이 규칙을 두지 않는다 |
 
 outbox 게이지는 작업자를 돌리는 프로세스만 갱신한다. 작업자를 돌리지 않는 프로세스도 지표 모듈을 불러오므로 `memento_outbox_lag_seconds`를 0으로 내보내고, 따라서 `absent(memento_outbox_lag_seconds)`는 스크레이프 대상이 사라졌을 때만 참이 되어 작업자 정지를 잡지 못한다. 작업자 정지는 갱신 시각 게이지 `memento_outbox_stats_updated_seconds`(유닉스 초, 갱신 전에는 0)로 본다. 인스턴스가 여럿이면 `max`가 가장 최근 갱신을 고르므로 하나라도 작업자를 돌리면 경보가 나지 않는다.
+
+### 행 잠금 지표
+
+| 지표 | 라벨 | 의미 |
+|-|-|-|
+| `memento_db_deadlock_retries_total` | `operation` | 잠금 충돌로 끝난 트랜잭션을 처음부터 다시 실행한 횟수. 재시도 횟수 상한은 `MEMENTO_DB_LOCK_RETRY_MAX`(기본 3) |
+| `memento_db_write_failures_total` | `operation` | 실패를 던지지 않고 경고 로그로 끝낸 배경 쓰기의 실패 수(현재 SpreadingActivation 활성화 갱신, `operation="activation"`) |
+
+`operation` 값은 `lib/tools/lock-retry.js`의 `LOCK_RETRY_OPERATIONS` 닫힌 집합이다(access, touch_linked, embedding, link_sync, unlink, delete, gc_delete, score_batch, activation, feedback, case_reward, merge_links, tier, ema_decay, anchor_promotion, stale_importance).
 
 ---
 
@@ -101,7 +114,7 @@ outbox 게이지는 작업자를 돌리는 프로세스만 갱신한다. 작업�
 
 ```bash
 curl -s -H "Authorization: Bearer $(cat /etc/prometheus/secrets/memento-master-key)" http://127.0.0.1:57332/metrics \
-  | grep -cE "^# TYPE (mcp_auth_store_errors_total|memento_consolidate_split_step_failed_total|mcp_protocol_version_negotiations_total) "
+  | grep -cE "^# TYPE (mcp_auth_store_errors_total|memento_consolidate_split_step_failed_total|memento_db_deadlock_retries_total|mcp_protocol_version_negotiations_total) "
 ```
 
-기대값은 3이다. 이 저장소의 `tests/unit/monitoring-doc-structure.test.js`는 위 규칙의 지표 이름과 셀렉터 라벨이 등록된 지표와 일치하는지, 값 집합이 닫힌 라벨(프로토콜 버전)의 셀렉터 값이 코드가 만들 수 있는 값인지 검사한다.
+기대값은 4이다. 이 저장소의 `tests/unit/monitoring-doc-structure.test.js`는 위 규칙의 지표 이름과 셀렉터 라벨이 등록된 지표와 일치하는지, 값 집합이 닫힌 라벨(프로토콜 버전)의 셀렉터 값이 코드가 만들 수 있는 값인지 검사한다.

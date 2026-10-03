@@ -57,6 +57,7 @@ server.js  (HTTP server)
             |   +-- FragmentImporter.js   Passes import rows through the gate and writes them with FragmentWriter. Applies the target key profile (owner, restore) (shared by admin import and CLI import)
             |   +-- DedupScope.js         content_hash duplicate detection scope (`MEMENTO_DEDUP_SCOPE`). Reads the valid detection indexes to choose the detection scope, ON CONFLICT target, pre-insert lookup and batch fold key
             |   +-- FragmentWriter.js     Fragment writes. The semantic methods (insert, update) accept only gated values; internal metadata goes through updateInternal, which cannot write the 9 semantic columns (also delete, incrementAccess, touchLinked)
+            |   +-- rowLock.js            Id-ordered lock statement (`fragmentRowLock`) and locked-row delete statement shared by multi-row fragment writes
             |   +-- FragmentFactory.js    Fragment creation, validation, PII masking entry point (`maskSensitiveText`, rules come from the `lib/security` table) and per-type truncation (`limitContentLength`)
             |   +-- affect.js             Allowed affect tag values and `sanitizeAffect` normalization (shared by FragmentFactory and FragmentWriter)
             |   +-- FragmentStore.js      PostgreSQL CRUD facade (delegates to FragmentReader + FragmentWriter)
@@ -195,7 +196,8 @@ lib/tools/
 +-- reconstruct.js  reconstruct_history, search_traces tool handlers (Narrative Reconstruction)
 +-- memory-schemas.js  Tool schema definitions (inputSchema)
 +-- tool-error.js Converts error text in tool responses. Intended business errors pass through, driver/OS/runtime errors become fixed text, and storage CHECK constraint violations become an `INVALID_ARGUMENT` message naming the parameter and allowed values
-+-- db.js        PostgreSQL connection pool, agent session variable query helper (not exposed via MCP). getPrimaryPool(), getBatchPool(), queryWithAgentVector()
++-- db.js        PostgreSQL connection pool, agent session variable query helper (not exposed via MCP). getPrimaryPool(), getBatchPool(), queryWithAgentVector(). With `opts.lock` it runs the lock statement first in the same transaction and then the write statement with the locked ids as $1
++-- lock-retry.js Re-runs transactions that ended in a deadlock (40P01) or lock timeout (55P03) (`MEMENTO_DB_LOCK_RETRY_MAX`), and the `memento_db_deadlock_retries_total` and `memento_db_write_failures_total` metrics
 +-- embedding.js OpenAI text embedding generation
 +-- stats.js     Access statistics collection and storage
 +-- pool-gate.js Caps background use of the primary pool
