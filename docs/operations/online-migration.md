@@ -16,7 +16,7 @@
 |3|대형 표 백필은 watermark와 실패 행 기록을 가진 재개형 도우미로 실행한다|단위 시험, DB 레인 시험|
 |4|`VALIDATE CONSTRAINT`는 배포와 분리한 운영 단계에서 실행한다|절차 점검|
 
-배포 전에는 백업을 완료한다. 백업이 없는 상태에서 대형 표를 바꾸는 단계는 시작하지 않는다.
+배포 전에는 `scripts/ops/backup.sh --label pre-migration`으로 백업을 완료한다. 백업이 없는 상태에서 대형 표를 바꾸는 단계는 시작하지 않는다. 절차는 [backup-restore.md](backup-restore.md#마이그레이션-전-백업)에 있다.
 
 ---
 
@@ -82,7 +82,7 @@ lint 규칙은 번호 `050` 이상 파일에 적용한다(`scripts/lint-migratio
    ```
 
 3. `npm run lint:migrations`로 규약을 확인한다.
-4. 배포 전에 백업을 완료하고 저트래픽 시간대를 고른다.
+4. 배포 전에 `scripts/ops/backup.sh --label pre-migration`으로 백업을 완료하고([backup-restore.md](backup-restore.md#마이그레이션-전-백업)) 저트래픽 시간대를 고른다.
 5. 단계 순서를 확인한다(연결하지 않는다).
 
    ```bash
@@ -276,7 +276,7 @@ ALTER TABLE agent_memory.fragments VALIDATE CONSTRAINT chk_example;
 
 ## 배포 점검표
 
-1. 백업을 완료하고 복원 가능 여부를 확인한다.
+1. `scripts/ops/backup.sh --label pre-migration`으로 백업을 완료하고 복원 가능 여부를 확인한다([backup-restore.md](backup-restore.md#마이그레이션-전-백업)).
 2. `npm run lint:migrations`가 통과한다.
 3. 대형 표 색인이 있으면 작업 목록에 등록하고 `--dry-run`으로 단계를 확인한다.
 4. 접속 대상을 명시하고 `--confirm`으로 색인을 만든다.
