@@ -35,7 +35,7 @@ const ALLOWED = {
   "admin/ApiKeyStore.js": 4, // 키 삭제 전 그 키의 파편, 재공고화 이력 수를 세는 회계 질의 2곳
   "admin/admin-keys.js": 1,
   "memory/CaseEventStore.js": 2,
-  "memory/consolidate/MemoryConsolidator.js": 2,
+  "memory/consolidate/MemoryConsolidator.js": 3, // linked_to 교체는 잠금 문장과 갱신 문장이 같은 키 조건을 고정 위치로 쓴다
   "memory/link/ContradictionDetector.js": 2,
   "memory/read/FragmentReader.js": 1,
   "memory/read/GraphNeighborSearch.js": 1,

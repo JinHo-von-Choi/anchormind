@@ -36,7 +36,10 @@ function dataError(id) {
   return Object.assign(new Error(`invalid input syntax for type integer: "value-of-${id}"`), { code: "22P02" });
 }
 
-/** 갱신 묶음 문을 흉내 낸다: 후보 id 중 badIds 가 있으면 오류, 아니면 갱신한 것으로 기록한다. */
+/**
+ * 갱신 묶음(잠금 문장 + 잠근 행 갱신 문장 한 트랜잭션)을 흉내 낸다: 후보 id 중 badIds 가 있으면
+ * 오류, 아니면 갱신한 것으로 기록하고 잠근 id 목록을 돌려준다.
+ */
 function runBatchSql(sql, params) {
   const [afterId, limit] = params;
   const onlyMatch = sql.match(/AND id = \$(\d+)/);
@@ -51,12 +54,11 @@ function runBatchSql(sql, params) {
   const bad = pool.find(id => db.badIds.has(id));
   if (bad !== undefined) throw db.badErrors.get(bad) ?? dataError(bad);
   db.updated.push(...pool);
-  return { rows: [{ n: pool.length, last_id: pool.length ? pool[pool.length - 1] : null }] };
+  return { rows: [], rowCount: pool.length, lockedIds: pool };
 }
 
 function runSql(sql, params) {
   db.queries.push(sql);
-  if (sql.includes("FOR NO KEY UPDATE")) return runBatchSql(sql, params);
   if (sql.includes("SELECT NOW()"))      return { rows: [{ ts: new Date("2026-10-03T00:00:00Z") }] };
   if (sql.includes("to_regclass"))       return { rows: [db.tablesExist ? { watermark: "w", failure: "f" } : { watermark: null, failure: null }] };
   if (/^\s*SELECT id FROM/.test(sql)) {
@@ -112,7 +114,13 @@ function runStateSql(sql, params) {
 }
 
 mock.module("../../lib/tools/db.js", {
-  exports: { queryWithAgentVector: async (_agent, sql, params = []) => runSql(sql, params) }
+  exports: {
+    queryWithAgentVector: async (_agent, sql, params = [], opts) => {
+      if (!opts?.lock) return runSql(sql, params);
+      db.queries.push(opts.lock.sql, sql);
+      return runBatchSql(opts.lock.sql, opts.lock.params);
+    }
+  }
 });
 
 const {

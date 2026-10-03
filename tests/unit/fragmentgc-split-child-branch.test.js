@@ -7,8 +7,9 @@ import assert from "node:assert/strict";
 const captured = [];
 mock.module("../../lib/tools/db.js", {
   namedExports: {
-    queryWithAgentVector: async (_ctx, sql, params) => {
-      captured.push({ sql, params });
+    /** 삭제 대상 선정 조건은 잠금 문장에 있으므로 잠금 문장이 있으면 그것을 본다. */
+    queryWithAgentVector: async (_ctx, sql, params, opts) => {
+      captured.push(opts?.lock ? { sql: opts.lock.sql, params: opts.lock.params } : { sql, params });
       return { rowCount: 0 };
     }
   }

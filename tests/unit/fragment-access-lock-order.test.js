@@ -4,8 +4,9 @@
  * 작성자: 최진호
  * 작성일: 2026-09-30
  *
- * incrementAccess(EMA/noEma)와 touchLinked는 대상 행을 id 오름차순으로 먼저
- * 잠근 뒤 갱신해야 한다. DB 없이 발행 SQL 문자열의 구조와 원래 조건 보존만 본다.
+ * incrementAccess(EMA/noEma)와 touchLinked는 대상 행을 id 오름차순으로 먼저 잠그는
+ * 문장과 잠근 행만 갱신하는 문장으로 나뉘어야 한다. DB 없이 발행 SQL 문자열의 구조와
+ * 원래 조건 보존만 본다.
  */
 
 import { describe, it, mock, beforeEach } from "node:test";
@@ -16,8 +17,8 @@ let calls = [];
 mock.module("../../lib/tools/db.js", {
   namedExports: {
     getPrimaryPool: () => ({ query: async () => ({ rows: [] }) }),
-    queryWithAgentVector: async (agentId, sql, params) => {
-      calls.push({ agentId, sql, params });
+    queryWithAgentVector: async (agentId, sql, params, opts) => {
+      calls.push({ agentId, sql, params, lock: opts?.lock });
       return { rows: [], rowCount: 0 };
     }
   }
@@ -28,14 +29,26 @@ mock.module("../../lib/tools/embedding.js", {
 
 const { FragmentWriter } = await import("../../lib/memory/write/FragmentWriter.js");
 
-/** 잠금 CTE가 UPDATE보다 앞서고 id 순 잠금과 조인 갱신으로 이어지는 골격 */
-const LOCK_FIRST = /^\s*WITH locked AS \([\s\S]*?ORDER BY id\s+FOR NO KEY UPDATE\s*\)\s*UPDATE agent_memory\.fragments f\b[\s\S]*FROM locked\s+WHERE f\.id = locked\.id\s*$/;
+/** 갱신 문장은 잠금 문장이 잠근 행($1)만 갱신한다. 잠금 CTE나 조인 갱신을 쓰지 않는다. */
+const LOCKED_ONLY = /^\s*UPDATE agent_memory\.fragments f\b[\s\S]*WHERE f\.id = ANY\(\$1::text\[\]\)\s*$/;
 
-/** CTE 본문(잠금 대상 선정 SELECT)만 추출 */
-function lockedBody(sql) {
-  const m = sql.match(/WITH locked AS \(([\s\S]*?)\)\s*UPDATE agent_memory\.fragments f/);
-  assert.ok(m, "잠금 CTE가 없다");
-  return m[1];
+/** 잠금 문장의 골격: 대상 조건 뒤 id 오름차순 FOR NO KEY UPDATE */
+const LOCK_STATEMENT = /^SELECT id FROM agent_memory\.fragments WHERE [\s\S]+ ORDER BY id FOR NO KEY UPDATE$/;
+
+/**
+ * 호출 하나가 잠금 문장과 잠근 행만 쓰는 갱신 문장으로 나뉘었는지 확인하고 잠금 조건을 돌려준다.
+ *
+ * @param {{sql: string, lock: {operation: string, sql: string}}} call
+ * @param {string} operation
+ * @returns {string} 잠금 문장의 WHERE 본문
+ */
+function lockedWhere(call, operation) {
+  assert.match(call.sql, LOCKED_ONLY);
+  assert.doesNotMatch(call.sql, /WITH locked|FROM locked/);
+  assert.ok(call.lock, "잠금 문장이 없다");
+  assert.equal(call.lock.operation, operation);
+  assert.match(call.lock.sql, LOCK_STATEMENT);
+  return call.lock.sql.match(/WHERE ([\s\S]+) ORDER BY id FOR NO KEY UPDATE$/)[1];
 }
 
 beforeEach(() => {
@@ -48,13 +61,13 @@ describe("FragmentWriter.incrementAccess 잠금 순서", () => {
     await writer.incrementAccess(["b", "a"], "agent-a", { noEma: true });
 
     assert.equal(calls.length, 1);
-    const { sql, params, agentId } = calls[0];
-    assert.equal(agentId, "agent-a");
-    assert.match(sql, LOCK_FIRST);
-    assert.match(lockedBody(sql), /WHERE id = ANY\(\$1\)\s+ORDER BY id\s+FOR NO KEY UPDATE/);
-    assert.match(sql, /SET access_count = f\.access_count \+ 1,\s+accessed_at\s+= NOW\(\)/);
-    assert.doesNotMatch(sql, /ema_activation/);
-    assert.deepEqual(params, [["b", "a"]]);
+    const [call] = calls;
+    assert.equal(call.agentId, "agent-a");
+    assert.equal(lockedWhere(call, "access"), "id = ANY($1)");
+    assert.deepEqual(call.lock.params, [["b", "a"]]);
+    assert.match(call.sql, /SET access_count = f\.access_count \+ 1,\s+accessed_at\s+= NOW\(\)/);
+    assert.doesNotMatch(call.sql, /ema_activation/);
+    assert.deepEqual(call.params, []);
   });
 
   it("EMA 경로는 id 순 잠금 후 갱신하고 EMA 식과 파라미터를 유지한다", async () => {
@@ -62,15 +75,15 @@ describe("FragmentWriter.incrementAccess 잠금 순서", () => {
     await writer.incrementAccess(["b", "a"], "agent-a");
 
     assert.equal(calls.length, 1);
-    const { sql, params } = calls[0];
-    assert.match(sql, LOCK_FIRST);
-    assert.match(lockedBody(sql), /WHERE id = ANY\(\$1\)\s+ORDER BY id\s+FOR NO KEY UPDATE/);
-    assert.match(sql, /access_count\s+= f\.access_count \+ 1/);
-    assert.match(sql, /ema_activation\s+= \$2 \* POWER\(/);
-    assert.match(sql, /COALESCE\(f\.ema_last_updated, f\.created_at - INTERVAL '1 day'\)/);
-    assert.match(sql, /\(1 - \$2\) \* COALESCE\(f\.ema_activation, 0\)/);
-    assert.match(sql, /ema_last_updated\s+= NOW\(\)/);
-    assert.deepEqual(params, [["b", "a"], 0.3]);
+    const [call] = calls;
+    assert.equal(lockedWhere(call, "access"), "id = ANY($1)");
+    assert.deepEqual(call.lock.params, [["b", "a"]]);
+    assert.match(call.sql, /access_count\s+= f\.access_count \+ 1/);
+    assert.match(call.sql, /ema_activation\s+= \$2 \* POWER\(/);
+    assert.match(call.sql, /COALESCE\(f\.ema_last_updated, f\.created_at - INTERVAL '1 day'\)/);
+    assert.match(call.sql, /\(1 - \$2\) \* COALESCE\(f\.ema_activation, 0\)/);
+    assert.match(call.sql, /ema_last_updated\s+= NOW\(\)/);
+    assert.deepEqual(call.params, [0.3]);
   });
 
   it("빈 id 배열은 질의를 발행하지 않는다", async () => {
@@ -81,24 +94,24 @@ describe("FragmentWriter.incrementAccess 잠금 순서", () => {
 });
 
 describe("FragmentWriter.touchLinked 잠금 순서", () => {
-  it("co_retrieved 대상 선정 조건 전체를 잠금 CTE 안에 유지한다", async () => {
+  it("co_retrieved 대상 선정 조건 전체를 잠금 문장 안에 유지한다", async () => {
     const writer = new FragmentWriter();
     await writer.touchLinked(["a", "b"], "agent-a", "key-a", { workspace: "ws-a" });
 
     assert.equal(calls.length, 1);
-    const { sql, params } = calls[0];
-    assert.match(sql, LOCK_FIRST);
-    const body = lockedBody(sql);
+    const [call] = calls;
+    const body   = lockedWhere(call, "touch_linked");
     assert.match(body, /fl\.relation_type = 'co_retrieved'/);
     assert.match(body, /fl\.from_id = ANY\(\$1::text\[\]\) OR fl\.to_id = ANY\(\$1::text\[\]\)/);
     assert.match(body, /AND id != ALL\(\$1::text\[\]\)/);
     assert.match(body, /key_id/);
     assert.match(body, /workspace/);
-    assert.match(body, /ORDER BY id\s+FOR NO KEY UPDATE\s*$/);
-    assert.match(sql, /SET accessed_at = NOW\(\)/);
-    assert.deepEqual(params[0], ["a", "b"]);
-    assert.ok(params.flat().includes("key-a"));
-    assert.ok(params.includes("ws-a"));
+    assert.match(call.sql, /SET accessed_at = NOW\(\)/);
+    assert.deepEqual(call.params, []);
+    const lockParams = call.lock.params;
+    assert.deepEqual(lockParams[0], ["a", "b"]);
+    assert.ok(lockParams.flat().includes("key-a"));
+    assert.ok(lockParams.includes("ws-a"));
   });
 
   it("빈 입력은 질의를 발행하지 않는다", async () => {

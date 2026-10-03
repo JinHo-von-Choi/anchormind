@@ -12,8 +12,9 @@ let captured = null;
 mock.module("../../lib/tools/db.js", {
   namedExports: {
     getPrimaryPool: () => ({}),
-    queryWithAgentVector: mock.fn(async (_agentId, sql, params) => {
-      captured = { sql, params };
+    /** 대상 조건은 잠금 문장에 있으므로 잠금 문장이 있으면 그것을 본다. */
+    queryWithAgentVector: mock.fn(async (_agentId, sql, params, opts) => {
+      captured = opts?.lock ? { sql: opts.lock.sql, params: opts.lock.params } : { sql, params };
       return { rowCount: 1, rows: [] };
     }),
     withTransaction: mock.fn(async fn => fn({ query: async () => ({ rows: [] }) }))

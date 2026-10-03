@@ -16,7 +16,11 @@ const calls = [];
 mock.module("../../lib/tools/db.js", {
   namedExports: {
     getPrimaryPool       : () => ({ query: async (sql) => { calls.push(sql); return { rows: [] }; } }),
-    queryWithAgentVector : async (_agent, sql) => { calls.push(sql); return { rows: [], rowCount: 0 }; },
+    /** 대상 조건이 잠금 문장에 있는 갱신은 두 문장을 이어 붙여 기록한다. */
+    queryWithAgentVector : async (_agent, sql, _params, opts) => {
+      calls.push(opts?.lock ? `${sql}\n${opts.lock.sql}` : sql);
+      return { rows: [], rowCount: 0 };
+    },
     withTransaction      : async () => { throw new Error("unused"); }
   }
 });

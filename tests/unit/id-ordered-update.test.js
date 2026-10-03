@@ -11,14 +11,17 @@ const calls   = [];
 let   replies = [];
 mock.module("../../lib/tools/db.js", {
   exports: {
-    queryWithAgentVector: async (agent, sql, params) => {
-      calls.push({ agent, sql, params });
-      return replies.shift() ?? { rows: [{ n: 0, last_id: null }] };
+    queryWithAgentVector: async (agent, sql, params, opts) => {
+      calls.push({ agent, sql, params, lock: opts?.lock });
+      return replies.shift() ?? { rows: [], rowCount: 0, lockedIds: [] };
     }
   }
 });
 
-const { updateInIdOrder, updateOneBatch, readBatchClock, scoreUpdateBatchSize } = await import("../../lib/memory/consolidate/idOrderedUpdate.js");
+const { updateInIdOrder, updateOneBatch, readBatchClock, scoreUpdateBatchSize, paramGuard } = await import("../../lib/memory/consolidate/idOrderedUpdate.js");
+
+/** 잠금 문장이 ids 를 잠그고 갱신 문장이 n 행을 갱신한 결과 */
+const locked = (n, ids) => ({ rows: [], rowCount: n, lockedIds: ids });
 
 beforeEach(() => { calls.length = 0; replies = []; delete process.env.MEMENTO_SCORE_UPDATE_BATCH; });
 
@@ -27,55 +30,73 @@ describe("updateInIdOrder", () => {
     const ts = new Date("2026-10-03T00:00:00Z");
     replies = [
       { rows: [{ ts }] },
-      { rows: [{ n: 2, last_id: "frag-b" }] },
-      { rows: [{ n: 1, last_id: "frag-c" }] },
-      { rows: [{ n: 0, last_id: null }] }
+      locked(2, ["frag-a", "frag-b"]),
+      locked(1, ["frag-c"]),
+      locked(0, [])
     ];
     const total = await updateInIdOrder({
       where: "ttl_tier != 'permanent'", set: "importance = 0.5", batchSize: 2
     });
     assert.equal(total, 3);
     assert.equal(calls.length, 4);
-    assert.match(calls[1].sql, /ORDER BY id\s+LIMIT \$2\s+FOR NO KEY UPDATE/);
-    assert.deepEqual(calls[1].params, ["", 2, ts]);
-    assert.deepEqual(calls[2].params, ["frag-b", 2, ts]);
-    assert.deepEqual(calls[3].params, ["frag-c", 2, ts]);
+    assert.equal(calls[1].lock.operation, "score_batch");
+    assert.match(calls[1].lock.sql, /ORDER BY id\s+LIMIT \$2\s+FOR NO KEY UPDATE$/);
+    assert.deepEqual(calls[1].lock.params, ["", 2, ts]);
+    assert.deepEqual(calls[2].lock.params, ["frag-b", 2, ts]);
+    assert.deepEqual(calls[3].lock.params, ["frag-c", 2, ts]);
+    assert.deepEqual(calls[1].params, [2, ts]);
     assert.ok(calls.every(c => c.agent === "system"));
   });
 
-  it("추가 인자는 $4부터 붙는다", async () => {
-    replies = [{ rows: [{ ts: new Date() }] }, { rows: [{ n: 0, last_id: null }] }];
+  it("추가 인자는 두 문장 모두 $4부터 붙는다", async () => {
+    replies = [{ rows: [{ ts: new Date() }] }, locked(0, [])];
     await updateInIdOrder({ where: "importance > $4", set: "importance = 0.5", params: [0.1], batchSize: 10 });
-    assert.equal(calls[1].params[3], 0.1);
+    assert.equal(calls[1].lock.params[3], 0.1);
+    assert.equal(calls[1].params[2], 0.1);
   });
 });
 
 describe("updateOneBatch", () => {
-  it("afterId 를 $1 로 쓰고 갱신 행 수와 잠근 마지막 id 를 돌려준다", async () => {
+  it("afterId 를 $1 로 잠그고 갱신 행 수와 잠근 마지막 id 를 돌려준다", async () => {
     const ts = new Date("2026-10-03T00:00:00Z");
-    replies  = [{ rows: [{ n: 2, last_id: "frag-z" }] }];
+    replies  = [locked(2, ["frag-n", "frag-z"])];
     const batch = await updateOneBatch({ where: "importance > $4", set: "importance = 1", params: [0.1], batchSize: 5, afterId: "frag-m", clock: ts });
     assert.deepEqual(batch, { n: 2, lastId: "frag-z" });
-    assert.deepEqual(calls[0].params, ["frag-m", 5, ts, 0.1]);
-    assert.ok(!/ AND id = \$/.test(calls[0].sql));
+    assert.deepEqual(calls[0].lock.params, ["frag-m", 5, ts, 0.1]);
+    assert.match(calls[0].lock.sql, /WHERE \(importance > \$4\) AND id > \$1/);
+    assert.ok(!/ AND id = \$/.test(calls[0].lock.sql));
+  });
+
+  it("갱신 문장은 잠근 행($1)만 갱신하고 쓰지 않는 자리표시자의 형만 정한다", async () => {
+    replies = [locked(1, ["frag-a"])];
+    await updateOneBatch({ where: "importance > $4", set: "importance = 1", params: [0.1], batchSize: 5, clock: new Date() });
+    const { sql, params } = calls[0];
+    assert.match(sql, /SET importance = 1\s+WHERE f\.id = ANY\(\$1::text\[\]\)/);
+    assert.match(sql, / AND \$2::text IS NOT NULL AND \$3::text IS NOT NULL AND \$4::text IS NOT NULL$/);
+    assert.doesNotMatch(sql, /FOR NO KEY UPDATE|locked/);
+    assert.equal(params.length, 3);
   });
 
   it("onlyId 는 마지막 자리표시자로 붙어 한 행으로 한정한다", async () => {
-    replies = [{ rows: [{ n: 0, last_id: null }] }];
+    replies = [locked(0, [])];
     const batch = await updateOneBatch({ where: "importance > $4", set: "importance = 1", params: [0.1], batchSize: 5, clock: new Date(), onlyId: "frag-q" });
     assert.deepEqual(batch, { n: 0, lastId: null });
-    assert.match(calls[0].sql, /AND id = \$5\b/);
-    assert.equal(calls[0].params[3], 0.1);
-    assert.equal(calls[0].params[4], "frag-q");
-    assert.equal(calls[0].params[0], "");
+    assert.match(calls[0].lock.sql, /AND id = \$5\b/);
+    assert.equal(calls[0].lock.params[3], 0.1);
+    assert.equal(calls[0].lock.params[4], "frag-q");
+    assert.equal(calls[0].lock.params[0], "");
+    assert.equal(calls[0].params[3], "frag-q");
+    assert.match(calls[0].sql, /\$5::text IS NOT NULL/);
   });
 
-  it("where 와 set 이 $3 을 쓰지 않으면 기준 시각의 형을 정하는 조건을 덧붙인다", async () => {
-    replies = [{ rows: [{ n: 0, last_id: null }] }, { rows: [{ n: 0, last_id: null }] }];
+  it("where 가 $3 을 쓰지 않으면 잠금 문장에, set 이 쓰지 않으면 갱신 문장에 기준 시각의 형을 정하는 조건을 붙인다", async () => {
+    replies = [locked(0, []), locked(0, [])];
     await updateOneBatch({ where: "importance < 1", set: "importance = 1", batchSize: 5, clock: new Date() });
     await updateOneBatch({ where: "importance < 1", set: "last_decay_at = $3", batchSize: 5, clock: new Date() });
-    assert.match(calls[0].sql, /AND id > \$1 AND \$3::timestamptz IS NOT NULL/);
-    assert.ok(!/\$3::timestamptz IS NOT NULL/.test(calls[1].sql));
+    assert.match(calls[0].lock.sql, /AND id > \$1 AND \$3::text IS NOT NULL/);
+    assert.match(calls[0].sql, /\$3::text IS NOT NULL/);
+    assert.match(calls[1].lock.sql, /\$3::text IS NOT NULL/);
+    assert.ok(!/\$3::text IS NOT NULL/.test(calls[1].sql));
   });
 
   it("readBatchClock 은 NOW() 한 번을 읽는다", async () => {
@@ -83,6 +104,13 @@ describe("updateOneBatch", () => {
     replies  = [{ rows: [{ ts }] }];
     assert.equal(await readBatchClock(), ts);
     assert.equal(calls.length, 1);
+  });
+});
+
+describe("paramGuard", () => {
+  it("범위 안에서 sql 이 참조하지 않는 자리표시자만 조건으로 붙인다", () => {
+    assert.equal(paramGuard("a = $2 AND b = $12", 2, 4), " AND $3::text IS NOT NULL AND $4::text IS NOT NULL");
+    assert.equal(paramGuard("a = $1", 2, 1), "");
   });
 });
 

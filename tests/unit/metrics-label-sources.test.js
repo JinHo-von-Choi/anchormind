@@ -89,6 +89,7 @@ const REVIEWED = new Map([
   ["lib/memory/write/RememberPostProcessor.js|recordClaim|c.extractor ?? \"morpheme-rule\"", "ClaimExtractor 추출기 이름"],
   ["lib/memory/write/RememberPostProcessor.js|recordClaim|c.polarity ?? \"uncertain\"",       "ClaimExtractor 극성 상수"],
   ["lib/memory/write/RememberPostProcessor.js|recordGateBlock|gateResult.reason",            "proactive-gate 판정 사유 상수"],
+  ["lib/tools/lock-retry.js|inc|operation",                                     "assertLockOperation이 LOCK_RETRY_OPERATIONS 밖 값을 기록 전에 거부한다"],
   ["lib/symbolic/CbrEligibility.js|recordGateBlock|reason",                       "CbrEligibility 판정 사유 상수"],
   ["lib/symbolic/ClaimConflictDetector.js|recordWarning|RULE_ID",                 "모듈 상수"],
   ["lib/symbolic/ClaimConflictDetector.js|recordWarning|severity",                "판정 심각도 상수"],

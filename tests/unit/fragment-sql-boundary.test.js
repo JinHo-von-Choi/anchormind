@@ -71,6 +71,7 @@ const ALLOWED = {
   "memory/write/DedupScope.js": 1, // 중복 판정 사전 조회. insert, amend, batch_remember가 같은 질의와 같은 범위 판정을 쓴다
   "memory/write/FragmentWriter.js": 24, // 가져오기의 id 충돌 판정은 같은 id 행의 키 소속을 조회한다, archive 전에 현재 파편을 FOR UPDATE로 재조회, 접근 기록 갱신 3경로와 linked_to 정리 2경로는 id 순 잠금 CTE와 갱신 문장을 함께 쓴다
   "memory/write/RememberPostProcessor.js": 1,
+  "memory/write/rowLock.js": 2, // 여러 행 쓰기 경로가 공유하는 id 순 잠금 문장과 잠근 행 삭제 문장
   "tools/reconstruct.js": 1,
   "tools/resources.js": 4,
 };

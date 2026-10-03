@@ -5,7 +5,8 @@
  * 작성일: 2026-10-03
  *
  * 거래 T1이 id가 작은 행 a를 잠근 뒤, 물리 위치가 앞인 행 z를 갱신한다.
- * 같은 두 행을 다루는 배경 문장이 id 순으로 잠그면 교착이 생기지 않는다.
+ * 같은 두 행을 다루는 배경 경로가 id 순 잠금 문장으로 먼저 잠그면 교착이 생기지 않는다.
+ * 배경 경로가 a에서 기다리는 것은 그 잠금 문장의 텍스트로 확인한다.
  * 실행마다 전용 데이터베이스를 만들어 쓰고 끝나면 지운다.
  */
 import { describe, it, before, after } from "node:test";
@@ -101,7 +102,8 @@ describe("잠금 순서", () => {
   it("decayImportance는 id 순 거래와 교착하지 않는다", async () => {
     const ids = await seedPair(`d${Date.now().toString(36)}`);
     const { FragmentGC } = await import("../../lib/memory/consolidate/FragmentGC.js");
-    const err = await interleave(ids, () => new FragmentGC().decayImportance(), "%last_decay_at%");
+    const err = await interleave(ids, () => new FragmentGC().decayImportance(),
+      "%(ttl_tier != 'permanent' AND is_anchor = FALSE) AND id > $1%FOR NO KEY UPDATE%");
     assert.equal(err, null, `감쇠 실패: ${err?.code} ${err?.message}`);
   });
 
@@ -109,7 +111,7 @@ describe("잠금 순서", () => {
     const ids = await seedPair(`u${Date.now().toString(36)}`);
     const { MemoryConsolidator } = await import("../../lib/memory/consolidate/MemoryConsolidator.js");
     const err = await interleave(ids,
-      () => MemoryConsolidator.prototype._updateUtilityScores.call({}), "%SET utility_score%",
+      () => MemoryConsolidator.prototype._updateUtilityScores.call({}), "%WHERE (utility_score IS DISTINCT FROM%FOR NO KEY UPDATE%",
       () => admin.query(`UPDATE agent_memory.fragments SET utility_score = -1 WHERE id = ANY($1)`, [[ids.a, ids.z]]));
     assert.equal(err, null, `utility 실패: ${err?.code} ${err?.message}`);
   });
@@ -122,7 +124,7 @@ describe("잠금 순서", () => {
       [idX]);
     const ids = await seedPair(tag, { linkedTo: idX });
     const { FragmentWriter } = await import("../../lib/memory/write/FragmentWriter.js");
-    const err = await interleave(ids, () => new FragmentWriter().delete(idX, "default", null), "%array_remove%");
+    const err = await interleave(ids, () => new FragmentWriter().delete(idX, "default", null), "%linked_to @> ARRAY%FOR NO KEY UPDATE%");
     assert.equal(err, null, `삭제 실패: ${err?.code} ${err?.message}`);
     const { rows } = await admin.query(`SELECT count(*)::int AS c FROM agent_memory.fragments WHERE id = $1`, [idX]);
     assert.equal(rows[0].c, 0);

@@ -18,8 +18,15 @@ const pool = {
   })
 };
 
+/** 활성화 갱신은 잠금 문장에 대상 조건을 두므로 잠금 문장을 기록한다. */
 mock.module("../../lib/tools/db.js", {
-  namedExports: { getPrimaryPool: () => pool }
+  namedExports: {
+    getPrimaryPool      : () => pool,
+    queryWithAgentVector: mock.fn(async (_agentId, sql, params, opts) => {
+      queries.push(opts?.lock ? { sql: opts.lock.sql, params: opts.lock.params } : { sql, params });
+      return { rows: [], rowCount: 1 };
+    })
+  }
 });
 mock.module("../../lib/memory/read/GraphNeighborSearch.js", {
   namedExports: {

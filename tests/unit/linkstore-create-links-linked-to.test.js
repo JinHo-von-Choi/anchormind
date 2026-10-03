@@ -59,10 +59,10 @@ describe("LinkStore.createLinks 연결 배열 갱신", () => {
 
     assert.equal(updates.length, 1);
     const { sql, params, mode } = updates[0];
-    assert.match(sql, /unnest\(\$1::text\[\],\s*\$2::text\[\]\)\s+AS\s+p\(src,\s*dst\)/);
+    assert.match(sql, /unnest\(\$2::text\[\],\s*\$3::text\[\]\)\s+AS\s+p\(src,\s*dst\)/);
     assert.match(sql, /WHERE\s+p\.src\s*=\s*f\.id/);
-    assert.doesNotMatch(sql, /unnest\(\$2::text\[\]\)/);
-    assert.equal(mode, "write");
+    assert.doesNotMatch(sql, /unnest\(\$3::text\[\]\)/);
+    assert.equal(mode.lock.operation, "link_sync");
     assert.deepEqual(params, [
       ["a", "c", "b", "d"],
       ["b", "d", "a", "c"]
@@ -77,13 +77,15 @@ describe("LinkStore.createLinks 연결 배열 갱신", () => {
     assert.deepEqual(directed, ["a>b", "b>a", "c>d", "d>c"]);
   });
 
-  it("대상 행을 id 순으로 먼저 잠근 뒤 갱신한다", async () => {
+  it("대상 행을 id 순으로 먼저 잠그고 다음 문장에서 잠근 행만 갱신한다", async () => {
     await new LinkStore().createLinks(pairs, "agent-a");
 
-    const { sql } = updates[0];
-    assert.match(sql, /WITH locked AS \(\s*SELECT id FROM \S*fragments\s+WHERE id = ANY\(\$1::text\[\]\)\s+ORDER BY id\s+FOR NO KEY UPDATE\s*\)/);
+    const { sql, mode } = updates[0];
+    assert.match(mode.lock.sql, /^SELECT id FROM \S*fragments WHERE id = ANY\(\$1::text\[\]\) ORDER BY id FOR NO KEY UPDATE$/);
+    assert.deepEqual(mode.lock.params, [["a", "c", "b", "d"]]);
     assert.match(sql, /UPDATE \S*fragments f/);
-    assert.match(sql, /FROM locked\s+WHERE f\.id = locked\.id/);
+    assert.match(sql, /WHERE f\.id = ANY\(\$1::text\[\]\)\s*$/);
+    assert.doesNotMatch(sql, /locked/);
     assert.match(sql, /array_agg\(DISTINCT elem\)/);
   });
 
