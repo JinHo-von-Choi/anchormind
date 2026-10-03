@@ -8,22 +8,20 @@
  * context_summary, goal, outcome)을 쓰는 SQL 문자열은 FragmentWriter의 의미 메서드와
  * 사유가 붙은 허용 목록에만 있어야 한다. 행 INSERT는 본문을 쓰므로 모두 의미 쓰기다.
  *
- * lib, scripts, bin의 문자열 상수와 템플릿 문자열을 읽어
+ * lib, scripts, bin의 문자열 상수, 템플릿 문자열, + 연결식을 읽어
  *   1. INSERT INTO fragments
  *   2. UPDATE fragments ... SET <의미 열> =
  *   3. SET 절을 조립하는 모듈(동적 SET)에서 "<의미 열> = "로 시작하는 문자열
- * 을 찾고, 감싼 함수 이름과 함께 대조한다. 내부 메타데이터 갱신(임베딩, 접근 수, TTL,
+ *   4. 표 이름이 보간이나 연결식인 INSERT, 의미 열 또는 보간 SET 절을 가진 UPDATE
+ * 을 찾고, 감싼 함수 이름과 함께 대조한다. 같은 파일의 문자열 상수로 보간한 표 이름은 그 값으로 읽는다. 내부 메타데이터 갱신(임베딩, 접근 수, TTL,
  * 감쇠, 링크 유지 등)은 의미 열을 쓰지 않으므로 대상이 아니다.
  */
 
 import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
-import { listSourceFiles, scanFile } from "./_source-scan.js";
-
-const SEMANTIC_COLUMNS = Object.freeze([
-  "content", "topic", "keywords", "is_anchor", "workspace", "key_id", "context_summary", "goal", "outcome"
-]);
+import { listSourceFiles, scanFile, scanSource } from "./_source-scan.js";
+import { findSemanticSql }                       from "./_write-rules.js";
 
 /** FragmentWriter의 의미 메서드. 관문을 통과한 값만 받는다. */
 const SEMANTIC_METHODS = Object.freeze({
@@ -58,63 +56,14 @@ const ALLOWED_SEMANTIC_SQL = Object.freeze({
     "운영자가 실행하는 일회성 백필. 같은 세션 파편의 workspace를 reflect 파편에 옮겨 적는다"
 });
 
-const TABLE_WRITE   = /\b(INSERT\s+INTO|UPDATE)\s+(?:\$\{\}\.|[A-Za-z_]+\.)?fragments(?![\w])/i;
-const SET_CLAUSE    = /\bSET\b([\s\S]*?)(?:\bWHERE\b|\bFROM\b|\bRETURNING\b|$)/i;
-const ASSIGNMENT    = /(?:^|,)\s*(?:[a-z_]+\.)?([a-z_]+)\s*=(?!=)/gi;
-const LEADING_SET   = /^\s*(?:[a-z_]+\.)?([a-z_]+)\s*=(?!=)/i;
-
-/** UPDATE 문자열의 SET 절에서 대입되는 열 이름. SET 절이 보간이면 dynamic=true. */
-function setColumns(text, matchEnd) {
-  const set = SET_CLAUSE.exec(text.slice(matchEnd));
-  if (!set) return { columns: [], dynamic: false };
-  const columns = [...set[1].matchAll(ASSIGNMENT)].map(m => m[1].toLowerCase());
-  return { columns, dynamic: /^\s*\$\{\}/.test(set[1]) };
-}
-
-/**
- * 파일 하나의 의미 쓰기와 동적 SET 문장을 찾는다.
- *
- * @param {string} file
- * @returns {{ writes: Array<{file: string, fn: string, kind: string, columns: string[], line: number}>, dynamicSet: boolean }}
- */
-function scanWrites(file) {
-  const { strings, calls } = scanFile(file);
-  const writes     = [];
-  let   dynamicSet = false;
-  const fnOf       = (s) => s.scope.at(-1) ?? "<module>";
-
-  for (const s of strings) {
-    const m = TABLE_WRITE.exec(s.text);
-    if (!m) continue;
-    if (/INSERT/i.test(m[1])) {
-      writes.push({ file, fn: fnOf(s), kind: "insert", columns: ["*"], line: s.line });
-      continue;
-    }
-    const { columns, dynamic } = setColumns(s.text, m.index + m[0].length);
-    dynamicSet = dynamicSet || dynamic;
-    const semantic = columns.filter(c => SEMANTIC_COLUMNS.includes(c));
-    if (semantic.length > 0) writes.push({ file, fn: fnOf(s), kind: "update", columns: semantic, line: s.line });
-  }
-
-  const buildsSet = file in DYNAMIC_SET_MODULES || calls.some(c => DYNAMIC_SET_HELPERS.includes(c.callee));
-  if (buildsSet) {
-    for (const s of strings) {
-      const lead = LEADING_SET.exec(s.text);
-      if (lead && SEMANTIC_COLUMNS.includes(lead[1].toLowerCase()) && !TABLE_WRITE.test(s.text)) {
-        writes.push({ file, fn: fnOf(s), kind: "set-fragment", columns: [lead[1].toLowerCase()], line: s.line });
-      }
-    }
-  }
-  return { writes, dynamicSet };
-}
-
 /** lib, scripts, bin 전체를 스캔한다. */
 function collectSemanticWrites() {
   const files      = [...listSourceFiles("lib"), ...listSourceFiles("scripts"), ...listSourceFiles("bin")];
   const writes     = [];
   const dynamicSet = [];
+  const opts       = { dynamicSetModules: DYNAMIC_SET_MODULES, dynamicSetHelpers: DYNAMIC_SET_HELPERS };
   for (const file of files) {
-    const r = scanWrites(file);
+    const r = findSemanticSql(file, scanFile(file), opts);
     writes.push(...r.writes);
     if (r.dynamicSet) dynamicSet.push(file);
   }
@@ -150,7 +99,7 @@ describe("의미 열 쓰기 경계", () => {
 
   it("검사가 FragmentWriter 의미 메서드의 INSERT와 SET 조립을 실제로 찾는다", () => {
     const found = new Set(writes.filter(isSemanticMethod).map(w => `${w.fn}:${w.kind}`));
-    assert.ok(found.has("_prepareInsertRow:insert"), "INSERT 탐지가 동작하지 않는다");
+    assert.ok(found.has("_prepareInsertRow:fragments-insert"), "INSERT 탐지가 동작하지 않는다");
     assert.ok(found.has("_diffUpdatableFields:set-fragment"), "동적 SET 조각 탐지가 동작하지 않는다");
   });
 
@@ -159,5 +108,35 @@ describe("의미 열 쓰기 경계", () => {
     assert.deepEqual(unknown, [], `등록되지 않은 동적 SET 모듈: ${unknown.join(", ")}`);
     const stale = Object.keys(DYNAMIC_SET_MODULES).filter(f => !dynamicSet.includes(f));
     assert.deepEqual(stale, [], `동적 SET이 사라진 모듈: ${stale.join(", ")}`);
+  });
+});
+
+describe("의미 열 쓰기 탐지 규칙", () => {
+  const detect = (source) => findSemanticSql("synthetic.js", scanSource(source)).writes.map(w => `${w.kind}:${w.columns.join(",")}`);
+
+  it("+ 연결로 만든 SQL의 의미 열 갱신을 찾는다", () => {
+    const found = detect(`export function f(c) { return c.query("UPDATE " + SCHEMA + ".fragments SET content = $1 WHERE id = $2", []); }`);
+    assert.deepEqual(found, ["fragments-update:content"]);
+  });
+
+  it("같은 파일의 문자열 상수로 보간한 표 이름을 읽는다", () => {
+    const found = detect('const TABLE = "fragments";\nexport function f(c) { return c.query(`UPDATE ${SCHEMA}.${TABLE} SET topic = $1 WHERE id = $2`, []); }');
+    assert.deepEqual(found, ["fragments-update:topic"]);
+  });
+
+  it("표 이름을 알 수 없는 INSERT와 보간 SET 절 UPDATE를 찾는다", () => {
+    const found = detect([
+      "export function f(c, table, set) {",
+      "  c.query(`INSERT INTO ${SCHEMA}.${table} (id, content) VALUES ($1, $2)`, []);",
+      "  c.query(`UPDATE ${table} SET ${set} WHERE id = $1`, []);",
+      "  c.query(`UPDATE ${table} SET importance = $1 WHERE id = $2`, []);",
+      "}"
+    ].join("\n"));
+    assert.deepEqual(found, ["dynamic-insert:*", "dynamic-update:?"]);
+  });
+
+  it("의미 열이 없는 갱신과 다른 표는 대상이 아니다", () => {
+    const found = detect('export function f(c) { c.query(`UPDATE ${SCHEMA}.fragments SET importance = $1`); c.query(`INSERT INTO ${SCHEMA}.fragment_links (a) VALUES ($1)`); }');
+    assert.deepEqual(found, []);
   });
 });

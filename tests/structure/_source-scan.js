@@ -52,17 +52,64 @@ function functionName(node, parent) {
 const FUNCTION_TYPES = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
 
 /**
- * 모듈 소스를 읽어 호출식, 문자열, import 경로(정적과 리터럴 동적)를 모은다.
+ * 문자열 조각 목록. 리터럴은 { lit }, 보간이나 연결된 식은 { expr }(식별자면 이름, 아니면 null)이다.
+ * 템플릿 문자열과 + 연결을 같은 형태로 펼친다.
+ */
+function stringParts(node) {
+  if (node.type === "Literal" && typeof node.value === "string") return [{ lit: node.value }];
+  if (node.type === "TemplateLiteral") {
+    const parts = [];
+    node.quasis.forEach((q, i) => {
+      parts.push({ lit: q.value.cooked ?? q.value.raw });
+      if (i < node.expressions.length) parts.push(...exprPart(node.expressions[i]));
+    });
+    return parts;
+  }
+  if (node.type === "BinaryExpression" && node.operator === "+") return [...stringParts(node.left), ...stringParts(node.right)];
+  return exprPart(node);
+}
+
+function exprPart(node) {
+  const isString = node.type === "Literal" && typeof node.value === "string";
+  const isConcat = node.type === "BinaryExpression" && node.operator === "+";
+  if (isString || isConcat || node.type === "TemplateLiteral") return stringParts(node);
+  return [{ expr: node.type === "Identifier" ? node.name : null }];
+}
+
+/** 호출 인자 요약. 객체 리터럴은 키 목록, 식별자는 이름이다. */
+function describeArg(arg) {
+  if (!arg) return { kind: "none" };
+  if (arg.type === "ObjectExpression") {
+    const keys    = arg.properties.filter(p => p.type === "Property" && !p.computed).map(p => p.key.name ?? p.key.value);
+    const spreads = arg.properties.some(p => p.type === "SpreadElement");
+    return { kind: "object", keys, spreads };
+  }
+  if (arg.type === "Identifier") return { kind: "identifier", name: arg.name };
+  return { kind: "other" };
+}
+
+/**
+ * 모듈 소스를 읽어 호출식, 문자열, import 경로(정적과 리터럴 동적), 바인딩을 모은다.
+ *
+ * - calls: { callee, receiver, method, args, scope, line }
+ * - strings: { text, scope, line }. 템플릿과 + 연결은 보간 자리를 "${}"로 두되, 같은 파일의
+ *   문자열 상수(const X = "..." 또는 템플릿 상수)를 가리키면 그 값으로 채운다. 연결식은 가장 바깥 식
+ *   하나로 남긴다.
+ * - bindings: { name, source, scope }. `x = new C()`는 source "new C", `x = a.b`는 source "a.b"
+ * - objectVars: { name, keys, scope }. 객체 리터럴로 초기화한 변수
+ * - memberAssigns: { object, property, scope }. `x.p = ...`
  *
  * @param {string} source
- * @returns {{ calls: Array<{callee: string, scope: string[], line: number}>,
- *             strings: Array<{text: string, scope: string[], line: number}>,
- *             imports: string[] }}
  */
 export function scanSource(source) {
-  const calls   = [];
-  const strings = [];
-  const imports = [];
+  const calls         = [];
+  const rawStrings    = [];
+  const imports       = [];
+  const constStrings  = new Map();
+  const constParts    = new Map();
+  const bindings      = [];
+  const objectVars    = [];
+  const memberAssigns = [];
 
   const collect = {
     create(context) {
@@ -78,18 +125,56 @@ export function scanSource(source) {
         }
         return names;
       };
+      const bindingSource = (init) => {
+        if (!init) return null;
+        if (init.type === "NewExpression") return `new ${sc.getText(init.callee)}`;
+        if (init.type === "MemberExpression") return sc.getText(init);
+        return null;
+      };
       return {
         ImportDeclaration(node) { imports.push(node.source.value); },
         ImportExpression(node)  { if (node.source.type === "Literal") imports.push(node.source.value); },
         CallExpression(node) {
-          calls.push({ callee: sc.getText(node.callee), scope: scopeOf(node), line: node.loc.start.line });
+          const callee = node.callee;
+          calls.push({
+            callee  : sc.getText(callee),
+            receiver: callee.type === "MemberExpression" ? sc.getText(callee.object) : null,
+            method  : callee.type === "MemberExpression" && !callee.computed ? callee.property.name : null,
+            args    : node.arguments.map(describeArg),
+            scope   : scopeOf(node),
+            line    : node.loc.start.line
+          });
         },
         Literal(node) {
-          if (typeof node.value === "string") strings.push({ text: node.value, scope: scopeOf(node), line: node.loc.start.line });
+          if (typeof node.value === "string") rawStrings.push({ parts: [{ lit: node.value }], scope: scopeOf(node), line: node.loc.start.line });
         },
         TemplateLiteral(node) {
-          const text = node.quasis.map(q => q.value.cooked ?? q.value.raw).join("${}");
-          strings.push({ text, scope: scopeOf(node), line: node.loc.start.line });
+          rawStrings.push({ parts: stringParts(node), scope: scopeOf(node), line: node.loc.start.line });
+        },
+        BinaryExpression(node) {
+          if (node.operator !== "+") return;
+          const parent = sc.getAncestors(node).at(-1);
+          if (parent?.type === "BinaryExpression" && parent.operator === "+") return;
+          const parts = stringParts(node);
+          if (parts.some(p => p.lit !== undefined)) rawStrings.push({ parts, scope: scopeOf(node), line: node.loc.start.line });
+        },
+        VariableDeclarator(node) {
+          if (node.id.type !== "Identifier") return;
+          const name = node.id.name;
+          if (node.init?.type === "Literal" && typeof node.init.value === "string") constStrings.set(name, node.init.value);
+          if (node.init?.type === "TemplateLiteral") constParts.set(name, stringParts(node.init));
+          if (node.init?.type === "ObjectExpression") objectVars.push({ name, keys: describeArg(node.init).keys, scope: scopeOf(node) });
+          const src = bindingSource(node.init);
+          if (src) bindings.push({ name, source: src, scope: scopeOf(node) });
+        },
+        AssignmentExpression(node) {
+          if (node.left.type !== "MemberExpression" || node.left.computed) return;
+          const target = sc.getText(node.left);
+          const src    = bindingSource(node.right);
+          if (src) bindings.push({ name: target, source: src, scope: scopeOf(node) });
+          if (node.left.object.type === "Identifier") {
+            memberAssigns.push({ object: node.left.object.name, property: node.left.property.name, scope: scopeOf(node) });
+          }
         }
       };
     }
@@ -102,7 +187,16 @@ export function scanSource(source) {
   }]);
   const fatal = messages.find(m => m.fatal);
   if (fatal) throw new Error(`parse failed: ${fatal.message}`);
-  return { calls, strings, imports };
+
+  /** 보간 자리를 같은 파일의 문자열 상수 값으로 채운다. 템플릿 상수는 한 단계 더 펼친다. */
+  const resolve = (parts, depth) => parts.map(p => {
+    if (p.lit !== undefined)       return p.lit;
+    if (constStrings.has(p.expr))  return constStrings.get(p.expr);
+    if (depth > 0 && constParts.has(p.expr)) return resolve(constParts.get(p.expr), depth - 1);
+    return "${}";
+  }).join("");
+  const strings = rawStrings.map(({ parts, scope, line }) => ({ text: resolve(parts, 2), scope, line }));
+  return { calls, strings, imports, bindings, objectVars, memberAssigns };
 }
 
 /** 저장소 기준 상대 경로 파일을 읽어 스캔한다. */
