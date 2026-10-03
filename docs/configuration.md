@@ -22,6 +22,7 @@
 | 100 이상 4500 이하의 정수, 그 밖은 2000 | MEMENTO_HEALTH_READY_DB_TIMEOUT_MS |
 | 1 이상 100 이하의 정수, 그 밖은 12 | MEMENTO_OUTBOX_MAX_ATTEMPTS |
 | 1 이상 3650 이하의 정수, 그 밖은 7 | MEMENTO_OUTBOX_RETENTION_DAYS, MEMENTO_OUTBOX_UNHANDLED_DAYS |
+| 0 이상 10 이하의 정수, 그 밖은 3 | MEMENTO_DB_LOCK_RETRY_MAX |
 | 1 이상의 숫자, 그 밖은 `SESSION_TTL_MINUTES * 60` | OAUTH_ACCESS_TOKEN_TTL_SECONDS |
 | 0 이상 1 이하의 숫자 (1을 넘으면 1, 음수와 숫자가 아닌 값은 0) | MEMENTO_DECAY_MIN_DELTA, MEMENTO_UTILITY_MIN_DELTA |
 | off, warn, enforce (공백만 있는 값을 포함한 그 밖의 값은 enforce로 동작) | MEMENTO_TOOL_ARGS_VALIDATION |
@@ -62,7 +63,7 @@
 | MEMENTO_AUTH_DISABLED | false | `true`로 설정 시 인증을 완전히 비활성화하여 모든 요청을 master 권한으로 처리. 개발·시험 전용이며 이 선언이 없으면 키 없는 기동 자체가 거부된다. `MEMENTO_ACCESS_KEY`가 비어 있을 때만 유효 |
 | DB_STATEMENT_TIMEOUT_MS | 30000 | 사용자 요청 경로의 질의 시간 상한(ms). 0은 무제한. system·admin 유지보수 경로에는 적용하지 않는다 |
 | REQUEST_TIMEOUT_MS | 60000 | 요청 수신 상한(ms). 0은 무제한 |
-| MEMENTO_CONFIG_STRICT | false | 숫자·열거·불리언 환경 변수의 값 문제를 기동 시 한 줄로 기록한다. 숫자가 아닌 값은 기본값으로 돌아가고, 정수가 아니거나 허용 범위 밖인 값은 그대로 쓰며 기록만 한다(`MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`, `MEMENTO_SHUTDOWN_DEADLINE_MS`, `MEMENTO_SCORE_UPDATE_BATCH`, `MEMENTO_SESSION_KEY_RECHECK_MS`는 범위 밖이어도 기본값). 공백만 있는 값은 미설정과 같다. `true`면 문제가 있을 때 종료 코드 78로 멈춘다 |
+| MEMENTO_CONFIG_STRICT | false | 숫자·열거·불리언 환경 변수의 값 문제를 기동 시 한 줄로 기록한다. 숫자가 아닌 값은 기본값으로 돌아가고, 정수가 아니거나 허용 범위 밖인 값은 그대로 쓰며 기록만 한다(`MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`, `MEMENTO_SHUTDOWN_DEADLINE_MS`, `MEMENTO_SCORE_UPDATE_BATCH`, `MEMENTO_SESSION_KEY_RECHECK_MS`, `MEMENTO_DB_LOCK_RETRY_MAX`는 범위 밖이어도 기본값). 공백만 있는 값은 미설정과 같다. `true`면 문제가 있을 때 종료 코드 78로 멈춘다 |
 | KEEP_ALIVE_TIMEOUT_MS | 75000 | Keep-Alive 연결 유지 시간(ms). 프록시 설정과 맞춘다 |
 | HEADERS_TIMEOUT_MS | 76000 | 요청 헤더 수신 상한(ms). KEEP_ALIVE_TIMEOUT_MS보다 크게 둔다 |
 | LOG_LEVEL | info (NODE_ENV가 production이 아니면 debug) | winston 로그 레벨 |
@@ -73,6 +74,7 @@
 | MEMENTO_VECTOR_FORCE_INDEX | (적용) | `off`면 벡터 검색의 인덱스 강제 planner 힌트를 끈다 |
 | MEMENTO_SEMANTIC_THRESHOLD_MODE | inner | `outer`면 시맨틱 검색이 이웃 max(limit, 80)개를 먼저 고르고 유사도 임계값을 바깥에서 적용한다 |
 | MEMENTO_SCORE_UPDATE_BATCH | 200 | 감쇠와 utility 갱신을 id 오름차순 묶음으로 나눌 때의 묶음 크기. 0이면 단일 UPDATE 문장. 0 이상의 정수만 받고(음수와 정수 아님은 기본값) 10000을 넘으면 10000으로 줄인다. `forget`의 `linked_to` 정리는 이 값과 무관하게 항상 id 오름차순으로 잠근다 |
+| MEMENTO_DB_LOCK_RETRY_MAX | 3 | 파편 행을 여러 개 잠그는 쓰기 트랜잭션이 교착(40P01)이나 잠금 대기 상한(55P03)으로 끝났을 때 처음부터 다시 실행하는 최대 횟수. 재시도 전 대기는 25ms에서 두 배씩 늘어 400ms를 넘지 않으며 그 범위의 절반에서 상한 사이 임의 값이다. 0이면 재시도하지 않는다. 0 이상 10 이하의 정수만 받고 그 밖은 기본값. 재시도 수는 `memento_db_deadlock_retries_total`(operation 라벨)로 노출된다 |
 | MEMENTO_DECAY_MIN_DELTA | 0 | 감쇠량이 이 값보다 작은 행을 건너뛴다. 마지막 감쇠 후 24시간이 지난 행은 항상 갱신(하한 0.05에 닿은 행은 이 상한 때문에 대략 네 번에 한 번 다시 쓰인다). 숫자가 아니거나 음수인 값은 0으로 처리하고 경고를 남기며 1을 넘는 값은 1로 제한한다. `MEMENTO_SCORE_UPDATE_BATCH`가 0이면 적용하지 않는다 |
 | MEMENTO_UTILITY_MIN_DELTA | 0 | 저장값과의 차이가 이 값 이하인 utility_score를 다시 쓰지 않는다. 숫자가 아니거나 음수인 값은 0으로 처리하고 경고를 남기며 1을 넘는 값은 1로 제한한다. `MEMENTO_SCORE_UPDATE_BATCH`가 0이면 적용하지 않는다 |
 | MEMENTO_RUNTIME | (없음) | `docker`면 Docker 설치로 판정한다 |

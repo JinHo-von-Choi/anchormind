@@ -22,6 +22,7 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | Integer, 100 to 4500, anything else uses 2000 | MEMENTO_HEALTH_READY_DB_TIMEOUT_MS |
 | Integer, 1 to 100, anything else uses 12 | MEMENTO_OUTBOX_MAX_ATTEMPTS |
 | Integer, 1 to 3650, anything else uses 7 | MEMENTO_OUTBOX_RETENTION_DAYS, MEMENTO_OUTBOX_UNHANDLED_DAYS |
+| Integer, 0 to 10, anything else uses 3 | MEMENTO_DB_LOCK_RETRY_MAX |
 | Number, 1 or more, anything else uses `SESSION_TTL_MINUTES * 60` | OAUTH_ACCESS_TOKEN_TTL_SECONDS |
 | Number, 0 to 1 (above 1 is capped to 1; negative and non-numeric values become 0) | MEMENTO_DECAY_MIN_DELTA, MEMENTO_UTILITY_MIN_DELTA |
 | off, warn, enforce (any other value, including a whitespace-only value, behaves as enforce) | MEMENTO_TOOL_ARGS_VALIDATION |
@@ -62,7 +63,7 @@ The name, documented default, purpose and category of each feature switch are in
 | MEMENTO_AUTH_DISABLED | false | When `true`, completely disables authentication and processes all requests with master privileges. Development/testing only. Only effective when `MEMENTO_ACCESS_KEY` is unset |
 | DB_STATEMENT_TIMEOUT_MS | 30000 | Query time limit (ms) for user request paths. 0 means unlimited. Not applied to system and admin maintenance paths |
 | REQUEST_TIMEOUT_MS | 60000 | Request receive limit (ms). 0 means unlimited |
-| MEMENTO_CONFIG_STRICT | false | Reports problems in numeric, enumerated and boolean environment variables as one startup log line. A non-numeric value falls back to the default; a non-integer or out-of-range value is used as given and only reported (`MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`, `MEMENTO_SHUTDOWN_DEADLINE_MS`, `MEMENTO_SCORE_UPDATE_BATCH` and `MEMENTO_SESSION_KEY_RECHECK_MS` fall back to the default when out of range). A whitespace-only value counts as unset. When `true`, startup stops with exit code 78 if any problem is found |
+| MEMENTO_CONFIG_STRICT | false | Reports problems in numeric, enumerated and boolean environment variables as one startup log line. A non-numeric value falls back to the default; a non-integer or out-of-range value is used as given and only reported (`MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`, `MEMENTO_SHUTDOWN_DEADLINE_MS`, `MEMENTO_SCORE_UPDATE_BATCH`, `MEMENTO_SESSION_KEY_RECHECK_MS` and `MEMENTO_DB_LOCK_RETRY_MAX` fall back to the default when out of range). A whitespace-only value counts as unset. When `true`, startup stops with exit code 78 if any problem is found |
 | KEEP_ALIVE_TIMEOUT_MS | 75000 | Keep-Alive connection lifetime (ms). Match the proxy setting |
 | HEADERS_TIMEOUT_MS | 76000 | Request header receive limit (ms). Keep it larger than KEEP_ALIVE_TIMEOUT_MS |
 | LOG_LEVEL | info (debug when NODE_ENV is not production) | winston log level |
@@ -73,6 +74,7 @@ The name, documented default, purpose and category of each feature switch are in
 | MEMENTO_VECTOR_FORCE_INDEX | (applied) | `off` disables the index-forcing planner hint for vector search |
 | MEMENTO_SEMANTIC_THRESHOLD_MODE | inner | `outer` selects max(limit, 80) nearest neighbours first and applies the similarity threshold outside the KNN query |
 | MEMENTO_SCORE_UPDATE_BATCH | 200 | Batch size for id-ordered importance decay and utility updates. 0 runs a single UPDATE statement. Only integers of 0 or more are accepted (a negative or non-integer value falls back to the default) and values above 10000 are capped at 10000. The `linked_to` cleanup of `forget` always locks rows in id order regardless of this value |
+| MEMENTO_DB_LOCK_RETRY_MAX | 3 | Maximum number of times a write transaction that locks several fragment rows is re-run from the start after a deadlock (40P01) or lock timeout (55P03). The wait before a retry starts at 25 ms, doubles per retry up to 400 ms, and is a random value between half of that bound and the bound. 0 disables retries. Only integers from 0 to 10 are accepted; anything else uses the default. Retries are exposed as `memento_db_deadlock_retries_total` (operation label) |
 | MEMENTO_DECAY_MIN_DELTA | 0 | Skips rows whose decay change is below this value; rows last decayed more than 24 hours ago are always updated (rows at the 0.05 floor are therefore rewritten about every fourth cycle). Non-numeric or negative values are treated as 0 with a warning, and values above 1 are capped to 1. Ignored when `MEMENTO_SCORE_UPDATE_BATCH` is 0 |
 | MEMENTO_UTILITY_MIN_DELTA | 0 | Skips utility_score rewrites when the stored value differs by at most this value. Non-numeric or negative values are treated as 0 with a warning, and values above 1 are capped to 1. Ignored when `MEMENTO_SCORE_UPDATE_BATCH` is 0 |
 | MEMENTO_RUNTIME | (none) | `docker` marks the installation as Docker |
