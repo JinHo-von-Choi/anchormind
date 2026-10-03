@@ -71,13 +71,13 @@ describe("원시 API 키의 허용 대역", () => {
   });
 
   it("대역 안 주소는 통과한다(IPv4 매핑 IPv6 소켓 주소 포함)", async () => {
-    state.fromDb = validKey({ allowedCidrs: ["10.0.0.0/8"] });
-    assert.equal((await validateAuthentication(request("mmcp_a", "::ffff:10.2.3.4"), null)).valid, true);
+    state.fromDb = validKey({ allowedCidrs: ["198.51.100.0/24"] });
+    assert.equal((await validateAuthentication(request("mmcp_a", "::ffff:198.51.100.4"), null)).valid, true);
     assert.equal(usage.length, 1);
   });
 
   it("대역 밖 주소는 키 무효와 같은 응답으로 거부하고 사용량을 올리지 않는다", async () => {
-    state.fromDb = validKey({ allowedCidrs: ["10.0.0.0/8"] });
+    state.fromDb = validKey({ allowedCidrs: ["198.51.100.0/24"] });
     const before = await denied("cidr_denied");
     const result = await validateAuthentication(request("mmcp_a", "192.0.2.10"), null);
     assert.equal(result.valid, false);
@@ -88,8 +88,8 @@ describe("원시 API 키의 허용 대역", () => {
   });
 
   it("잘못된 목록을 가진 키는 거부한다", async () => {
-    state.fromDb = validKey({ allowedCidrs: ["10.0.0.0/8", "not-a-cidr"] });
-    assert.equal((await validateAuthentication(request("mmcp_a", "10.0.0.1"), null)).valid, false);
+    state.fromDb = validKey({ allowedCidrs: ["198.51.100.0/24", "not-a-cidr"] });
+    assert.equal((await validateAuthentication(request("mmcp_a", "198.51.100.1"), null)).valid, false);
   });
 });
 
@@ -122,7 +122,7 @@ describe("수명 거부 사유 지표", () => {
       state.fromDb = async () => ({ valid: false, reason });
       const before = await denied(`key_${reason}`);
       const invalidBefore = await denied("invalid_key");
-      const result = await validateAuthentication(request("mmcp_a", "10.0.0.1"), null);
+      const result = await validateAuthentication(request("mmcp_a", "192.0.2.1"), null);
       assert.equal(result.valid, false);
       assert.equal(result.error, "Invalid or missing access key");
       assert.equal(await denied(`key_${reason}`), before + 1);
@@ -134,8 +134,31 @@ describe("수명 거부 사유 지표", () => {
     for (const reason of ["inactive", "limit_exceeded"]) {
       state.fromDb = async () => ({ valid: false, reason });
       const before = await denied("invalid_key");
-      await validateAuthentication(request("mmcp_a", "10.0.0.1"), null);
+      await validateAuthentication(request("mmcp_a", "192.0.2.1"), null);
       assert.equal(await denied("invalid_key"), before + 1, reason);
     }
+  });
+});
+
+describe("키에 묶인 OAuth 토큰과 회전 퇴역", () => {
+  beforeEach(() => {
+    state.token = async () => ({ valid: true, client_id: "conn_550e8400", is_api_key: false, bound_key_id: KEY_ID, issued_at: Date.now() - 60_000 });
+  });
+
+  it("지난 퇴역 시각보다 먼저 발급된 토큰은 key_rotated로 거부하고 비 API 키 OAuth로 넘기지 않는다", async () => {
+    state.byId   = validKey({ secretRetirements: [new Date(Date.now() - 1000)] });
+    const before = await denied("key_rotated");
+    const result = await validateAuthentication(request("oauth-token", "192.0.2.5"), null);
+    assert.equal(result.valid, false);
+    assert.equal(result.oauth, undefined);
+    assert.equal(usage.length, 0);
+    assert.equal(await denied("key_rotated"), before + 1);
+  });
+
+  it("퇴역 시각 뒤에 발급된 토큰과 퇴역 시각이 없는 키는 통과한다", async () => {
+    state.byId = validKey({ secretRetirements: [new Date(Date.now() - 120_000)] });
+    assert.equal((await validateAuthentication(request("oauth-token", "192.0.2.5"), null)).valid, true);
+    state.byId = validKey();
+    assert.equal((await validateAuthentication(request("oauth-token", "192.0.2.5"), null)).valid, true);
   });
 });

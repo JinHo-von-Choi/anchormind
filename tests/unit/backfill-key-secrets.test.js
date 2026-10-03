@@ -15,7 +15,7 @@ import {
   main, consistencyVerdict, BACKFILL_SQL, BACKFILL_BATCH
 } from "../../scripts/ops/backfill-key-secrets.mjs";
 
-const consistentRow = { keys_total: 3, keys_with_secret: 3, active_keys: 2, active_keys_with_active_secret: 2, active_secret_rows: 3, overlap_secret_rows: 1 };
+const consistentRow = { keys_total: 3, keys_with_secret: 3, active_keys: 2, active_keys_with_active_secret: 2, active_secret_rows: 3, overlap_secret_rows: 1, active_secrets_of_revoked_keys: 0 };
 
 /** 질의를 기록하고 정해 둔 응답을 돌려주는 연결 */
 function fakeClient({ missing = 2, tableExists = true, after = consistentRow } = {}) {
@@ -55,6 +55,18 @@ describe("정합 판정", () => {
     const verdict = consistencyVerdict({ ...consistentRow, keys_with_secret: 2, active_keys_with_active_secret: 1 });
     assert.equal(verdict.consistent, false);
     assert.equal(verdict.problems.length, 2);
+  });
+
+  it("폐기한 키의 활성 비밀 행을 문제로 보고한다", () => {
+    const verdict = consistencyVerdict({ ...consistentRow, active_secrets_of_revoked_keys: 1 });
+    assert.equal(verdict.consistent, false);
+    assert.match(verdict.problems[0], /폐기한 키의 활성 비밀 행 1건/);
+  });
+
+  it("일괄 이관은 키 행을 잠그고 폐기한 키는 revoked 행으로 옮기는 한 문장이다", () => {
+    assert.match(BACKFILL_SQL, /FOR SHARE OF k/);
+    assert.match(BACKFILL_SQL, /CASE WHEN revoked_at IS NULL THEN 'active' ELSE 'revoked' END/);
+    assert.equal(BACKFILL_SQL.split(";").length, 1);
   });
 });
 

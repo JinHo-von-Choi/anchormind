@@ -12,11 +12,15 @@ import { describe, it, mock, beforeEach } from "node:test";
 import assert                              from "node:assert/strict";
 import { Readable }                        from "node:stream";
 
+/** 허용 대역 쓰기는 신뢰 프록시 hop 수가 설정된 서버에서만 받는다(설정 없는 경우는 admin-key-cidr-hops.test.js). */
+process.env.TRUST_PROXY_HOPS = "1";
+
 const KEY_ID = "7a1e0000-0000-4000-8000-0000000000f5";
 
 let key;
 let sqls;
 let closed;
+let closeFailure;
 
 /** 키 한 행과 비밀 행 목록을 흉내 내는 질의 처리 */
 async function handle(sql, params = []) {
@@ -80,7 +84,15 @@ const pool = {
 };
 
 mock.module("../../lib/tools/db.js", { exports: { getPrimaryPool: () => pool } });
-mock.module("../../lib/sessions.js", { exports: { closeSessionsByKeyId: async (id) => { closed.push(id); return 2; } } });
+mock.module("../../lib/sessions.js", {
+  exports: {
+    closeSessionsByKeyId: async (id) => {
+      if (closeFailure) throw closeFailure;
+      closed.push(id);
+      return 2;
+    }
+  }
+});
 
 const { handleKeys }        = await import("../../lib/admin/admin-keys.js");
 const { takeAdminAuditNote } = await import("../../lib/admin/admin-audit-actions.js");
@@ -103,7 +115,8 @@ async function call(method, path, body) {
 
 beforeEach(() => {
   sqls   = [];
-  closed = [];
+  closed       = [];
+  closeFailure = null;
   key    = {
     id: KEY_ID, name: "svc", key_hash: "a".repeat(64), key_prefix: "mmcp_svc_aaaaa", created_at: new Date("2026-01-01T00:00:00Z"),
     status: "active", revoked_at: null, expires_at: null, description: null, owner: null, kind: null, allowed_cidrs: null,
@@ -127,6 +140,18 @@ describe("POST /keys/:id/rotate", () => {
     assert.equal(r.note.detail.graceHours, 2);
     assert.ok(!JSON.stringify(r.note).includes(r.data.raw_key), "감사 detail에 원시 키가 없다");
     assert.ok(!sqls.some((q) => q.params.includes(r.data.raw_key)), "질의 값에 원시 키가 없다");
+  });
+
+  it("겹침 회전은 세션을 닫지 않고, 겹침 0은 그 키의 세션을 바로 닫는다", async () => {
+    const overlap = await call("POST", `/keys/${KEY_ID}/rotate`, { graceHours: 1 });
+    assert.deepEqual(closed, []);
+    assert.equal(overlap.data.closed_sessions, 0);
+    const immediate = await call("POST", `/keys/${KEY_ID}/rotate`, { graceHours: 0 });
+    assert.equal(immediate.status, 200);
+    assert.deepEqual(closed, [KEY_ID]);
+    assert.equal(immediate.data.closed_sessions, 2);
+    assert.equal(immediate.note.detail.closedSessions, 2);
+    assert.ok(key.secrets.filter((s) => s.key_hash !== key.key_hash).every((s) => s.valid_until.getTime() <= Date.now()));
   });
 
   it("본문이 없으면 기본 겹침 24시간이다", async () => {
@@ -157,7 +182,17 @@ describe("POST /keys/:id/revoke", () => {
     assert.equal(key.revoked_by, "master:bearer");
     assert.equal(key.secrets[0].status, "revoked");
     assert.deepEqual(closed, [KEY_ID]);
-    assert.deepEqual(r.note.detail, { reason: "leaked in ci log", revokedHashes: 1, closedSessions: 2 });
+    assert.deepEqual(r.note.detail, { reason: "leaked in ci log", revokedHashes: 1, closedSessions: 2, sessionCloseFailed: false });
+    assert.equal(r.data.warning, undefined);
+  });
+
+  it("세션 닫기가 실패해도 커밋한 폐기는 성공으로 응답하고 경고와 감사 detail을 남긴다", async () => {
+    closeFailure = new Error("redis down");
+    const r = await call("POST", `/keys/${KEY_ID}/revoke`, { reason: "leak" });
+    assert.equal(r.status, 200);
+    assert.equal(r.data.warning, "session_close_failed");
+    assert.equal(key.status, "inactive");
+    assert.deepEqual(r.note.detail, { reason: "leak", revokedHashes: 0, closedSessions: null, sessionCloseFailed: true });
   });
 
   it("사유가 없으면 400, 이미 폐기한 키는 409다", async () => {
@@ -182,16 +217,24 @@ describe("POST /keys/:id/revoke", () => {
 
 describe("PATCH /keys/:id", () => {
   it("만료와 허용 대역을 바꾸고 바뀐 필드를 감사 detail에 남긴다", async () => {
-    const r = await call("PATCH", `/keys/${KEY_ID}`, { expires_at: "2027-01-01T00:00:00Z", allowed_cidrs: ["10.0.0.0/8"], description: "ci runner" });
+    const r = await call("PATCH", `/keys/${KEY_ID}`, { expires_at: "2027-01-01T00:00:00Z", allowed_cidrs: ["198.51.100.0/24"], description: "ci runner" });
     assert.equal(r.status, 200);
     assert.equal(key.expires_at, "2027-01-01T00:00:00.000Z");
-    assert.deepEqual(key.allowed_cidrs, ["10.0.0.0/8"]);
+    assert.deepEqual(key.allowed_cidrs, ["198.51.100.0/24"]);
     assert.deepEqual(r.note.detail.changed, ["expires_at", "description", "allowed_cidrs"]);
-    assert.deepEqual(r.note.detail.after, { expires_at: "2027-01-01T00:00:00.000Z", allowed_cidrs: ["10.0.0.0/8"] });
+    assert.deepEqual(r.note.detail.after, { expires_at: "2027-01-01T00:00:00.000Z", allowed_cidrs: ["198.51.100.0/24"] });
+  });
+
+  it("오프셋 없는 만료 시각과 날짜 아닌 값은 400이다", async () => {
+    for (const bad of ["2027-01-01T00:00:00", "1", "March 7, 2027"]) {
+      const r = await call("PATCH", `/keys/${KEY_ID}`, { expires_at: bad });
+      assert.equal(r.status, 400, bad);
+      assert.equal(r.data.field, "expires_at");
+    }
   });
 
   it("잘못된 값은 필드와 함께 400이다", async () => {
-    const r = await call("PATCH", `/keys/${KEY_ID}`, { allowed_cidrs: ["10.0.0.0/40"] });
+    const r = await call("PATCH", `/keys/${KEY_ID}`, { allowed_cidrs: ["198.51.100.0/40"] });
     assert.equal(r.status, 400);
     assert.equal(r.data.field, "allowed_cidrs");
     assert.equal((await call("PATCH", `/keys/${KEY_ID}`, "{nope")).status, 400);

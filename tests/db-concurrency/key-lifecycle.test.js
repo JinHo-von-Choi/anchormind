@@ -13,6 +13,9 @@
  *   - 폐기는 모든 비밀을 거부하고 세션 재확인 상태에 반영되며 다시 활성화할 수 없다
  *   - 만료 시각이 지난 키를 거부한다
  *   - 같은 키의 동시 회전은 직렬화되어 현재 해시가 하나로 남는다
+ *   - 겹침이 끝나면 그보다 먼저 만든 세션과 OAuth 토큰이 끝나는 판정 값(퇴역 시각)이 세션 상태와 id 조회에 실린다
+ *   - 이관이 진행 중인 폐기와 겹쳐도 폐기한 키에 활성 비밀 행을 만들지 않는다
+ *   - 수명 판이 한 번 성공한 뒤 비밀 표가 사라지면 기본 판으로 내려가지 않고 거부한다(마지막 시험)
  * 실행마다 전용 데이터베이스를 만들어 쓰고 끝나면 지운다.
  */
 import { describe, it, after } from "node:test";
@@ -33,6 +36,8 @@ const {
   rotateApiKey, revokeApiKey, updateKeyLifecycle
 } = await import("../../lib/admin/ApiKeyLifecycleStore.js");
 const { isKeyStateRevoked } = await import("../../lib/admin/key-state-cache.js");
+const { validateApiKeyById } = await import("../../lib/admin/ApiKeyStore.js");
+const { isAccessRetired }    = await import("../../lib/admin/key-lifecycle.js");
 const { main: backfillMain } = await import("../../scripts/ops/backfill-key-secrets.mjs");
 
 const KEYS    = "agent_memory.api_keys";
@@ -124,14 +129,14 @@ describe("api_keys 행만 있는 키의 해시 이관과 이중 조회", () => {
   });
 
   it("새 키는 두 표에 함께 쓰이고 비밀 표로 인증된다", async () => {
-    const created = await createApiKey({ name: "fresh", permissions: ["read"], daily_limit: 100, allowed_cidrs: ["10.0.0.0/8"] });
+    const created = await createApiKey({ name: "fresh", permissions: ["read"], daily_limit: 100, allowed_cidrs: ["198.51.100.0/24"] });
     const { rows } = await directQuery(`SELECT s.key_hash, k.key_hash AS current, k.allowed_cidrs FROM ${SECRETS} s JOIN ${KEYS} k ON k.id = s.key_id WHERE k.id = $1`, [created.id]);
     assert.equal(rows.length, 1);
     assert.equal(rows[0].key_hash, rows[0].current);
-    assert.deepEqual(rows[0].allowed_cidrs, ["10.0.0.0/8"]);
+    assert.deepEqual(rows[0].allowed_cidrs, ["198.51.100.0/24"]);
     const result = await validateApiKeyFromDB(created.raw_key);
     assert.equal(result.valid, true);
-    assert.deepEqual(result.allowedCidrs, ["10.0.0.0/8"]);
+    assert.deepEqual(result.allowedCidrs, ["198.51.100.0/24"]);
   });
 });
 
@@ -172,6 +177,58 @@ describe("회전 겹침", () => {
   });
 });
 
+describe("겹침 종료 뒤 기존 세션과 토큰", () => {
+  it("지난 퇴역 시각이 세션 상태와 id 조회에 실리고 그보다 먼저 만든 접근만 끝난다", async () => {
+    const key     = await legacyKey("retiring");
+    const before  = Date.now() - 1000;
+    await rotateApiKey(key.id, { graceHours: 1 });
+    let state = await getKeyAuthState(key.id);
+    assert.equal(isKeyStateRevoked(state, { sessionCreatedAt: before }), false, "겹침 중에는 이어진다");
+
+    await directQuery(`UPDATE ${SECRETS} SET valid_until = NOW() - interval '1 second' WHERE key_hash = $1`, [sha256(key.raw)]);
+    state = await getKeyAuthState(key.id);
+    assert.equal(state.secretRetirements.length, 1);
+    assert.equal(isKeyStateRevoked(state, { sessionCreatedAt: before }), true);
+    assert.equal(isKeyStateRevoked(state, { sessionCreatedAt: Date.now() }), false);
+
+    const byId = await validateApiKeyById(key.id);
+    assert.equal(byId.valid, true);
+    assert.equal(isAccessRetired(before, byId.secretRetirements, Date.now()), true);
+    assert.equal(isAccessRetired(Date.now(), byId.secretRetirements, Date.now()), false);
+  });
+
+  it("겹침 0 회전은 그 시각 이전의 접근을 바로 끝낸다", async () => {
+    const key    = await legacyKey("cutnow");
+    const before = Date.now() - 1000;
+    await rotateApiKey(key.id, { graceHours: 0 });
+    assert.equal(isKeyStateRevoked(await getKeyAuthState(key.id), { sessionCreatedAt: before }), true);
+  });
+});
+
+describe("이관과 폐기의 경합", () => {
+  it("폐기 트랜잭션이 키 행을 잡은 동안 시작한 이관은 기다렸다가 revoked 행으로 옮긴다", async () => {
+    const key    = await legacyKey("racer");
+    const holder = new pg.Client(directClientConfig());
+    await holder.connect();
+    try {
+      await holder.query("BEGIN");
+      await holder.query(`SELECT id FROM ${KEYS} WHERE id = $1 FOR UPDATE`, [key.id]);
+      await holder.query(`UPDATE ${KEYS} SET revoked_at = NOW(), revoked_by = 'master:bearer', revoke_reason = 'race', status = 'inactive' WHERE id = $1`, [key.id]);
+      const pending = runBackfill(["--confirm", "--url", laneUrl()]);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await holder.query(`UPDATE ${SECRETS} SET status = 'revoked' WHERE key_id = $1`, [key.id]);
+      await holder.query("COMMIT");
+      const result = await pending;
+      assert.equal(result.code, 0, result.err);
+      assert.match(result.out, /폐기한 키의 활성 비밀 행 0건/);
+    } finally {
+      await holder.end();
+    }
+    const { rows } = await directQuery(`SELECT status FROM ${SECRETS} WHERE key_id = $1`, [key.id]);
+    assert.deepEqual(rows.map((r) => r.status), ["revoked"]);
+  });
+});
+
 describe("폐기와 만료", () => {
   it("폐기는 모든 비밀을 거부하고 세션 상태에 반영되며 다시 활성화할 수 없다", async () => {
     const key     = await legacyKey("revokee");
@@ -198,5 +255,15 @@ describe("폐기와 만료", () => {
     assert.equal(outcome(await validateApiKeyFromDB(key.raw)), "expired");
     await updateKeyLifecycle(key.id, { expires_at: null });
     assert.equal(outcome(await validateApiKeyFromDB(key.raw)), "valid");
+  });
+});
+
+describe("수명 스키마가 사라진 뒤(마지막 시험)", () => {
+  it("수명 판이 성공한 뒤 비밀 표가 없어지면 기본 판으로 내려가지 않고 저장소 오류로 거부한다", async () => {
+    const key = await legacyKey("schemagone");
+    assert.equal(outcome(await validateApiKeyFromDB(key.raw)), "valid");
+    await directQuery(`DROP TABLE ${SECRETS}`);
+    await assert.rejects(validateApiKeyFromDB(key.raw), { code: "42P01" });
+    assert.equal(outcome(await validateApiKeyById(key.id)), "store_unavailable");
   });
 });

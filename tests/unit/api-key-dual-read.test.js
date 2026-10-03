@@ -34,7 +34,7 @@ const {
 const { resetLifecycleSchemaState } = await import("../../lib/admin/key-schema-state.js");
 const { hashClientIp }              = await import("../../lib/admin/key-lifecycle.js");
 
-const IP_HASH = hashClientIp("10.0.0.1", "pepper");
+const IP_HASH = hashClientIp("203.0.113.1", "pepper");
 
 const isLookup  = (sql) => /WHERE\s+s\.key_hash\s*=\s*\$1/.test(sql);
 const isLegacy  = (sql) => /WHERE k\.key_hash = \$1/.test(sql);
@@ -128,11 +128,11 @@ describe("수명 거부 사유", () => {
 
   it("겹침 안의 이전 비밀과 만료 전 키는 통과하고 허용 대역을 함께 돌려준다", async () => {
     rowsFor = async (sql) => (isLookup(sql)
-      ? { rows: [keyRow({ secret_valid_until: new Date(Date.now() + 60_000), expires_at: new Date(Date.now() + 60_000), allowed_cidrs: ["10.0.0.0/8"] })], rowCount: 1 }
+      ? { rows: [keyRow({ secret_valid_until: new Date(Date.now() + 60_000), expires_at: new Date(Date.now() + 60_000), allowed_cidrs: ["198.51.100.0/24"] })], rowCount: 1 }
       : { rows: [] });
     const result = await validateApiKeyFromDB("mmcp_k_raw");
     assert.equal(result.valid, true);
-    assert.deepEqual(result.allowedCidrs, ["10.0.0.0/8"]);
+    assert.deepEqual(result.allowedCidrs, ["198.51.100.0/24"]);
   });
 });
 
@@ -151,6 +151,18 @@ describe("수명 스키마가 없는 DB", () => {
     await validateApiKeyFromDB("mmcp_k_raw");
     assert.equal(sqls.filter((q) => isLookup(q.sql)).length, lookups, "간격 안에서는 수명 판을 다시 시도하지 않는다");
     assert.equal(sqls.filter((q) => isLegacy(q.sql)).length, 2);
+  });
+
+  it("수명 판이 한 번 성공한 뒤의 스키마 오류는 기본 판으로 돌아가지 않고 던진다", async () => {
+    rowsFor = async (sql) => (isLookup(sql) ? { rows: [keyRow()], rowCount: 1 } : { rows: [] });
+    assert.equal((await validateApiKeyFromDB("mmcp_k_raw")).valid, true);
+    rowsFor = async (sql) => {
+      if (/api_key_secrets|allowed_cidrs/.test(sql)) throw missing();
+      return { rows: [{ ...keyRow(), expires_at: undefined }], rowCount: 1 };
+    };
+    await assert.rejects(validateApiKeyFromDB("mmcp_k_raw"), { code: "42P01" });
+    assert.equal(sqls.filter((q) => isLegacy(q.sql)).length, 0, "기본 판으로 내려가지 않는다");
+    assert.deepEqual(await validateApiKeyById(KEY_ID), { valid: false, reason: "store_unavailable" });
   });
 
   it("그 밖의 오류는 그대로 던진다", async () => {
@@ -172,14 +184,17 @@ describe("id 조회와 세션 재확인 상태", () => {
     const result = await validateApiKeyById(KEY_ID);
     assert.equal(result.valid, true);
     assert.deepEqual(result.allowedCidrs, ["::1/128"]);
+    assert.deepEqual(result.secretRetirements, []);
   });
 
-  it("세션 재확인 상태에 폐기, 만료, 허용 대역이 실린다", async () => {
+  it("세션 재확인 상태에 폐기, 만료, 허용 대역, 회전 퇴역 시각이 실린다", async () => {
     const expires = new Date(Date.now() + 1000);
-    rowsFor = async () => ({ rows: [{ status: "active", permissions: ["read"], revoked_at: null, expires_at: expires, allowed_cidrs: ["10.0.0.0/8"] }] });
+    const retired = new Date(Date.now() - 1000);
+    rowsFor = async () => ({ rows: [{ status: "active", permissions: ["read"], revoked_at: null, expires_at: expires, allowed_cidrs: ["192.0.2.0/24"], secret_retirements: [retired] }] });
     assert.deepEqual(await getKeyAuthState(KEY_ID), {
-      exists: true, status: "active", permissions: ["read"], revokedAt: null, expiresAt: expires, allowedCidrs: ["10.0.0.0/8"]
+      exists: true, status: "active", permissions: ["read"], revokedAt: null, expiresAt: expires, allowedCidrs: ["192.0.2.0/24"], secretRetirements: [retired]
     });
+    assert.match(sqls[0].sql, /api_key_secrets s WHERE s\.key_id = k\.id AND s\.key_hash <> k\.key_hash/);
   });
 });
 

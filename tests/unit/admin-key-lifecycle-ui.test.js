@@ -15,7 +15,7 @@ import { setupDom, flatQuery }                    from "./admin-test-helper.js";
 setupDom();
 
 const { renderKeyInspector }                         = await import("../../assets/admin/modules/keys.js");
-const { buildKeyLifecyclePatch, KEY_LIFECYCLE_LIMITS } = await import("../../assets/admin/modules/key-lifecycle.js");
+const { buildKeyLifecyclePatch, KEY_LIFECYCLE_LIMITS, rotateConfirmLabel, ROTATE_NOTE } = await import("../../assets/admin/modules/key-lifecycle.js");
 const { MAX_ALLOWED_CIDRS }                          = await import("../../lib/admin/key-cidr.js");
 const { KEY_OWNER_MAX, KEY_DESCRIPTION_MAX, KEY_REVOKE_REASON_MAX } = await import("../../lib/admin/key-lifecycle.js");
 const { ADMIN_AUDIT_ACTIONS }                        = await import("../../lib/admin/admin-audit-actions.js");
@@ -45,10 +45,10 @@ describe("키 수명 카드 구조", () => {
   });
 
   test("현재 값이 입력에 채워지고 대역이 없으면 대역 입력이 꺼진다", () => {
-    const panel = renderKeyInspector({ ...baseKey, expires_at: "2027-01-01T00:00:00Z", owner: "team", allowed_cidrs: ["10.0.0.0/8"] });
+    const panel = renderKeyInspector({ ...baseKey, expires_at: "2027-01-01T00:00:00Z", owner: "team", allowed_cidrs: ["192.0.2.0/24"] });
     assert.equal(byId(panel, "key-lifecycle-expires").value, "2027-01-01T00:00:00.000Z");
     assert.equal(byId(panel, "key-lifecycle-owner").value, "team");
-    assert.equal(byId(panel, "key-lifecycle-cidrs").value, "10.0.0.0/8");
+    assert.equal(byId(panel, "key-lifecycle-cidrs").value, "192.0.2.0/24");
     assert.equal(byId(panel, "key-lifecycle-restrict-addresses").checked, true);
     assert.equal(byId(renderKeyInspector(baseKey), "key-lifecycle-cidrs").disabled, true);
   });
@@ -81,10 +81,10 @@ describe("수명 PATCH 본문", () => {
   });
 
   test("대역 제한 해제는 null, 빈 목록은 빈 배열이다", () => {
-    const key = { ...baseKey, allowed_cidrs: ["10.0.0.0/8"] };
+    const key = { ...baseKey, allowed_cidrs: ["192.0.2.0/24"] };
     assert.deepEqual(buildKeyLifecyclePatch(key, { ...blank, restrictAddresses: false }), { allowed_cidrs: null });
     assert.deepEqual(buildKeyLifecyclePatch(key, { ...blank, restrictAddresses: true, cidrsText: "" }), { allowed_cidrs: [] });
-    assert.deepEqual(buildKeyLifecyclePatch(key, { ...blank, restrictAddresses: true, cidrsText: " 10.0.0.0/8 \n" }), {});
+    assert.deepEqual(buildKeyLifecyclePatch(key, { ...blank, restrictAddresses: true, cidrsText: " 192.0.2.0/24 \n" }), {});
   });
 });
 
@@ -113,14 +113,38 @@ describe("단추의 요청", () => {
     assert.deepEqual(JSON.parse(calls[0].options.body), { kind: "service" });
   });
 
-  test("회전은 겹침 시간을 비우면 본문 없이, 넣으면 graceHours로 보낸다", async () => {
+  test("회전은 두 번 눌러야 보내고, 겹침 시간을 비우면 본문 없이, 넣으면 graceHours로 보낸다", async () => {
     const panel = renderKeyInspector(baseKey);
+    await click(panel, "key-lifecycle-rotate");
+    assert.equal(calls.length, 0, "첫 클릭은 확인 요청");
+    assert.match(byId(panel, "key-lifecycle-rotate").textContent, /^CONFIRM ROTATE/);
     await click(panel, "key-lifecycle-rotate");
     byId(panel, "key-lifecycle-grace-hours").value = "6";
     await click(panel, "key-lifecycle-rotate");
+    await click(panel, "key-lifecycle-rotate");
+    assert.equal(calls.length, 2);
     assert.equal(calls[0].url, "/v1/internal/model/nothing/keys/k1/rotate");
     assert.deepEqual(JSON.parse(calls[0].options.body), {});
     assert.deepEqual(JSON.parse(calls[1].options.body), { graceHours: 6 });
+  });
+
+  test("회전 확인 문구는 겹침 0이면 즉시 종료를 알린다", () => {
+    assert.match(rotateConfirmLabel("0"), /END NOW/);
+    assert.match(rotateConfirmLabel("6"), /6 HOURS/);
+    assert.match(ROTATE_NOTE, /every session and OAuth token/);
+  });
+
+  test("오프셋 없는 만료 시각은 보내지 않는다", async () => {
+    for (const bad of ["2027-01-01T00:00:00", "1", "March 7, 2027"]) {
+      const panel = renderKeyInspector(baseKey);
+      byId(panel, "key-lifecycle-expires").value = bad;
+      await click(panel, "key-lifecycle-save");
+    }
+    assert.equal(calls.length, 0);
+    const panel = renderKeyInspector(baseKey);
+    byId(panel, "key-lifecycle-expires").value = "2027-01-01T09:00:00+09:00";
+    await click(panel, "key-lifecycle-save");
+    assert.equal(calls.length, 1);
   });
 
   test("폐기는 사유가 있어야 하고 두 번 눌러야 보낸다", async () => {

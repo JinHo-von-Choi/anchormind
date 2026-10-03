@@ -5,7 +5,8 @@
  * 작성일: 2026-10-03
  *
  * 순수 함수 시험: 키 상태(폐기, 비활성, 만료), 비밀 행(조회 출처, 회전 겹침 종료, 폐기), 사용량 판정의 순서,
- * 회전 겹침 종료 시각, 편집 값과 폐기 사유 검증, 요청 주소 지문.
+ * 회전 겹침 종료 시각, 편집 값과 폐기 사유 검증, 요청 주소 지문, 만료 시각 엄격 판독, 회전 퇴역 시각에 따른
+ * 기존 세션과 토큰의 종료, 프록시 hop 설정 없는 허용 대역 쓰기 거부.
  */
 import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
@@ -13,7 +14,8 @@ import assert           from "node:assert/strict";
 import {
   evaluateKeyState, evaluateKeyCredential, rotationValidUntil, resolveGraceHours,
   validateKeyLifecyclePatch, validateRevokeReason, hashClientIp, diffKeyLifecycle,
-  DEFAULT_ROTATION_GRACE_HOURS, MAX_ROTATION_GRACE_HOURS, KEY_SECRET_SOURCE
+  DEFAULT_ROTATION_GRACE_HOURS, MAX_ROTATION_GRACE_HOURS, KEY_SECRET_SOURCE,
+  parseStrictTimestamp, accessCutoff, isAccessRetired, assertCidrWritable, KeyLifecycleConflictError
 } from "../../lib/admin/key-lifecycle.js";
 import { KeyPolicyValidationError } from "../../lib/admin/key-policy.js";
 
@@ -103,7 +105,7 @@ describe("수명 편집 값 검증", () => {
     assert.deepEqual(validateKeyLifecyclePatch({ expires_at: "2027-01-01T00:00:00+09:00" }), { expires_at: "2026-12-31T15:00:00.000Z" });
     assert.deepEqual(validateKeyLifecyclePatch({ expires_at: null, allowed_cidrs: null, kind: null, description: null, owner: "" }),
       { expires_at: null, allowed_cidrs: null, kind: null, description: null, owner: null });
-    assert.deepEqual(validateKeyLifecyclePatch({ allowed_cidrs: ["10.0.0.0/8"], kind: "service" }), { allowed_cidrs: ["10.0.0.0/8"], kind: "service" });
+    assert.deepEqual(validateKeyLifecyclePatch({ allowed_cidrs: ["192.0.2.0/24"], kind: "service" }), { allowed_cidrs: ["192.0.2.0/24"], kind: "service" });
   });
 
   it("빈 본문과 수명 필드 없는 본문은 오류다", () => {
@@ -140,11 +142,11 @@ describe("폐기 사유", () => {
 
 describe("요청 주소 지문", () => {
   it("같은 주소와 같은 비밀값이면 같은 32자 16진 지문이고 매핑 표기는 IPv4와 같다", () => {
-    const a = hashClientIp("10.1.2.3", "pepper");
+    const a = hashClientIp("198.51.100.3", "pepper");
     assert.match(a, /^[0-9a-f]{32}$/);
-    assert.equal(hashClientIp("::ffff:10.1.2.3", "pepper"), a);
-    assert.notEqual(hashClientIp("10.1.2.3", "other"), a);
-    assert.notEqual(hashClientIp("10.1.2.4", "pepper"), a);
+    assert.equal(hashClientIp("::ffff:198.51.100.3", "pepper"), a);
+    assert.notEqual(hashClientIp("198.51.100.3", "other"), a);
+    assert.notEqual(hashClientIp("198.51.100.4", "pepper"), a);
   });
 
   it("주소가 아니면 null이다", () => {
@@ -157,10 +159,71 @@ describe("수명 변경 감사 detail", () => {
   it("바뀐 필드만 담고 설명은 이름만 남긴다", () => {
     const detail = diffKeyLifecycle(
       { expires_at: null, owner: "a", kind: null, description: "old", allowed_cidrs: null },
-      { expires_at: new Date("2027-01-01T00:00:00Z"), owner: "a", kind: null, description: "new text", allowed_cidrs: ["10.0.0.0/8"] }
+      { expires_at: new Date("2027-01-01T00:00:00Z"), owner: "a", kind: null, description: "new text", allowed_cidrs: ["192.0.2.0/24"] }
     );
     assert.deepEqual(detail.changed, ["expires_at", "description", "allowed_cidrs"]);
     assert.deepEqual(detail.before, { expires_at: null, allowed_cidrs: null });
-    assert.deepEqual(detail.after, { expires_at: "2027-01-01T00:00:00.000Z", allowed_cidrs: ["10.0.0.0/8"] });
+    assert.deepEqual(detail.after, { expires_at: "2027-01-01T00:00:00.000Z", allowed_cidrs: ["192.0.2.0/24"] });
+  });
+});
+
+describe("만료 시각 엄격 판독", () => {
+  it("Z 또는 명시 오프셋이 있는 ISO 8601만 받는다", () => {
+    assert.equal(parseStrictTimestamp("2027-01-01T00:00:00Z"), Date.parse("2027-01-01T00:00:00Z"));
+    assert.equal(parseStrictTimestamp("2027-01-01T09:00:00+09:00"), Date.parse("2027-01-01T00:00:00Z"));
+    assert.equal(parseStrictTimestamp("2027-01-01T00:00Z"), Date.parse("2027-01-01T00:00:00Z"));
+    assert.equal(parseStrictTimestamp("2027-01-01T00:00:00.250-05:30"), Date.parse("2027-01-01T05:30:00.250Z"));
+    assert.equal(parseStrictTimestamp("2028-02-29T00:00:00Z"), Date.parse("2028-02-29T00:00:00Z"));
+  });
+
+  it("오프셋 없는 시각, 날짜만, 숫자, 자연어, 없는 날짜는 null이다", () => {
+    for (const bad of ["2027-01-01T00:00:00", "2027-01-01", "1", "March 7, 2027", "2027-02-29T00:00:00Z",
+      "2027-13-01T00:00:00Z", "2027-01-01T24:00:00Z", "2027-01-01T00:60:00Z", "2027-01-01T00:00:00+15:00",
+      "2027-01-01 00:00:00Z", " 2027-01-01T00:00:00Z", 1798761600000, null]) {
+      assert.equal(parseStrictTimestamp(bad), null, String(bad));
+    }
+  });
+
+  it("편집 값 검증은 엄격 판독을 쓴다", () => {
+    for (const bad of ["2027-01-01T00:00:00", "1", "March 7, 2027"]) {
+      assert.throws(() => validateKeyLifecyclePatch({ expires_at: bad }), (err) => err instanceof KeyPolicyValidationError && err.field === "expires_at", bad);
+    }
+  });
+});
+
+describe("회전 퇴역 시각과 기존 접근", () => {
+  const T0 = NOW - 60_000;
+  const T1 = NOW + 60_000;
+
+  it("지난 퇴역 시각 중 가장 늦은 것보다 먼저 만든 세션과 토큰은 끝난다", () => {
+    assert.equal(accessCutoff([new Date(T0)], NOW), T0);
+    assert.equal(isAccessRetired(T0 - 1, [new Date(T0)], NOW), true);
+    assert.equal(isAccessRetired(T0, [new Date(T0)], NOW), false);
+    assert.equal(isAccessRetired(T0 + 1, [new Date(T0)], NOW), false);
+  });
+
+  it("아직 오지 않은 퇴역 시각은 영향이 없다", () => {
+    assert.equal(accessCutoff([new Date(T1)], NOW), null);
+    assert.equal(isAccessRetired(0, [new Date(T1)], NOW), false);
+  });
+
+  it("퇴역 시각이 없으면 생성 시각과 무관하게 이어진다", () => {
+    assert.equal(isAccessRetired(undefined, [], NOW), false);
+    assert.equal(isAccessRetired(undefined, null, NOW), false);
+  });
+
+  it("생성 시각을 모르는 세션과 토큰은 퇴역 시각이 지났으면 끝난다", () => {
+    assert.equal(isAccessRetired(undefined, [new Date(T0)], NOW), true);
+    assert.equal(isAccessRetired(null, [T0], NOW), true);
+  });
+});
+
+describe("허용 대역 쓰기와 프록시 hop 설정", () => {
+  it("hop 수가 설정되지 않았으면 대역 목록 쓰기를 거부하고 해제는 허용한다", () => {
+    assert.throws(() => assertCidrWritable({ allowed_cidrs: ["192.0.2.0/24"] }, false), (err) => err instanceof KeyLifecycleConflictError && err.code === "trust_proxy_hops_unset");
+    assert.throws(() => assertCidrWritable({ allowed_cidrs: [] }, false), KeyLifecycleConflictError);
+    assert.doesNotThrow(() => assertCidrWritable({ allowed_cidrs: null }, false));
+    assert.doesNotThrow(() => assertCidrWritable({ owner: "a" }, false));
+    assert.doesNotThrow(() => assertCidrWritable({ allowed_cidrs: ["192.0.2.0/24"] }, true));
   });
 });

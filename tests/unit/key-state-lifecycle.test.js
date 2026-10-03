@@ -5,7 +5,8 @@
  * 작성일: 2026-10-03
  *
  * 순수 함수 시험: 세션이 쓰는 키 상태가 폐기, 만료, 허용 대역 밖 주소이면 더 쓸 수 없는 상태로 판정한다.
- * 수명 열이 없는 상태(이전 스키마)와 판정 불가(null)는 기존 판정과 같다.
+ * 회전 퇴역 시각이 지났으면 그보다 먼저 만든 세션도 더 쓸 수 없다. 수명 열이 없는 상태와 판정 불가(null)는
+ * status와 존재 여부만 본다.
  */
 import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
@@ -35,12 +36,23 @@ describe("세션 키 상태 판정", () => {
   });
 
   it("허용 대역 밖 주소의 요청은 세션을 쓸 수 없다", () => {
-    const state = { ...active, allowedCidrs: ["10.0.0.0/8"] };
-    assert.equal(isKeyStateRevoked(state, { now: NOW, clientIp: "10.1.1.1" }), false);
+    const state = { ...active, allowedCidrs: ["198.51.100.0/24"] };
+    assert.equal(isKeyStateRevoked(state, { now: NOW, clientIp: "198.51.100.1" }), false);
     assert.equal(isKeyStateRevoked(state, { now: NOW, clientIp: "192.0.2.1" }), true);
   });
 
   it("요청 주소를 넘기지 않으면 대역 판정을 하지 않는다", () => {
-    assert.equal(isKeyStateRevoked({ ...active, allowedCidrs: ["10.0.0.0/8"] }, { now: NOW }), false);
+    assert.equal(isKeyStateRevoked({ ...active, allowedCidrs: ["198.51.100.0/24"] }, { now: NOW }), false);
+  });
+
+  it("지난 회전 퇴역 시각보다 먼저 만든 세션은 쓸 수 없고 그 뒤에 만든 세션은 쓸 수 있다", () => {
+    const state = { ...active, secretRetirements: [new Date(NOW - 1000)] };
+    assert.equal(isKeyStateRevoked(state, { now: NOW, sessionCreatedAt: NOW - 5000 }), true);
+    assert.equal(isKeyStateRevoked(state, { now: NOW, sessionCreatedAt: NOW - 500 }), false);
+    assert.equal(isKeyStateRevoked({ ...active, secretRetirements: [new Date(NOW + 1000)] }, { now: NOW, sessionCreatedAt: 0 }), false);
+  });
+
+  it("세션 생성 시각을 넘기지 않으면 퇴역 판정을 하지 않는다", () => {
+    assert.equal(isKeyStateRevoked({ ...active, secretRetirements: [new Date(NOW - 1000)] }, { now: NOW }), false);
   });
 });

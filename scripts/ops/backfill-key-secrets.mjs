@@ -8,7 +8,8 @@
  * 목적: migration-059 뒤 인증은 api_key_secrets를 먼저 보고 해시가 없을 때만 api_keys.key_hash를 본다.
  *       이 스크립트는 비밀 표에 행이 없는 키의 현재 해시를 일괄 insert-select로 옮기고(ON CONFLICT DO NOTHING,
  *       다시 실행해도 안전), 정합을 확인한다. 폐기한 키(revoked_at)의 행은 revoked로 옮긴다.
- * 정합: 모든 키에 현재 해시(api_keys.key_hash)와 같은 비밀 행이 있고, 활성 키 수가 활성 현재 비밀 행 수와 같다.
+ * 정합: 모든 키에 현재 해시(api_keys.key_hash)와 같은 비밀 행이 있고, 활성 키 수가 활성 현재 비밀 행 수와 같으며,
+ *       폐기한 키에 활성 비밀 행이 없다.
  *       회전 겹침 중인 이전 비밀 행은 따로 센다.
  *
  * 접속 대상: --url 또는 표준 PG 환경변수(PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD).
@@ -42,13 +43,18 @@ export const TABLE_SQL = `SELECT to_regclass('${SECRETS}') IS NOT NULL AS presen
 export const MISSING_SQL =
   `SELECT count(*)::int AS missing FROM ${KEYS} k WHERE NOT EXISTS (SELECT 1 FROM ${SECRETS} s WHERE s.key_hash = k.key_hash)`;
 
-/** 일괄 이관 한 번. $1 은 건수 상한이다. */
+/**
+ * 일괄 이관 한 번. $1 은 건수 상한이다. 키 행을 FOR SHARE로 잠가 같은 키의 폐기, 회전(FOR UPDATE)과 직렬화하고,
+ * 잠근 뒤의 행 값으로 상태를 정하므로 폐기한 키(revoked_at)에 활성 비밀 행을 만들지 않는다.
+ * 비활성(status inactive)이지만 폐기하지 않은 키는 다시 활성화할 수 있으므로 활성 행으로 옮긴다.
+ */
 export const BACKFILL_SQL = `WITH batch AS (
   SELECT k.key_hash, k.id, k.key_prefix, k.created_at, k.revoked_at
   FROM   ${KEYS} k
   WHERE  NOT EXISTS (SELECT 1 FROM ${SECRETS} s WHERE s.key_hash = k.key_hash)
   ORDER BY k.id
   LIMIT  $1
+  FOR SHARE OF k
 )
 INSERT INTO ${SECRETS} (key_hash, key_id, key_prefix, created_at, status)
 SELECT key_hash, id, key_prefix, created_at, CASE WHEN revoked_at IS NULL THEN 'active' ELSE 'revoked' END
@@ -65,7 +71,9 @@ export const CONSISTENCY_SQL = `SELECT
   (SELECT count(*) FROM ${SECRETS} x WHERE x.status = 'active')::int AS active_secret_rows,
   (SELECT count(*) FROM ${SECRETS} x JOIN ${KEYS} y ON y.id = x.key_id
     WHERE x.key_hash <> y.key_hash AND x.status = 'active'
-      AND (x.valid_until IS NULL OR x.valid_until > NOW()))::int AS overlap_secret_rows
+      AND (x.valid_until IS NULL OR x.valid_until > NOW()))::int AS overlap_secret_rows,
+  (SELECT count(*) FROM ${SECRETS} x JOIN ${KEYS} y ON y.id = x.key_id
+    WHERE y.revoked_at IS NOT NULL AND x.status = 'active')::int AS active_secrets_of_revoked_keys
 FROM ${KEYS} k
 LEFT JOIN ${SECRETS} s ON s.key_hash = k.key_hash AND s.key_id = k.id`;
 
@@ -88,7 +96,8 @@ export class BackfillKeySecretsError extends OnlineIndexError {
 /**
  * 정합 판정.
  *
- * @param {{ keys_total: number, keys_with_secret: number, active_keys: number, active_keys_with_active_secret: number }} row
+ * @param {{ keys_total: number, keys_with_secret: number, active_keys: number, active_keys_with_active_secret: number,
+ *           active_secrets_of_revoked_keys?: number }} row
  * @returns {{ consistent: boolean, problems: string[] }}
  */
 export function consistencyVerdict(row) {
@@ -98,6 +107,9 @@ export function consistencyVerdict(row) {
   }
   if (row.active_keys_with_active_secret !== row.active_keys) {
     problems.push(`활성 키 ${row.active_keys}건, 활성 현재 비밀 행 ${row.active_keys_with_active_secret}건`);
+  }
+  if ((row.active_secrets_of_revoked_keys ?? 0) !== 0) {
+    problems.push(`폐기한 키의 활성 비밀 행 ${row.active_secrets_of_revoked_keys}건`);
   }
   return { consistent: problems.length === 0, problems };
 }
@@ -110,7 +122,8 @@ export function consistencyVerdict(row) {
  */
 function formatCounts(row) {
   return `키 ${row.keys_total}건(현재 해시 비밀 행 ${row.keys_with_secret}건), 활성 키 ${row.active_keys}건, `
-    + `활성 현재 비밀 행 ${row.active_keys_with_active_secret}건, 활성 비밀 행 전체 ${row.active_secret_rows}건(회전 겹침 ${row.overlap_secret_rows}건)`;
+    + `활성 현재 비밀 행 ${row.active_keys_with_active_secret}건, 활성 비밀 행 전체 ${row.active_secret_rows}건(회전 겹침 ${row.overlap_secret_rows}건), `
+    + `폐기한 키의 활성 비밀 행 ${row.active_secrets_of_revoked_keys}건`;
 }
 
 /**
