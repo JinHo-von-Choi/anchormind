@@ -140,3 +140,25 @@ describe("작업 목록과 현재 마이그레이션", () => {
     assert.match(out, /^OK/);
   });
 });
+
+describe("온라인 마이그레이션 문서", () => {
+  const docPath = path.join(ROOT, "docs/operations/online-migration.md");
+  const doc     = fs.readFileSync(docPath, "utf8");
+
+  it("본문이 가리키는 저장소 경로가 모두 존재한다", () => {
+    const refs = [...doc.matchAll(/`((?:scripts|lib|tests|docs)\/[A-Za-z0-9_./-]+)`/g)].map(m => m[1]);
+    assert.ok(refs.length > 0);
+    const missing = refs.filter(ref => !fs.existsSync(path.join(ROOT, ref)));
+    assert.deepEqual(missing, []);
+  });
+
+  it("마이그레이션 규약 문서가 이 문서를 연결한다", () => {
+    const conventions = fs.readFileSync(path.join(ROOT, "docs/migration-conventions.md"), "utf8");
+    assert.match(conventions, /\]\(operations\/online-migration\.md\)/);
+  });
+
+  it("백필 표 두 개의 이름을 문서가 모두 다룬다", () => {
+    assert.ok(doc.includes("agent_memory.backfill_watermarks"));
+    assert.ok(doc.includes("agent_memory.backfill_failures"));
+  });
+});

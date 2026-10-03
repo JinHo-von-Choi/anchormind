@@ -85,6 +85,18 @@ CREATE INDEX IF NOT EXISTS idx_fragments_embedding
 
 ---
 
+## 대형 표 변경
+
+`fragments`, `fragment_links`, `case_events`, `search_events`는 행 수가 많아 일반 `CREATE INDEX`나 제약 교체가 쓰기를 막는다. 마이그레이션 파일은 트랜잭션 안에서 실행되므로 `CONCURRENTLY`도 쓸 수 없다. 번호 `050` 이상 파일에는 다음을 적용하며 `npm run lint:migrations`가 검사한다.
+
+- 파일에는 nullable 열 추가, `NOT VALID` 제약, 작은 표 변경만 둔다.
+- `CONCURRENTLY`를 쓰지 않는다.
+- 대형 표 색인은 `scripts/ops/index-manifest.json`에 등록하고 `scripts/ops/online-index.mjs`로 먼저 만든다. 파일에는 같은 이름의 `CREATE INDEX IF NOT EXISTS` 문만 둔다.
+
+절차, 백필 도우미, 제약 검증은 [operations/online-migration.md](operations/online-migration.md)에 있다.
+
+---
+
 ## 새 마이그레이션 추가 절차
 
 1. 현재 가장 높은 번호를 확인한다.

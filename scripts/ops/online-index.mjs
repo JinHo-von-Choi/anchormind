@@ -9,7 +9,7 @@
  *       scripts/ops/index-manifest.json 의 작업 항목대로 CREATE INDEX CONCURRENTLY 로 만든다.
  *       마이그레이션 파일에는 같은 이름의 IF NOT EXISTS 문만 두고, 이 스크립트가 먼저 만든 색인이
  *       있으면 그 문이 건너뛴다.
- * 호출 조건: 대형 표 색인을 추가하는 배포 전, 저트래픽 시간대, 배포 전 백업(O2) 완료 후.
+ * 호출 조건: 대형 표 색인을 추가하는 배포 전, 저트래픽 시간대, 배포 전 백업 완료 후.
  * 단계: 잠금 대기 제한 설정, 디스크 여유 확인(표 크기의 2배), pg_index.indisvalid 확인,
  *       무효 색인 제거 후 재시도.
  *
@@ -187,7 +187,7 @@ async function executePlan({ client, entries, opts, freeBytes, io, sleep }) {
 async function runReal({ opts, entries, env, deps, io }) {
   if (!opts.confirm) {
     throw new OnlineIndexUsageError(
-      "실제 실행에는 --confirm 이 필요하다. 배포 전 백업(O2) 완료를 확인한 뒤 주고, 단계만 보려면 --dry-run 을 쓴다."
+      "실제 실행에는 --confirm 이 필요하다. 배포 전 백업 완료를 확인한 뒤 주고, 단계만 보려면 --dry-run 을 쓴다."
     );
   }
   const target    = resolveTarget(opts, env);

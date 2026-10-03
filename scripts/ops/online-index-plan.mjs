@@ -239,7 +239,7 @@ export function sessionSql(lockTimeout) {
  */
 export function planSteps({ entries, lockTimeout, retries, targetLabel }) {
   const steps = [
-    { id: STEP.BACKUP_GATE, text: "배포 전 백업(O2) 완료를 확인한다. --confirm 은 이 확인을 뜻한다" },
+    { id: STEP.BACKUP_GATE, text: "배포 전 백업 완료를 확인한다. --confirm 은 이 확인을 뜻한다" },
     { id: STEP.CONNECT,     text: `대상 ${targetLabel} 에 연결한다` },
     { id: STEP.SESSION,     sql: sessionSql(lockTimeout), text: "세션의 잠금 대기와 문장 시간 제한을 설정한다" },
   ];
