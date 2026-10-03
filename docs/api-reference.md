@@ -35,14 +35,15 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | GET | /v1/internal/model/nothing/stats | 대시보드 통계 (파편 수, API 호출량, 시스템 메트릭, searchMetrics, observability, queues, healthFlags) |
 | GET | /v1/internal/model/nothing/activity | 최근 파편 활동 로그 (10건) |
 | GET | /v1/internal/model/nothing/metrics-summary | 대시보드 메트릭 요약 |
-| GET | /v1/internal/model/nothing/keys | API 키 목록 조회 |
-| POST | /v1/internal/model/nothing/keys | API 키 생성. 원시 키는 응답에서 단 1회 반환 |
+| GET | /v1/internal/model/nothing/keys | API 키 목록 조회. 정책 열(`default_mode`, `allowed_workspaces`, `symbolic_hard_gate`)을 포함한다 |
+| POST | /v1/internal/model/nothing/keys | API 키 생성. 원시 키는 응답에서 단 1회 반환. `permissions`는 `read`, `write`로만 이뤄진 비어 있지 않은 배열이며 생략하면 `DEFAULT_PERMISSIONS`. 그 밖의 값은 400 |
 | PUT | /v1/internal/model/nothing/keys/:id | API 키 상태 변경 (active ↔ inactive) |
 | GET | /v1/internal/model/nothing/keys/:id/stats | API 키별 사용 통계 |
 | PUT | /v1/internal/model/nothing/keys/:id/daily-limit | API 키 일일 호출 제한 변경. 마스터 키 인증 필요 |
 | PUT | /v1/internal/model/nothing/keys/:id/permissions | API 키 권한 변경 |
 | PUT | /v1/internal/model/nothing/keys/:id/fragment-limit | API 키 파편 할당량 변경 |
 | PATCH | /v1/internal/model/nothing/keys/:id/workspace | API 키의 default_workspace 변경. `{ workspace: "name" }` 또는 `{ workspace: null }` (null=해제) |
+| PATCH | /v1/internal/model/nothing/keys/:id/policy | API 키 정책 열 변경. 본문은 `default_mode`, `allowed_workspaces`, `symbolic_hard_gate` 중 하나 이상. 아래 절 참조 |
 | DELETE | /v1/internal/model/nothing/keys/:id | API 키 삭제(성공 204). 저장된 파편이나 재통합 이력이 있는 키는 삭제하지 않고 409 `key_in_use`를 돌려준다(`MEMENTO_API_KEY_DELETE_GUARD=false`면 확인 생략). 비활성화나 삭제 시 이 프로세스의 그 키 세션이 즉시 닫힌다 |
 | GET | /v1/internal/model/nothing/groups | 키 그룹 목록 |
 | POST | /v1/internal/model/nothing/groups | 키 그룹 생성 |
@@ -121,7 +122,7 @@ X-RateLimit-Resource: fragments
 
 ### Mode Preset
 
-`X-Memento-Mode` 헤더 또는 `initialize` 요청의 `params.mode`로 세션 동작 모드를 지정할 수 있다. admin console에서 `api_keys.default_mode`를 설정하면 키 단위 기본값을 고정할 수 있다.
+`X-Memento-Mode` 헤더 또는 `initialize` 요청의 `params.mode`로 세션 동작 모드를 지정할 수 있다. `PATCH /v1/internal/model/nothing/keys/:id/policy`(admin console의 키 상세 ACCESS POLICY 카드)로 `api_keys.default_mode`를 설정하면 키 단위 기본값을 고정할 수 있다. 마스터 전용 preset(`audit`)은 API 키에 지정할 수 없다.
 
 | Preset | 설명 | tools/list에서 제외되는 도구 |
 |--------|------|----------|
@@ -344,6 +345,32 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 ```json
 { "success": true, "daily_limit": 50000 }
 ```
+
+### PATCH /v1/internal/model/nothing/keys/:id/policy
+
+API 키의 정책 열을 변경한다. 마스터 키 인증 필요. 전달한 필드만 한 문장으로 갱신하며, 알 수 없는 필드와 빈 객체는 400이다.
+
+요청 본문:
+
+```json
+{ "default_mode": "recall-only", "allowed_workspaces": ["proj-a", "proj-b"], "symbolic_hard_gate": true }
+```
+
+| 필드 | 값 | 설명 |
+|-|-|-|
+| `default_mode` | `recall-only`, `write-only`, `onboarding` 또는 `null` | 키 단위 기본 mode preset. `null`은 해제(전체 도구 노출). 등록되지 않은 이름과 마스터 전용 preset(`audit`)은 400 |
+| `allowed_workspaces` | 문자열 배열 또는 `null` | `null`은 제한 없음. 빈 배열은 모든 workspace 주장을 허가 집합 밖으로 판정한다. 항목은 최대 64개(중복 제거 후), 항목당 128자 이하이며 빈 문자열, 앞뒤 공백, 제어 문자는 400 |
+| `symbolic_hard_gate` | boolean | `true`면 PolicyRules 위반 파편의 `remember`를 거부한다 |
+
+응답 200:
+
+```json
+{ "success": true, "default_mode": "recall-only", "allowed_workspaces": ["proj-a", "proj-b"], "symbolic_hard_gate": true }
+```
+
+오류: 400 `{ "error": "...", "field": "default_mode" }`(검증 실패), 404(키 없음), 413(본문 과대).
+
+반영 시점: `symbolic_hard_gate`와 `allowed_workspaces`는 이 프로세스의 조회 캐시를 즉시 비우므로 다음 요청부터 적용되고, 다른 인스턴스는 캐시 TTL 30초 안에 반영된다. `default_mode`는 변경 이후 열린 세션부터 적용된다. 변경은 감사 로그에 `admin key_policy` 한 줄(필드 이름과 이전, 이후 값)로 남는다.
 
 ---
 

@@ -32,14 +32,15 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | GET | /v1/internal/model/nothing/stats | Dashboard statistics (fragment count, API call volume, system metrics, searchMetrics, observability, queues, healthFlags) |
 | GET | /v1/internal/model/nothing/activity | Recent fragment activity log (10 entries) |
 | GET | /v1/internal/model/nothing/metrics-summary | Dashboard metrics summary |
-| GET | /v1/internal/model/nothing/keys | API key list |
-| POST | /v1/internal/model/nothing/keys | Create API key. Raw key returned in response exactly once |
+| GET | /v1/internal/model/nothing/keys | API key list. Includes the policy columns (`default_mode`, `allowed_workspaces`, `symbolic_hard_gate`) |
+| POST | /v1/internal/model/nothing/keys | Create API key. Raw key returned in response exactly once. `permissions` is a non-empty array of `read` and `write` only and defaults to `DEFAULT_PERMISSIONS` when omitted; any other value returns 400 |
 | PUT | /v1/internal/model/nothing/keys/:id | Change API key status (active <-> inactive) |
 | GET | /v1/internal/model/nothing/keys/:id/stats | Per-key usage statistics |
 | PUT | /v1/internal/model/nothing/keys/:id/daily-limit | Change API key daily call limit. Master key required |
 | PUT | /v1/internal/model/nothing/keys/:id/permissions | Change API key permissions |
 | PUT | /v1/internal/model/nothing/keys/:id/fragment-limit | Change API key fragment quota |
 | PATCH | /v1/internal/model/nothing/keys/:id/workspace | Change API key's default_workspace. `{ workspace: "name" }` or `{ workspace: null }` (null=unset) |
+| PATCH | /v1/internal/model/nothing/keys/:id/policy | Change API key policy columns. The body carries at least one of `default_mode`, `allowed_workspaces`, `symbolic_hard_gate`. See the section below |
 | DELETE | /v1/internal/model/nothing/keys/:id | Delete API key (204 on success). A key that has stored fragments or reconsolidation history is not deleted and the server answers 409 `key_in_use` (`MEMENTO_API_KEY_DELETE_GUARD=false` skips the check). Disabling or deleting a key closes that key's sessions in this process immediately |
 | GET | /v1/internal/model/nothing/groups | Key group list |
 | POST | /v1/internal/model/nothing/groups | Create key group |
@@ -117,7 +118,7 @@ Accessing a protected resource without authentication returns `401 Unauthorized`
 
 ### Mode Preset
 
-The session behavior mode can be set via the `X-Memento-Mode` header or `params.mode` in the `initialize` request. Setting `api_keys.default_mode` in the admin console pins a per-key default.
+The session behavior mode can be set via the `X-Memento-Mode` header or `params.mode` in the `initialize` request. Setting `api_keys.default_mode` through `PATCH /v1/internal/model/nothing/keys/:id/policy` (the ACCESS POLICY card in the admin console key detail) pins a per-key default. Master-only presets (`audit`) cannot be assigned to an API key.
 
 | Preset | Description | Tools removed from tools/list |
 |--------|-------------|---------------|
@@ -342,6 +343,32 @@ Response:
 ```json
 { "success": true, "daily_limit": 50000 }
 ```
+
+### PATCH /v1/internal/model/nothing/keys/:id/policy
+
+Change the policy columns of an API key. Master key required. Only the supplied fields are updated in one statement; an unknown field or an empty object returns 400.
+
+Request body:
+
+```json
+{ "default_mode": "recall-only", "allowed_workspaces": ["proj-a", "proj-b"], "symbolic_hard_gate": true }
+```
+
+| Field | Value | Description |
+|-|-|-|
+| `default_mode` | `recall-only`, `write-only`, `onboarding` or `null` | Per-key default mode preset. `null` clears it (all tools exposed). An unregistered name and a master-only preset (`audit`) return 400 |
+| `allowed_workspaces` | array of strings or `null` | `null` is unlimited. An empty array judges every workspace claim to be outside the allowed set. At most 64 entries (after de-duplication), 128 characters each; an empty string, surrounding whitespace or a control character returns 400 |
+| `symbolic_hard_gate` | boolean | `true` rejects a `remember` call whose fragment violates a PolicyRules rule |
+
+Response 200:
+
+```json
+{ "success": true, "default_mode": "recall-only", "allowed_workspaces": ["proj-a", "proj-b"], "symbolic_hard_gate": true }
+```
+
+Errors: 400 `{ "error": "...", "field": "default_mode" }` (validation failure), 404 (key not found), 413 (body too large).
+
+Effect: `symbolic_hard_gate` and `allowed_workspaces` clear this process's lookup cache immediately, so the next request sees the new value; other instances follow within the 30 second cache TTL. `default_mode` applies to sessions opened after the change. The change is written to the audit log as one `admin key_policy` line (field names with old and new values).
 
 ---
 

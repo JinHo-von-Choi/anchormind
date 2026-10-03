@@ -177,7 +177,7 @@ All flags default to `false` / noop. For phased activation, follow the recommend
 | MEMENTO_SYMBOLIC_TIMEOUT_MS | 50 | - | Symbolic evaluation timeout setting (ms). No code currently reads this value |
 | MEMENTO_SYMBOLIC_MAX_CANDIDATES | 32 | - | Symbolic candidate count cap setting. No code currently reads this value |
 
-The `api_keys.symbolic_hard_gate` column (migration-033) enables per-key hard gate switching. Defaults to false. When set to true, PolicyRules violations cause the remember() call to be rejected with a JSON-RPC **protocol-level** error `-32003` (not an MCP tool error — `error.data.violations: string[]` included). Master keys (keyId=NULL) are excluded. Cache TTL is 30 seconds.
+The `api_keys.symbolic_hard_gate` column (migration-033) enables per-key hard gate switching. Defaults to false. When set to true, PolicyRules violations cause the remember() call to be rejected with a JSON-RPC **protocol-level** error `-32003` (not an MCP tool error; `error.data.violations: string[]` included). Master keys (keyId=NULL) are excluded. Cache TTL is 30 seconds. The value is changed through the ACCESS POLICY card in the admin console key detail or `PATCH /v1/internal/model/nothing/keys/:id/policy`; this process's cache is cleared on change.
 
 #### LLM Provider Fallback Chain
 
@@ -1037,7 +1037,7 @@ Run `npm run migrate` to execute unapplied migrations in order. History is manag
 | 039 | migration-039-feedback-instrumentation.sql | Adds `outcome`, `evaluator`, `evidence`, `unmet_requirements` (+ CHECK constraints on `outcome` and `evaluator`) to `task_feedback` and `irrelevance_reason` (+ CHECK constraint and partial index `idx_tf_irrelevance`) to `tool_feedback`. Existing rows are not backfilled, so NULL means "unreported" |
 | 040 | migration-040-workspace-audit-columns.sql | `fragments.workspace_source TEXT` (CHECK explicit / key_default / inferred / unscoped, NULL means not recorded), `fragments.quality_rationale TEXT` |
 | 041 | migration-041-workspace-backfill-inference.sql | `fragments.workspace_inferred`, `inference_confidence` (0.0 to 1.0 CHECK), `backfill_batch_id`. Records inference results separately from the workspace column |
-| 042 | migration-042-api-keys-allowed-workspaces.sql | `api_keys.allowed_workspaces TEXT[]`. NULL is unlimited, an empty array blocks every workspace claim |
+| 042 | migration-042-api-keys-allowed-workspaces.sql | `api_keys.allowed_workspaces TEXT[]`. NULL is unlimited, an empty array blocks every workspace claim. Edited through `PATCH /v1/internal/model/nothing/keys/:id/policy` (at most 64 entries, 128 characters each) |
 | 043 | migration-043-fragment-synthetic-query.sql | `fragment_synthetic_query` table (synthetic queries and embeddings, HNSW index, agent isolation policy) |
 | 044 | migration-044-idempotency-records.sql | `idempotency_records` table (retry responses of `amend` and `tool_feedback`, default 7-day expiry) |
 | 045 | migration-045-fragment-rls.sql | Enables RLS and isolation policies on `fragments` and `fragment_links`. `FORCE ROW LEVEL SECURITY` is not applied |
@@ -1053,7 +1053,7 @@ Locks the session operation scope to a preset. Three configuration paths are ava
 
 1. **Per-request header** (highest priority): `X-Memento-Mode: <preset>`
 2. **initialize parameter**: `{ "method": "initialize", "params": { "mode": "<preset>" } }`
-3. **Per-key default** (admin console): `api_keys.default_mode` column (migration-034)
+3. **Per-key default** (the ACCESS POLICY card in the admin console key detail, or `PATCH /v1/internal/model/nothing/keys/:id/policy`): `api_keys.default_mode` column (migration-034). Master-only presets (`audit`) cannot be assigned to an API key. Applies to sessions opened after the change
 
 | Preset | Description | Representative excluded_tools | Recommended context |
 |--------|-------------|-------------------------------|---------------------|

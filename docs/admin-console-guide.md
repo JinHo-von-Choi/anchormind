@@ -108,7 +108,11 @@ Tailwind CSS와 d3 스크립트는 외부 CDN이 아니라 서버가 `assets/adm
 
 키 행을 클릭하면 우측에 상세 패널이 열린다:
 - Daily Rate Limit -- 일일 호출 제한을 인라인으로 편집한다. 숫자 입력 필드에 값을 입력하면 변경 즉시 `PUT /v1/internal/model/nothing/keys/:id/daily-limit` API로 저장된다.
-- Default Mode -- API 키의 기본 mode preset을 설정한다. 값: `recall-only`, `write-only`, `onboarding`, `audit`, 또는 미설정(전체 도구 노출). 설정 시 해당 키로 연결된 세션의 기본 도구 집합이 제한된다. `X-Memento-Mode` 헤더가 있으면 DB 설정보다 우선한다.
+- ACCESS POLICY -- 세 정책 열을 한 카드에서 편집하고 SAVE POLICY로 한 번에 저장한다. 바뀐 필드만 `PATCH /v1/internal/model/nothing/keys/:id/policy`로 전송한다. 변경은 감사 로그(`admin key_policy`)에 필드 이름과 이전, 이후 값으로 남는다.
+  - DEFAULT MODE -- API 키의 기본 mode preset. 값: `recall-only`, `write-only`, `onboarding`, 또는 `(none)`(전체 도구 노출). 마스터 전용 preset(`audit`)은 API 키에 지정할 수 없다. 변경 이후 열린 세션부터 적용되고, `X-Memento-Mode` 헤더와 `initialize`의 `params.mode`가 DB 설정보다 우선한다.
+  - RESTRICT WORKSPACES -- `allowed_workspaces` 허가 목록. 체크를 끄면 제한 없음(NULL)이다. 체크하고 한 줄에 하나씩 workspace를 입력한다. 체크하고 목록을 비우면 모든 workspace 주장이 허가 집합 밖으로 판정된다. 항목은 최대 64개, 항목당 128자이며 앞뒤 공백과 제어 문자는 받지 않는다.
+  - SYMBOLIC HARD GATE -- `symbolic_hard_gate`. 켜면 PolicyRules 위반 파편의 `remember`가 거부된다(`-32003`).
+  - 이 프로세스에서는 hard gate와 workspace 허가 변경이 다음 요청부터 적용된다. 다른 인스턴스는 각 조회 캐시의 30초 만료로 반영된다.
 - 소속 그룹 관리:
   - ADD GROUP 버튼을 클릭하면 모달이 열리며 그룹을 선택할 수 있다.
   - Groups Directory 섹션의 각 그룹 행에 ASSIGN 버튼이 표시되며, 클릭 시 해당 키를 그룹에 추가한다.

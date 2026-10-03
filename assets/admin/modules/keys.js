@@ -67,6 +67,154 @@ export function keyInUseMessage(data) {
     + " link reconsolidation records. Deactivate it instead.";
 }
 
+/** default_mode로 지정할 수 있는 preset. 서버가 받는 목록과 같다(requiresMaster preset 제외). */
+export const KEY_MODE_OPTIONS = ["recall-only", "write-only", "onboarding"];
+
+/** allowed_workspaces 입력 한도. 서버 검증과 같다. */
+export const KEY_WORKSPACE_LIMITS = { count: 64, length: 128 };
+
+/**
+ * 줄바꿈으로 구분한 workspace 입력을 배열로 만든다. 앞뒤 공백을 지우고 빈 항목과 중복을 버린다.
+ *
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function parseWorkspaceLines(text) {
+  const items = String(text ?? "").split(/\r?\n/).map(v => v.trim()).filter(v => v !== "");
+  return Array.from(new Set(items));
+}
+
+/** 두 workspace 목록이 같은 순서로 같은 항목인지, null끼리인지 판정한다. */
+function sameWorkspaces(a, b) {
+  if (a === null || b === null) return a === b;
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+/**
+ * 정책 입력 상태와 현재 키 값을 비교해 바뀐 필드만 담은 PATCH 본문을 만든다.
+ *
+ * @param {{ default_mode?: string|null, allowed_workspaces?: string[]|null, symbolic_hard_gate?: boolean }} key
+ * @param {{ defaultMode: string, restrict: boolean, workspacesText: string, hardGate: boolean }} form
+ * @returns {{ default_mode?: string|null, allowed_workspaces?: string[]|null, symbolic_hard_gate?: boolean }}
+ */
+export function buildKeyPolicyPatch(key, form) {
+  const patch = {};
+  const mode  = form.defaultMode === "" ? null : form.defaultMode;
+  if (mode !== (key.default_mode ?? null)) patch.default_mode = mode;
+
+  const workspaces = form.restrict ? parseWorkspaceLines(form.workspacesText) : null;
+  if (!sameWorkspaces(workspaces, key.allowed_workspaces ?? null)) patch.allowed_workspaces = workspaces;
+
+  if (form.hardGate !== (key.symbolic_hard_gate === true)) patch.symbolic_hard_gate = form.hardGate;
+  return patch;
+}
+
+/** 라벨과 입력을 한 줄로 묶는 정책 행을 만든다. */
+function policyRow(labelText, control, hint) {
+  const row = document.createElement("div");
+  row.className = "flex flex-col gap-1";
+  const head = document.createElement("div");
+  head.className = "flex justify-between items-center";
+  const label = document.createElement("span");
+  label.className = "text-[10px] font-bold text-slate-500 uppercase tracking-wider";
+  label.textContent = labelText;
+  head.appendChild(label);
+  head.appendChild(control);
+  row.appendChild(head);
+  if (hint) {
+    const note = document.createElement("p");
+    note.className = "text-[10px] text-slate-500";
+    note.textContent = hint;
+    row.appendChild(note);
+  }
+  return row;
+}
+
+/**
+ * 키 정책 카드. default_mode, allowed_workspaces, symbolic_hard_gate를 한 번에 저장한다.
+ *
+ * @param {object} key
+ * @param {HTMLElement} container
+ * @returns {HTMLElement}
+ */
+export function renderKeyPolicyCard(key, container) {
+  const card = document.createElement("div");
+  card.className = "bg-surface-container-highest p-4 rounded-sm border-l-2 border-secondary space-y-3";
+  card.id = "key-policy-card";
+
+  const title = document.createElement("h4");
+  title.className = "text-[10px] font-bold text-slate-400 tracking-widest uppercase font-label";
+  title.textContent = "ACCESS POLICY";
+  card.appendChild(title);
+
+  const modeSelect = document.createElement("select");
+  modeSelect.className = "w-40 bg-surface-container-highest border border-outline-variant/30 rounded-sm px-2 py-1 text-xs font-mono text-on-surface focus:border-primary focus:outline-none";
+  modeSelect.id = "key-policy-default-mode";
+  [""].concat(KEY_MODE_OPTIONS).forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name === "" ? "(none)" : name;
+    opt.selected = name === (key.default_mode ?? "");
+    modeSelect.appendChild(opt);
+  });
+  modeSelect.value = key.default_mode ?? "";
+  card.appendChild(policyRow("DEFAULT MODE", modeSelect, "Applies to sessions opened after the change. A header or initialize mode takes precedence."));
+
+  const restrictCb = document.createElement("input");
+  restrictCb.type = "checkbox";
+  restrictCb.id = "key-policy-restrict-workspaces";
+  restrictCb.className = "accent-primary";
+  restrictCb.checked = Array.isArray(key.allowed_workspaces);
+  const wsArea = document.createElement("textarea");
+  wsArea.className = "form-input w-full text-xs font-mono";
+  wsArea.id = "key-policy-workspaces";
+  wsArea.rows = 3;
+  wsArea.placeholder = "one workspace per line";
+  wsArea.value = Array.isArray(key.allowed_workspaces) ? key.allowed_workspaces.join("\n") : "";
+  wsArea.disabled = !restrictCb.checked;
+  restrictCb.addEventListener("change", () => { wsArea.disabled = !restrictCb.checked; });
+  card.appendChild(policyRow("RESTRICT WORKSPACES", restrictCb,
+    "Unchecked allows every workspace. Checked with an empty list blocks every workspace claim. Up to "
+    + KEY_WORKSPACE_LIMITS.count + " entries of " + KEY_WORKSPACE_LIMITS.length + " characters."));
+  card.appendChild(wsArea);
+
+  const gateCb = document.createElement("input");
+  gateCb.type = "checkbox";
+  gateCb.id = "key-policy-hard-gate";
+  gateCb.className = "accent-primary";
+  gateCb.checked = key.symbolic_hard_gate === true;
+  card.appendChild(policyRow("SYMBOLIC HARD GATE", gateCb, "Rejects a remember call that violates a policy rule."));
+
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "btn btn-primary w-full";
+  saveBtn.id = "key-policy-save";
+  saveBtn.textContent = "SAVE POLICY";
+  saveBtn.addEventListener("click", async () => {
+    const patch = buildKeyPolicyPatch(key, {
+      defaultMode   : modeSelect.value,
+      restrict      : restrictCb.checked,
+      workspacesText: wsArea.value,
+      hardGate      : gateCb.checked
+    });
+    if (Object.keys(patch).length === 0) { showToast("No policy changes", "warning"); return; }
+    const r = await api("/keys/" + key.id + "/policy", { method: "PATCH", body: patch });
+    if (r.ok) {
+      showToast("Policy updated", "success");
+      Object.assign(key, {
+        default_mode      : r.data.default_mode,
+        allowed_workspaces: r.data.allowed_workspaces,
+        symbolic_hard_gate: r.data.symbolic_hard_gate
+      });
+      renderKeys(container);
+    } else {
+      showToast(r.data?.error ?? "Update failed", "error");
+    }
+  });
+  card.appendChild(saveBtn);
+
+  return card;
+}
+
 export function renderKeyTable(keys) {
   const wrap = document.createElement("div");
   wrap.className = "glass-panel flex-1 flex flex-col min-h-0";
@@ -440,6 +588,7 @@ export function renderKeyInspector(key, container) {
   idCard.appendChild(fragRow);
 
   panel.appendChild(idCard);
+  panel.appendChild(renderKeyPolicyCard(key, container));
 
   /* Assigned Groups */
   const groupsSection = document.createElement("div");

@@ -9,13 +9,15 @@
 
 ## 활성화
 
+admin console 키 상세의 ACCESS POLICY에서 SYMBOLIC HARD GATE를 켜거나 `PATCH /v1/internal/model/nothing/keys/:id/policy`에 `{ "symbolic_hard_gate": true }`를 보낸다. 이 프로세스의 캐시는 즉시 비워지고 다른 인스턴스는 30초 안에 반영된다. 변경은 감사 로그에 남는다. SQL로 직접 바꾸는 경우는 다음과 같다.
+
 ```sql
 UPDATE agent_memory.api_keys
 SET    symbolic_hard_gate = true
 WHERE  id = '<key_uuid>';
 ```
 
-캐시 갱신: `ApiKeyStore` 30초 TTL이 만료되면 자동 반영. 즉시 적용이 필요하면 `invalidateHardGateCache(keyId)` 호출 또는 서버 재시작.
+캐시 갱신: SQL로 바꾼 경우 `ApiKeyStore` 30초 TTL이 만료되면 자동 반영된다. 즉시 적용이 필요하면 `invalidateHardGateCache(keyId)` 호출 또는 서버 재시작.
 
 ## 비활성화
 

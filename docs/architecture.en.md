@@ -1122,7 +1122,7 @@ The blind spot in SessionLinker.wouldCreateCycle is sealed. `store.isReachable` 
 
 - Preset definition files: `lib/memory/modes/*.json` (recall-only, write-only, onboarding, audit)
 - Reads the preset name from the `X-Memento-Mode` header or `initialize.params.mode`
-- `api_keys.default_mode` column (migration-034) enables per-key default configuration via admin console
+- `api_keys.default_mode` column (migration-034) enables per-key default configuration via admin console. Edited through `PATCH /v1/internal/model/nothing/keys/:id/policy`
 - Filters tools/list response to expose only allowed tools for the active preset
 
 ```

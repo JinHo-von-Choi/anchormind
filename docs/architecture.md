@@ -1125,7 +1125,7 @@ SessionLinker.wouldCreateCycle의 tenant isolation 사각지대가 봉인되어 
 
 - preset 정의 파일: `lib/memory/modes/*.json` (recall-only, write-only, onboarding, audit)
 - `X-Memento-Mode` 헤더 또는 `initialize.params.mode`에서 preset 이름을 읽음
-- `api_keys.default_mode` 컬럼(migration-034)으로 키 단위 기본값 설정 가능
+- `api_keys.default_mode` 컬럼(migration-034)으로 키 단위 기본값 설정 가능. `PATCH /v1/internal/model/nothing/keys/:id/policy`로 편집한다
 - tools/list 응답을 preset에 따라 필터링하여 허용 도구만 노출
 
 ```
