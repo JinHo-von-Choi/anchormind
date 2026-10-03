@@ -64,6 +64,14 @@ groups:
       - alert: MementoProtocolVersionOther
         expr: sum(increase(mcp_protocol_version_negotiations_total{requested_version="other"}[1h])) > 0
         labels: { severity: info, component: memento-mcp }
+      - alert: MementoOutboxDeadLetter
+        expr: max(memento_outbox_dead_letter) > 0
+        for: 5m
+        labels: { severity: warning, component: memento-mcp }
+      - alert: MementoOutboxLag
+        expr: max(memento_outbox_lag_seconds) > 300
+        for: 10m
+        labels: { severity: warning, component: memento-mcp }
 ```
 
 | 경보 | 의미 |
@@ -72,6 +80,8 @@ groups:
 | MementoAuthStoreErrors | API 키 저장소 조회가 키 판정 전에 실패한다(`operation` 라벨로 구분) |
 | MementoSplitStepFailures | 장문 파편 분할의 커밋 단계가 실패한다(`step` 라벨로 구분) |
 | MementoProtocolVersionOther | 지원 목록에 없는 프로토콜 버전을 요청한 협상이 있다 |
+| MementoOutboxDeadLetter | 재시도 한도를 넘었거나 재시도 불가로 판정된 outbox 이벤트가 있다. 원인을 고친 뒤 되돌리는 절차는 [configuration.md](../configuration.md#outbox) |
+| MementoOutboxLag | 가장 오래된 outbox 대기 행이 5분 넘게 전달되지 않았다(작업자 정지, 처리기 반복 실패) |
 
 ---
 

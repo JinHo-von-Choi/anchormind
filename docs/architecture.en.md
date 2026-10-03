@@ -175,6 +175,13 @@ lib/http/
 lib/logging/
 +-- audit.js           Audit logging and access history recording
 +-- session-ref.js     Session ID notation used in logs and external prompts (first 8 chars)
+
+lib/outbox/
++-- Outbox.js          Transactional outbox writes. `enqueue(client, event)` accepts only a connection after BEGIN, `enqueueStandalone(pool, event)` writes in a short separate transaction. `MEMENTO_OUTBOX`
++-- OutboxHandlers.js  Per-topic handler registry (consumer extension point), `OutboxPermanentError`
++-- OutboxStore.js     outbox_events claim (FOR UPDATE SKIP LOCKED with a lease), complete, fail, release, retention cleanup and stats queries
++-- OutboxWorker.js    Polling worker. Runs handlers in claim order, exponential retries and dead-letter, lease budget, cleanup and gauge updates. `MEMENTO_OUTBOX_WORKER`
++-- outbox-metrics.js  `memento_outbox_*` metrics
 ```
 
 Storage access is handled by `getPrimaryPool` and `queryWithAgentVector` in `lib/tools/db.js`.

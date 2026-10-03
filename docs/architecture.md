@@ -178,6 +178,13 @@ lib/http/
 lib/logging/
 ├── audit.js           감사 로그 및 접근 이력 기록
 └── session-ref.js     로그와 외부 프롬프트에 쓰는 세션 ID 표기 (앞 8자)
+
+lib/outbox/
+├── Outbox.js          트랜잭션 outbox 기록. `enqueue(client, event)`는 BEGIN 뒤의 연결만 받고, `enqueueStandalone(pool, event)`는 짧은 독립 트랜잭션으로 기록한다. `MEMENTO_OUTBOX`
+├── OutboxHandlers.js  topic별 처리기 등록부(소비자 확장 지점), `OutboxPermanentError`
+├── OutboxStore.js     outbox_events 점유(FOR UPDATE SKIP LOCKED와 임대), 완료, 실패, 반납, 보존 정리, 통계 질의
+├── OutboxWorker.js    폴링 작업자. 점유 순서대로 처리기 실행, 지수 간격 재시도와 dead-letter, 임대 예산, 정리와 게이지 갱신. `MEMENTO_OUTBOX_WORKER`
+└── outbox-metrics.js  `memento_outbox_*` 지표
 ```
 
 저장소 접근은 `lib/tools/db.js`의 `getPrimaryPool`, `queryWithAgentVector`가 맡는다.
