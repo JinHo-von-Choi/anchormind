@@ -280,6 +280,9 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-051-search-events-budget.s
 # outbox_events table
 psql $DATABASE_URL -f lib/memory/migrations/migration-052-outbox-events.sql
 
+# fragments.content_tokens column (the GIN index is built separately with online-index)
+psql $DATABASE_URL -f lib/memory/migrations/migration-053-content-tokens.sql
+
 # case_events source fragment index (production databases create it first with online-index)
 psql $DATABASE_URL -f lib/memory/migrations/migration-054-case-events-source-fragment.sql
 

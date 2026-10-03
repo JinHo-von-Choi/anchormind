@@ -205,6 +205,7 @@ MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test \
 | `writer-mix.test.js` | 접근 기록, 임베딩 저장, 링크 생성, forget, 감쇠, TTL 전환, 앵커 승격과 외래키 검사를 일으키는 링크 삽입을 겹쳐 실행해 서버 교착 집계, 40P01, 잠금 충돌 재시도 지표가 모두 0. 회차 수는 `DB_LANE_ROUNDS`(기본 10) |
 | `online-index.test.js` | `scripts/ops/online-index.mjs`의 색인 생성, 재실행 건너뜀, 무효 색인 재구성, 잠금 대기 초과 뒤 재시도와 소진, 디스크 여유 거부, 확인 플래그 없는 실행 거부 |
 | `resumable-backfill.test.js` | 재개형 백필의 watermark 이어하기와 행 단위 오류 기록, 행 단위가 아닌 오류의 전파 |
+| `lexical-channel.test.js` | 마이그레이션 053이 열만 더함, tsquery 생성기 이스케이프 표의 실제 `to_tsquery` 해석, remember, amend, batch_remember의 `content_tokens` 기록, 어휘 검색의 키와 workspace 범위, NULL 행 제외, 무효 색인 비참여, 백필 스크립트 미리보기와 실행, 중단 뒤 이어하기, 읽은 뒤 본문이 바뀐 행 보존 |
 | `dedup-scope.test.js` | 세 색인 상태에서 insert, amend, batch_remember의 판정, 실행 중 색인 제거(42P10), 무효 상태로 남은 키 범위 색인, 마무리 스크립트, workspace 정규화, reflect workspace 백필의 같은 본문 제외 |
 | `gc-throughput.test.js` | 만료 삭제의 주기당 상한, 청크 반복, 스위치 off의 50건, 보호 대상 보존, 작업 기억 행 정리, 청크 잠금 대기 상한, 적체 게이지 |
 | `working-memory-rows.test.js` | 작업 기억 행의 기록, 조회, 보관 시간 만료, 보관량 제거, 세션 격리, 조회 대상 제외 |

@@ -53,6 +53,8 @@ server.js  (HTTP server)
             |   +-- GraphNeighborSearch.js L2.5 graph neighbor search (fragment_links 1-hop bidirectional UNION, tanh-saturated scoring + relation-type boosts)
             |   +-- HistoryReconstructor.js case_id/entity-based narrative reconstruction (ordered_timeline, causal_chains, unresolved_branches)
             |   +-- BudgetSelector.js     recall token budget selection (`MEMENTO_RANK_BEFORE_BUDGET`). Pure functions for the search-order cut (`trimInSearchOrder`) and the final-score selection (`selectWithinBudget`)
+            |   +-- LexicalSearch.js      Content lexical channel (L2b, `MEMENTO_LEXICAL_CHANNEL`). Turns the query into an OR tsquery with the same tokenization as the write paths and returns the top 200 candidates in key, workspace and agent scope ordered by `ts_rank_cd`
+            |   +-- RankFusion.js         RRF merge of layer results (`mergeRRF`) and ordering of cache-hydrated candidates (`mergeHydratedCandidates`)
             |   +-- Reranker.js           Cross-Encoder reranking (disabled by default; enable via MEMENTO_RERANKER_ENABLED or RERANKER_URL)
             |   +-- CaseRecall.js         Dedicated caseMode: true path. Returns (goal, events[], outcome) triple per case_id
             |   +-- LinkedFragmentLoader.js Bulk linked fragment load (1-hop neighbor batch query)
@@ -74,7 +76,7 @@ server.js  (HTTP server)
             |   +-- serverWriteGate.js    Builds the gate for server write paths, injecting the key's allowed workspace set and hard gate setting from ApiKeyStore
             |   +-- FragmentImporter.js   Passes import rows through the gate and writes them with FragmentWriter. Applies the target key profile (owner, restore) (shared by admin import and CLI import)
             |   +-- DedupScope.js         content_hash duplicate detection scope (`MEMENTO_DEDUP_SCOPE`). Reads the valid detection indexes to choose the detection scope, ON CONFLICT target, pre-insert lookup and batch fold key
-            |   +-- ForgetCascade.js      forget deletion cascade (`MEMENTO_FORGET_CASCADE`). Lock statement, deletion and case_events summary statement, receipt (`purged`), orphan summary cleanup
+            |   +-- ForgetCascade.js      forget deletion cascade (`MEMENTO_FORGET_CASCADE`). Lock statement, deletion and case_events summary statement, receipt (`purged`), orphan summary cleanup, +-- ContentTokens.js      Helpers with which the write paths store the content tokens into `content_tokens` in the same statement (INSERT column, UPDATE SET clause, multi-row VALUES)
             |   +-- FragmentWriter.js     Fragment writes. The semantic methods (insert, update) accept only gated values; internal metadata goes through updateInternal, which cannot write the 9 semantic columns (also delete, incrementAccess, touchLinked)
             |   +-- rowLock.js            Id-ordered lock statement (`fragmentRowLock`) and locked-row delete statement shared by multi-row fragment writes
             |   +-- FragmentFactory.js    Fragment creation, validation, PII masking entry point (`maskSensitiveText`, rules come from the `lib/security` table) and per-type truncation (`limitContentLength`)
@@ -118,6 +120,7 @@ server.js  (HTTP server)
             |   +-- EmbeddingCache.js     Query embedding Redis cache (emb:q:{sha256 first 16 chars} key, 1-hour TTL, fault-isolated)
             |   +-- MorphemeIndex.js      Morpheme-based L3 fallback index
             |   +-- MorphemeTokenizer.js  Local CPU morpheme analyzer. Splits Unicode script runs then routes per language: Korean garu-ko (filterHangulMorphemes strips particles/endings/single-syllable tokens), English natural PorterStemmer, Chinese @node-rs/jieba, Japanese kuromoji (skipped when enableKuromoji=false). MorphemeIndex.tokenize() delegates to it, replacing the LLM subprocess on the default path (MEMENTO_MORPHEME_TOKENIZER=local). Benchmark: 1.06ms/call, resident RSS +28.9MB.
+            |   +-- LexicalTokens.js      Tokenization of the content lexical channel (MorphemeTokenizer tokens lowercased, ending fragments removed) and the tsquery generator (single-quote wrapping, OR join)
             +-- signals/                  Signal layer modules
             |   +-- SpreadingActivation.js Async activation propagation based on contextText (ACT-R model, keywords GIN seed -> 1-hop graph spread, 10-min TTL cache)
             |   +-- CaseRewardBackprop.js  case verification event -> evidence fragment importance atomic backpropagation. Returns immediately when MEMENTO_CASE_BACKPROP_ENABLED is unset
@@ -138,6 +141,8 @@ server.js  (HTTP server)
             +-- WorkingMemorySql.js       Working memory row marker and the SQL condition that excludes those rows from queries and counts
             +-- provenance.js             Fragment provenance and trust tier decisions (pure functions). Accepted origins, per-origin tiers, key cap (3 with the `trusted_origin` permission or the master key, otherwise 2), the injection exclusion predicate that reads NULL as 2 and the SQL fragment with the same threshold, observed client notation, INSERT column fragment
             +-- reviewState.js            Review states (pending, approved, rejected), review modes (off, flagged, all) and the review mode markers of key permission lists (review_off, review_all)
+            +-- LexicalSchema.js          Schema state of the content lexical channel. Reads the content_tokens column and its GIN index (found by definition) every 60 seconds and decides whether the channel takes part
+            +-- LexicalCoverage.js        Per-key content_tokens fill metrics `memento_lexical_tokens_coverage_ratio{key_id}`, `memento_lexical_tokens_missing{key_id}`
             +-- keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` shared helper. Generates key_id-scoped WHERE clauses. Used by FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js
             +-- anchorPolicy.js           Pure anchor decision functions: change kind (set, clear), permission and per-key limit decision, non-identifying principal label of context lines (`k:` + first 4 characters of the key id sha256)
             +-- CaseEventStore.js         Semantic milestone log (case_events CRUD, DAG edges, evidence join)
@@ -1006,6 +1011,8 @@ After the three layers' results are merged via RRF, time-semantic composite rank
 
 **Budget selection (`BudgetSelector`).** With `MEMENTO_RANK_BEFORE_BUDGET=on` (the default), FragmentSearch returns candidates without a token budget cut, `MemoryRecaller` merges linked fragments and scores them with `computeRecallScore`, and `selectWithinBudget` selects within `tokenBudget`. When every candidate fits the budget, all are selected; linked fragments use the same budget. With `off`, the search layer cuts the budget in search order (`trimInSearchOrder`) and linked fragments are added outside the budget. Selection rules and caps are in the `MEMENTO_RANK_BEFORE_BUDGET` row of [Configuration](configuration.en.md).
 
+**Content lexical channel (`LexicalSearch`, L2b).** A search with text calls the lexical channel in parallel with L2 and L3. The write paths (remember, batch_remember, amend that changes content, reflect, import, split) store the morpheme tokens of the content (`LexicalTokens`) joined by spaces into `fragments.content_tokens` (`to_tsvector('simple', ...)`, migration 053) in the same statement. The search turns the query into an OR tsquery with the same tokenization and reads the top 200 candidates within the key, workspace and agent scope and the search filters, ordered by `ts_rank_cd`. `ts_rank_cd` looks only at one document and the query, so data of other keys does not affect the ranking. With embeddings on, the candidates join RRF as the `lexical` layer (weight `lexicalWeightFactor`); with embeddings off they are appended to the fallback result. The relative score of a candidate (0 to 1 against the best `ts_rank_cd` of that search, `_lexicalScore`) feeds the order score of the search layer and the lexical term of the recall final score, and is removed from responses. Rows whose `content_tokens` is NULL are left out of the channel; `scripts/backfill-content-tokens.mjs` fills them. `LexicalSchema` decides participation: without the column or with an invalid GIN index the channel does not take part, and without the index it searches without one (one warning each).
+
 When `includeLinks: true` (default) is set on recall, linked fragments are fetched via a 1-hop traversal. The `linkRelationType` parameter filters for specific relation types -- when unspecified, caused_by, resolved_by, and related are included. The linked fragment fetch limit is `MEMORY_CONFIG.linkedFragmentLimit` (default 10).
 
 > **Note:** The L1 Redis index currently supports namespace isolation by API key (keyId) only. Agent-level isolation is enforced at L2/L3, so final result accuracy is unaffected. In multi-agent deployments, L1 candidate sets may include fragments from other agents.
@@ -1387,7 +1394,7 @@ lib/memory/
 +-- write/         WriteGate, DedupScope, FragmentImporter, FragmentWriter, FragmentFactory, FragmentStore, RememberPostProcessor, ConflictResolver, BatchRememberProcessor, BatchRememberWorker
 +-- link/          ReconsolidationEngine, GraphLinker, LinkStore, SessionLinker, TemporalLinker, ContradictionDetector
 +-- consolidate/   MemoryConsolidator, ConsolidatorGC, FragmentGC, decay, UtilityBaseline
-+-- embedding/     EmbeddingWorker, EmbeddingCache, MorphemeIndex, MorphemeTokenizer
++-- embedding/     EmbeddingWorker, EmbeddingCache, MorphemeIndex, MorphemeTokenizer, LexicalTokens
 +-- signals/       SpreadingActivation, CaseRewardBackprop, NLIClassifier, MemoryEvaluator, SearchMetrics, SearchEventAnalyzer, SearchEventRecorder, EvaluationMetrics, SearchParamAdaptor
 +-- processors/    MemoryRememberer, MemoryRecaller, MemoryReflector, MemoryLinker, ReflectProcessor, AutoReflect, EpisodeContinuityService, SessionActivityTracker
 +-- migrations/    52 migration SQL files (001 through 054; 046 and 053 unused)

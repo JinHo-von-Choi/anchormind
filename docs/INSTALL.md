@@ -172,6 +172,7 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-049-align-synthetic-query-
 psql $DATABASE_URL -f lib/memory/migrations/migration-050-dedup-scope-workspace.sql                 # 키와 workspace 단위 content_hash 유일 색인 (운영 DB는 online-index로 먼저 생성)
 psql $DATABASE_URL -f lib/memory/migrations/migration-051-search-events-budget.sql                   # search_events 예산 선택 열(candidate_count, budget_kept) 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-052-outbox-events.sql                         # outbox_events 표 추가
+psql $DATABASE_URL -f lib/memory/migrations/migration-053-content-tokens.sql                        # fragments.content_tokens 열 추가(GIN 색인은 online-index로 별도 생성)
 psql $DATABASE_URL -f lib/memory/migrations/migration-054-case-events-source-fragment.sql          # case_events 원본 파편 색인 (운영 DB는 online-index로 먼저 생성)
 psql $DATABASE_URL -f lib/memory/migrations/migration-055-api-keys-egress-policy.sql                # api_keys.egress_policy(LLM 외부 전송 정책) 열 추가
 psql $DATABASE_URL -f lib/memory/migrations/migration-056-admin-audit-events.sql                    # admin_audit_events 감사 해시 체인 표 추가

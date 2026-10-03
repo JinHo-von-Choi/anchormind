@@ -242,6 +242,7 @@ const retry  = await retryBackfillFailures(spec);
 - 같은 `job`을 동시에 둘 이상 실행하지 않는다. watermark는 읽은 값과 같을 때만 갱신하므로 겹쳐 실행해도 뒤로 가지 않으며, 다른 실행이 진행한 것을 발견한 실행은 `BackfillConcurrentRunError`로 멈추고 완료로 표시하지 않는다.
 - 완료된 `job`은 `restart: true`를 주지 않는 한 아무것도 하지 않는다. `restart`는 watermark와 실패 행 기록을 지우고 처음부터 실행한다.
 - `job` 이름은 소문자 영숫자와 `.`, `_`, `-`로 1~64자다.
+- 갱신 값이 SQL 식만으로 정해지지 않으면(본문을 JS로 토큰화하는 `content_tokens` 등) `prepareBatch({ afterId, batchSize, clock, onlyId })`로 묶음마다 `params`를 만든다. 묶음이 시작할 watermark를 받으므로 같은 `where`와 묶음 크기로 다음 후보를 읽어 값을 준비할 수 있고, `retryBackfillFailures`는 행마다 `onlyId`로 부른다.
 
 실패 행 확인과 재시도:
 
@@ -463,6 +464,59 @@ migration-059는 `api_keys`에 수명 열(모두 NULL 허용)을 더하고 `api_
 
 마이그레이션은 열과 표를 더하기만 한다. 이전 버전을 그대로 배포하면 이전 버전은 `api_keys.key_hash`만 보며, 회전은 이 열을 늘 새 해시로 바꾸므로 현재 키는 계속 인증된다. 회전 겹침 중인 이전 키는 즉시 거부된다. 폐기는 `status`를 `inactive`로도 바꾸므로 이전 버전에서도 거부된다. 만료(`expires_at`)와 허용 대역(`allowed_cidrs`)은 이전 버전에서 적용되지 않는다. `api_key_secrets`와 수명 열은 지우지 않아도 된다.
 
+## 본문 어휘 채널
+
+migration-053은 `fragments.content_tokens tsvector` 열만 더한다(nullable, 기본값 없음). 검색용 GIN 색인은 마이그레이션 파일에 두지 않고 작업 목록의 `idx_fragments_content_tokens`(`ON agent_memory.fragments USING gin (content_tokens)`)로 만든다. 열이 마이그레이션으로 생기므로 순서는 다른 색인과 달리 배포 뒤다.
+
+|상태|저장 경로|어휘 채널|
+|-|-|-|
+|열 없음(배포 전)|열을 쓰지 않는다|참여하지 않는다|
+|열만 있음|본문 토큰을 같은 문장으로 쓴다|색인 없이 참여한다(경고 한 번)|
+|색인을 만드는 중이거나 실패(`indisvalid=false`)|쓴다|참여하지 않는다(경고 한 번)|
+|유효한 색인|쓴다|참여한다|
+
+색인은 이름이 아니라 정의(fragments 표의 술어 없는 GIN 색인, 첫 키 열 `content_tokens`)로 찾으므로 다른 이름으로 같은 정의를 만든 설치도 같게 동작한다. 상태는 60초마다 다시 읽으므로 재시작하지 않아도 된다.
+
+### 운영 순서
+
+1. `scripts/ops/backup.sh --label pre-migration`으로 백업을 완료한다.
+2. 배포하고 `npm run migrate`를 실행한다. 새로 쓰는 파편부터 `content_tokens`가 채워진다.
+3. 색인을 만든다. 기존 행의 값이 NULL인 동안 만들면 색인이 작다.
+
+   ```bash
+   node scripts/ops/online-index.mjs --dry-run --index idx_fragments_content_tokens
+   PGHOST=<호스트> PGPORT=<포트> PGDATABASE=<DB> PGUSER=<사용자> PGPASSWORD=<비밀번호> \
+     node scripts/ops/online-index.mjs --confirm --index idx_fragments_content_tokens --data-dir <데이터 디렉터리>
+   ```
+
+4. 기존 행을 채운다. 옵션 없이 실행하면 키별 미채움 수와 작업 상태만 출력하고 쓰지 않는다.
+
+   ```bash
+   PGHOST=<호스트> PGPORT=<포트> PGDATABASE=<DB> PGUSER=<사용자> PGPASSWORD=<비밀번호> \
+     node scripts/backfill-content-tokens.mjs
+   PGHOST=<호스트> PGPORT=<포트> PGDATABASE=<DB> PGUSER=<사용자> PGPASSWORD=<비밀번호> \
+     node scripts/backfill-content-tokens.mjs --confirm
+   ```
+
+   스크립트는 규칙 3의 재개형 백필로 id 순 묶음(기본 200행)마다 후보의 본문을 읽어 토큰 문서를 만들고(`prepareBatch`), 잠근 행 가운데 `content_hash`가 읽은 값과 같은 행만 갱신한다. 그 사이 본문이 바뀐 행은 저장 경로가 토큰을 썼거나(대상에서 빠진다) 다음 실행의 대상으로 남는다. 중단되면 같은 명령을 다시 실행해 이어 간다(작업 이름 기본 `content-tokens`). 접속 대상은 online-index.mjs와 같고 환경 파일은 읽지 않는다.
+
+5. 키별 채움 비율을 확인한다. `/metrics`의 `memento_lexical_tokens_coverage_ratio{key_id}`가 1, `memento_lexical_tokens_missing{key_id}`가 0이면 끝난 것이다(10분마다 다시 센다). 같은 값을 SQL로 보려면 다음을 실행한다.
+
+   ```sql
+   SELECT key_id, count(*) AS total, count(*) FILTER (WHERE content_tokens IS NULL) AS missing
+     FROM agent_memory.fragments
+    WHERE valid_to IS NULL
+    GROUP BY key_id;
+   ```
+
+### 되돌리기
+
+|상황|방법|
+|-|-|
+|채널만 끈다|`MEMENTO_LEXICAL_CHANNEL=off`. 호출 시점에 읽으므로 재시작하지 않아도 된다. 검색 참여와 토큰 기록이 함께 멈춘다. 다시 켤 때는 off 동안 저장하거나 본문을 바꾼 행을 위해 `backfill-content-tokens.mjs --confirm --restart`를 실행한다|
+|색인을 치운다|`DROP INDEX CONCURRENTLY IF EXISTS agent_memory.idx_fragments_content_tokens`. 채널은 색인 없이 동작한다|
+|코드를 되돌린다|이전 버전은 `content_tokens`를 읽거나 쓰지 않으므로 열과 색인이 남아 있어도 된다|
+
 ---
 
 ## 배포 점검표
@@ -475,9 +529,10 @@ migration-059는 `api_keys`에 수명 열(모두 NULL 허용)을 더하고 `api_
 6. 배포하고 `npm run migrate`를 실행한다.
 7. 백필이 있으면 표를 만들고 `runResumableBackfill`을 실행한다.
 8. 제약 검증이 있으면 `VALIDATE CONSTRAINT`를 실행한다.
-9. migration-050이 포함된 배포는 동작을 확인한 뒤 `node scripts/ops/finish-dedup-scope.mjs`로 단계를 보고 `--confirm`으로 키 범위 색인을 지운 다음 자료 정합을 확인한다(「중복 판정 범위 전환」의 6, 7단계). 3, 4단계의 색인은 `uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`다.
-10. migration-054가 포함된 배포는 3, 4단계에서 `idx_ce_source_fragment_id`(case_events)를 만든다. 배포 뒤 접속 대상을 명시해(`--url` 또는 PG 환경변수) `node scripts/purge-orphan-case-summaries.js`로 원본 파편이 없는 요약 수를 보고, `pg_dump -t agent_memory.case_events`로 표를 보관한 다음 `--execute --i-have-a-backup`으로 정리한다([cli.md](../cli.md)).
-11. migration-059가 포함된 배포는 `node scripts/ops/backfill-key-secrets.mjs`로 옮길 건수를 보고 `--confirm`으로 키 해시를 옮긴 뒤 정합 일치를 확인한다(「키 비밀 이관」).
+9. migration-053이 포함된 배포는 배포 뒤 `idx_fragments_content_tokens`를 만들고 `backfill-content-tokens.mjs`로 기존 행을 채운다(「본문 어휘 채널」의 3~5단계).
+10. migration-050이 포함된 배포는 동작을 확인한 뒤 `node scripts/ops/finish-dedup-scope.mjs`로 단계를 보고 `--confirm`으로 키 범위 색인을 지운 다음 자료 정합을 확인한다(「중복 판정 범위 전환」의 6, 7단계). 3, 4단계의 색인은 `uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`다.
+11. migration-054가 포함된 배포는 3, 4단계에서 `idx_ce_source_fragment_id`(case_events)를 만든다. 배포 뒤 접속 대상을 명시해(`--url` 또는 PG 환경변수) `node scripts/purge-orphan-case-summaries.js`로 원본 파편이 없는 요약 수를 보고, `pg_dump -t agent_memory.case_events`로 표를 보관한 다음 `--execute --i-have-a-backup`으로 정리한다([cli.md](../cli.md)).
+12. migration-059가 포함된 배포는 `node scripts/ops/backfill-key-secrets.mjs`로 옮길 건수를 보고 `--confirm`으로 키 해시를 옮긴 뒤 정합 일치를 확인한다(「키 비밀 이관」).
 
 ---
 
@@ -487,6 +542,7 @@ migration-059는 `api_keys`에 수명 열(모두 NULL 허용)을 더하고 `api_
 |-|-|
 |lint 규칙, 스크립트 계획과 실행 논리, 백필 도우미|`npm test`(`tests/unit/lint-migrations.test.js`, `tests/unit/online-index.test.js`, `tests/unit/resumable-backfill.test.js`)|
 |스크립트 실서버 동작, 백필 이어하기|`npm run test:db`(`tests/db-concurrency/online-index.test.js`, `tests/db-concurrency/resumable-backfill.test.js`)|
+|본문 어휘 채널 열, 색인 상태, 백필 이어하기|`npm test`(`tests/structure/lexical-schema.test.js`, `tests/unit/backfill-content-tokens.test.js`, `tests/unit/resumable-backfill.test.js`), `npm run test:db`(`tests/db-concurrency/lexical-channel.test.js`)|
 |중복 판정 범위의 세 색인 상태, 무효 상태로 남은 키 범위 색인, 다른 이름의 키 범위 색인, 실행 중 색인 제거, 마무리 스크립트|`npm test`(`tests/unit/dedup-scope.test.js`, `tests/unit/dedup-scope-alias.test.js`, `tests/unit/fragment-writer-dedup-scope.test.js`, `tests/unit/batch-remember-dedup-scope.test.js`, `tests/unit/finish-dedup-scope.test.js`), `npm run test:db`(`tests/db-concurrency/dedup-scope.test.js`)|
 
 |키 비밀 이관 스크립트, 키 수명 판정, 이중 조회|`npm test`(`tests/unit/backfill-key-secrets.test.js`, `tests/unit/key-lifecycle.test.js`, `tests/unit/api-key-dual-read.test.js`), `npm run test:db`(`tests/db-concurrency/key-lifecycle.test.js`)|

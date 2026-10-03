@@ -37,7 +37,7 @@
 | `migration-034-v2.16.0-bundle.sql` | `fragments.affect TEXT CHECK(...)` 컬럼 + partial 인덱스 |
 | `migration-036-split-attempt-failed-at.sql` | `fragments.split_attempt_failed_at TIMESTAMPTZ` 컬럼 추가 |
 | `migration-037-hnsw-index-rename.sql` | HNSW 인덱스 이름 정합화 |
-| `migration-038` ~ `migration-052` | fragment_versions case 필드, feedback 계측, workspace 감사 컬럼, allowed_workspaces, synthetic query, idempotency_records, fragment RLS(ENABLE만), agent scope 감사, case_closed, synthetic query 임베딩 정합, 키와 workspace 단위 content_hash 유일 색인, search_events 예산 선택 열, outbox_events 표. 번호 046은 비어 있다 |
+| `migration-038` ~ `migration-053` | fragment_versions case 필드, feedback 계측, workspace 감사 컬럼, allowed_workspaces, synthetic query, idempotency_records, fragment RLS(ENABLE만), agent scope 감사, case_closed, synthetic query 임베딩 정합, 키와 workspace 단위 content_hash 유일 색인, search_events 예산 선택 열, outbox_events 표, 본문 어휘 채널 열(content_tokens). 번호 046은 비어 있다 |
 
 `post-migrate-flexible-embedding-dims.js`: `EMBEDDING_DIMENSIONS` 변경 또는 임베딩 제공자 전환 시 `fragments`, `morpheme_dict`, `fragment_synthetic_query` 세 테이블의 벡터 컬럼 차원을 함께 갱신한다. 임베딩 제공자 전환마다 재실행이 필요하다.
 
