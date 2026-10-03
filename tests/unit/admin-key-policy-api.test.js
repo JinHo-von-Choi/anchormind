@@ -30,15 +30,19 @@ const pool = {
       if (!row) return { rows: [], rowCount: 0 };
       const prev = { ...row };
       const assignments = [...sql.matchAll(/(\w+) = \$(\d+)/g)].filter(([, col]) => col in row);
-      for (const [, col, idx] of assignments) row[col] = params[Number(idx) - 1];
-      return {
-        rowCount: 1,
-        rows    : [{
-          prev_default_mode: prev.default_mode, prev_allowed_workspaces: prev.allowed_workspaces, prev_symbolic_hard_gate: prev.symbolic_hard_gate,
-          default_mode: row.default_mode, allowed_workspaces: row.allowed_workspaces, symbolic_hard_gate: row.symbolic_hard_gate
-        }]
-      };
+      for (const [, col, idx] of assignments) {
+        const value = params[Number(idx) - 1];
+        row[col] = col === "egress_policy" && typeof value === "string" ? JSON.parse(value) : value;
+      }
+      const out = {};
+      for (const col of Object.keys(row)) {
+        if (!new RegExp(`prev\\.${col} AS prev_${col}`).test(sql)) continue;
+        out[`prev_${col}`] = prev[col];
+        out[col]           = row[col];
+      }
+      return { rowCount: 1, rows: [out] };
     }
+    if (/to_jsonb\(k\) -> 'egress_policy'/.test(sql)) return { rows: row ? [{ egress_policy: row.egress_policy ?? null }] : [] };
     if (/SELECT symbolic_hard_gate FROM/.test(sql))  return { rows: row ? [{ symbolic_hard_gate: row.symbolic_hard_gate }] : [] };
     if (/SELECT allowed_workspaces FROM/.test(sql))  return { rows: row ? [{ allowed_workspaces: row.allowed_workspaces }] : [] };
     if (/INSERT INTO .*api_keys/.test(sql))          return { rows: [{ id: KEY_ID, name: params[0], permissions: params[3] }] };
@@ -58,8 +62,10 @@ const { handleKeys }                           = await import("../../lib/admin/a
 const {
   getSymbolicHardGate,
   getAllowedWorkspaces,
+  getEgressPolicy,
   invalidateHardGateCache,
-  invalidateAllowedWorkspacesCache
+  invalidateAllowedWorkspacesCache,
+  invalidateEgressPolicyCache
 } = await import("../../lib/admin/ApiKeyStore.js");
 const ADMIN_BASE = "/v1/internal/model/nothing";
 
@@ -92,6 +98,7 @@ beforeEach(() => {
   audits.length = 0;
   invalidateHardGateCache(KEY_ID);
   invalidateAllowedWorkspacesCache(KEY_ID);
+  invalidateEgressPolicyCache(KEY_ID);
 });
 
 describe("PATCH /keys/:id/policy 정상 경로", () => {
@@ -226,6 +233,57 @@ describe("PATCH /keys/:id/policy 저장소 결과", () => {
     const { res } = await patchPolicy({ symbolic_hard_gate: true });
     assert.equal(res.statusCode, 500);
     assert.doesNotMatch(JSON.stringify(res.body), /db-internal/);
+    assert.equal(audits.length, 0);
+  });
+});
+
+describe("PATCH /keys/:id/policy egress_policy", () => {
+  it("정책을 저장하고 변경 후 값을 돌려준다", async () => {
+    row.egress_policy = null;
+    const { res } = await patchPolicy({ egress_policy: { local_only: true, workspaces: { open: { local_only: false } } } });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body.egress_policy, { local_only: true, workspaces: { open: { local_only: false } } });
+    assert.deepEqual(row.egress_policy, { local_only: true, workspaces: { open: { local_only: false } } });
+  });
+
+  it("다른 열만 바꾸는 요청은 egress_policy 열을 읽지도 쓰지도 않는다", async () => {
+    const { res } = await patchPolicy({ symbolic_hard_gate: true });
+    assert.equal(res.statusCode, 200);
+    assert.doesNotMatch(updates()[0].sql, /egress_policy/);
+    assert.equal(Object.hasOwn(res.body, "egress_policy"), false);
+  });
+
+  it("변경은 30초 캐시를 기다리지 않고 바로 보인다", async () => {
+    row.egress_policy = null;
+    assert.equal(await getEgressPolicy(KEY_ID), null);
+    await patchPolicy({ egress_policy: { local_only: true } });
+    assert.deepEqual(await getEgressPolicy(KEY_ID), { local_only: true });
+  });
+
+  it("감사 기록에 이전과 이후 정책을 남긴다", async () => {
+    row.egress_policy = null;
+    await patchPolicy({ egress_policy: { local_only: true } });
+    assert.match(audits[0].fields.details, /egress_policy null -> \{"local_only":true\}/);
+  });
+
+  it("같은 정책을 다시 쓰면 변경 없음으로 적는다", async () => {
+    row.egress_policy = { approved_providers: ["codex-cli"], local_only: false };
+    await patchPolicy({ egress_policy: { local_only: false, approved_providers: ["codex-cli"] } });
+    assert.match(audits[0].fields.details, /unchanged/);
+  });
+
+  it("규칙에 맞지 않는 정책은 400이고 저장소에 닿지 않는다", async () => {
+    const { res } = await patchPolicy({ egress_policy: { approved_providers: ["no-such-provider"] } });
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.body.field, "egress_policy");
+    assert.equal(updates().length, 0);
+  });
+
+  it("열이 없는 설치(migration-055 이전)에서는 409로 마이그레이션을 안내한다", async () => {
+    poolFailure = Object.assign(new Error('column "egress_policy" does not exist'), { code: "42703" });
+    const { res } = await patchPolicy({ egress_policy: { local_only: true } });
+    assert.equal(res.statusCode, 409);
+    assert.match(res.body.error, /migration-055/);
     assert.equal(audits.length, 0);
   });
 });

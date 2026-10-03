@@ -282,6 +282,10 @@ psql $DATABASE_URL -f lib/memory/migrations/migration-052-outbox-events.sql
 
 # case_events source fragment index (production databases create it first with online-index)
 psql $DATABASE_URL -f lib/memory/migrations/migration-054-case-events-source-fragment.sql
+
+# api_keys.egress_policy (LLM egress policy) column
+psql $DATABASE_URL -f lib/memory/migrations/migration-055-api-keys-egress-policy.sql
+
 # Fragment provenance, trust tier and review state columns
 psql $DATABASE_URL -f lib/memory/migrations/migration-057-fragment-provenance.sql
 

@@ -144,6 +144,39 @@ describe("validateKeyPolicyPatch: symbolic_hard_gate", () => {
   });
 });
 
+describe("validateKeyPolicyPatch: egress_policy", () => {
+  const providers = ["ollama", "anthropic", "codex-cli"];
+  const checkEgress = (body) => check(body, { providerNames: providers });
+
+  it("null과 정규화된 정책을 받는다", () => {
+    assert.deepEqual(checkEgress({ egress_policy: null }), { egress_policy: null });
+    assert.deepEqual(
+      checkEgress({ egress_policy: { local_only: false, approved_providers: ["codex-cli", "codex-cli"], workspaces: { a: { local_only: true } } } }),
+      { egress_policy: { local_only: false, approved_providers: ["codex-cli"], workspaces: { a: { local_only: true } } } }
+    );
+  });
+
+  it("규칙에 맞지 않으면 egress_policy 필드 오류로 거부한다", () => {
+    for (const value of ["local", [], { local_only: 1 }, { approved_providers: ["unknown-x"] }, { workspaces: { a: { extra: 1 } } }, { mode: "x" }]) {
+      assert.throws(
+        () => checkEgress({ egress_policy: value }),
+        (err) => err instanceof KeyPolicyValidationError && err.field === "egress_policy",
+        JSON.stringify(value)
+      );
+    }
+  });
+
+  it("오류 문구에 문제 위치를 싣는다", () => {
+    assert.throws(() => checkEgress({ egress_policy: { workspaces: { a: { local_only: "y" } } } }),
+      /egress_policy\.workspaces\.a\.local_only/);
+  });
+
+  it("제공자 목록을 주지 않으면 이름 형식만 본다", () => {
+    assert.deepEqual(check({ egress_policy: { approved_providers: ["custom-x"] } }), { egress_policy: { approved_providers: ["custom-x"] } });
+    assert.throws(() => check({ egress_policy: { approved_providers: [" x"] } }), KeyPolicyValidationError);
+  });
+});
+
 describe("validatePermissionList", () => {
   it("read와 write만 받고 중복은 제거한다", () => {
     assert.deepEqual(validatePermissionList(["read", "write", "read"]), ["read", "write"]);
@@ -173,6 +206,20 @@ describe("diffKeyPolicy", () => {
     assert.deepEqual(diffKeyPolicy(a, b), []);
     assert.equal(diffKeyPolicy(a, { ...b, allowed_workspaces: ["b", "a"] }).length, 1);
     assert.equal(diffKeyPolicy(before, { ...before, allowed_workspaces: [] }).length, 1);
+  });
+});
+
+describe("diffKeyPolicy: egress_policy", () => {
+  it("객체는 키 순서와 관계없이 내용으로 비교한다", () => {
+    const a = { egress_policy: { local_only: true, approved_providers: ["x"] } };
+    const b = { egress_policy: { approved_providers: ["x"], local_only: true } };
+    assert.deepEqual(diffKeyPolicy(a, b), []);
+    assert.equal(diffKeyPolicy(a, { egress_policy: { local_only: false } }).length, 1);
+    assert.equal(diffKeyPolicy({}, { egress_policy: {} }).length, 1);
+  });
+
+  it("편집하지 않은 정책 열은 비교에서 빠진다", () => {
+    assert.deepEqual(diffKeyPolicy({ symbolic_hard_gate: false }, { symbolic_hard_gate: false }), []);
   });
 });
 

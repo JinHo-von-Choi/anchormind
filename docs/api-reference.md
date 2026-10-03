@@ -44,7 +44,7 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | PUT | /v1/internal/model/nothing/keys/:id/permissions | API 키 권한 변경. 허용 값은 POST와 같다(`read`, `write` 중 하나 이상, 선택 `trusted_origin`). 빈 배열과 `trusted_origin`만 있는 배열은 400이다. `trusted_origin`이 있는 키는 remember의 `origin` 주장으로 신뢰 등급 3까지 쓸 수 있고, 없는 키는 2가 상한이다(`MEMENTO_PROVENANCE`). 검토 방식 표지 `review_off`, `review_all`은 둘 중 하나만 둘 수 있고 둘 다 있으면 400이다(`MEMENTO_REVIEW_QUEUE`) |
 | PUT | /v1/internal/model/nothing/keys/:id/fragment-limit | API 키 파편 할당량 변경 |
 | PATCH | /v1/internal/model/nothing/keys/:id/workspace | API 키의 default_workspace 변경. `{ workspace: "name" }` 또는 `{ workspace: null }` (null=해제) |
-| PATCH | /v1/internal/model/nothing/keys/:id/policy | API 키 정책 열 변경. 본문은 `default_mode`, `allowed_workspaces`, `symbolic_hard_gate` 중 하나 이상. 아래 절 참조 |
+| PATCH | /v1/internal/model/nothing/keys/:id/policy | API 키 정책 열 변경. 본문은 `default_mode`, `allowed_workspaces`, `symbolic_hard_gate`, `egress_policy` 중 하나 이상. 아래 절 참조 |
 | DELETE | /v1/internal/model/nothing/keys/:id | API 키 삭제(성공 204). 저장된 파편이나 재통합 이력이 있는 키는 삭제하지 않고 409 `key_in_use`를 돌려준다(`MEMENTO_API_KEY_DELETE_GUARD=false`면 확인 생략). 비활성화나 삭제 시 이 프로세스의 그 키 세션이 즉시 닫힌다 |
 | GET | /v1/internal/model/nothing/review | 검토 대기 파편 목록(오래된 순). 질의 `key_id`(`master`는 마스터 키가 쓴 것), `limit`(1~200, 기본 50), `cursor`(앞 응답의 `nextCursor`). 항목은 `id`, `key_id`, `key_name`, `agent_id`, `workspace`, `type`, `topic`, `content_preview`(500자), `review_reasons`, `origin`, `trust_tier`, `is_anchor`, `created_at`, `auto_reject_at`(만든 지 30일). 잘못된 값은 400과 `field` |
 | POST | /v1/internal/model/nothing/review/:id/approve | 검토 대기 파편 승인. 본문 `note`(500자 이하, 민감 정보는 가려서 저장), `idempotencyKey`(또는 `Idempotency-Key` 헤더, 1~128자 `[A-Za-z0-9._:-]`), `applyAnchor`(불리언). `review_state`를 `approved`로 바꾼다. 보류한 앵커 지정 요청(`anchor_requested`)은 결정 시점 판정(키 권한 목록의 `anchor` 또는 `admin`, 마스터 키 허용)을 통과할 때만 적용하고, 무권한 앵커 요청(`anchor_unauthorized`)은 `applyAnchor: true`일 때만, `applyAnchor: false`이면 적용하지 않는다. 응답 `decisionId`, `fragmentId`, `decision`, `reviewer`, `keyId`, `decidedAt`, `replayed`(같은 멱등 키의 재요청이면 true, 동시 재요청 포함), `anchorApplied`, `anchorReason`(`not_requested`, `permitted`, `master`, `permission`, `explicit`, `explicit_required`, `declined`). 없는 파편 404, 검토 대기가 아닌 파편 409(`state`), 다른 결정에 쓰인 멱등 키 409(`field: idempotencyKey`) |
@@ -422,6 +422,9 @@ API 키의 정책 열을 변경한다. 마스터 키 인증 필요. 전달한 �
 | `default_mode` | `recall-only`, `write-only`, `onboarding` 또는 `null` | 키 단위 기본 mode preset. `null`은 해제(전체 도구 노출). 등록되지 않은 이름과 마스터 전용 preset(`audit`)은 400 |
 | `allowed_workspaces` | 문자열 배열 또는 `null` | `null`은 제한 없음. 빈 배열은 모든 workspace 주장을 허가 집합 밖으로 판정해 `workspaceNotAllowed` 경고를 남기고, `MEMENTO_WORKSPACE_GATE=true`이며 hard gate가 켜진 키에서만 저장을 거부한다. workspace가 없는 쓰기는 항상 통과한다. 항목은 최대 64개(중복 제거 후), 항목당 128자 이하이며 빈 문자열, 앞뒤 공백, 제어 문자는 400 |
 | `symbolic_hard_gate` | boolean | `true`면 PolicyRules 위반 파편의 `remember`를 거부한다 |
+| `egress_policy` | 객체 또는 `null` | LLM 외부 전송 정책 `{ "local_only": boolean, "approved_providers": [제공자 이름] 또는 null, "workspaces": { "<workspace>": { "local_only", "approved_providers" } } }`. 필드는 모두 생략할 수 있고 `null`은 정책 없음이다. 제공자 이름은 등록된 이름만(최대 32개), workspace 재정의는 최대 64개다. 알 수 없는 필드와 형식 오류는 400이며 오류 문구에 위치(예: `egress_policy.workspaces.a.local_only`)를 싣는다. 판정은 [configuration.md](configuration.md) 「외부 전송 정책」 |
+
+`egress_policy`는 요청에 있을 때만 읽고 쓰며 응답에도 그때만 실린다. 열이 없는 설치(migration-055 이전)에서 `egress_policy`를 보내면 409다.
 
 응답 200:
 
@@ -429,9 +432,9 @@ API 키의 정책 열을 변경한다. 마스터 키 인증 필요. 전달한 �
 { "success": true, "default_mode": "recall-only", "allowed_workspaces": ["proj-a", "proj-b"], "symbolic_hard_gate": true }
 ```
 
-오류: 400 `{ "error": "...", "field": "default_mode" }`(검증 실패), 404(키 없음), 413(본문 과대).
+오류: 400 `{ "error": "...", "field": "default_mode" }`(검증 실패), 404(키 없음), 409(`egress_policy` 열 없음), 413(본문 과대).
 
-반영 시점: `symbolic_hard_gate`와 `allowed_workspaces`는 이 프로세스의 조회 캐시를 비우지만, 변경 시점에 이미 진행 중이던 조회가 이전 값을 캐시에 쓸 수 있다. 그 항목은 TTL 30초 안에 만료되므로 늦어도 약 30초 안에 적용되며, 다른 인스턴스도 같다. `default_mode`는 변경 이후 열린 세션부터 적용된다. 변경은 감사 로그에 `admin key_policy` 한 줄(필드 이름과 이전, 이후 값)로 남는다.
+반영 시점: `symbolic_hard_gate`, `allowed_workspaces`, `egress_policy`는 이 프로세스의 조회 캐시를 비우지만, 변경 시점에 이미 진행 중이던 조회가 이전 값을 캐시에 쓸 수 있다. 그 항목은 TTL 30초 안에 만료되므로 늦어도 약 30초 안에 적용되며, 다른 인스턴스도 같다. `default_mode`는 변경 이후 열린 세션부터 적용된다. 변경은 감사 로그에 `admin key_policy` 한 줄(필드 이름과 이전, 이후 값)로 남는다.
 
 ---
 
