@@ -11,9 +11,12 @@
 
 | 경로 | 인증 | 용도 |
 |-|-|-|
-| `/metrics` | `MEMENTO_ACCESS_KEY` 설정 시 마스터 키 Bearer 필요 | Prometheus 지표 |
+| `/metrics` | `MEMENTO_ACCESS_KEY` 설정 시 마스터 키 Bearer 필요. 키가 없거나 틀리면 401 | Prometheus 지표 |
+| `/health` | `MEMENTO_ACCESS_KEY` 설정 시 마스터 키 Bearer가 있으면 전체 상세, 없으면 최소 본문(`status`, `timestamp`)만 | 서비스 상태 종합(DB, Redis, pgvector, 워커). DB가 응답하지 않으면 503 |
 | `/health/live` | 없음 | 프로세스 생존 확인(DB, Redis를 보지 않음) |
 | `/health/ready` | 없음 | 주 DB 응답 확인(`MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`(기본 2000, 범위 100~4500) 안에 응답하면 200, 아니면 503) |
+
+`/health/live`와 `/health/ready`는 키 설정과 관계없이 항상 키 없이 응답한다. `MEMENTO_ACCESS_KEY`를 설정하지 않은 배치에서는 `/health`도 키 없이 전체 상세를 돌려준다.
 
 ---
 
@@ -84,4 +87,4 @@ curl -s -H "Authorization: Bearer $(cat /etc/prometheus/secrets/memento-master-k
   | grep -cE "^# TYPE (mcp_auth_store_errors_total|memento_consolidate_split_step_failed_total|mcp_protocol_version_negotiations_total) "
 ```
 
-기대값은 3이다. 이 저장소의 `tests/unit/monitoring-doc-structure.test.js`는 위 규칙의 지표 이름과 셀렉터 라벨이 등록된 지표와 일치하는지 검사한다.
+기대값은 3이다. 이 저장소의 `tests/unit/monitoring-doc-structure.test.js`는 위 규칙의 지표 이름과 셀렉터 라벨이 등록된 지표와 일치하는지, 값 집합이 닫힌 라벨(프로토콜 버전)의 셀렉터 값이 코드가 만들 수 있는 값인지 검사한다.
