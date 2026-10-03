@@ -73,6 +73,8 @@ remember(params)
 
 The `dryRun` branch includes a `_runPolicyGate` call and is positioned before the atomic guard declaration. `_runPolicyGate` accepts a mode parameter (`"dryRun"` / `"production"`) and evaluates the same PolicyRules, ensuring that the policy applied to dryRun responses and actual storage paths is always consistent.
 
+A call whose stored id differs from the new fragment id, meaning it hit an existing fragment, is counted in the `mcp_remember_duplicate_total{kind}` counter. `kind` is one of `same_scope`, `other_workspace`, `closed` and `unknown`, and it is recorded regardless of `MEMENTO_REMEMBER_DUPLICATE_GUARD`. It is a labeled counter, so no value is exposed until the first hit.
+
 **recall() pipeline — fields pick position:**
 
 ```

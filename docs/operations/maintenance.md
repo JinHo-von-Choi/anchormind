@@ -209,7 +209,7 @@ log_format memento_main '$remote_addr - $upstream_http_x_ratelimit_remaining '
 
 ### Prometheus/Grafana 연동
 
-`/metrics`에는 키별 할당량 게이지가 없다. 할당량 상태는 응답 헤더(`X-RateLimit-Remaining`)나 Admin API 키 목록의 `fragment_count`, `fragment_limit`에서 확인한다. 캐시 통과 횟수는 `mcp_quota_cache_pass_total`로 노출된다.
+`/metrics`에는 키별 할당량 게이지가 없다. 할당량 상태는 응답 헤더(`X-RateLimit-Remaining`)나 Admin API 키 목록의 `fragment_count`, `fragment_limit`에서 확인한다. 캐시 통과 횟수는 `mcp_quota_cache_pass_total`로 노출된다. remember 중복 적중 횟수는 `mcp_remember_duplicate_total{kind}`로 노출되며 `kind`는 `same_scope`, `other_workspace`, `closed`, `unknown`이다. 라벨이 붙은 카운터라 첫 적중이 발생하기 전에는 값이 출력되지 않는다.
 
 ---
 

@@ -73,6 +73,8 @@ remember(params)
 
 `dryRun` 분기는 `_runPolicyGate` 호출을 포함하여 atomic 가드 선언 직전에 위치한다. `_runPolicyGate`는 mode 파라미터(`"dryRun"` / `"production"`)를 받아 동일 PolicyRules를 평가하므로, dryRun 응답과 실제 저장 경로의 정책 적용이 항상 일치한다.
 
+저장 결과 id가 새 파편 id와 달라 기존 파편에 적중한 호출은 `mcp_remember_duplicate_total{kind}` 카운터로 집계한다. `kind`는 `same_scope`, `other_workspace`, `closed`, `unknown` 네 값이며 `MEMENTO_REMEMBER_DUPLICATE_GUARD` 설정과 무관하게 기록한다. 라벨이 붙은 카운터라 첫 적중이 발생하기 전에는 값이 출력되지 않는다.
+
 **recall() 파이프라인 단계별 fields pick 위치:**
 
 ```
