@@ -38,6 +38,10 @@ mock.module("../../lib/config.js", {
     writeGateEnabled       : () => true,
     sensitiveScanMode      : () => "mask",
     sensitiveScanEffectiveMode: () => "mask",
+    /** ConsolidatorGC가 배경 쓰기 실패를 세는 lock-retry가 읽는 값 */
+    envInt                 : (_name, fallback) => fallback,
+    DEFAULT_DB_LOCK_RETRY_MAX: 3,
+    MAX_DB_LOCK_RETRY_MAX  : 10,
     workspaceGateEnforced  : () => false,
     DEFAULT_DAILY_LIMIT    : 1000,
     DEFAULT_FRAGMENT_LIMIT : 5000,
