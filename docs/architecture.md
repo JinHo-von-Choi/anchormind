@@ -926,6 +926,8 @@ recall에 `includeLinks: true`(기본값)가 설정되어 있으면 결과 파�
 
 `isAnchor: true`로 표시된 파편은 어느 계층에 있든 MemoryConsolidator의 감쇠 및 삭제 대상에서 영구적으로 제외된다. 중요도가 0.1이더라도 삭제되지 않는다. 절대 잃어서는 안 되는 지식에 사용한다.
 
+분할 자식은 품질 판정(20자 이상 등)을 통과한 뒤 부모의 key_id와 workspace로 의미 쓰기 관문(entry `consolidate_split`)을 거쳐 마스킹과 길이 상한(300자, episode 1000자)을 받고 FragmentWriter로 기록된다. 자식은 `MEMENTO_WRITE_GATE` 값과 관계없이 부모의 workspace를 물려받는다(스위치는 관문 단계만 바꾸고 저장 값은 바꾸지 않는다). `MEMENTO_SYMBOLIC_POLICY_RULES`가 켜져 있고 부모 키가 hard gate 키(`api_keys.symbolic_hard_gate=true`)이면 정책을 위반한 자식은 건너뛰며(`recordSplitSkip("write_gate")`), 남은 자식이 `minItems`보다 적으면 그 분할은 `low_yield`로 기록되고 원본은 그대로 남는다.
+
 `splitLongFragments`로 분할된 원본은 `source = 'split:{원본 id}'`인 자식이 하나라도 남아 있는 동안 만료 삭제 대상에서 제외된다. 분할은 원본을 `valid_to` 설정과 함께 importance 하향·`cold` 강등 처리하므로, 이 보호가 없으면 원본이 utility 기준으로 물리 삭제되어 자식만 남는다. 자식이 모두 정리된 뒤에는 일반 GC 규칙이 그대로 적용된다.
 
 stale 기준(일): procedure=30, fact=60, decision=90, default=60. `config/memory.js`의 `MEMORY_CONFIG.staleThresholds`에서 조정한다.

@@ -412,6 +412,7 @@ Each row passes the semantic write gate (outside the transaction) and is written
 - Rows the gate does not accept (missing or too short content, more than 4000 characters, malformed keywords, policy violations on a hard-gate key) are counted as errors and the import continues with the next row.
 - A row whose content already exists points to the existing fragment, creates nothing and is counted as skipped.
 - A row whose id already exists is counted as skipped with `--idempotent`, otherwise as an error.
+- A row the database rejects because of its values (CHECK constraints on type, assertion_status and so on) is counted as an error and the import continues.
 - `--dry-run` runs only the gate checks and writes nothing.
 
 Help:

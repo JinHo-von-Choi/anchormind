@@ -413,6 +413,7 @@ node bin/memento.js import --input out.jsonl --idempotent --dry-run
 - 관문이 받아들이지 않은 행(본문 누락이나 품질 미달, 4000자 초과, 형식이 잘못된 키워드, hard gate 키의 정책 위반)은 errors로 세고 다음 행을 계속 가져온다.
 - 같은 본문이 이미 있는 행은 기존 파편을 가리키므로 새로 만들지 않고 skipped로 센다.
 - 같은 id가 이미 있는 행은 `--idempotent`이면 skipped, 아니면 errors로 센다.
+- 행의 값 때문에 DB가 거부한 행(type, assertion_status CHECK 제약 등)은 errors로 세고 다음 행을 계속 가져온다.
 - `--dry-run`은 관문 검증만 수행하고 기록하지 않는다.
 
 도움말:
