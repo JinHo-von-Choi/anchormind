@@ -11,7 +11,7 @@ import { describe, it, beforeEach } from "node:test";
 import assert                        from "node:assert/strict";
 
 import {
-  DEDUP_INDEXES, DEDUP_INDEX_NAMES, DEDUP_INDEX_STATE_TTL_MS,
+  DEDUP_INDEXES, DEDUP_INDEX_NAMES, DEDUP_INDEX_LOOKUP_NAMES, DEDUP_INDEX_STATE_TTL_MS,
   effectiveDedupScope, conflictIndex, conflictClause, workspaceKey, pickDuplicate,
   foldKey, splitLookupHits, isDedupIndexError, loadDedupIndexes, invalidateDedupIndexes,
   normalizeWorkspace, resolveUniqueConflict, lookupRequired
@@ -220,7 +220,7 @@ describe("색인 상태 기억", () => {
     assert.match(calls[0].sql, /pg_index/);
     assert.match(calls[0].sql, /indisvalid AS valid/);
     assert.doesNotMatch(calls[0].sql, /AND i\.indisvalid/);
-    assert.deepEqual(calls[0].params, [DEDUP_INDEX_NAMES]);
+    assert.deepEqual(calls[0].params, [DEDUP_INDEX_LOOKUP_NAMES]);
     await loadDedupIndexes(run([]), 1000 + DEDUP_INDEX_STATE_TTL_MS - 1);
     assert.equal(calls.length, 1);
   });
