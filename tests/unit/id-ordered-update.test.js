@@ -18,7 +18,7 @@ mock.module("../../lib/tools/db.js", {
   }
 });
 
-const { updateInIdOrder, scoreUpdateBatchSize } = await import("../../lib/memory/consolidate/idOrderedUpdate.js");
+const { updateInIdOrder, updateOneBatch, readBatchClock, scoreUpdateBatchSize } = await import("../../lib/memory/consolidate/idOrderedUpdate.js");
 
 beforeEach(() => { calls.length = 0; replies = []; delete process.env.MEMENTO_SCORE_UPDATE_BATCH; });
 
@@ -47,6 +47,42 @@ describe("updateInIdOrder", () => {
     replies = [{ rows: [{ ts: new Date() }] }, { rows: [{ n: 0, last_id: null }] }];
     await updateInIdOrder({ where: "importance > $4", set: "importance = 0.5", params: [0.1], batchSize: 10 });
     assert.equal(calls[1].params[3], 0.1);
+  });
+});
+
+describe("updateOneBatch", () => {
+  it("afterId 를 $1 로 쓰고 갱신 행 수와 잠근 마지막 id 를 돌려준다", async () => {
+    const ts = new Date("2026-10-03T00:00:00Z");
+    replies  = [{ rows: [{ n: 2, last_id: "frag-z" }] }];
+    const batch = await updateOneBatch({ where: "importance > $4", set: "importance = 1", params: [0.1], batchSize: 5, afterId: "frag-m", clock: ts });
+    assert.deepEqual(batch, { n: 2, lastId: "frag-z" });
+    assert.deepEqual(calls[0].params, ["frag-m", 5, ts, 0.1]);
+    assert.ok(!/ AND id = \$/.test(calls[0].sql));
+  });
+
+  it("onlyId 는 마지막 자리표시자로 붙어 한 행으로 한정한다", async () => {
+    replies = [{ rows: [{ n: 0, last_id: null }] }];
+    const batch = await updateOneBatch({ where: "importance > $4", set: "importance = 1", params: [0.1], batchSize: 5, clock: new Date(), onlyId: "frag-q" });
+    assert.deepEqual(batch, { n: 0, lastId: null });
+    assert.match(calls[0].sql, /AND id = \$5\b/);
+    assert.equal(calls[0].params[3], 0.1);
+    assert.equal(calls[0].params[4], "frag-q");
+    assert.equal(calls[0].params[0], "");
+  });
+
+  it("where 와 set 이 $3 을 쓰지 않으면 기준 시각의 형을 정하는 조건을 덧붙인다", async () => {
+    replies = [{ rows: [{ n: 0, last_id: null }] }, { rows: [{ n: 0, last_id: null }] }];
+    await updateOneBatch({ where: "importance < 1", set: "importance = 1", batchSize: 5, clock: new Date() });
+    await updateOneBatch({ where: "importance < 1", set: "last_decay_at = $3", batchSize: 5, clock: new Date() });
+    assert.match(calls[0].sql, /AND id > \$1 AND \$3::timestamptz IS NOT NULL/);
+    assert.ok(!/\$3::timestamptz IS NOT NULL/.test(calls[1].sql));
+  });
+
+  it("readBatchClock 은 NOW() 한 번을 읽는다", async () => {
+    const ts = new Date("2026-10-03T01:00:00Z");
+    replies  = [{ rows: [{ ts }] }];
+    assert.equal(await readBatchClock(), ts);
+    assert.equal(calls.length, 1);
   });
 });
 
