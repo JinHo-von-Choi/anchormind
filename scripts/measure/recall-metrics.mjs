@@ -29,7 +29,7 @@ import {
   loadEvalDir, splitLabeled, coverageReport, EvalSetError, AUXILIARY_SUBSETS, SUBSETS
 } from "../../lib/memory/signals/RecallEvalSet.js";
 import { scoreQuery, summarizeRows, latencySummary, MetricInputError, NDCG_UNIT_TOKENS } from "../../lib/memory/signals/RecallMetrics.js";
-import { compareRuns, BootstrapInputError, DEFAULT_ITERATIONS, DEFAULT_SEED, DEFAULT_CONFIDENCE, DEFAULT_MIN_N } from "../../lib/memory/signals/PairedBootstrap.js";
+import { compareRuns, BootstrapInputError, DEFAULT_ITERATIONS, DEFAULT_SEED, DEFAULT_CONFIDENCE, DEFAULT_MIN_N, COMPARE_METRICS } from "../../lib/memory/signals/PairedBootstrap.js";
 
 const ROOT            = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const DEFAULT_EVAL    = path.join(ROOT, "tests/fixtures/recall-eval-v2");
@@ -60,6 +60,7 @@ export const usage = [
   "  --embeddings off|on      off (default) disables the query embedding channel; on uses the environment",
   "  --token-budget <n>       recall token budget and nDCG budget (default: 4000)",
   "  --page-size <n>          Max fragments per recall call (default: 10)",
+  "  --include-links off|on   off (default) sends includeLinks=false; on lets linked fragments join the result",
   "  --query-keywords <mode>  whitespace (default) sends the query split on spaces as keywords next to the text,",
   "                           none sends the text only. A keywords field in an entry always wins",
   "  --limit <n>              Run only the first n labeled queries",
@@ -69,7 +70,8 @@ export const usage = [
   `  --iterations <n>         Bootstrap resamples (default: ${DEFAULT_ITERATIONS})`,
   `  --seed <n>               Bootstrap seed (default: ${DEFAULT_SEED})`,
   `  --confidence <p>         Interval level, between 0 and 1 (default: ${DEFAULT_CONFIDENCE})`,
-  `  --min-n <n>              Groups with fewer paired queries report insufficient_n and no finding (default: ${DEFAULT_MIN_N})`
+  `  --min-n <n>              Groups with fewer paired queries report insufficient_n and no finding (default: ${DEFAULT_MIN_N})`,
+  `  --metric <name>          Report only this metric (${COMPARE_METRICS.join(", ")}), for example ndcg_at_budget`
 ].join("\n");
 
 /**
@@ -231,15 +233,15 @@ export function queryKeywords(entry, mode) {
  * 그 workspace로 좁힌다.
  *
  * @param {Object} entry
- * @param {{budgetTokens: number, pageSize: number, keywordMode: "whitespace"|"none"}} opts
+ * @param {{budgetTokens: number, pageSize: number, keywordMode: "whitespace"|"none", includeLinks?: boolean}} opts
  * @returns {Object}
  */
-export function buildRecallParams(entry, { budgetTokens, pageSize, keywordMode }) {
+export function buildRecallParams(entry, { budgetTokens, pageSize, keywordMode, includeLinks = false }) {
   const keywords = queryKeywords(entry, keywordMode);
   return {
     text: entry.query, ...(keywords.length > 0 ? { keywords } : {}),
     agentId: "default", tokenBudget: budgetTokens, pageSize,
-    includeLinks: false, excludeSeen: false, _isMaster: true, includePeerAgents: true,
+    includeLinks, excludeSeen: false, _isMaster: true, includePeerAgents: true,
     ...(entry.workspace ? { workspace: entry.workspace } : { allWorkspaces: true })
   };
 }
@@ -339,11 +341,12 @@ export function buildReport({ target, embeddings, params, coverage, labels, scor
 }
 
 /**
- * --compare 모드. 두 지표 JSON의 질의 행으로 부트스트랩 구간을 낸다.
+ * --compare 모드. 두 지표 JSON의 질의 행으로 부트스트랩 구간을 낸다. opts.metric이 있으면 그 지표의
+ * 비교만 남긴다(구간 값은 전체 비교와 같다).
  *
  * @param {string} baselinePath
  * @param {string} candidatePath
- * @param {{iterations: number, seed: number, confidence: number}} opts
+ * @param {{iterations: number, seed: number, confidence: number, minN?: number, metric?: string|null}} opts
  * @returns {Promise<Object>}
  */
 export async function compareFiles(baselinePath, candidatePath, opts) {
@@ -351,12 +354,16 @@ export async function compareFiles(baselinePath, candidatePath, opts) {
   for (const [name, doc] of [["기준", baseline], ["후보", candidate]]) {
     if (doc.schema !== SCHEMA_METRICS || !Array.isArray(doc.rows)) throw new MeasureRefusalError(`${name} 파일이 ${SCHEMA_METRICS} 지표 JSON이 아니다`);
   }
+  const { metric = null, ...runOpts } = opts;
+  const compared = compareRuns(baseline.rows, candidate.rows, { ...runOpts, auxiliarySubsets: AUXILIARY_SUBSETS });
   return {
     schema   : SCHEMA_COMPARE,
     baseline : { file: path.basename(baselinePath),  embeddings: baseline.embeddings,  params: baseline.params },
     candidate: { file: path.basename(candidatePath), embeddings: candidate.embeddings, params: candidate.params },
     warnings : comparisonWarnings(baseline, candidate),
-    ...compareRuns(baseline.rows, candidate.rows, { ...opts, auxiliarySubsets: AUXILIARY_SUBSETS })
+    ...(metric ? { metric } : {}),
+    unpaired   : compared.unpaired,
+    comparisons: metric ? compared.comparisons.filter(c => c.metric === metric) : compared.comparisons
   };
 }
 
@@ -369,7 +376,7 @@ export async function compareFiles(baselinePath, candidatePath, opts) {
  */
 export function comparisonWarnings(baseline, candidate) {
   const warnings = [];
-  for (const key of ["token_budget", "query_keywords"]) {
+  for (const key of ["token_budget", "query_keywords", "include_links"]) {
     const a = baseline.params?.[key];
     const b = candidate.params?.[key];
     if (a !== b) warnings.push(`${key} 가 다르다 (기준 ${a ?? "(없음)"}, 후보 ${b ?? "(없음)"}). 같은 조건의 실행끼리 비교한다.`);
@@ -388,6 +395,33 @@ function confidenceOption(args) {
   const value = typeof args.confidence === "string" ? Number(args.confidence) : Number.NaN;
   if (!(value > 0 && value < 1)) throw new MeasureRefusalError("--confidence 는 0과 1 사이의 수여야 한다");
   return value;
+}
+
+/**
+ * 비교 지표 옵션을 읽는다. 없으면 null(모든 지표)이다.
+ *
+ * @param {Object} args
+ * @returns {string|null}
+ */
+export function metricOption(args) {
+  if (args.metric === undefined) return null;
+  if (typeof args.metric !== "string" || !COMPARE_METRICS.includes(args.metric)) {
+    throw new MeasureRefusalError(`--metric 은 ${COMPARE_METRICS.join(", ")} 가운데 하나다`);
+  }
+  return args.metric;
+}
+
+/**
+ * 켜짐과 꺼짐 옵션을 읽는다.
+ *
+ * @param {Object} args
+ * @param {string} key
+ * @returns {boolean}
+ */
+function onOffOption(args, key) {
+  const value = args[key] === undefined ? "off" : args[key];
+  if (!["off", "on"].includes(value)) throw new MeasureRefusalError(`--${key} 는 off 또는 on 이다 (받은 값: ${value})`);
+  return value === "on";
 }
 
 /**
@@ -447,7 +481,7 @@ async function measure(args) {
   const target = resolveMeasureTarget(args.target, process.env);
   prepareEnvironment(process.env, target, { embeddings });
 
-  const { DB_HOST, DB_PORT, DB_NAME, EMBEDDING_ENABLED, EMBEDDING_PROVIDER, EMBEDDING_MODEL } = await import("../../lib/config.js");
+  const { DB_HOST, DB_PORT, DB_NAME, EMBEDDING_ENABLED, EMBEDDING_PROVIDER, EMBEDDING_MODEL, rankBeforeBudgetEnabled } = await import("../../lib/config.js");
   assertConfigMatchesTarget({ DB_HOST, DB_PORT, DB_NAME }, target);
   if (embeddings === "off" && EMBEDDING_ENABLED) throw new MeasureRefusalError("측정 거부: 임베딩 off 모드인데 임베딩 기능이 켜져 있다.");
 
@@ -459,6 +493,7 @@ async function measure(args) {
 
   const budgetTokens = intOption(args, "token-budget", 4000);
   const pageSize     = intOption(args, "page-size", 10);
+  const includeLinks = onOffOption(args, "include-links");
   const keywordMode  = args["query-keywords"] === undefined ? "whitespace" : args["query-keywords"];
   if (!["whitespace", "none"].includes(keywordMode)) throw new MeasureRefusalError(`--query-keywords 는 whitespace 또는 none 이다 (받은 값: ${keywordMode})`);
   const subsets      = typeof args.subsets === "string" ? args.subsets.split(",") : undefined;
@@ -471,7 +506,7 @@ async function measure(args) {
   try {
     const resolved = resolveLabels(selected, await lookupFragments(manager, selected, countTokens));
     const recallFn = async (entry) => {
-      const res = await manager.recall(buildRecallParams(entry, { budgetTokens, pageSize, keywordMode }));
+      const res = await manager.recall(buildRecallParams(entry, { budgetTokens, pageSize, keywordMode, includeLinks }));
       return (res?.fragments ?? []).map(f => ({ id: f.id, tokens: tokensOf(f, countTokens) }));
     };
 
@@ -483,7 +518,7 @@ async function measure(args) {
     const report = buildReport({
       target,
       embeddings: { mode: embeddings, provider: embeddings === "on" ? EMBEDDING_PROVIDER : null, model: embeddings === "on" ? EMBEDDING_MODEL : null },
-      params    : { token_budget: budgetTokens, page_size: pageSize, query_keywords: keywordMode, ndcg_unit_tokens: NDCG_UNIT_TOKENS, subsets: subsets ?? [...SUBSETS], files: dir === DEFAULT_EVAL ? "tests/fixtures/recall-eval-v2" : path.basename(dir), limit: args.limit ? selected.length : null },
+      params    : { token_budget: budgetTokens, page_size: pageSize, query_keywords: keywordMode, include_links: includeLinks ? "on" : "off", rank_before_budget: rankBeforeBudgetEnabled() ? "on" : "off", ndcg_unit_tokens: NDCG_UNIT_TOKENS, subsets: subsets ?? [...SUBSETS], files: dir === DEFAULT_EVAL ? "tests/fixtures/recall-eval-v2" : path.basename(dir), limit: args.limit ? selected.length : null },
       coverage  : coverageReport(entries),
       labels    : { unlabeled: unlabeled.length, stale_fragments: resolved.stale, excluded_queries: resolved.excluded, holdout_violations: resolved.holdout_violations },
       scored,
@@ -516,7 +551,8 @@ export async function main(argv) {
       iterations: intOption(args, "iterations", DEFAULT_ITERATIONS),
       seed      : intOption(args, "seed", DEFAULT_SEED),
       confidence: confidenceOption(args),
-      minN      : intOption(args, "min-n", DEFAULT_MIN_N)
+      minN      : intOption(args, "min-n", DEFAULT_MIN_N),
+      metric    : metricOption(args)
     });
     for (const warning of output.warnings) console.error(`[measure] 경고: ${warning}`);
   } else {

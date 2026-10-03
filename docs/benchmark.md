@@ -258,20 +258,42 @@ node scripts/measure/recall-metrics.mjs --target localhost:35433/<복구본_DB> 
 
 `--target`은 일회용 시험 서버(포트 35433의 시험 컨테이너, 또는 `DB_LANE_SERVER_ALLOW=<host:port>`로 명시한 한 곳)의 데이터베이스여야 하며, 그렇지 않으면 접속 전에 종료 코드 3으로 거부한다. 연결 설정은 `--target`만으로 정해지고 Redis, 캐시, 지표 수집은 꺼진다. 운영 DB에는 접속하지 않는다. 복구본에서 recall이 접근 기록을 남기므로 실행마다 새 복구본에서 시작한다.
 
-출력 JSON에서 `metrics`, `rows`, `coverage`, `labels`는 같은 DB와 같은 세트에서 같은 값이고, 시각과 지연은 `volatile` 아래에 있다. 질의 문장만 보내면 임베딩 off에서 어휘 채널이 비므로 `--query-keywords whitespace`(기본)는 질의를 공백으로 나눈 키워드를 함께 보낸다. 항목의 `keywords` 필드는 이 값보다 우선한다.
+출력 JSON에서 `metrics`, `rows`, `coverage`, `labels`는 같은 DB와 같은 세트에서 같은 값이고, 시각과 지연은 `volatile` 아래에 있다. 질의 문장만 보내면 임베딩 off에서 어휘 채널이 비므로 `--query-keywords whitespace`(기본)는 질의를 공백으로 나눈 키워드를 함께 보낸다. 항목의 `keywords` 필드는 이 값보다 우선한다. recall은 기본으로 `includeLinks=false`로 부르며, `--include-links on`이면 연결 파편도 결과에 합류한다.
 
 ### 비교 규칙
 
 - 고정 문자열이나 고정 기대값과 대조하지 않는다. 스크립트는 합격 여부를 판정하지 않는다.
 - 두 실행의 비교는 질의별 짝지은 부트스트랩 95% 구간으로 한다. 묶음(전체, 부분집합, 태그, 영역)과 지표마다 후보 - 기준의 평균 차이와 구간을 낸다. 구간이 0을 제외할 때만 차이가 있다고 본다.
 - 짝지은 질의 수가 `--min-n`(기본 10) 미만인 묶음은 `insufficient_n: true`로 표시하고 `excludes_zero`를 판단하지 않는다(false). 이런 묶음의 구간은 결론으로 인용하지 않는다.
-- `--compare`는 두 파일의 `token_budget` 또는 `query_keywords`가 다르면 출력 JSON의 `warnings`와 표준 오류에 알린다. 같은 조건의 실행끼리 비교한다.
+- `--compare`는 두 파일의 `token_budget`, `query_keywords`, `include_links` 가운데 다른 값이 있으면 출력 JSON의 `warnings`와 표준 오류에 알린다. 같은 조건의 실행끼리 비교한다.
 - 난수는 시드를 받으므로 같은 입력과 시드는 같은 구간을 낸다. 기본 시드 20261003, 재표집 2000회.
 - 같은 DB에서 두 번 실행한 `volatile` 밖의 값이 같은지는 재현성 확인일 뿐 품질 기준이 아니다.
 
 ```bash
 node scripts/measure/recall-metrics.mjs --compare run-a.json run-b.json --out compare.json
 ```
+
+### 순위 후 예산 선택 비교 (`MEMENTO_RANK_BEFORE_BUDGET`)
+
+recall 예산 선택(`MEMENTO_RANK_BEFORE_BUDGET=on`)과 검색 순서 절단(`off`)을 같은 세트, 같은 조건에서 비교한다. 스위치는 호출 시점에 읽으므로 실행할 때의 환경 변수로 정하고, 지표 JSON의 `params.rank_before_budget`에 실제 적용 값이 남는다. 예산이 묶이지 않으면 두 경로의 결과가 같으므로 `--token-budget`은 recall 기본값 1000 이하로 두고 두 실행에 같은 값을 쓴다. 연결 파편도 예산 안에서 고르는 효과까지 보려면 두 실행 모두 `--include-links on`을 준다. 실제 실행은 복구본 DB와 임베딩(`--embeddings on`)이 필요한 소유자 단계이며, 아래 절차의 결과는 아직 측정하지 않았다.
+
+```bash
+# 1. 새 복구본 A에서 기준 실행(검색 순서 절단)
+MEMENTO_RANK_BEFORE_BUDGET=off node scripts/measure/recall-metrics.mjs \
+  --target localhost:35433/<복구본_A> --embeddings on --token-budget 1000 --include-links on --out budget-off.json
+
+# 2. 새 복구본 B에서 후보 실행(순위 후 예산 선택)
+MEMENTO_RANK_BEFORE_BUDGET=on node scripts/measure/recall-metrics.mjs \
+  --target localhost:35433/<복구본_B> --embeddings on --token-budget 1000 --include-links on --out budget-on.json
+
+# 3. 예산 내 nDCG만 짝지은 부트스트랩으로 비교
+node scripts/measure/recall-metrics.mjs --compare budget-off.json budget-on.json --metric ndcg_at_budget --out budget-compare.json
+```
+
+- `--metric ndcg_at_budget`은 비교 결과에서 그 지표만 남긴다. 구간 값은 모든 지표를 비교할 때와 같다.
+- 판단: `comparisons`에서 `group`이 `overall`인 항목의 `ci_low`가 0보다 크고 `insufficient_n`이 false이면 예산 내 nDCG가 개선된 것이다. 부분집합, 태그, 영역 묶음은 같은 규칙으로 읽는다.
+- `warnings`에 `token_budget`, `query_keywords`, `include_links` 차이가 있으면 조건이 다른 실행이므로 비교하지 않는다.
+- 복구본에 마이그레이션 052를 적용하면(`DATABASE_URL=postgresql://<사용자>:<비밀번호>@localhost:35433/<복구본_B> npm run migrate`, `DATABASE_URL`을 명시해 다른 설정 파일의 접속 값을 쓰지 않게 한다) 후보 실행의 `search_events.candidate_count`, `budget_kept`로 예산이 묶인 recall의 비율을 볼 수 있다(`SELECT count(*) FILTER (WHERE budget_kept < candidate_count), count(*) FROM agent_memory.search_events WHERE candidate_count IS NOT NULL`). 적용하지 않아도 recall과 지표는 같고 검색 이벤트 기록만 실패한다.
 
 ## Ablation 연구
 

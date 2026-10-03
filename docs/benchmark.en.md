@@ -355,17 +355,39 @@ node scripts/measure/recall-metrics.mjs --target localhost:35433/<restored_db> -
 
 `--target` must be a database on a disposable test server (the test container on port 35433, or one place named with `DB_LANE_SERVER_ALLOW=<host:port>`). Any other target is refused with exit code 3 before a connection is opened. The connection settings come from `--target` alone, and Redis, caching and metrics collection are off. The production database is never contacted. Recall records access on the restored copy, so each run starts from a fresh restore.
 
-In the output JSON, `metrics`, `rows`, `coverage` and `labels` hold the same values for the same database and the same set, while timestamps and latency sit under `volatile`. Sending only the query sentence leaves the lexical channel empty with embeddings off, so `--query-keywords whitespace` (default) also sends the query split on spaces as keywords. A `keywords` field in an entry takes precedence.
+In the output JSON, `metrics`, `rows`, `coverage` and `labels` hold the same values for the same database and the same set, while timestamps and latency sit under `volatile`. Sending only the query sentence leaves the lexical channel empty with embeddings off, so `--query-keywords whitespace` (default) also sends the query split on spaces as keywords. A `keywords` field in an entry takes precedence. Recall is called with `includeLinks=false` by default; with `--include-links on`, linked fragments join the result.
 
 ### Comparison rules
 
 - Nothing is compared against fixed strings or fixed expected values. The script does not judge pass or fail.
 - Two runs are compared with a paired bootstrap 95% interval over queries. For each group (overall, subset, tag, domain) and metric it reports the mean difference candidate - baseline and the interval. A difference counts only when the interval excludes zero.
 - A group with fewer paired queries than `--min-n` (default 10) is marked `insufficient_n: true` and `excludes_zero` is not judged (false). Do not cite the interval of such a group as a finding.
-- `--compare` reports a difference in `token_budget` or `query_keywords` between the two files in `warnings` of the output JSON and on standard error. Compare runs made under the same conditions.
+- `--compare` reports a difference in `token_budget`, `query_keywords` or `include_links` between the two files in `warnings` of the output JSON and on standard error. Compare runs made under the same conditions.
 - The random generator takes a seed, so the same input and seed give the same interval. Default seed 20261003, 2000 resamples.
 - Identical values outside `volatile` across two runs on the same database confirm reproducibility and are not a quality criterion.
 
 ```bash
 node scripts/measure/recall-metrics.mjs --compare run-a.json run-b.json --out compare.json
 ```
+
+### Rank-before-budget comparison (`MEMENTO_RANK_BEFORE_BUDGET`)
+
+Compares recall budget selection (`MEMENTO_RANK_BEFORE_BUDGET=on`) with the search-order cut (`off`) on the same set under the same conditions. The switch is read at call time, so it is set through the environment of each run, and the applied value is recorded in `params.rank_before_budget` of the metric JSON. When the budget does not bind, both paths return the same result, so keep `--token-budget` at or below the recall default 1000 and use the same value in both runs. To include the effect of selecting linked fragments within the budget, pass `--include-links on` to both runs. The real run needs a restored database and embeddings (`--embeddings on`) and is an owner step; the procedure below has not been measured yet.
+
+```bash
+# 1. Baseline run on fresh restore A (search-order cut)
+MEMENTO_RANK_BEFORE_BUDGET=off node scripts/measure/recall-metrics.mjs \
+  --target localhost:35433/<restore_a> --embeddings on --token-budget 1000 --include-links on --out budget-off.json
+
+# 2. Candidate run on fresh restore B (rank before budget)
+MEMENTO_RANK_BEFORE_BUDGET=on node scripts/measure/recall-metrics.mjs \
+  --target localhost:35433/<restore_b> --embeddings on --token-budget 1000 --include-links on --out budget-on.json
+
+# 3. Paired bootstrap comparison of the budgeted nDCG only
+node scripts/measure/recall-metrics.mjs --compare budget-off.json budget-on.json --metric ndcg_at_budget --out budget-compare.json
+```
+
+- `--metric ndcg_at_budget` keeps only that metric in the comparison output. The interval values are the same as when all metrics are compared.
+- Reading: the budgeted nDCG improved when the `comparisons` entry with `group` `overall` has `ci_low` above 0 and `insufficient_n` false. Subset, tag and domain groups are read with the same rule.
+- When `warnings` lists a difference in `token_budget`, `query_keywords` or `include_links`, the runs were made under different conditions and are not compared.
+- With migration 052 applied to the restored copy (`DATABASE_URL=postgresql://<user>:<password>@localhost:35433/<restore_b> npm run migrate`; set `DATABASE_URL` explicitly so that no connection value from another settings file is used), `search_events.candidate_count` and `budget_kept` of the candidate run show the share of recalls where the budget bound (`SELECT count(*) FILTER (WHERE budget_kept < candidate_count), count(*) FROM agent_memory.search_events WHERE candidate_count IS NOT NULL`). Without it, recall and the metrics are the same and only the search event insert fails.
