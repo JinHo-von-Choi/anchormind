@@ -471,7 +471,7 @@ anchormind hook SessionEnd   --client codex --timeout 3000
 |-|-|
 | `<event>` | `SessionStart`, `Stop`, `SessionEnd` |
 | `--client` | `claude-code`, `codex` |
-| `--remote`, `--key` | 서버 MCP 주소와 API 키. 키는 명령줄 대신 `MEMENTO_CLI_KEY` 환경 변수로 준다(명령줄 인자는 프로세스 목록에 보인다) |
+| `--remote`, `--key` | 서버 MCP 주소와 API 키. 없으면 프로세스 환경 변수 `MEMENTO_CLI_REMOTE`, `MEMENTO_CLI_KEY`를 쓴다. 키는 명령줄 대신 환경 변수로 준다(명령줄 인자는 프로세스 목록에 보인다). `hook`은 다른 명령과 달리 작업 디렉터리의 `.env`를 읽지 않는다(하네스는 작업 중인 저장소에서 훅을 실행하므로 저장소의 `.env`가 키와 발췌를 보낼 주소를 바꾸지 못하게 한다). 업데이트 확인도 하지 않는다 |
 | `--timeout` | 요청 제한 시간(ms). 기본 `SessionEnd` 1200(Claude Code의 SessionEnd 훅 예산 1.5초 안), 그 밖 5000 |
 
 - `SessionStart`: 서버 응답 `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}`를 표준 출력에 그대로 쓴다.

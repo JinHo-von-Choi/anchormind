@@ -12,12 +12,13 @@ Claude Code와 Codex의 훅이 세션 시작에 기억을 주입하고 세션 �
 | 이벤트 | 하는 일 | 필요한 권한 |
 |-|-|-|
 | `SessionStart` | `context` 결과를 `additionalContext`로 주입 | read |
-| `Stop`, `SessionEnd` | 최근 대화 발췌(64 KB 이하)를 접수하고 서버가 비동기로 `reflect` | write |
+| `SessionEnd` | 최근 대화 발췌(64 KB 이하)를 보내면 서버가 마지막 응답 블록을 가려 1000자 요약 후보로 접수하고 비동기로 `reflect` | write |
+| `Stop` | `SessionEnd`와 같은 처리. 세션의 첫 `Stop`만 접수하고 그 뒤는 중복으로 바로 끝나는 보조 경로 | write |
 
 ## 준비
 
 1. 훅 전용 API 키를 관리 콘솔에서 만든다. `SessionStart`만 쓰면 read, 회고까지 쓰면 read와 write 권한을 준다. 프로젝트 저장소에서 workspace를 고르게 하려면 키의 `allowed_workspaces`에 workspace 이름을 넣는다(아래 "workspace 결정").
-2. 키와 서버 주소를 셸 환경 변수로 둔다. 키를 설정 파일에 직접 쓰지 않는다.
+2. 키와 서버 주소를 셸 환경 변수로 둔다. 키를 설정 파일에 직접 쓰지 않는다. `anchormind hook`은 작업 디렉터리(하네스가 연 저장소)의 `.env`를 읽지 않으므로, 저장소의 `.env`에 적은 값은 쓰이지 않는다. 서버 주소와 키는 명령 인자(`--remote`, `--key`)나 프로세스 환경 변수에서만 읽는다.
 
    ```bash
    # ~/.bashrc, ~/.zshrc 또는 비밀 관리 도구가 내보내는 환경
@@ -27,7 +28,7 @@ Claude Code와 Codex의 훅이 세션 시작에 기억을 주입하고 세션 �
 
 3. `anchormind` 명령이 PATH에 있어야 한다. 저장소에서 설치했다면 저장소 루트에서 `npm link`를 실행하거나, 아래 예시의 `anchormind`를 `node /설치/경로/bin/memento.js`로 바꾼다.
 
-서버는 클라이언트의 transcript 파일을 읽을 수 없다. 회고에 쓸 대화 발췌는 로컬에서 실행되는 `anchormind hook`이 transcript에서 만들어 보낸다. 그래서 회고는 command 훅에서만 동작하고, http 훅만 쓰면 `SessionStart` 주입만 된다.
+서버는 클라이언트의 transcript 파일을 읽을 수 없다. 회고에 쓸 대화 발췌는 로컬에서 실행되는 `anchormind hook`이 transcript에서 만들어 보낸다. 서버는 발췌 전체를 저장하지 않고 마지막 응답 블록을 민감 정보 규칙으로 가린 1000자 이하의 요약 후보만 저장한다. 그래서 회고는 command 훅에서만 동작하고, http 훅만 쓰면 `SessionStart` 주입만 된다.
 
 ## Claude Code
 
@@ -57,7 +58,7 @@ Claude Code와 Codex의 훅이 세션 시작에 기억을 주입하고 세션 �
 
 - `compact` matcher는 압축 뒤 기억을 다시 주입한다.
 - `SessionEnd` 훅의 예산은 1.5초다. `anchormind hook SessionEnd`의 기본 요청 제한 시간은 1200 ms이고, 서버는 기록만 하고 바로 202로 응답한다(회고는 서버의 outbox 소비자가 나중에 수행한다).
-- `Stop`은 응답이 끝날 때마다 실행된다. 회고의 멱등 키가 세션 id와 이벤트이므로 `Stop`을 걸면 세션의 첫 `Stop`만 회고된다. 세션 단위 회고는 `SessionEnd`에 건다.
+- 회고하는 이벤트는 `SessionEnd`다. `Stop`은 응답이 끝날 때마다 실행되고 회고의 멱등 키가 세션 id와 이벤트이므로, `Stop`을 걸어도 세션의 첫 `Stop`만 접수되고 그 뒤 `Stop`은 서버가 중복으로 바로 끝낸다(202, 기록 없음). 따라서 `Stop`은 걸지 않는 것을 권장한다.
 
 ### http 훅으로 SessionStart만 쓰기
 
@@ -112,7 +113,7 @@ Codex 훅은 command 처리기만 실행한다(http 처리기 없음). `~/.codex
 ```
 
 - Codex는 훅 출력이 약 2500 토큰을 넘으면 본문 대신 파일 경로를 넘기므로 서버는 Codex 주입 예산을 1500 토큰으로 둔다(Claude Code는 2000).
-- Codex의 `SessionEnd`는 대화를 보관하거나 지울 때, 또는 30분 동안 활동이 없을 때 실행된다. 이 시점의 회고가 늦으면 `Stop`을 추가로 걸 수 있으며, 이 경우에도 세션의 첫 `Stop`만 회고된다.
+- Codex의 `SessionEnd`는 대화를 보관하거나 지울 때, 또는 30분 동안 활동이 없을 때 실행된다. 회고는 이 시점에 일어난다. `Stop`을 추가하면 첫 응답 직후의 짧은 내용만 회고되고 이후 `Stop`은 중복으로 끝나며, 같은 세션의 `SessionEnd` 회고는 별도로 한 번 더 일어난다. 세션 전체를 반영하려면 `SessionEnd`만 건다.
 - 하네스의 환경 변수가 셸과 다르면 `MEMENTO_CLI_REMOTE`, `MEMENTO_CLI_KEY`가 Codex 프로세스에 전달되는지 확인한다.
 
 ## workspace 결정
@@ -143,7 +144,7 @@ echo '{"session_id":"check-1","hook_event_name":"SessionEnd","last_assistant_mes
   | anchormind hook SessionEnd --client claude-code
 ```
 
-첫 명령은 `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}`를 돌려준다. 두 번째 명령은 출력 없이 종료 코드 0으로 끝나고, 잠시 뒤 `recall`로 `session_reflect` 주제의 episode를 확인할 수 있다. 서버 지표 `memento_hook_calls_total{client,event,outcome}`와 `memento_hook_reflect_total{outcome}`로 호출과 회고 결과를 본다.
+첫 명령은 `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}`를 돌려준다. `additionalContext`는 `<<<MEMORY CONTEXT>>>`와 `<<<END MEMORY CONTEXT>>>` 사이에 기억을 한 줄씩(줄바꿈과 제어 문자는 이스케이프 표기) 담고, 그 사이 내용이 자료이며 지시가 아니라는 고정 문단을 앞에 둔다. 두 번째 명령은 출력 없이 종료 코드 0으로 끝나고, 잠시 뒤 `recall`로 `session_reflect` 주제의 episode를 확인할 수 있다. 서버 지표 `memento_hook_calls_total{client,event,outcome}`와 `memento_hook_reflect_total{outcome}`로 호출과 회고 결과를 본다.
 
 ## 응답 코드
 
@@ -151,14 +152,15 @@ echo '{"session_id":"check-1","hook_event_name":"SessionEnd","last_assistant_mes
 |-|-|-|
 | 200 | | `SessionStart` 주입 |
 | 202 | | 회고 접수 |
-| 400 | `invalid_json`, `json_too_deep`, `invalid_body`, `invalid_session_id`, `invalid_source`, `event_mismatch` | 본문 형식 |
+| 202 | | 같은 세션과 이벤트가 이미 접수되었거나 회고됨(`"duplicate": true`, 기록 없음) |
+| 400 | `invalid_json`, `json_too_deep`, `invalid_body`, `invalid_session_id`, `invalid_source`, `event_mismatch`, `invalid_excerpt` | 본문 형식(발췌의 NUL 문자 포함) |
 | 401 | `unauthorized` | 키가 없거나 맞지 않음 |
 | 403 | `forbidden` | 키에 필요한 권한이 없음 |
 | 404 | `not_found` | 경로가 허용 목록 밖이거나 `MEMENTO_HOOK_ENDPOINTS=off` |
 | 413 | `payload_too_large`, `excerpt_too_large` | 본문 196608바이트, 발췌 65536바이트 초과 |
 | 415 | `unsupported_media_type` | `Content-Type`이 `application/json`이 아님 |
 | 422 | `excerpt_required`, `sensitive_content` | 발췌 없음, `MEMENTO_SENSITIVE_SCAN=reject`에서 비밀 검출 |
-| 429 | `too_many_requests` | 요청 한도 초과 |
+| 429 | `too_many_requests`, `queue_full` | 키별 요청 한도 또는 인증 실패한 IP의 한도 초과, 키의 대기 회고 이벤트 500건 |
 | 431 | `headers_too_large` | 헤더 합계 8192바이트 초과 |
 | 500 | `server_error`, `context_failed` | 서버 내부 오류 |
 | 503 | `temporarily_unavailable`, `queue_unavailable` | 인증 저장소 장애, outbox 꺼짐 |

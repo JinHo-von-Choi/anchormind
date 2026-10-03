@@ -470,7 +470,7 @@ anchormind hook SessionEnd   --client codex --timeout 3000
 |-|-|
 | `<event>` | `SessionStart`, `Stop`, `SessionEnd` |
 | `--client` | `claude-code`, `codex` |
-| `--remote`, `--key` | Server MCP URL and API key. Pass the key through the `MEMENTO_CLI_KEY` environment variable instead of the command line (command-line arguments are visible in the process list) |
+| `--remote`, `--key` | Server MCP URL and API key. Without them the process environment variables `MEMENTO_CLI_REMOTE` and `MEMENTO_CLI_KEY` are used. Pass the key through the environment instead of the command line (command-line arguments are visible in the process list). Unlike other commands, `hook` does not read the `.env` file of the working directory (harnesses run hooks inside the repository being worked on, so a repository `.env` must not change where the key and excerpt are sent), and it does not check for updates |
 | `--timeout` | Request timeout (ms). Default 1200 for `SessionEnd` (inside the 1.5 second Claude Code SessionEnd hook budget), 5000 otherwise |
 
 - `SessionStart`: writes the server response `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}` to standard output unchanged.
