@@ -13,12 +13,17 @@
  * 모든 DB/Redis 의존성은 mock 처리. 실 DB 호출 없음.
  */
 
-import { describe, it, mock, after } from "node:test";
+import { describe, it, mock, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
-import { FragmentWriter } from "../../lib/memory/write/FragmentWriter.js";
 import { BatchRememberProcessor }                   from "../../lib/memory/write/BatchRememberProcessor.js";
 import { disconnectRedis }                          from "../../lib/redis.js";
+import {
+  DEDUP_INDEXES, conflictClause, findContentHashMatches, invalidateDedupIndexes
+} from "../../lib/memory/write/DedupScope.js";
+
+/** 키 범위 색인(migration-031)만 있는 상태 */
+const LEGACY_INDEXES = [DEDUP_INDEXES.keyLegacy, DEDUP_INDEXES.masterLegacy];
 
 after(async () => { await disconnectRedis().catch(() => {}); });
 
@@ -65,6 +70,7 @@ function makeBatchClient(capturedSqls) {
         return { rows: [] };
       }
       if (s.startsWith("SET LOCAL")) return { rows: [] };
+      if (s.includes("PG_INDEX")) return { rows: LEGACY_INDEXES.map(name => ({ name })) };
       if (s.startsWith("SELECT") && s.includes("FRAGMENT_LIMIT")) {
         return { rows: [] }; // quota 없음
       }
@@ -117,50 +123,41 @@ function makeMockFactory() {
 
 describe("FragmentWriter — content_hash 테넌트 격리", () => {
 
-  it("dedup SELECT가 key_id IS NOT DISTINCT FROM 조건을 포함한다", async () => {
-    const _captured = [];
-    const _writer   = new FragmentWriter();
+  it("중복 사전 조회는 키 경로마다 부분 유일 색인과 같은 키 조건을 쓴다", async () => {
+    const calls = [];
+    const run   = async (sql, params) => { calls.push({ sql, params }); return { rows: [] }; };
 
-    // queryWithAgentVector를 직접 모킹할 수 없으므로
-    // db.js 모듈 단위에서 실제 pool 미사용 경로를 확인:
-    // getPrimaryPool()이 null 반환 → insert()가 null을 반환하는지 확인하는 대신,
-    // 실제 SQL 문자열 생성 로직은 FragmentWriter 소스에서 직접 검증한다.
-    //
-    // 아래는 dedup SELECT SQL이 key_id 격리 조건을 포함하는지 소스 레벨에서 확인.
-    const src = FragmentWriter.toString();
-    // class body에 해당 패턴이 있어야 한다
-    assert.ok(
-      src.includes("IS NOT DISTINCT FROM"),
-      "dedup SELECT must include IS NOT DISTINCT FROM for key_id isolation"
-    );
+    await findContentHashMatches(run, null, ["h1"]);
+    await findContentHashMatches(run, "key-abc", ["h1"]);
+
+    assert.match(calls[0].sql, /key_id IS NULL/);
+    assert.deepEqual(calls[0].params, [["h1"]]);
+    assert.match(calls[1].sql, /key_id = \$2/);
+    assert.deepEqual(calls[1].params, [["h1"], "key-abc"]);
   });
 
-  it("insert(): keyId=null → ON CONFLICT (content_hash) WHERE key_id IS NULL", async () => {
-    const _captured = [];
-    const _writer   = new FragmentWriter();
-
-    // ON CONFLICT 분기 로직이 소스에 포함돼 있는지 확인
-    const src = FragmentWriter.toString();
+  it("insert(): keyId=null → ON CONFLICT (content_hash) WHERE key_id IS NULL", () => {
     assert.ok(
-      src.includes("ON CONFLICT (content_hash) WHERE key_id IS NULL"),
+      conflictClause(new Set(LEGACY_INDEXES), null).includes("ON CONFLICT (content_hash) WHERE key_id IS NULL"),
       "master path must use partial index clause: ON CONFLICT (content_hash) WHERE key_id IS NULL"
     );
   });
 
-  it("insert(): keyId non-null → ON CONFLICT (key_id, content_hash) WHERE key_id IS NOT NULL", async () => {
-    const src = FragmentWriter.toString();
+  it("insert(): keyId non-null → ON CONFLICT (key_id, content_hash) WHERE key_id IS NOT NULL", () => {
     assert.ok(
-      src.includes("ON CONFLICT (key_id, content_hash) WHERE key_id IS NOT NULL"),
+      conflictClause(new Set(LEGACY_INDEXES), "key-abc").includes("ON CONFLICT (key_id, content_hash) WHERE key_id IS NOT NULL"),
       "DB API key path must use partial index clause: ON CONFLICT (key_id, content_hash) WHERE key_id IS NOT NULL"
     );
   });
 
-  it("update() dedup SELECT가 existing.key_id 격리 조건을 포함한다", async () => {
-    const src = FragmentWriter.toString();
-    assert.ok(
-      src.includes("IS NOT DISTINCT FROM"),
-      "update() dedup SELECT must include IS NOT DISTINCT FROM"
-    );
+  it("update() 해시 충돌 조회는 자신을 빼고 같은 키만 본다", async () => {
+    const calls = [];
+    const run   = async (sql, params) => { calls.push({ sql, params }); return { rows: [] }; };
+
+    await findContentHashMatches(run, "key-abc", ["h1"], "frag-1");
+
+    assert.match(calls[0].sql, /key_id = \$2 AND id <> \$3/);
+    assert.deepEqual(calls[0].params, [["h1"], "key-abc", "frag-1"]);
   });
 
 });
@@ -170,6 +167,8 @@ describe("FragmentWriter — content_hash 테넌트 격리", () => {
 ───────────────────────────────────────────── */
 
 describe("BatchRememberProcessor — content_hash ON CONFLICT 격리", () => {
+
+  beforeEach(() => { invalidateDedupIndexes(); });
 
   it("keyId=null(master) → ON CONFLICT (content_hash) WHERE key_id IS NULL 사용", async () => {
     const capturedSqls = [];

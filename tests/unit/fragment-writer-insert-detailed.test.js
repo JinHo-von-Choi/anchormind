@@ -18,7 +18,7 @@ let   twin       = null;
 const fakeClient = {
   query: async (sql, params = []) => {
     statements.push({ sql, params });
-    if (/^\s*SELECT id FROM/.test(sql)) return { rows: twin ? [{ id: twin }] : [] };
+    if (/^\s*SELECT id, workspace, content_hash FROM/.test(sql)) return { rows: twin ? [{ id: twin, workspace: null }] : [] };
     if (/INSERT INTO\s+\S*fragments/.test(sql)) return { rows: insertRows };
     return { rows: [] };
   }

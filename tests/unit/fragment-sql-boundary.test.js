@@ -68,7 +68,8 @@ const ALLOWED = {
   "memory/transfer/FragmentExporter.js": 1, // 내보내기는 호출자가 넘긴 조건과 연결로 파편 열 전체를 id 순 묶음으로 읽는다. 관리 API와 CLI가 함께 쓴다
   "memory/write/BatchRememberProcessor.js": 1,
   "memory/write/ConflictResolver.js": 2,
-  "memory/write/FragmentWriter.js": 28, // 가져오기의 id 충돌 판정은 같은 id 행의 키 소속을 조회한다, archive 전에 현재 파편을 FOR UPDATE로 재조회, 접근 기록 갱신 3경로와 linked_to 정리 2경로는 id 순 잠금 CTE와 갱신 문장을 함께 쓴다
+  "memory/write/DedupScope.js": 1, // 중복 판정 사전 조회. insert, amend, batch_remember가 같은 질의와 같은 범위 판정을 쓴다
+  "memory/write/FragmentWriter.js": 24, // 가져오기의 id 충돌 판정은 같은 id 행의 키 소속을 조회한다, archive 전에 현재 파편을 FOR UPDATE로 재조회, 접근 기록 갱신 3경로와 linked_to 정리 2경로는 id 순 잠금 CTE와 갱신 문장을 함께 쓴다
   "memory/write/RememberPostProcessor.js": 1,
   "tools/reconstruct.js": 1,
   "tools/resources.js": 4,

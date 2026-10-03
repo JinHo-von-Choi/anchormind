@@ -61,6 +61,11 @@ describe("중복 적중 판정과 분류", () => {
     assert.equal(classifyDuplicate({ workspace: null }, { workspace: null, valid_to: null }), "same_scope");
     assert.equal(classifyDuplicate({}, { valid_to: null }), "same_scope");
   });
+
+  it("전역 기존 파편은 어느 workspace 요청에서도 같은 범위다", () => {
+    assert.equal(classifyDuplicate({ workspace: "w" }, { workspace: null, valid_to: null }), "same_scope");
+    assert.equal(classifyDuplicate({ workspace: null }, { workspace: "w", valid_to: null }), "other_workspace");
+  });
 });
 
 describe("remember 중복 적중", () => {
@@ -125,6 +130,28 @@ describe("remember 중복 적중", () => {
     assert.equal(res.existing, undefined);
     assert.equal(calls.index, 1);
     assert.equal(await read("unknown"), before + 1);
+  });
+
+  it("같은 범위 적중은 확인이 꺼져 있어도 응답에 duplicate_of를 싣는다", async () => {
+    const r   = makeRememberer({ insertResult: "frag-old", existing: { workspace: "ws-beta", valid_to: null, ttl_tier: "warm", keywords: [] } });
+    const res = await r.remember(params);
+    assert.equal(res.id, "frag-old");
+    assert.equal(res.duplicate_of, "frag-old");
+  });
+
+  it("확인이 켜져 있으면 같은 범위 적중 응답에 duplicate_of를 싣는다", async () => {
+    process.env.MEMENTO_REMEMBER_DUPLICATE_GUARD = "true";
+    const r   = makeRememberer({ insertResult: "frag-old", existing: { workspace: null, valid_to: null, ttl_tier: "warm", keywords: [] } });
+    const res = await r.remember(params);
+    assert.equal(res.duplicate, "same_scope");
+    assert.equal(res.duplicate_of, "frag-old");
+  });
+
+  it("다른 workspace 적중과 새 저장은 duplicate_of가 없다", async () => {
+    const other = await makeRememberer({ insertResult: "frag-old", existing: { workspace: "ws-alpha", valid_to: null, ttl_tier: "warm", keywords: [] } }).remember(params);
+    assert.equal(other.duplicate_of, undefined);
+    const fresh = await makeRememberer({ insertResult: "frag-new", existing: null }).remember(params);
+    assert.equal(fresh.duplicate_of, undefined);
   });
 
   it("범위 밖 kind 값은 unknown으로 닫힌다", async () => {

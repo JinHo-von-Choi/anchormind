@@ -70,10 +70,10 @@ beforeEach(() => {
 });
 
 describe("_rememberAtomic 중복 적중", () => {
-  it("확인이 꺼져 있으면 기존 응답 구조와 후속 처리를 그대로 탄다", async () => {
+  it("확인이 꺼져 있으면 기존 응답 구조와 후속 처리를 그대로 타고 같은 범위 적중은 duplicate_of를 싣는다", async () => {
     const res = await makeRememberer("frag-old")._rememberAtomic(fragment(), ctx());
     assert.deepEqual(res, {
-      id: "frag-old", keywords: ["k"], ttl_tier: "warm", scope: "persistent", conflicts: []
+      id: "frag-old", keywords: ["k"], ttl_tier: "warm", scope: "persistent", conflicts: [], duplicate_of: "frag-old"
     });
     assert.equal(calls.index, 1);
     assert.equal(calls.post, 1);
@@ -89,7 +89,7 @@ describe("_rememberAtomic 중복 적중", () => {
     const res = await makeRememberer("frag-old")._rememberAtomic(fragment(), ctx());
     assert.deepEqual(res, {
       id: "frag-old", keywords: ["k"], ttl_tier: "permanent", scope: "persistent",
-      conflicts: [], existing: true, duplicate: "same_scope"
+      conflicts: [], existing: true, duplicate: "same_scope", duplicate_of: "frag-old"
     });
     assert.deepEqual(calls.state, [["frag-old", "key-1", "default"]]);
     assert.equal(calls.index, 0);
