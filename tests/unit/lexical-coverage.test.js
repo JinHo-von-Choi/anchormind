@@ -1,10 +1,10 @@
 /**
- * 본문 어휘 채널 키별 채움 지표 단위 시험
+ * 본문 어휘 채널 채움 지표 단위 시험
  *
  * 작성자: 최진호
  * 작성일: 2026-10-03
  *
- * 질의 함수를 대역으로 바꿔 키별 채움 비율과 미채움 수 게이지, 갱신 간격, 스위치와 열 상태를 본다.
+ * 질의 함수를 대역으로 바꿔 채움 비율과 미채움 수 게이지(라벨 없음), 갱신 간격, 스위치와 열 상태를 본다.
  * 게이지 값을 읽으면 수집 함수가 갱신을 부르므로 기준 시각은 현재 시각 이후로 둔다(갱신 간격 안).
  */
 
@@ -24,23 +24,23 @@ mock.module("../../lib/logger.js", {
 });
 
 const {
-  refreshLexicalCoverage, resetLexicalCoverage, coverageRows, COVERAGE_TTL_MS, COVERAGE_SQL,
-  lexicalCoverageRatio, lexicalTokensMissing, MASTER_LABEL
+  refreshLexicalCoverage, resetLexicalCoverage, coverageValues, COVERAGE_TTL_MS, COVERAGE_SQL,
+  lexicalCoverageRatio, lexicalTokensMissing
 } = await import("../../lib/memory/LexicalCoverage.js");
 const { resetLexicalSchema } = await import("../../lib/memory/LexicalSchema.js");
 
 async function gaugeValues(gauge) {
   const { values } = await gauge.get();
-  return Object.fromEntries(values.map(v => [v.labels.key_id, v.value]));
+  return values;
 }
 
-function stubRun({ column = true, rows = [], fail = null } = {}) {
+function stubRun({ column = true, row = { total: 0, filled: 0 }, fail = null } = {}) {
   const calls = [];
   const run   = async (sql) => {
     calls.push(sql);
     if (sql.includes("column_present")) return { rows: [{ column_present: column, indexes: [] }] };
     if (fail) throw fail;
-    return { rows };
+    return { rows: [row] };
   };
   return { run, calls };
 }
@@ -57,31 +57,29 @@ beforeEach(() => {
 
 afterEach(() => { delete process.env.MEMENTO_LEXICAL_CHANNEL; });
 
-describe("coverageRows", () => {
-  it("키별 비율과 미채움 수를 계산하고 마스터 파편은 master 라벨이다", () => {
-    assert.deepEqual(coverageRows([
-      { key_id: "k1", total: "4", filled: "3" },
-      { key_id: null, total: "2", filled: "2" },
-      { key_id: "k2", total: "0", filled: "0" }
-    ]), [
-      { keyId: "k1", ratio: 0.75, missing: 1 },
-      { keyId: MASTER_LABEL, ratio: 1, missing: 0 },
-      { keyId: "k2", ratio: 1, missing: 0 }
-    ]);
+describe("coverageValues", () => {
+  it("비율과 미채움 수를 계산하고 현행 파편이 없으면 비율 1", () => {
+    assert.deepEqual(coverageValues({ total: "8", filled: "6" }), { ratio: 0.75, missing: 2 });
+    assert.deepEqual(coverageValues({ total: 0, filled: 0 }), { ratio: 1, missing: 0 });
+    assert.deepEqual(coverageValues(undefined), { ratio: 1, missing: 0 });
   });
 });
 
 describe("refreshLexicalCoverage", () => {
-  it("열이 있으면 키별 게이지를 채운다", async () => {
-    const { run, calls } = stubRun({ rows: [{ key_id: "k1", total: 10, filled: 4 }, { key_id: null, total: 5, filled: 5 }] });
+  it("열이 있으면 라벨 없는 게이지를 채운다", async () => {
+    const { run, calls } = stubRun({ row: { total: 10, filled: 4 } });
     await refreshLexicalCoverage(run, T0);
     assert.ok(calls.includes(COVERAGE_SQL));
-    assert.deepEqual(await gaugeValues(lexicalCoverageRatio), { k1: 0.4, [MASTER_LABEL]: 1 });
-    assert.deepEqual(await gaugeValues(lexicalTokensMissing), { k1: 6, [MASTER_LABEL]: 0 });
+    assert.doesNotMatch(COVERAGE_SQL, /key_id/);
+    const [ratio]   = await gaugeValues(lexicalCoverageRatio);
+    const [missing] = await gaugeValues(lexicalTokensMissing);
+    assert.equal(ratio.value, 0.4);
+    assert.deepEqual(ratio.labels, {});
+    assert.equal(missing.value, 6);
   });
 
   it("갱신 간격 안에서는 다시 세지 않는다", async () => {
-    const { run, calls } = stubRun({ rows: [] });
+    const { run, calls } = stubRun();
     await refreshLexicalCoverage(run, T0);
     await refreshLexicalCoverage(run, T0 + COVERAGE_TTL_MS - 1);
     assert.equal(calls.filter(sql => sql === COVERAGE_SQL).length, 1);
@@ -89,22 +87,16 @@ describe("refreshLexicalCoverage", () => {
     assert.equal(calls.filter(sql => sql === COVERAGE_SQL).length, 2);
   });
 
-  it("이전에 있던 키가 사라지면 그 라벨을 지운다", async () => {
-    await refreshLexicalCoverage(stubRun({ rows: [{ key_id: "gone", total: 1, filled: 0 }] }).run, T0);
-    await refreshLexicalCoverage(stubRun({ rows: [{ key_id: "k1", total: 1, filled: 1 }] }).run, T0 + COVERAGE_TTL_MS);
-    assert.deepEqual(Object.keys(await gaugeValues(lexicalCoverageRatio)), ["k1"]);
-  });
-
-  it("열이 없으면 세지 않고 게이지를 비운다", async () => {
+  it("열이 없으면 세지 않고 값을 내보내지 않는다", async () => {
     const { run, calls } = stubRun({ column: false });
     await refreshLexicalCoverage(run, T0);
     assert.equal(calls.includes(COVERAGE_SQL), false);
-    assert.deepEqual(await gaugeValues(lexicalCoverageRatio), {});
+    assert.ok((await gaugeValues(lexicalTokensMissing)).every(v => v.value === 0));
   });
 
   it("스위치가 off이면 아무것도 읽지 않는다", async () => {
     process.env.MEMENTO_LEXICAL_CHANNEL = "off";
-    const { run, calls } = stubRun({ rows: [{ key_id: "k1", total: 1, filled: 1 }] });
+    const { run, calls } = stubRun({ row: { total: 1, filled: 1 } });
     await refreshLexicalCoverage(run, T0);
     assert.equal(calls.length, 0);
   });
