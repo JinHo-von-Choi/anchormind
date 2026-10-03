@@ -29,7 +29,7 @@ const { FragmentFactory }                       = await import("../../lib/memory
 const { WriteGate }                             = await import("../../lib/memory/write/WriteGate.js");
 const { DEDUP_INDEXES, invalidateDedupIndexes } = await import("../../lib/memory/write/DedupScope.js");
 const { getPrimaryPool, shutdownPool }          = await import("../../lib/tools/db.js");
-const { importFragment, IMPORT_DEFAULTS }       = await import("../../lib/memory/write/FragmentImporter.js");
+const { checkImportRow, writeImportRow, importProfile, IMPORT_DEFAULTS } = await import("../../lib/memory/write/FragmentImporter.js");
 const { WRITE_ENTRIES }                         = await import("../../lib/memory/write/WriteGate.js");
 const { main: finishDedupScope }                = await import("../../scripts/ops/finish-dedup-scope.mjs");
 const { main: backfillReflectWorkspace }        = await import("../../scripts/backfill-reflect-workspace.js");
@@ -126,10 +126,13 @@ async function insertAtomic(workspace, opts) {
 }
 
 async function importGlobal(content = TEXT) {
-  return importFragment(
-    { content, topic: "dedup-lane", type: "fact", key_id: KEY },
-    { entry: WRITE_ENTRIES.ADMIN_IMPORT, gate: new WriteGate(), writer, defaults: IMPORT_DEFAULTS.admin }
+  const profile  = importProfile(IMPORT_DEFAULTS.admin, { keyId: KEY, owner: true });
+  const prepared = await checkImportRow(
+    { content, topic: "dedup-lane", type: "fact" },
+    { entry: WRITE_ENTRIES.ADMIN_IMPORT, gate: new WriteGate(), profile }
   );
+  assert.equal(prepared.status, "ready", prepared.reason);
+  return writeImportRow(prepared, { writer, profile });
 }
 
 async function rowCount() {
