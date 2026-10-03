@@ -38,6 +38,17 @@
 - 지표 `mcp_sse_rate_limited_total`: IP 한도로 거부된 `GET /sse` 요청 수를 센다. 거부는 주소를 담지 않는 `[SSE] connection request rejected by IP rate limit` 경고 로그로도 남는다.
 - `MEMENTO_LLM_CLI_TOOL_APPROVAL`(`none`, `all`, 기본 `none`): gemini-cli, copilot-cli, opencode-cli의 도구 실행 승인 방식. 기본에서 세 CLI는 제한된 승인으로 실행된다. gemini는 `-y` 없이, copilot은 쓰기, 셸, URL 도구와 내장 MCP를 거부하는 인자와 함께, opencode는 `OPENCODE_PERMISSION={"*":"deny"}`로 실행되며, 세 CLI 모두 서버 작업 디렉터리가 아닌 빈 임시 디렉터리에서 시작한다. `all`이면 gemini `-y`, copilot `--allow-all-tools`를 쓰고 서버 작업 디렉터리에서 실행하며 opencode에는 승인 관련 설정을 더하지 않는다.
 - 벤치마크 `isolated` 모드는 격리 키 `benchmark-harness-key`(상태 `inactive`) 행을 `api_keys`에 한 번 만든다. `--save-baseline`은 임베딩 provider, 모델, 차원을 기준선 파일에 함께 기록하고, `--baseline` 비교는 모델이나 차원이 다르면 경고한다.
+- 마이그레이션 lint 규칙(번호 `050` 이상 파일, `npm run lint:migrations`): `no-concurrently`(`CONCURRENTLY` 금지), `large-index-unregistered`, `large-index-table-mismatch`, `large-index-if-not-exists`. 대형 표(`fragments`, `fragment_links`, `case_events`, `search_events`)의 `CREATE INDEX`는 이름이 있고 `IF NOT EXISTS`를 가지며 `scripts/ops/index-manifest.json`에 등록된 색인이어야 한다. `DO` 블록 같은 달러 인용 본문과 `EXECUTE` 문자열도 코드로 검사한다.
+- `node scripts/ops/online-index.mjs`: 작업 목록의 대형 표 색인을 쓰기를 막지 않고 만든다. 접속 대상은 `--url` 또는 PG 환경변수로만 받고 `.env`를 읽지 않는다. `--dry-run`은 연결 없이 단계를 출력하고, 실행에는 `--confirm`과 디스크 여유 입력(`--data-dir` 또는 `--free-bytes`)이 필요하다. 표 크기의 2배 미만이면 거부하고, 무효 색인은 정리한 뒤 `lock_timeout`과 교착에 한해 대기를 늘리며 다시 시도한다.
+- `lib/memory/consolidate/resumableBackfill.js`의 `runResumableBackfill`: id 오름차순 묶음 갱신으로 대형 표를 채우는 재개형 도우미. 묶음마다 watermark(`agent_memory.backfill_watermarks`)를 기록해 같은 작업 이름으로 다시 실행하면 이어지고, 행 단위 오류(SQLSTATE 22, 23 계열)는 그 행을 `agent_memory.backfill_failures`에 기록하고 건너뛴다. 절차는 `docs/operations/online-migration.md`에 있다.
+- `scripts/ops/backup.sh`: `agent_memory` 스키마의 `pg_dump -Fc` 덤프, 체크섬, 표별 행 수 매니페스트, 역할 정의 덤프를 한 벌로 만든다. 기본 보관은 최근 14일(`--keep`, `MEMENTO_BACKUP_KEEP_DAYS`), 저장 위치는 `--dir` 또는 `MEMENTO_BACKUP_DIR`이다. `--label NAME` 벌은 보관 정리에서 제외되고 `--prune-labelled`로만 지운다. `--dry-run`은 접속하지 않는다. 저장 위치의 권한과 링크를 검사하고 파일은 600으로 만든다.
+- `scripts/ops/restore-verify.mjs`: 덤프를 일회용 시험 서버(포트 35433 또는 `DB_LANE_SERVER_ALLOW`로 명시한 한 곳)의 임시 데이터베이스에 복원하고, 체크섬, 표별 행 수, 마이그레이션 이력, HNSW 색인 유효성을 매니페스트와 대조해 JSON으로 보고한다. 그 밖의 대상에는 연결하기 전에 거부한다. `docs/operations/backup-restore.md`에 일일 백업, 복구 훈련, 단일 파편 복구, 마이그레이션 전 백업(`--label pre-migration`) 절차가 있다.
+- `node scripts/measure/recall-metrics.mjs`: 평가 세트(`tests/fixtures/recall-eval-v2`)의 질의를 일회용 시험 서버의 데이터베이스에 실행해 R@1, R@5, R@10, MRR, 토큰 예산 내 nDCG, hard negative 선행 비율, 지연(cold, warm 동시성 1과 8)을 부분집합과 태그, 영역별로 JSON으로 낸다. 합격 판정은 하지 않는다. `--compare 기준.json 후보.json`은 질의별 짝지은 부트스트랩 95% 구간(시드 지정, 표본 수 미달 묶음 표시)으로 두 실행을 비교한다. 평가 세트 형식과 질의 추가 절차는 `tests/fixtures/recall-eval-v2/README.md`에 있고, 실제 질의와 라벨은 git이 무시하는 `tests/fixtures/recall-eval-v2/private/`에 둔다.
+- 모든 도구가 `title`과 네 가지 `annotations`(`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)를 boolean으로 선언한다. `destructiveHint`는 `forget`, `amend`, `memory_consolidate`, `apply_update`가 true다. 도구별 값과 기준은 `docs/api-reference.md`의 도구 힌트 표에 있다.
+- `ping` 메서드: 인증된 세션에서 빈 객체 `{}`를 돌려주고, 알림으로 보내면 응답 없이 수락한다.
+- `PATCH /v1/internal/model/nothing/keys/:id/policy`: API 키의 `default_mode`(`recall-only`, `write-only`, `onboarding`, `null`), `allowed_workspaces`(문자열 배열 또는 `null`, 최대 64개, 항목당 길이 제한), `symbolic_hard_gate`(boolean)를 전달한 필드만 한 문장으로 갱신한다. 알 수 없는 필드, 빈 객체, 마스터 전용 preset(`audit`)은 400이다. 변경은 `admin key_policy` 감사 기록(필드 이름과 이전, 이후 값)으로 남고 조회 캐시를 비운다. 관리 콘솔의 키 상세에 ACCESS POLICY 카드가 있고, 키 목록 응답은 세 정책 열을 포함한다.
+- `config/switches.js`의 스위치 대장: 기능 스위치 59개의 이름, 기본값, 용도, 분류를 한곳에 두고 환경에서 실제로 적용되는 값을 사용처와 같은 규칙으로 계산한다. `npm run switches`는 적용 값, 기본값, 상태, 기본과 다름, 분류를 표로 출력하고(`.env` 파일은 읽지 않는다), `--strict`는 값이 잘못된 스위치가 있으면 종료 코드 1로 끝난다.
+- 관리 `/stats` 응답의 `switches`(`total`, `on`, `off`, `mode`, `nonDefaultCount`, `nonDefault`, `invalid`)와 기동 로그의 `[Startup] switches: total=N on=N off=N mode=N nonDefault=N ... invalid=N` 한 줄. 값은 담지 않는다.
 
 ### Changed
 
@@ -82,6 +93,8 @@
 - `npm run release`가 안내하는 `gh release create` 명령은 notes 파일 경로를 셸 인용으로 출력한다.
 - `docs/operations/monitoring.md`의 엔드포인트 표에 `/health` 행을 싣고, `/metrics`가 Bearer 없이 401을 돌려주며 `/health/live`와 `/health/ready`는 키 없이 호출함을 적는다.
 - 벤치마크 CLI는 `--no-seed` 실행에서 `--save-baseline`을 거부할 때 `--no-seed`를 사유로 안내한다.
+- `tools/list`는 `recall`, `context`, `remember` 순으로 앞에 두고 나머지를 이름 오름차순으로 돌려준다. 세션과 키가 달라도 노출되는 도구의 상대 순서가 같다. `recall`의 `asOf` 설명은 시간 근접 랭킹의 기준 시각이며 기간 필터가 아니라고 적고, 기간 한정은 `timeRange`를 안내한다.
+- `POST /v1/internal/model/nothing/keys`의 `permissions`는 `read`, `write`로만 이뤄진 비어 있지 않은 배열이어야 하고 생략하면 기본 권한을 쓴다. 빈 배열, `null`, 그 밖의 값은 400이다.
 
 ### Removed
 
