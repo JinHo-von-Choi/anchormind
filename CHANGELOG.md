@@ -119,6 +119,7 @@
 - 관리 가져오기의 JSON 본문 상한은 2 MiB이고, `Content-Type`이 `application/x-ndjson` 또는 `application/jsonl`인 export 파일 본문은 64 MiB까지 받는다. 초과하면 413이다.
 - 가져오기 `dryRun`(CLI `--dry-run`)은 DB에 연결해 같은 경로로 처리한 뒤 되돌리므로 집계가 실제 실행과 같다. 관문 지표는 남기지 않는다.
 - `scripts/backfill-reflect-workspace.js`는 대상 workspace에 같은 본문 파편이 이미 있는 파편을 옮기지 않는다.
+- 중복 판정과 `scripts/ops/finish-dedup-scope.mjs`의 키 단위 색인 확인은 두 이름 묶음(`uq_frag_hash_per_key`, `uq_frag_hash_master`와 같은 정의의 `fragments_new_key_id_content_hash_idx`, `fragments_new_content_hash_idx`)을 모두 키 단위 색인으로 본다. 마무리 스크립트는 정의가 같은 쪽을 지우고, 정의가 다른 같은 이름의 색인은 지우지 않고 알린다.
 
 ### Removed
 

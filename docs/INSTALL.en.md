@@ -290,6 +290,18 @@ node scripts/ops/finish-dedup-scope.mjs
 PGHOST=<host> PGDATABASE=<db> PGUSER=<user> PGPASSWORD=<password> node scripts/ops/finish-dedup-scope.mjs --confirm
 ```
 
+Installs whose per-key indexes carry the names `fragments_new_key_id_content_hash_idx` and `fragments_new_content_hash_idx` are detected and dropped the same way when the definition matches. The following query lists the detection indexes present:
+
+```sql
+SELECT c.relname, i.indisvalid, i.indisready
+  FROM pg_index i
+  JOIN pg_class c ON c.oid = i.indexrelid
+ WHERE c.relnamespace = 'agent_memory'::regnamespace
+   AND c.relname IN ('uq_frag_hash_per_key', 'uq_frag_hash_master',
+                     'fragments_new_key_id_content_hash_idx', 'fragments_new_content_hash_idx',
+                     'uq_frag_hash_ws_per_key', 'uq_frag_hash_ws_master');
+```
+
 The production rollout and its rollback are described in [operations/online-migration.md](operations/online-migration.md#중복-판정-범위-전환).
 
 > **Re-running migration-007**: If you change `EMBEDDING_DIMENSIONS` or switch embedding providers, re-run `scripts/post-migrate-flexible-embedding-dims.js` to update the vector column dimensions in the `fragments`, `morpheme_dict`, and `fragment_synthetic_query` tables simultaneously.

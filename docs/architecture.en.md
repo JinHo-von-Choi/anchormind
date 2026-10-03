@@ -517,7 +517,7 @@ The store for all fragments. This is the core table of the system.
 | keywords | TEXT[] | NOT NULL DEFAULT '{}' | Search keyword array (GIN indexed) |
 | type | TEXT | NOT NULL, CHECK | fact / decision / error / preference / procedure / relation / episode |
 | importance | REAL | 0.0~1.0 CHECK | Importance. Defaults per type, decayed by MemoryConsolidator |
-| content_hash | TEXT | NOT NULL | SHA hash-based duplicate prevention. Not a global UNIQUE: enforced by two per key and workspace partial unique indexes (`uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`, migration-050). The per-key indexes (`uq_frag_hash_per_key`, `uq_frag_hash_master`, migration-031) are dropped in an operational step, and while they remain detection is per key (`MEMENTO_DEDUP_SCOPE`) |
+| content_hash | TEXT | NOT NULL | SHA hash-based duplicate prevention. Not a global UNIQUE: enforced by two per key and workspace partial unique indexes (`uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`, migration-050). The per-key indexes (`uq_frag_hash_per_key`, `uq_frag_hash_master`, migration-031; installs with a rebuilt table carry the same definitions as `fragments_new_key_id_content_hash_idx`, `fragments_new_content_hash_idx`) are dropped in an operational step, and while they remain detection is per key (`MEMENTO_DEDUP_SCOPE`) |
 | source | TEXT | | Source identifier (session ID, tool name, etc.) |
 | linked_to | TEXT[] | DEFAULT '{}' | Connected fragment ID list (GIN indexed) |
 | agent_id | TEXT | NOT NULL DEFAULT 'default' | Agent scoping ID |

@@ -520,7 +520,7 @@ erDiagram
 | keywords | TEXT[] | NOT NULL DEFAULT '{}' | 검색용 키워드 배열 (GIN 인덱스) |
 | type | TEXT | NOT NULL, CHECK | fact / decision / error / preference / procedure / relation / episode |
 | importance | REAL | 0.0~1.0 CHECK | 중요도. type별 기본값, MemoryConsolidator에 의해 감쇠 |
-| content_hash | TEXT | NOT NULL | SHA 해시 기반 중복 방지. 전역 UNIQUE가 아니라 키와 workspace 단위 partial unique index 2종(`uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`, migration-050)으로 강제. 키 단위 색인(`uq_frag_hash_per_key`, `uq_frag_hash_master`, migration-031)은 운영 단계로 지우며, 남아 있는 동안은 키 단위로 판정한다(`MEMENTO_DEDUP_SCOPE`) |
+| content_hash | TEXT | NOT NULL | SHA 해시 기반 중복 방지. 전역 UNIQUE가 아니라 키와 workspace 단위 partial unique index 2종(`uq_frag_hash_ws_per_key`, `uq_frag_hash_ws_master`, migration-050)으로 강제. 키 단위 색인(`uq_frag_hash_per_key`, `uq_frag_hash_master`, migration-031. 표를 다시 만든 설치는 같은 정의의 `fragments_new_key_id_content_hash_idx`, `fragments_new_content_hash_idx`)은 운영 단계로 지우며, 남아 있는 동안은 키 단위로 판정한다(`MEMENTO_DEDUP_SCOPE`) |
 | source | TEXT | | 출처 식별자 (세션 ID, 도구명 등) |
 | linked_to | TEXT[] | DEFAULT '{}' | 연결 파편 ID 목록 (GIN 인덱스) |
 | agent_id | TEXT | NOT NULL DEFAULT 'default' | 에이전트 구분용 ID |

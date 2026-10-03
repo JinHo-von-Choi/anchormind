@@ -183,6 +183,18 @@ node scripts/ops/finish-dedup-scope.mjs
 PGHOST=<호스트> PGDATABASE=<DB> PGUSER=<사용자> PGPASSWORD=<비밀번호> node scripts/ops/finish-dedup-scope.mjs --confirm
 ```
 
+설치의 키 단위 색인이 다른 이름(`fragments_new_key_id_content_hash_idx`, `fragments_new_content_hash_idx`)으로 있어도 정의가 같으면 같은 방식으로 판정하고 지운다. 설치에 있는 판정 색인은 다음 질의로 확인한다.
+
+```sql
+SELECT c.relname, i.indisvalid, i.indisready
+  FROM pg_index i
+  JOIN pg_class c ON c.oid = i.indexrelid
+ WHERE c.relnamespace = 'agent_memory'::regnamespace
+   AND c.relname IN ('uq_frag_hash_per_key', 'uq_frag_hash_master',
+                     'fragments_new_key_id_content_hash_idx', 'fragments_new_content_hash_idx',
+                     'uq_frag_hash_ws_per_key', 'uq_frag_hash_ws_master');
+```
+
 운영 DB의 전환 절차와 되돌리기는 [operations/online-migration.md](operations/online-migration.md#중복-판정-범위-전환)에 있다.
 
 > **migration-007 재실행**: `EMBEDDING_DIMENSIONS`를 변경하거나 임베딩 제공자를 전환한 경우, `scripts/post-migrate-flexible-embedding-dims.js`를 재실행하면 `fragments`, `morpheme_dict`, `fragment_synthetic_query` 테이블의 벡터 차원이 동시에 갱신된다.
