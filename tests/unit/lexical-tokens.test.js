@@ -116,7 +116,7 @@ describe("lexicalTokens", () => {
     const tokens = await lexicalTokens("사용자는 운영 서버 재시작을 싫어한다");
     assert.ok(tokens.includes("사용자"));
     assert.ok(tokens.includes("서버"));
-    assert.ok(!tokens.some(t => /[ㄱ-ㆎ]/.test(t)));
+    assert.ok(!tokens.some(t => /[\u3131-\u318E]/.test(t)));
   });
 
   it("영문은 소문자 어간으로 바꾼다", async () => {
