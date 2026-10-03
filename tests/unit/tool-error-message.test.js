@@ -34,7 +34,7 @@ mock.module("../../lib/utils.js", {
 });
 
 const { handleToolsCall }  = await import("../../lib/jsonrpc.js");
-const { toolErrorMessage } = await import("../../lib/tools/tool-error.js");
+const { toolErrorMessage, toolErrorResponse } = await import("../../lib/tools/tool-error.js");
 
 const MASTER = {
   authenticated: true, isMaster: true, keyId: null, groupKeyIds: null, permissions: null,
@@ -84,6 +84,52 @@ describe("toolErrorMessage", () => {
     assert.equal(toolErrorMessage(sys), "Internal error");
     assert.equal(toolErrorMessage(Object.assign(new Error("relation missing"), { code: "42P01" })), "Internal error");
     assert.equal(toolErrorMessage("not an error"), "Internal error");
+  });
+});
+
+function checkViolation(constraint) {
+  const e = new pg.DatabaseError(`new row violates check constraint "${constraint}"`, 0, "error");
+  e.code       = "23514";
+  e.constraint = constraint;
+  return e;
+}
+
+describe("CHECK 제약 위반 문구", () => {
+  it("파라미터를 선언한 도구에는 파라미터 이름과 허용 값을 안내하고 INVALID_ARGUMENT 코드를 싣는다", () => {
+    const err = checkViolation("fragments_type_check");
+    assert.match(toolErrorMessage(err, "remember"), /^Invalid arguments for remember: type: must be one of fact\|/);
+    const linkErr = toolErrorResponse(checkViolation("fragment_links_relation_type_check"), "link");
+    assert.match(linkErr.error, /^Invalid arguments for link: relationType: must be one of /);
+    assert.equal(linkErr.code, "INVALID_ARGUMENT");
+  });
+
+  it("batch_remember는 fragments 항목의 type 열거를 쓴다", () => {
+    const msg = toolErrorMessage(checkViolation("fragments_type_check"), "batch_remember");
+    assert.match(msg, /^Invalid arguments for batch_remember: type: must be one of fact\|/);
+    assert.equal(toolErrorResponse(checkViolation("fragments_type_check"), "batch_remember").code, "INVALID_ARGUMENT");
+  });
+
+  for (const tool of ["reflect", "forget", "batch_remember", "link", "amend"]) {
+    it(`${tool}은 선언하지 않은 파라미터를 이름으로 대지 않고 고정 문구를 돌려준다`, () => {
+      for (const constraint of ["fragments_affect_check", "tool_feedback_trigger_type_check", "fragments_resolution_status_check"]) {
+        if (tool === "amend" && constraint === "fragments_resolution_status_check") continue;
+        const response = toolErrorResponse(checkViolation(constraint), tool);
+        assert.equal(response.error, "Internal error", `${tool} ${constraint}`);
+        assert.equal(response.code, undefined);
+      }
+    });
+  }
+
+  for (const tool of ["reflect", "forget"]) {
+    it(`${tool}은 type 제약 위반도 고정 문구로 돌려준다`, () => {
+      const response = toolErrorResponse(checkViolation("fragments_type_check"), tool);
+      assert.deepEqual(response, { success: false, error: "Internal error" });
+    });
+  }
+
+  it("도구 이름이 없으면 고정 문구를 돌려준다", () => {
+    assert.equal(toolErrorMessage(checkViolation("fragments_type_check")), "Internal error");
+    assert.equal(toolErrorResponse(checkViolation("fragments_type_check")).code, undefined);
   });
 });
 

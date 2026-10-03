@@ -202,7 +202,7 @@ Content-Type: application/json
 
 `tools/call`의 인자는 해당 도구의 `inputSchema`와 대조된다. 점검은 최상위 필드와 배열 항목에 대해 타입, `enum`, 범위, `maxLength`, `maxItems`, `pattern`, `oneOf`, 필수 필드, 스키마에 없는 필드를 본다. `MEMENTO_TOOL_ARGS_VALIDATION`(`off`, `warn`, `enforce`, 기본 `warn`)이 동작을 정한다. `warn`은 경고 로그만 남기고 호출을 진행하며, `enforce`는 위반 시 JSON-RPC `-32602`와 `Invalid arguments for <tool>: <사유>` 메시지로 거절한다. `MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN=true`이면 스키마에 없는 필드를 위반으로 보지 않는다.
 
-도구 처리 중 내부 예외(DB 드라이버, 런타임 오류)는 응답에 `Internal error`로 나가고 원문은 서버 로그와 감사 기록에만 남는다. `remember`, `amend`, `link`, `tool_feedback`의 열거형 인자 값이 저장소 제약에 맞지 않으면 `{ "success": false, "error": "Invalid arguments for <tool>: <param>: must be one of a|b|c", "code": "INVALID_ARGUMENT" }`를 돌려준다.
+도구 처리 중 내부 예외(DB 드라이버, 런타임 오류)는 응답에 `Internal error`로 나가고 원문은 서버 로그와 감사 기록에만 남는다. `remember`, `batch_remember`(항목의 `type`), `amend`, `link`, `tool_feedback`의 열거형 인자 값이 저장소 제약에 맞지 않으면 `{ "success": false, "error": "Invalid arguments for <tool>: <param>: must be one of a|b|c", "code": "INVALID_ARGUMENT" }`를 돌려준다. 정의에 해당 파라미터를 선언하지 않은 도구는 `Internal error`를 돌려준다. 제약 위반에서 나온 인자 오류는 도구 결과(`isError`)에 문자열 코드 `INVALID_ARGUMENT`를 싣고, `enforce` 모드의 스키마 검증은 JSON-RPC `-32602`를 쓴다.
 
 내부 작업 전용 agentId(`system`, `admin`)는 `MEMENTO_RESERVED_AGENT_IDS`(`warn`, `enforce`, 기본 `warn`)로 다룬다. `warn`은 API 키 요청에서 쓰면 경고 로그(키 앞 8자 포함)만 남기고, `enforce`는 FORBIDDEN(`-32001`)으로 거부한다. master 키는 두 방식 모두 허용한다.
 
