@@ -28,8 +28,8 @@ import { parseArgs }                                              from "../../li
 import {
   loadEvalDir, splitLabeled, coverageReport, EvalSetError, AUXILIARY_SUBSETS, SUBSETS
 } from "../../lib/memory/signals/RecallEvalSet.js";
-import { scoreQuery, summarizeRows, latencySummary, NDCG_UNIT_TOKENS } from "../../lib/memory/signals/RecallMetrics.js";
-import { compareRuns, DEFAULT_ITERATIONS, DEFAULT_SEED, DEFAULT_CONFIDENCE } from "../../lib/memory/signals/PairedBootstrap.js";
+import { scoreQuery, summarizeRows, latencySummary, MetricInputError, NDCG_UNIT_TOKENS } from "../../lib/memory/signals/RecallMetrics.js";
+import { compareRuns, BootstrapInputError, DEFAULT_ITERATIONS, DEFAULT_SEED, DEFAULT_CONFIDENCE, DEFAULT_MIN_N } from "../../lib/memory/signals/PairedBootstrap.js";
 
 const ROOT            = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const DEFAULT_EVAL    = path.join(ROOT, "tests/fixtures/recall-eval-v2");
@@ -68,7 +68,8 @@ export const usage = [
   "Compare options:",
   `  --iterations <n>         Bootstrap resamples (default: ${DEFAULT_ITERATIONS})`,
   `  --seed <n>               Bootstrap seed (default: ${DEFAULT_SEED})`,
-  `  --confidence <p>         Interval level (default: ${DEFAULT_CONFIDENCE})`
+  `  --confidence <p>         Interval level, between 0 and 1 (default: ${DEFAULT_CONFIDENCE})`,
+  `  --min-n <n>              Groups with fewer paired queries report insufficient_n and no finding (default: ${DEFAULT_MIN_N})`
 ].join("\n");
 
 /**
@@ -79,7 +80,7 @@ export const usage = [
  */
 export function parseTarget(spec) {
   const match = TARGET_PATTERN.exec(String(spec ?? ""));
-  if (!match) throw new MeasureRefusalError(`측정 거부: --target 은 host:port/database 형식이어야 한다 (받은 값: "${spec ?? ""}")`);
+  if (!match) throw new MeasureRefusalError("측정 거부: --target 은 host:port/database 형식이어야 한다 (받은 값은 출력하지 않는다)");
   const port = Number(match[2]);
   if (port < 1 || port > 65535) throw new MeasureRefusalError(`측정 거부: 포트 ${port} 가 범위 밖이다`);
   return { host: match[1].replace(/^\[|\]$/g, ""), port, database: match[3] };
@@ -300,6 +301,16 @@ export function countOrderChanges(first, other) {
   return first.filter((r, i) => key(r) !== key(other[i])).length;
 }
 
+/** 출력 JSON에 싣는 지표 정의. */
+export const METRIC_DEFINITIONS = Object.freeze({
+  recall_at_k            : "hit rate: share of queries with at least one relevant fragment in the top k (duplicates removed, first occurrence counts)",
+  recall_fraction_at_k   : "mean over queries of (relevant fragments in the top k) / (relevant fragments of the query)",
+  mrr                    : "mean of 1 / rank of the first relevant fragment, 0 when absent",
+  ndcg_at_budget         : "token-weighted nDCG within the token budget with a greedy ideal order, capped at 1",
+  ndcg_uncapped_at_budget: "the same nDCG before the cap at 1",
+  token_source           : "tokens of every fragment are countTokens(content) from the database; a relevant fragment uses the same value in the returned list and in the ideal order"
+});
+
 /**
  * 지표 JSON을 만든다. metrics, rows, coverage, labels는 같은 DB와 같은 세트에서 같은 값이고
  * 시각과 지연은 volatile 아래에만 둔다.
@@ -312,6 +323,7 @@ export function buildReport({ target, embeddings, params, coverage, labels, scor
     schema    : SCHEMA_METRICS,
     target    : { host: target.host, port: target.port, database: target.database },
     embeddings,
+    definitions: METRIC_DEFINITIONS,
     params,
     coverage,
     labels,
@@ -343,8 +355,39 @@ export async function compareFiles(baselinePath, candidatePath, opts) {
     schema   : SCHEMA_COMPARE,
     baseline : { file: path.basename(baselinePath),  embeddings: baseline.embeddings,  params: baseline.params },
     candidate: { file: path.basename(candidatePath), embeddings: candidate.embeddings, params: candidate.params },
+    warnings : comparisonWarnings(baseline, candidate),
     ...compareRuns(baseline.rows, candidate.rows, { ...opts, auxiliarySubsets: AUXILIARY_SUBSETS })
   };
+}
+
+/**
+ * 두 지표 JSON의 측정 조건이 달라 비교가 어긋날 수 있는 항목을 알린다.
+ *
+ * @param {Object} baseline
+ * @param {Object} candidate
+ * @returns {string[]}
+ */
+export function comparisonWarnings(baseline, candidate) {
+  const warnings = [];
+  for (const key of ["token_budget", "query_keywords"]) {
+    const a = baseline.params?.[key];
+    const b = candidate.params?.[key];
+    if (a !== b) warnings.push(`${key} 가 다르다 (기준 ${a ?? "(없음)"}, 후보 ${b ?? "(없음)"}). 같은 조건의 실행끼리 비교한다.`);
+  }
+  return warnings;
+}
+
+/**
+ * 신뢰수준 옵션을 읽는다. 0과 1 사이의 수여야 한다.
+ *
+ * @param {Object} args
+ * @returns {number}
+ */
+function confidenceOption(args) {
+  if (args.confidence === undefined) return DEFAULT_CONFIDENCE;
+  const value = typeof args.confidence === "string" ? Number(args.confidence) : Number.NaN;
+  if (!(value > 0 && value < 1)) throw new MeasureRefusalError("--confidence 는 0과 1 사이의 수여야 한다");
+  return value;
 }
 
 /**
@@ -363,6 +406,17 @@ function intOption(args, key, fallback) {
 }
 
 /**
+ * 파편의 토큰 수. 반환 목록과 정답 조회가 같은 계산을 쓰도록 한 곳에 둔다.
+ *
+ * @param {{content?: string}} fragment
+ * @param {(text: string) => number} countTokens
+ * @returns {number}
+ */
+export function tokensOf(fragment, countTokens) {
+  return Math.max(1, countTokens(fragment.content || ""));
+}
+
+/**
  * 대상 DB에서 정답 파편의 토큰 수와 생성 시각을 읽는다.
  *
  * @param {Object} manager MemoryManager
@@ -375,7 +429,7 @@ async function lookupFragments(manager, entries, countTokens) {
   const known = new Map();
   for (let i = 0; i < ids.length; i += 200) {
     const rows = await manager.store.getByIds(ids.slice(i, i + 200), "default", null, [], { includePeerAgents: true, _isMaster: true });
-    for (const row of rows) known.set(row.id, { tokens: Math.max(1, countTokens(row.content || "")), created_at: row.created_at });
+    for (const row of rows) known.set(row.id, { tokens: tokensOf(row, countTokens), created_at: row.created_at });
   }
   return known;
 }
@@ -418,7 +472,7 @@ async function measure(args) {
     const resolved = resolveLabels(selected, await lookupFragments(manager, selected, countTokens));
     const recallFn = async (entry) => {
       const res = await manager.recall(buildRecallParams(entry, { budgetTokens, pageSize, keywordMode }));
-      return (res?.fragments ?? []).map(f => ({ id: f.id, tokens: f.estimated_tokens || countTokens(f.content || "") }));
+      return (res?.fragments ?? []).map(f => ({ id: f.id, tokens: tokensOf(f, countTokens) }));
     };
 
     const queries = resolved.usable.map(u => u.entry);
@@ -461,8 +515,10 @@ export async function main(argv) {
     output = await compareFiles(baseline, candidate, {
       iterations: intOption(args, "iterations", DEFAULT_ITERATIONS),
       seed      : intOption(args, "seed", DEFAULT_SEED),
-      confidence: args.confidence === undefined ? DEFAULT_CONFIDENCE : Number(args.confidence)
+      confidence: confidenceOption(args),
+      minN      : intOption(args, "min-n", DEFAULT_MIN_N)
     });
+    for (const warning of output.warnings) console.error(`[measure] 경고: ${warning}`);
   } else {
     ({ report: output, exitCode } = await measure(args));
   }
@@ -477,7 +533,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   main(process.argv.slice(2)).then(
     (code) => process.exit(code),
     (err) => {
-      const known = err instanceof MeasureRefusalError || err instanceof EvalSetError;
+      const known = [MeasureRefusalError, EvalSetError, BootstrapInputError, MetricInputError].some(type => err instanceof type);
       console.error(`[measure] ${known ? err.message : err.stack}`);
       for (const detail of err.details ?? []) console.error(`  - ${detail}`);
       process.exit(known ? 3 : 1);

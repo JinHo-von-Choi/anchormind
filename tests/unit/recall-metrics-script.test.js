@@ -19,7 +19,7 @@ import path                     from "node:path";
 import {
   MeasureRefusalError, parseTarget, resolveMeasureTarget, prepareEnvironment, assertConfigMatchesTarget,
   runWithConcurrency, executePass, queryKeywords, buildRecallParams, resolveLabels, scoreResults, countOrderChanges, buildReport,
-  compareFiles, main, PASSES
+  compareFiles, comparisonWarnings, tokensOf, main, PASSES
 } from "../../scripts/measure/recall-metrics.mjs";
 import { TEST_PORT, TEST_USER, TEST_PASSWORD } from "../db-concurrency/_guard.js";
 
@@ -32,6 +32,20 @@ describe("parseTarget", () => {
   test("host:port/database를 분해한다", () => {
     assert.deepEqual(parseTarget("localhost:35433/restore_copy"), { host: "localhost", port: 35433, database: "restore_copy" });
     assert.equal(parseTarget("[::1]:35433/x").host, "::1");
+  });
+
+  test("비밀번호가 든 URL을 거부할 때 받은 값을 어느 출력에도 담지 않는다", async () => {
+    const url = "postgresql://memento:hunter2-secret@db.internal.example:5432/prod";
+    for (const attempt of [() => parseTarget(url), () => resolveMeasureTarget(url, {})]) {
+      assert.throws(attempt, (e) => e instanceof MeasureRefusalError && !`${e.message}\n${e.stack}`.includes("hunter2-secret") && !e.message.includes("db.internal.example"));
+    }
+    const log = mock.method(console, "error", () => {});
+    try {
+      await assert.rejects(main(["--target", url]), (e) => !`${e.message}\n${e.stack}`.includes("hunter2-secret"));
+      assert.ok(log.mock.calls.every(c => !c.arguments.join(" ").includes("hunter2-secret")));
+    } finally {
+      log.mock.restore();
+    }
   });
 
   test("형식이 다르거나 포트가 범위 밖이면 거부한다", () => {
@@ -115,6 +129,14 @@ describe("prepareEnvironment", () => {
     assert.ok(["EMBEDDING_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "EMBEDDING_BASE_URL"].every(k => off[k] === undefined));
     assert.deepEqual(on.EMBEDDING_API_KEY, "k");
     assert.equal(on.EMBEDDING_PROVIDER, "gemini");
+  });
+});
+
+describe("토큰 수의 단일 출처", () => {
+  test("정답 조회와 반환 항목이 같은 계산을 쓴다", () => {
+    const count = (text) => text.length;
+    assert.equal(tokensOf({ content: "abcd", estimated_tokens: 999 }, count), 4);
+    assert.equal(tokensOf({}, count), 1);
   });
 });
 
@@ -325,6 +347,47 @@ describe("compareFiles", () => {
       assert.equal(code, 0);
       const { readFile } = await import("node:fs/promises");
       assert.equal(JSON.parse(await readFile(out, "utf-8")).schema, "recall-compare/v1");
+    });
+  });
+
+  test("두 파일의 token_budget 또는 query_keywords가 다르면 경고한다", async () => {
+    const mk = (params) => ({ ...doc([row("1", 1)]), params });
+    assert.deepEqual(comparisonWarnings(mk({ token_budget: 4000, query_keywords: "whitespace" }), mk({ token_budget: 4000, query_keywords: "whitespace" })), []);
+    const warnings = comparisonWarnings(mk({ token_budget: 4000, query_keywords: "whitespace" }), mk({ token_budget: 2000, query_keywords: "none" }));
+    assert.equal(warnings.length, 2);
+    assert.ok(warnings[0].includes("token_budget") && warnings[1].includes("query_keywords"));
+
+    await withFiles([mk({ token_budget: 4000 }), mk({ token_budget: 2000 })], async ([pa, pb]) => {
+      const log = mock.method(console, "error", () => {});
+      try {
+        const out  = path.join(path.dirname(pa), "w.json");
+        assert.equal(await main(["--compare", pa, pb, "--iterations", "20", "--out", out]), 0);
+        const { readFile } = await import("node:fs/promises");
+        assert.ok(JSON.parse(await readFile(out, "utf-8")).warnings.some(w => w.includes("token_budget")));
+        assert.ok(log.mock.calls.some(c => String(c.arguments[0]).includes("token_budget")));
+      } finally {
+        log.mock.restore();
+      }
+    });
+  });
+
+  test("숫자가 아니거나 범위 밖인 --confidence는 MeasureRefusalError로 거부한다", async () => {
+    await withFiles([doc([row("1", 0)]), doc([row("1", 1)])], async ([pa, pb]) => {
+      for (const bad of ["abc", "1.5", "0", "-0.2", ""]) {
+        await assert.rejects(main(["--compare", pa, pb, `--confidence=${bad}`]), (e) => e instanceof MeasureRefusalError && /--confidence/.test(e.message), bad);
+      }
+      await assert.rejects(main(["--compare", pa, pb, "--confidence"]), MeasureRefusalError);
+    });
+  });
+
+  test("--min-n은 비교 묶음의 insufficient_n에 반영되고 잘못된 값은 거부된다", async () => {
+    await withFiles([doc([row("1", 0), row("2", 0)]), doc([row("1", 1), row("2", 1)])], async ([pa, pb]) => {
+      const out = path.join(path.dirname(pa), "m.json");
+      await main(["--compare", pa, pb, "--iterations", "20", "--min-n", "3", "--out", out]);
+      const { readFile } = await import("node:fs/promises");
+      const overall = JSON.parse(await readFile(out, "utf-8")).comparisons.find(c => c.group === "overall");
+      assert.deepEqual([overall.min_n, overall.insufficient_n], [3, true]);
+      await assert.rejects(main(["--compare", pa, pb, "--min-n", "0"]), MeasureRefusalError);
     });
   });
 
