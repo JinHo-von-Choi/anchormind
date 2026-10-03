@@ -3,7 +3,7 @@
  *
  * DB 연결 없이 로직·인터페이스만 검증한다.
  * export.js / import.js의 usage export, JSON parse 에러 핸들링,
- * --dry-run 동작, --idempotent 중복 스킵 로직을 테스트한다.
+ * --dry-run 동작, --idempotent 중복 처리를 테스트한다.
  *
  * 작성자: 최진호
  * 작성일: 2026-04-20
@@ -94,13 +94,29 @@ describe("M6: import.js", () => {
     assert.ok(src.includes("dryRun ? null"), "dry-run 시 pool이 null로 분기돼야 함");
   });
 
-  it("--idempotent 플래그 — ON CONFLICT DO NOTHING 사용", async () => {
-    const src = fs.readFileSync(
-      new URL("../../lib/cli/import.js", import.meta.url).pathname,
-      "utf8"
-    );
-    assert.ok(src.includes("ON CONFLICT (id) DO NOTHING"), "idempotent 모드에 ON CONFLICT DO NOTHING이 있어야 함");
-    assert.ok(src.includes("skipped++"), "중복 시 skipped 카운터 증가 로직이 있어야 함");
+  it("--idempotent 플래그: 같은 id로 거부된 행은 skipped, 플래그가 없으면 errors로 센다", async () => {
+    const { importRows }                    = await import("../../lib/cli/import.js");
+    const { importFragment, IMPORT_DEFAULTS } = await import("../../lib/memory/write/FragmentImporter.js");
+    const { WriteGate }                     = await import("../../lib/memory/write/WriteGate.js");
+    const conflict = Object.assign(new Error("duplicate key value violates unique constraint"), { code: "23505" });
+    const deps = (idempotent) => ({
+      importFragment,
+      withTransaction: (_pool, fn) => fn({}),
+      pool    : {},
+      entry   : "cli_import",
+      gate    : new WriteGate(),
+      writer  : { insert: async () => { throw conflict; } },
+      defaults: IMPORT_DEFAULTS.cli,
+      idempotent,
+      dryRun  : false
+    });
+    const lines = [JSON.stringify({ id: "test-1", content: "Redis on 6380 for cache", topic: "infra" })];
+
+    const skipped = await importRows(lines, deps(true));
+    assert.deepEqual([skipped.imported, skipped.skipped, skipped.errors], [0, 1, 0]);
+
+    const failed = await importRows(lines, deps(false));
+    assert.deepEqual([failed.imported, failed.skipped, failed.errors], [0, 0, 1]);
   });
 
   it("임시 JSONL 파일 생성/파싱 기능 정상 동작 확인", () => {

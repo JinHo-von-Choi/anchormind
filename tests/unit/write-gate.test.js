@@ -22,7 +22,8 @@ import {
   policyStep,
   workspaceStep,
   anchorStep,
-  isGateEligible
+  isGateEligible,
+  WriteInputError
 } from "../../lib/memory/write/WriteGate.js";
 
 /** 단계 시험용 상태 */
@@ -36,7 +37,7 @@ describe("normalizeStep", () => {
   it("4000자를 넘는 본문은 -32602 오류로 거부한다", () => {
     assert.throws(
       () => normalizeStep(stateOf({ fields: { content: "a".repeat(4001), type: "fact" } })),
-      (err) => err.code === -32602 && /exceeds max 4000/.test(err.message)
+      (err) => err instanceof WriteInputError && err.code === -32602 && /exceeds max 4000/.test(err.message)
     );
   });
 
@@ -50,7 +51,10 @@ describe("normalizeStep", () => {
   });
 
   it("생성은 최소 품질 미달 본문을 거부한다", () => {
-    assert.throws(() => normalizeStep(stateOf({ fields: { content: "짧음", type: "fact" } })), /Content too short/);
+    assert.throws(
+      () => normalizeStep(stateOf({ fields: { content: "짧음", type: "fact" } })),
+      (err) => err instanceof WriteInputError && err.code === undefined && /Content too short/.test(err.message)
+    );
   });
 
   it("갱신은 본문을 다듬지 않고 키워드만 정규화한다", () => {

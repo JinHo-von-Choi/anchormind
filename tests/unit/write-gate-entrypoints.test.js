@@ -52,6 +52,16 @@ mock.module("../../lib/memory/processors/EpisodeContinuityService.js", {
   namedExports: { linkEpisodeMilestone: async () => null }
 });
 
+/** admin 가져오기가 불러오는 FragmentWriter를 기록 대역으로 바꾼다. */
+const writerHolder = { inserted: [], idFor: (f) => f.id };
+mock.module("../../lib/memory/write/FragmentWriter.js", {
+  namedExports: {
+    FragmentWriter: class {
+      async insert(f) { writerHolder.inserted.push(f); return writerHolder.idFor(f); }
+    }
+  }
+});
+
 const { MemoryRememberer }       = await import("../../lib/memory/processors/MemoryRememberer.js");
 const { FragmentFactory }        = await import("../../lib/memory/write/FragmentFactory.js");
 const { BatchRememberProcessor } = await import("../../lib/memory/write/BatchRememberProcessor.js");
@@ -59,6 +69,10 @@ const { ReflectProcessor }       = await import("../../lib/memory/processors/Ref
 const { WriteGate }              = await import("../../lib/memory/write/WriteGate.js");
 const { autoReflect }            = await import("../../lib/memory/processors/AutoReflect.js");
 const { handleMemory }           = await import("../../lib/admin/admin-memory.js");
+const { handleImport }           = await import("../../lib/admin/admin-export.js");
+const { importRows }             = await import("../../lib/cli/import.js");
+const { rememberLocal }          = await import("../../lib/cli/remember.js");
+const { importFragment, IMPORT_DEFAULTS, buildImportFragment } = await import("../../lib/memory/write/FragmentImporter.js");
 const { teardownTestResources }  = await import("../_lifecycle.js");
 
 after(async () => { await teardownTestResources(); });
@@ -364,5 +378,107 @@ describe("AutoReflect", () => {
     assert.equal(result.count, MASKING_TABLE.length);
     MASKING_TABLE.forEach(([, , secret, marker], i) => assertMasked(contents[i], secret, marker));
     assert.ok(entries.length > 0 && entries.every(e => e === "auto_reflect"), JSON.stringify(entries));
+  });
+});
+
+describe("admin import", () => {
+  beforeEach(() => {
+    writerHolder.inserted = [];
+    writerHolder.idFor    = (f) => f.id;
+  });
+
+  it("행마다 민감 정보를 마스킹해 기록한다", async () => {
+    const res = fakeRes();
+    await handleImport(
+      jsonReq("POST", { fragments: MASKING_TABLE.map(([, content]) => ({ content, topic: "ops", type: "fact" })) }),
+      res, new URL(`http://localhost${ADMIN_BASE}/import`)
+    );
+    assert.equal(res.statusCode, 200, res.body);
+    assert.deepEqual(JSON.parse(res.body), { imported: MASKING_TABLE.length, skipped: 0 });
+    MASKING_TABLE.forEach(([, , secret, marker], i) => assertMasked(writerHolder.inserted[i]?.content, secret, marker));
+  });
+
+  it("관문이 받아들이지 않은 행과 이미 있는 본문은 skipped로 센다", async () => {
+    writerHolder.idFor = (f) => (f.content.startsWith("이미") ? "frag-existing" : f.id);
+    const res = fakeRes();
+    await handleImport(jsonReq("POST", { fragments: [
+      { content: "짧음", topic: "ops", type: "fact" },
+      { content: "이미 저장된 본문과 같은 내용이다", topic: "ops", type: "fact" },
+      { content: "새로 가져오는 본문 하나를 적는다", topic: "ops", type: "fact" }
+    ] }), res, new URL(`http://localhost${ADMIN_BASE}/import`));
+    assert.deepEqual(JSON.parse(res.body), { imported: 1, skipped: 2 });
+  });
+});
+
+/** CLI 가져오기 의존성 */
+function cliImportDeps({ inserted = [], dryRun = false } = {}) {
+  return {
+    importFragment,
+    withTransaction: (_pool, fn) => fn({ query: async () => ({ rows: [] }) }),
+    pool    : {},
+    entry   : "cli_import",
+    gate    : new WriteGate(),
+    writer  : { insert: async (f) => { inserted.push(f); return f.id; } },
+    defaults: IMPORT_DEFAULTS.cli,
+    idempotent: false,
+    dryRun
+  };
+}
+
+describe("CLI import", () => {
+  it("줄마다 민감 정보를 마스킹해 기록한다", async () => {
+    const inserted = [];
+    const lines    = MASKING_TABLE.map(([, content]) => JSON.stringify({ content, topic: "ops" }));
+    const counts   = await importRows(lines, cliImportDeps({ inserted }));
+    assert.equal(counts.imported, MASKING_TABLE.length);
+    MASKING_TABLE.forEach(([, , secret, marker], i) => assertMasked(inserted[i]?.content, secret, marker));
+  });
+
+  it("관문이 받아들이지 않은 줄은 errors로 세고 기록하지 않는다", async () => {
+    const inserted = [];
+    const counts   = await importRows([JSON.stringify({ content: "짧음", topic: "ops" })], cliImportDeps({ inserted }));
+    assert.deepEqual([counts.imported, counts.errors], [0, 1]);
+    assert.equal(inserted.length, 0);
+  });
+
+  it("dry-run은 관문 검증만 하고 기록하지 않는다", async () => {
+    const inserted = [];
+    const counts   = await importRows([JSON.stringify({ content: MASKING_TABLE[0][1], topic: "ops" })], cliImportDeps({ inserted, dryRun: true }));
+    assert.equal(counts.imported, 1);
+    assert.equal(inserted.length, 0);
+  });
+});
+
+describe("CLI remember 로컬 모드", () => {
+  for (const [label, content, secret, marker] of MASKING_TABLE) {
+    it(`${label} 원문을 마스킹해 기록한다`, async () => {
+      const inserted = [];
+      const result   = await rememberLocal(
+        { content, topic: "ops", type: "fact", source: "cli", agentId: "cli" },
+        {
+          gate       : new WriteGate(),
+          writer     : { insert: async (f) => { inserted.push(f); return f.id; } },
+          transaction: (fn) => fn({}),
+          entry      : "cli_remember"
+        }
+      );
+      assert.equal(result.id, inserted[0].id);
+      assertMasked(inserted[0]?.content, secret, marker);
+    });
+  }
+});
+
+describe("buildImportFragment", () => {
+  it("admin 기본값은 행의 key_id를 쓰고 CLI 기본값은 마스터로 기록한다", () => {
+    const row = { id: "f1", content: "본문", topic: "t", key_id: "key-9", agent_id: null };
+    assert.equal(buildImportFragment(row, IMPORT_DEFAULTS.admin).key_id, "key-9");
+    assert.equal(buildImportFragment(row, IMPORT_DEFAULTS.cli).key_id, null);
+    assert.equal(buildImportFragment(row, IMPORT_DEFAULTS.admin).agent_id, "default");
+    assert.equal(buildImportFragment(row, IMPORT_DEFAULTS.cli).source, "import");
+  });
+
+  it("id가 없으면 새 id를 만든다", () => {
+    const built = buildImportFragment({ content: "본문", topic: "t" }, IMPORT_DEFAULTS.cli);
+    assert.match(built.id, /^[0-9a-f-]{36}$/);
   });
 });
