@@ -11,12 +11,13 @@
 import { describe, it, before, after } from "node:test";
 import assert                          from "node:assert/strict";
 import { spawnSync }                   from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir }                      from "node:os";
 import path                            from "node:path";
 import { fileURLToPath }               from "node:url";
 
 import { SWITCHES } from "../../config/switches.js";
+import { uncommentedAssignments } from "./switch-source-helpers.js";
 
 const SCRIPT = fileURLToPath(new URL("../../scripts/switch-report.mjs", import.meta.url));
 
@@ -82,4 +83,14 @@ describe("switch-report.mjs", () => {
   it("옵션이 없으면 잘못된 값이 있어도 0으로 끝난다", () => {
     assert.equal(run({ MEMENTO_CORS_MODE: "bogus" }, { cwd: dir }).status, 0);
   });
+
+  for (const file of [".env.example", ".env.example.minimal"]) {
+    it(`${file}의 주석 처리 없는 스위치 값으로 만든 환경에서 --strict가 0으로 끝난다`, () => {
+      const names = new Set(SWITCHES.map((x) => x.name));
+      const text  = readFileSync(fileURLToPath(new URL(`../../${file}`, import.meta.url)), "utf8");
+      const env   = Object.fromEntries(Object.entries(uncommentedAssignments(text)).filter(([n]) => names.has(n)));
+      const res   = run(env, { cwd: dir, args: ["--strict"] });
+      assert.equal(res.status, 0, res.stderr);
+    });
+  }
 });

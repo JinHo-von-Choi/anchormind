@@ -16,8 +16,8 @@ import { readFileSync } from "node:fs";
 import path             from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { SWITCHES } from "../../config/switches.js";
-import { helperReadNames, listJs } from "./switch-source-helpers.js";
+import { SWITCHES, describeSwitches } from "../../config/switches.js";
+import { helperReadNames, listJs, uncommentedAssignments } from "./switch-source-helpers.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const read = (rel) => readFileSync(path.join(ROOT, rel), "utf8");
@@ -62,13 +62,34 @@ describe("대장의 스위치와 문서", () => {
       const mismatched = [];
       for (const s of SWITCHES.filter((x) => !x.follows)) {
         for (const cell of documentedDefaults(text, s.name)) {
-          const unsetNote = s.kind === "enum" && /^\(.*\)$/.test(cell);
+          const unsetNote = s.kind !== "boolean" && /^\(.*\)$/.test(cell);
           if (cell !== String(s.default) && !unsetNote) mismatched.push(`${s.name}: 문서 ${cell}, 대장 ${s.default}`);
         }
       }
       assert.deepEqual(mismatched, []);
     });
   }
+});
+
+describe("환경 파일 예시의 스위치 값", () => {
+  for (const file of [".env.example", ".env.example.minimal"]) {
+    it(`${file}에 주석 처리 없이 적힌 스위치 값은 모두 대장에서 유효하다`, () => {
+      const names    = new Set(SWITCHES.map((s) => s.name));
+      const assigned = Object.entries(uncommentedAssignments(read(file))).filter(([name]) => names.has(name));
+      const invalid  = describeSwitches(Object.fromEntries(assigned)).filter((s) => s.invalid).map((s) => s.name);
+      assert.deepEqual(invalid, []);
+      for (const [name, value] of assigned) {
+        const one = describeSwitches({ [name]: value }).find((s) => s.name === name);
+        assert.equal(one.invalid, false, `${name}=${value}`);
+      }
+    });
+  }
+
+  it(".env.example에 적힌 스위치 값을 확인할 대상이 있다", () => {
+    const names = new Set(SWITCHES.map((s) => s.name));
+    const found = Object.keys(uncommentedAssignments(read(".env.example"))).filter((n) => names.has(n));
+    assert.ok(found.includes("MEMENTO_VECTOR_FORCE_INDEX") && found.includes("REDIS_ENABLED"), found.join(","));
+  });
 });
 
 describe("도우미로 읽는 스위치", () => {

@@ -1,16 +1,13 @@
 /**
  * 스위치 대장과 사용처 판독의 일치 검사
  *
- * 스위치마다 여러 원시값(미설정, 빈 값, 공백, 대소문자, 잘못된 값, 문서 값)을 자식 프로세스의 환경에
- * 넣고, 실제 사용처가 읽은 값이 describeSwitches의 적용 값과 같은지 본다. 사용처가 모듈 상수나
- * 내보낸 함수로 값을 드러내는 스위치가 대상이다. 호출 시점에 열거를 읽는 8개는 사용처가 부르는
- * lib/env-parse.js의 판독 함수와 대장을 같은 원시값 표로 비교하고, 사용처가 그 함수를 부르는지 소스로 본다.
- * 값을 내보내지 않는 불리언은 사용처 소스에 판독 지점이 있고 대장의 불리언 해석과 같은 비교식인지 소스로 본다.
- * 환경 변수 도우미(envBool, envEnum)로도 읽는 스위치는 대장이 잘못된 값으로 본 집합이 기동 시 설정 문제
- * 목록과 같은지도 본다.
- *
- * 작성자: 최진호
- * 작성일: 2026-10-03
+ * 스위치마다 여러 원시값(미설정, 빈 값, 공백, 대소문자, 잘못된 값, 문서 값)을 넣고 실제 사용처가 읽은 값이
+ * describeSwitches의 적용 값과 같은지 본다. 모든 스위치가 대상이다.
+ *   1. 사용처가 모듈 상수나 내보낸 함수로 값을 드러내는 45개: 자식 프로세스의 환경에 원시값을 넣고 읽은 값을 비교한다.
+ *   2. 호출 시점에 읽는 열거 8개와 리터럴 true 불리언 6개: 사용처가 부르는 lib/env-parse.js의 판독 함수와
+ *      대장을 같은 원시값 표로 비교하고, 사용처가 그 함수를 부르며 환경을 직접 비교하지 않는지 소스로 본다.
+ *   3. 잘못된 값 표시: 환경 변수 도우미(envBool, envEnum)로도 읽는 스위치는 기동 시 설정 문제 목록과, 기동 실패로
+ *      이어지는 값은 판독 결과와, 그 밖의 모든 스위치는 문서 값 집합에서 독립적으로 계산한 기대값과 비교한다.
  */
 
 import { describe, it, before } from "node:test";
@@ -79,10 +76,9 @@ const RUNTIME = {
 };
 
 /**
- * 사용처가 호출 시점에 환경을 직접 비교하고 값을 모듈 밖으로 내보내지 않는 불리언 스위치.
- * 소스의 비교식이 대장의 기본값과 맞는지 본다.
+ * 사용처가 호출 시점에 isLiteralTrue(env, 이름)으로 읽고 값을 모듈 밖으로 내보내지 않는 불리언 스위치.
  */
-const SOURCE_ONLY = [
+const LITERAL_TRUE = [
   "MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN", "MEMENTO_REMEMBER_ATOMIC", "MEMENTO_WORKSPACE_GATE",
   "ENABLE_RECONSOLIDATION", "ENABLE_SPREADING_ACTIVATION", "UPDATE_REQUIRE_SIGNED_TAG"
 ];
@@ -101,12 +97,18 @@ const ENUM_READERS = {
   MEMENTO_METRICS_DEFAULT:        "readMetricsDefault"
 };
 
-/** 열거 판독 시험에 쓰는 원시값 표 */
-const ENUM_RAW = [undefined, "", " ", "\t", "garbage", "Deny", "DENY", "Enforce", " enforce", "off", "on", "warn", "enforce",
-  "reflect", "observe", "allowlist", "allow", "deny"];
-
 /** 모든 스위치에 공통으로 넣는 원시값. undefined는 미설정이다. */
 const COMMON_RAW = [undefined, "", " ", "true", "false", "TRUE", "False", "1", "yes", " true", "garbage", "on", "off"];
+
+/** 판독 함수와 대장의 직접 비교에 쓰는 원시값 표. 공통 값에 탭, 대소문자 혼합, 열거 값을 더했다. */
+const RAW_TABLE = [...new Set([...COMMON_RAW, "\t", "Deny", "DENY", "Enforce", " enforce", " off", "Off", "warn", "enforce",
+  "reflect", "observe", "allowlist", "allow", "deny", "none", "all"])];
+
+/** 스위치 하나에 대한 원시값 표: 공통 표에 그 스위치의 문서 값을 더한다. */
+const rawTableFor = (spec) => [...new Set([...RAW_TABLE, ...(spec.values ?? [])])];
+
+/** 원시값 하나로 이루어진 환경. undefined는 빈 환경이다. */
+const envOf = (name, raw) => (raw === undefined ? {} : { [name]: raw });
 
 const CHILD_HEAD = `
 const root = ${JSON.stringify(ROOT)};
@@ -186,8 +188,8 @@ describe("스위치 대장과 사용처 판독", () => {
     const names = new Set(SWITCHES.map((s) => s.name));
     for (const name of Object.keys(RUNTIME)) assert.ok(names.has(name), `${name}은 대장에 없다`);
     const rest = SWITCHES.filter((s) => RUNTIME[s.name] === undefined).map((s) => s.name).sort();
-    const expected = [...SOURCE_ONLY, ...Object.keys(ENUM_READERS)].sort();
-    assert.deepEqual(rest, expected, "판독 식이 없는 스위치와 소스 검사, 판독 함수 목록이 다르다");
+    const expected = [...LITERAL_TRUE, ...Object.keys(ENUM_READERS)].sort();
+    assert.deepEqual(rest, expected, "판독 식이 없는 스위치와 판독 함수 목록이 다르다");
   });
 
   it("모든 원시값에서 사용처가 읽은 값이 대장의 적용 값과 같다", () => {
@@ -231,33 +233,36 @@ describe("스위치 대장과 사용처 판독", () => {
   });
 });
 
-describe("소스에서만 확인하는 스위치", () => {
-  const files  = [...listJs(path.join(ROOT, "lib")), ...listJs(path.join(ROOT, "config")), path.join(ROOT, "server.js")];
-  const source = files.map((f) => readFileSync(f, "utf8")).join("\n");
+/** lib, config, server.js의 소스. 판독 함수를 정의한 lib/env-parse.js는 뺀다. */
+const callSiteSource = () => [
+  ...listJs(path.join(ROOT, "lib")), ...listJs(path.join(ROOT, "config")), path.join(ROOT, "server.js")
+].filter((f) => !f.endsWith(path.join("lib", "env-parse.js"))).map((f) => readFileSync(f, "utf8")).join("\n");
 
-  for (const name of SOURCE_ONLY) {
-    const spec = SWITCHES.find((s) => s.name === name);
-    it(`${name}의 판독 지점이 소스에 있다`, () => {
-      assert.ok(spec, `${name}은 대장에 없다`);
-      assert.match(source, new RegExp(`process\\.env\\.${name}\\b`));
+describe("호출 시점에 리터럴 true를 읽는 불리언 스위치", () => {
+  const source = callSiteSource();
+
+  for (const name of LITERAL_TRUE) {
+    it(`${name}: 사용처가 isLiteralTrue로 읽고 환경을 직접 비교하지 않는다`, () => {
+      assert.match(source, new RegExp(`isLiteralTrue\\(process\\.env,\\s*"${name}"\\)`));
+      assert.doesNotMatch(source, new RegExp(`process\\.env\\.${name}\\b`));
     });
 
-    if (spec?.kind === "boolean") {
-      it(`${name}의 비교식이 대장의 기본값과 맞다`, () => {
-        const eq  = new RegExp(`process\\.env\\.${name}\\s*===\\s*"true"`);
-        const neq = new RegExp(`process\\.env\\.${name}\\s*!==\\s*"(true|false)"`);
-        const m   = source.match(spec.default ? /$^/ : eq) ?? source.match(neq);
-        assert.ok(m, `${name}의 비교식을 찾지 못했다`);
-        if (spec.default) assert.match(m[0], /!==\s*"false"/);
-        else assert.ok(/===\s*"true"/.test(m[0]) || /!==\s*"true"/.test(m[0]));
-      });
-    }
+    it(`${name}: 모든 원시값에서 판독 값이 대장의 적용 값과 같다`, () => {
+      const spec  = SWITCHES.find((s) => s.name === name);
+      const wrong = [];
+      for (const raw of rawTableFor(spec)) {
+        const env   = envOf(name, raw);
+        const state = describeSwitches(env).find((s) => s.name === name);
+        const got   = String(readers.isLiteralTrue(env, name));
+        if (got !== state.value) wrong.push(`raw=${JSON.stringify(raw)} 판독=${got} 대장=${state.value}`);
+      }
+      assert.deepEqual(wrong, []);
+    });
   }
 });
 
 describe("호출 시점에 열거를 읽는 스위치", () => {
-  const files  = [...listJs(path.join(ROOT, "lib")), ...listJs(path.join(ROOT, "config")), path.join(ROOT, "server.js")];
-  const source = files.filter((f) => !f.endsWith(path.join("lib", "env-parse.js"))).map((f) => readFileSync(f, "utf8")).join("\n");
+  const source = callSiteSource();
 
   for (const [name, fn] of Object.entries(ENUM_READERS)) {
     it(`${name}: 사용처가 ${fn}으로 읽고 환경을 직접 비교하지 않는다`, () => {
@@ -268,8 +273,9 @@ describe("호출 시점에 열거를 읽는 스위치", () => {
     it(`${name}: 모든 원시값에서 판독 함수의 값이 대장의 적용 값과 같다`, () => {
       assert.equal(typeof readers[fn], "function", fn);
       const wrong = [];
-      for (const raw of ENUM_RAW) {
-        const env   = raw === undefined ? {} : { [name]: raw };
+      const spec  = SWITCHES.find((s) => s.name === name);
+      for (const raw of rawTableFor(spec)) {
+        const env   = envOf(name, raw);
         const state = describeSwitches(env).find((s) => s.name === name);
         const got   = readers[fn](env);
         if (got !== state.value) wrong.push(`raw=${JSON.stringify(raw)} 판독=${got} 대장=${state.value}`);
@@ -277,4 +283,47 @@ describe("호출 시점에 열거를 읽는 스위치", () => {
       assert.deepEqual(wrong, []);
     });
   }
+});
+
+/**
+ * 문서 값 집합에서 독립적으로 계산한 "잘못된 값" 기대값. 불리언은 true와 false, 열거는 문서 값만 유효하다.
+ * 미설정과 공백만 있는 값은 미설정이다(emptyOnly는 빈 문자열만, strictBlank는 미설정만).
+ * 항목의 trim, ci 속성은 사용처가 읽는 방식 그대로 적용한다. off-disables는 잘못된 값이 없다.
+ */
+function expectedInvalid(spec, raw) {
+  if (spec.kind === "off-disables" || raw === undefined) return false;
+  let text = raw;
+  if (spec.trim) text = text.trim();
+  if (spec.ci)   text = text.toLowerCase();
+  const blank = spec.emptyOnly ? text === "" : text.trim() === "";
+  if (blank) return Boolean(spec.strictBlank) && !(spec.emptyOnly);
+  const documented = spec.kind === "boolean" ? ["true", "false"] : spec.values;
+  return !documented.includes(text);
+}
+
+describe("모든 스위치의 잘못된 값 표시", () => {
+  it("모든 스위치와 원시값 표에서 대장의 invalid가 문서 값 집합의 기대값과 같다", () => {
+    const wrong = [];
+    for (const spec of SWITCHES) {
+      for (const raw of rawTableFor(spec)) {
+        const state = describeSwitches(envOf(spec.name, raw)).find((s) => s.name === spec.name);
+        if (state.invalid !== expectedInvalid(spec, raw)) {
+          wrong.push(`${spec.name} raw=${JSON.stringify(raw)} 대장=${state.invalid} 기대=${expectedInvalid(spec, raw)}`);
+        }
+      }
+    }
+    assert.deepEqual(wrong, []);
+  });
+
+  it("잘못된 값의 적용 값은 문서 기본값 또는 사용처가 적용하는 값이고 잘못된 원본은 담기지 않는다", () => {
+    for (const spec of SWITCHES) {
+      const state = describeSwitches(envOf(spec.name, "garbage_SECRET_value")).find((s) => s.name === spec.name);
+      assert.ok(!JSON.stringify(state).includes("garbage_SECRET_value"), spec.name);
+      if (state.invalid && state.state !== "invalid") {
+        const applied = spec.invalid ?? spec.default;
+        const given   = spec.follows ? state.default : String(applied);
+        assert.equal(state.value, given, spec.name);
+      }
+    }
+  });
 });

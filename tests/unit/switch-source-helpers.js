@@ -38,3 +38,19 @@ export function listJs(dir) {
   }
   return out;
 }
+
+/**
+ * 환경 파일 예시 텍스트에서 주석 처리되지 않은 NAME=value 줄을 읽는다. 값 뒤의 `  # 설명`은 지운다.
+ * 파일을 환경에 올리지 않고 텍스트만 해석한다.
+ *
+ * @param {string} text
+ * @returns {Record<string, string>}
+ */
+export function uncommentedAssignments(text) {
+  const out = {};
+  for (const line of text.split("\n")) {
+    const m = /^([A-Z][A-Z0-9_]*)=(.*)$/.exec(line);
+    if (m) out[m[1]] = m[2].replace(/\s+#.*$/, "").trim();
+  }
+  return out;
+}

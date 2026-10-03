@@ -12,7 +12,8 @@
  *
  * 항목 속성
  *   name        환경 변수 이름
- *   kind        "boolean" | "enum"
+ *   kind        "boolean" | "enum" | "off-disables"
+ *               off-disables: 리터럴 "off"만 끄고 그 밖의 모든 값과 미설정은 켜짐이며 잘못된 값이 없다
  *   default     미설정일 때의 값. boolean은 true/false, enum은 문자열
  *   values      enum의 문서 값 목록
  *   off         enum에서 꺼짐으로 보는 값. 없으면 상태는 "mode"
@@ -49,6 +50,10 @@ const boolOnStrict = (name, category, purpose) =>
   boolOn(name, category, purpose, { strictBlank: true, invalid: false });
 
 /** 사용처가 대소문자를 구분하지 않고 읽는 symbolic 불리언 */
+/** 사용처가 `=== "off"` 또는 `!== "off"`로 읽는 스위치. 리터럴 off만 끄고 그 밖의 값은 모두 켜짐으로 유효하다 */
+const offDisables = (name, category, purpose) =>
+  ({ name, kind: "off-disables", values: ["on", "off"], default: "on", off: ["off"], category, purpose });
+
 const symbolicFlag = (name, purpose) => boolOff(name, "symbolic", purpose, { ci: true });
 
 export const SWITCHES = Object.freeze([
@@ -86,7 +91,7 @@ export const SWITCHES = Object.freeze([
   boolOn("MEMENTO_QUERY_PROFILE_ENABLED", "검색", "질의 의도별 검색 프로파일을 적용한다"),
   boolOn("MEMENTO_KEYWORD_SEMANTIC_FALLBACK", "검색", "keywords만 있는 recall에 시맨틱 보조 검색을 더한다"),
   boolOn("MEMENTO_WORKSPACE_DECAY", "검색", "workspace가 다른 파편의 순위 점수를 낮춘다"),
-  enumOf("MEMENTO_VECTOR_FORCE_INDEX", ["off"], "on", "검색", "벡터 검색에 인덱스 강제 planner 힌트를 쓴다", { off: ["off"], invalid: "on" }),
+  offDisables("MEMENTO_VECTOR_FORCE_INDEX", "검색", "벡터 검색에 인덱스 강제 planner 힌트를 쓴다"),
   boolOff("ENABLE_SPREADING_ACTIVATION", "검색", "recall의 contextText로 활성 확산 검색을 한다"),
   boolOff("MEMENTO_SYNTHETIC_QUERY_ENABLED", "검색", "파편 저장 시 LLM으로 합성 역질의를 만들어 색인한다"),
   boolOn("MEMENTO_SYNTHETIC_QUERY_SEARCH", "검색", "합성 역질의 벡터를 검색에 반영한다"),
@@ -124,8 +129,8 @@ export const SWITCHES = Object.freeze([
   boolOff("MEMENTO_CONFIG_STRICT", "운영", "환경 변수 값 문제가 있으면 기동을 멈춘다"),
   boolOff("UPDATE_CHECK_DISABLED", "운영", "신규 버전 확인을 끈다"),
   boolOff("UPDATE_REQUIRE_SIGNED_TAG", "운영", "git 설치본 갱신에서 서명된 태그를 요구한다"),
-  enumOf("MEMENTO_ADMIN_METRICS_SAMPLING", ["off"], "on", "운영", "관리 콘솔 메트릭 샘플링을 한다", { off: ["off"], invalid: "on" }),
-  enumOf("MEMENTO_METRICS_DEFAULT", ["off"], "on", "운영", "prom-client 기본 메트릭(CPU, 메모리 등)을 수집한다", { off: ["off"], invalid: "on" })
+  offDisables("MEMENTO_ADMIN_METRICS_SAMPLING", "운영", "관리 콘솔 메트릭 샘플링을 한다"),
+  offDisables("MEMENTO_METRICS_DEFAULT", "운영", "prom-client 기본 메트릭(CPU, 메모리 등)을 수집한다")
 ]);
 
 const BY_NAME = new Map(SWITCHES.map((spec) => [spec.name, spec]));
@@ -153,6 +158,7 @@ function normalizeRaw(raw, spec) {
  */
 function classify(text, spec) {
   if (spec.strictBlank && text !== undefined && text.trim() === "") return { status: "invalid" };
+  if (spec.kind === "off-disables") return text === "off" ? { status: "valid", value: "off" } : { status: "unset" };
   if (spec.kind === "boolean") return classifyBool(text);
   return classifyEnum(text, spec.values, { emptyOnly: Boolean(spec.emptyOnly) });
 }

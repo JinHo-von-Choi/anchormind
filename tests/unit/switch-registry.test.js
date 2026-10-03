@@ -174,13 +174,25 @@ describe("describeSwitches 잘못된 값", () => {
     assert.equal(empty.value,   "warn");
   });
 
-  it("문서 값이 아닌 기본값 표기는 잘못된 값이다", () => {
+  it("닫힌 열거에서 문서 값이 아닌 기본값 표기는 잘못된 값이다", () => {
     const frame = byName(describeSwitches({ MEMENTO_FRAME_OPTIONS: "off" }), "MEMENTO_FRAME_OPTIONS");
     assert.equal(frame.invalid, true);
     assert.equal(frame.value,   "off");
-    const guard = byName(describeSwitches({ MEMENTO_VECTOR_FORCE_INDEX: "on" }), "MEMENTO_VECTOR_FORCE_INDEX");
-    assert.equal(guard.invalid, true);
-    assert.equal(guard.value,   "on");
+  });
+
+  it("off만 끄는 스위치는 off 외의 모든 값을 켜짐으로 보고 잘못된 값이 없다", () => {
+    for (const name of ["MEMENTO_VECTOR_FORCE_INDEX", "MEMENTO_ADMIN_METRICS_SAMPLING", "MEMENTO_METRICS_DEFAULT"]) {
+      for (const raw of [undefined, "", " ", "on", "ON", "true", "garbage", " off", "Off"]) {
+        const s = byName(describeSwitches(raw === undefined ? {} : { [name]: raw }), name);
+        assert.equal(s.invalid, false, `${name} ${JSON.stringify(raw)}`);
+        assert.equal(s.state,   "on",  `${name} ${JSON.stringify(raw)}`);
+        assert.equal(s.value,   "on",  `${name} ${JSON.stringify(raw)}`);
+      }
+      const off = byName(describeSwitches({ [name]: "off" }), name);
+      assert.equal(off.state,      "off");
+      assert.equal(off.invalid,    false);
+      assert.equal(off.nonDefault, true);
+    }
   });
 
   it("기동 실패로 이어지는 값은 invalid 상태로 표시한다", () => {
@@ -286,16 +298,17 @@ describe("레지스트리 항목", () => {
 
   it("종류, 기본값, 설명, 분류가 갖춰져 있다", () => {
     for (const s of SWITCHES) {
-      assert.ok(["boolean", "enum"].includes(s.kind), s.name);
+      assert.ok(["boolean", "enum", "off-disables"].includes(s.kind), s.name);
       assert.ok(typeof s.purpose === "string" && s.purpose.length > 0, `${s.name} purpose`);
       assert.ok(typeof s.category === "string" && s.category.length > 0, `${s.name} category`);
       if (s.kind === "boolean") assert.ok(typeof s.default === "boolean" || s.follows, `${s.name} default`);
       else assert.ok(typeof s.default === "string" && Array.isArray(s.values), `${s.name} enum`);
+      if (s.kind === "off-disables") assert.deepEqual([s.default, s.off], ["on", ["off"]], s.name);
     }
   });
 
   it("열거의 꺼짐 값과 잘못된 값 적용값은 그 열거 안에 있다", () => {
-    for (const s of SWITCHES.filter((x) => x.kind === "enum")) {
+    for (const s of SWITCHES.filter((x) => x.kind !== "boolean")) {
       const known = new Set([...s.values, s.default]);
       for (const v of s.off ?? []) assert.ok(known.has(v), `${s.name} off ${v}`);
       if (s.invalid !== undefined) assert.ok(known.has(s.invalid), `${s.name} invalid ${s.invalid}`);
