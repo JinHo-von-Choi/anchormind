@@ -6,7 +6,7 @@
  *
  * 기억 내용이 LLM 제공자로 나가는 경로는 모두 외부 전송 관문(lib/llm/EgressGate.js)을 지난다.
  * lib, scripts, bin의 소스를 정적으로 읽어 tests/structure/_llm-egress-rules.js의 규칙을 검사한다.
- * 규칙이 우회 경로를 실제로 잡는지는 llm-egress-mutation.test.js가 소스 사본에 위반을 넣어 확인한다.
+ * 규칙이 관문을 거치지 않는 경로를 실제로 잡는지는 llm-egress-mutation.test.js가 소스 사본에 위반을 넣어 확인한다.
  */
 
 import { describe, it } from "node:test";
