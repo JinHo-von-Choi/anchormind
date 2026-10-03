@@ -40,7 +40,12 @@ export const state = {
   logTail:   200,
   logLines:  [],
   logFiles:  [],
-  logStats:  null
+  logStats:  null,
+
+  auditFilter:     { action: "", actor: "", target_type: "", target_id: "", outcome: "", from: "", to: "" },
+  auditEvents:     [],
+  auditNextBefore: null,
+  auditVerify:     null
 };
 
 /** 뷰 이름 → 렌더러 함수 매핑 레지스트리 */

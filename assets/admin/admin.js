@@ -15,6 +15,7 @@ import { renderGroups } from "./modules/groups.js";
 import { renderSessions } from "./modules/sessions.js";
 import { renderGraph } from "./modules/graph.js";
 import { renderLogs } from "./modules/logs.js";
+import { renderAudit } from "./modules/audit.js";
 import { renderMemory } from "./modules/memory.js";
 import { mountMetricsView } from "./modules/metrics.js";
 import { api } from "./modules/api.js";
@@ -37,6 +38,7 @@ registerView("groups",   renderGroups);
 registerView("sessions", renderSessions);
 registerView("graph",    renderGraph);
 registerView("logs",     renderLogs);
+registerView("audit",    renderAudit);
 registerView("memory",   renderMemory);
 registerView("metrics",  renderMetrics);
 
