@@ -11,7 +11,7 @@
  * 업데이트 확인을 수행하며, UPDATE_CHECK_DISABLED=true 로 비활성화할 수 있다.
  *
  * 지원 커맨드: serve, migrate, cleanup, backfill, stats, health, recall, remember,
- * inspect, update, export, import, completion, session, benchmark.
+ * inspect, update, export, import, completion, session, benchmark, anchor-scope, hook.
  */
 import "dotenv/config";
 import { parseArgs } from '../lib/cli/parseArgs.js';
@@ -34,6 +34,7 @@ const COMMANDS = {
   session:    () => import('../lib/cli/session.js'),
   benchmark:  () => import('../lib/cli/benchmark.js'),
   'anchor-scope': () => import('../lib/cli/anchor-scope.js'),
+  hook:       () => import('../lib/cli/hook.js'),
 };
 
 /** 원격 모드를 지원하지 않는 로컬 전용 명령 목록 */
@@ -63,6 +64,7 @@ function printUsage() {
     '  session <list|show|delete>       Manage active sessions (headless/CI)',
     '  benchmark [--goldset FILE]       Measure recall quality against a goldset',
     '  anchor-scope [--execute]         Inventory/normalize approved shared anchors',
+    '  hook <event> --client <name>     Claude Code/Codex hook runner (SessionStart|Stop|SessionEnd)',
     '',
     'Options:',
     '  --help                      Show this help message',
