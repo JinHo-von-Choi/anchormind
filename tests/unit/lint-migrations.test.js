@@ -87,6 +87,11 @@ describe("대형 표 색인 등록과 IF NOT EXISTS", () => {
     });
   }
 
+  it("본문 맨 위의 SET LOCAL lock_timeout 은 위반이 아니다", () => {
+    const sql = "SET LOCAL lock_timeout = '3s';\nALTER TABLE agent_memory.fragments ADD COLUMN IF NOT EXISTS example_col integer;\nALTER TABLE agent_memory.fragments ADD CONSTRAINT chk_example CHECK (example_col >= 0) NOT VALID;";
+    assert.deepEqual(ruleIds("migration-050-x.sql", sql), []);
+  });
+
   it("대형 표 목록은 네 표다", () => {
     assert.deepEqual([...LARGE_TABLES], ["fragments", "fragment_links", "case_events", "search_events"]);
   });

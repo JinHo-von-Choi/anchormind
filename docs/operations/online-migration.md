@@ -33,12 +33,20 @@
 
 `NOT NULL` 추가와 제약의 `VALIDATE`는 대형 표를 훑으므로 파일에 두지 않는다. 값이 필요한 열은 nullable로 추가한 뒤 규칙 3의 백필로 채운다. 제약을 바꿀 때는 새 제약을 `NOT VALID`로 추가하고 규칙 4로 검증한 뒤 옛 제약을 지운다.
 
+열 추가와 `ADD CONSTRAINT ... NOT VALID`도 짧게나마 표 전체 잠금(`ACCESS EXCLUSIVE`)을 잡는다. 오래 열린 트랜잭션 뒤에서 이 잠금을 기다리는 동안 그 표의 모든 읽기와 쓰기가 줄을 선다. 파일 본문 맨 위에 `SET LOCAL lock_timeout = '3s';`를 두어 대기를 3초로 제한한다. 파일은 러너가 연 트랜잭션 안에서 실행되므로 `SET LOCAL`은 그 파일에만 적용되고 커밋 뒤 사라진다. 잠금을 얻지 못하면 파일 전체가 롤백되고 같은 배포를 다시 실행한다. lint 는 이 구문을 허용한다.
+
+```sql
+SET LOCAL lock_timeout = '3s';
+ALTER TABLE agent_memory.fragments ADD COLUMN IF NOT EXISTS example_col integer;
+```
+
 lint 규칙은 번호 `050` 이상 파일에 적용한다(`scripts/lint-migrations.js`의 `NEW_RULES_FROM`). 기존 파일의 검사 하한은 `MIGRATION_LINT_FROM`이 그대로 정한다.
 
 |규칙 id|위반|
 |-|-|
 |`no-concurrently`|주석을 제외한 본문에 `CONCURRENTLY`가 있다(`CREATE`, `DROP`, `REINDEX` 모두)|
-|`large-index-unregistered`|대형 표의 `CREATE INDEX` 이름이 `scripts/ops/index-manifest.json`에 없다|
+|`large-index-unregistered`|대형 표의 `CREATE INDEX` 이름이 `scripts/ops/index-manifest.json`에 없다. 이름이 없는 `CREATE INDEX ON ...`도 해당한다|
+|`large-index-table-mismatch`|등록된 이름을 작업 목록의 표와 다른 대형 표에 쓴다|
 |`large-index-if-not-exists`|대형 표의 `CREATE INDEX` 문에 `IF NOT EXISTS`가 없다|
 
 ---
@@ -93,6 +101,8 @@ lint 규칙은 번호 `050` 이상 파일에 적용한다(`scripts/lint-migratio
 
 스크립트는 `.env` 파일을 읽지 않는다. 대상은 `--url postgresql://...` 또는 표준 PG 환경변수(`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`)로만 받고, `DATABASE_URL`과 `POSTGRES_*`는 쓰지 않는다. 호스트와 데이터베이스 이름이 명시되지 않으면 실행하지 않는다. 출력에는 비밀번호를 담지 않는다.
 
+`--url`은 호스트, 포트, 데이터베이스, 사용자, 비밀번호만 읽고 쿼리 매개변수(`sslmode` 등)는 적용하지 않는다. 쿼리 매개변수가 붙은 주소는 거부한다. SSL이 필요한 대상은 PG 환경변수(`PGSSLMODE`, `PGSSLROOTCERT` 등)로 지정한다.
+
 ### 옵션
 
 |옵션|설명|
@@ -103,8 +113,9 @@ lint 규칙은 번호 `050` 이상 파일에 적용한다(`scripts/lint-migratio
 |`--url <주소>`|접속 대상. 없으면 PG 환경변수|
 |`--manifest <경로>`|작업 목록 파일(기본 `scripts/ops/index-manifest.json`)|
 |`--lock-timeout <값>`|잠금 대기 제한(기본 `3s`, `500ms`와 `1min` 형식도 허용)|
-|`--retries <횟수>`|실패 뒤 다시 시도할 횟수(기본 2, 최대 10)|
-|`--retry-wait-ms <ms>`|재시도 사이 대기(기본 2000)|
+|`--retries <횟수>`|실패 뒤 다시 시도할 횟수(기본 2, 최대 10). 시도는 최대 횟수 + 1번이다|
+|`--retry-wait-ms <ms>`|첫 재시도 전 대기(기본 2000). 시도마다 두 배가 된다(2초, 4초, 8초)|
+|`--retry-max-wait-ms <ms>`|재시도 대기의 상한(기본 30000)|
 |`--free-bytes <바이트>`|디스크 여유. 실제 실행에는 이 옵션이나 `--data-dir`이 필요하다|
 |`--data-dir <경로>`|스크립트를 실행하는 호스트에서 보이는 데이터 디렉터리. 파일시스템 여유를 읽는다|
 
@@ -118,13 +129,27 @@ lint 규칙은 번호 `050` 이상 파일에 적용한다(`scripts/lint-migratio
 |2|`connect`|명시한 대상에 연결|
 |3|`session-settings`|`SET lock_timeout='3s'`, `SET statement_timeout=0`|
 |4|`disk-check`|색인마다. 대상 표 크기(`pg_total_relation_size`)의 2배 이상 여유가 없으면 거부|
-|5|`inspect`|`pg_index.indisvalid` 조회. 유효하면 건너뛰고, 같은 이름의 색인이 다른 표에 있으면 거부|
-|6|`drop-invalid`|이전 시도가 남긴 무효 색인만 `DROP INDEX CONCURRENTLY`|
-|7|`create`|`CREATE [UNIQUE] INDEX CONCURRENTLY IF NOT EXISTS`|
-|8|`verify`|`indisvalid`가 참인지 확인|
-|9|`retry`|무효이거나 `lock_timeout`(55P03), 교착(40P01)이면 무효 색인을 제거하고 `create`부터 다시 시도|
+|5|`txn-check`|같은 데이터베이스에서 열려 있는 다른 트랜잭션의 수와 가장 오래된 경과 시간을 경고로 출력한다(중단하지 않는다)|
+|6|`inspect`|`pg_index.indisvalid` 조회. 유효하면 건너뛰고, 같은 이름의 색인이 다른 표에 있으면 거부|
+|7|`drop-invalid`|이전 시도가 남긴 무효 색인만 `DROP INDEX CONCURRENTLY`|
+|8|`create`|`CREATE [UNIQUE] INDEX CONCURRENTLY IF NOT EXISTS`|
+|9|`verify`|`indisvalid`가 참인지 확인|
+|10|`retry`|무효이거나 `lock_timeout`(55P03), 교착(40P01)이면 무효 색인을 제거하고 대기 후 `create`부터 다시 시도. 무효 색인 제거가 55P03 으로 실패해도 다음 시도가 먼저 제거를 다시 시도한다|
 
-유효한 색인은 어느 단계에서도 제거하지 않는다. 그 밖의 오류는 무효 색인을 정리한 뒤 그대로 보고하고 종료한다.
+유효한 색인은 어느 단계에서도 제거하지 않는다. 그 밖의 오류는 무효 색인을 정리한 뒤 그대로 보고하고 종료한다. 정리까지 실패하면 원 오류를 원인으로 담은 오류로 보고한다. 재시도를 모두 쓴 뒤에도 무효 색인이 남을 수 있으며, 이 경우 출력이 알리고 다음 실행의 첫 단계가 제거한다.
+
+### 열린 트랜잭션과 백업
+
+`lock_timeout`은 `CREATE INDEX CONCURRENTLY`가 기존 트랜잭션이 끝나기를 기다리는 동안에도 적용된다. 실행 중인 `pg_dump`(반복 읽기 트랜잭션)나 오래 열린 트랜잭션이 하나라도 있으면 매 시도가 대기 제한에 걸려 실패한다. 무효 색인을 지우는 `DROP INDEX CONCURRENTLY`도 같은 트랜잭션을 기다리므로 정리가 실패해 무효 색인이 남을 수 있다.
+
+따라서 백업은 색인 단계 전에 끝나 있어야 하고, 색인 단계 중에는 시작하지 않는다. `txn-check`는 시작 전에 열린 트랜잭션 수와 가장 오래된 것의 경과 시간을 경고로 보여 준다. `pg_stat_activity`는 권한이 없으면 다른 역할의 세션을 보여 주지 않으므로 경고가 없어도 별도 확인이 필요할 수 있다. 직접 확인하는 질의는 다음과 같다.
+
+```sql
+SELECT pid, usename, state, now() - xact_start AS age, left(query, 80) AS query
+  FROM pg_stat_activity
+ WHERE datname = current_database() AND xact_start IS NOT NULL AND pid <> pg_backend_pid()
+ ORDER BY xact_start;
+```
 
 `CREATE INDEX CONCURRENTLY`는 시작과 끝에서 기존 트랜잭션이 끝나기를 기다린다. 오래 열린 트랜잭션이 있으면 `lock_timeout`으로 중단하고 다시 시도한다. 유일 색인은 중복 값이 있으면 실패하고 무효 색인을 남기므로, 스크립트가 제거한 뒤 원인을 보고한다.
 
@@ -149,7 +174,7 @@ SELECT c.relname, i.indisvalid, i.indisready
 `lib/memory/consolidate/resumableBackfill.js`는 `idOrderedUpdate.js`의 id 오름차순 묶음 갱신(`updateOneBatch`) 위에서 동작한다.
 
 - watermark: 묶음이 커밋될 때마다 작업의 마지막 id를 `agent_memory.backfill_watermarks`에 기록한다. 같은 `job` 이름으로 다시 실행하면 그 id 뒤부터 이어진다.
-- 실패 행 기록: 묶음이 행 단위 오류(SQLSTATE 22, 23 계열)로 실패하면 그 묶음을 행마다 나누어 갱신한다. 실패한 행은 `agent_memory.backfill_failures`에 기록하고 건너뛴다.
+- 실패 행 기록: 묶음이 행 단위 오류(SQLSTATE 22, 23 계열)로 실패하면 그 묶음을 행마다 나누어 갱신한다. 실패한 행은 `agent_memory.backfill_failures`에 기록하고 건너뛴다. 기록에는 SQLSTATE, 계열 이름(`data_exception`, `integrity_constraint_violation`), 제약 이름만 담는다. 오류 메시지는 문제가 된 값을 인용하므로 저장하지 않는다.
 - 행 단위가 아닌 오류(연결 끊김, 교착, 취소 등)는 그대로 던진다. watermark가 남아 있어 다시 실행하면 이어진다.
 
 ### 표 만들기
@@ -167,12 +192,13 @@ CREATE TABLE IF NOT EXISTS agent_memory.backfill_watermarks (
 );
 
 CREATE TABLE IF NOT EXISTS agent_memory.backfill_failures (
-  job       text        NOT NULL,
-  row_id    text        NOT NULL,
-  error     text        NOT NULL,
-  sqlstate  text,
-  attempts  integer     NOT NULL DEFAULT 1,
-  failed_at timestamptz NOT NULL DEFAULT now(),
+  job             text        NOT NULL,
+  row_id          text        NOT NULL,
+  sqlstate        text        NOT NULL,
+  error_class     text        NOT NULL,
+  constraint_name text,
+  attempts        integer     NOT NULL DEFAULT 1,
+  failed_at       timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (job, row_id)
 );
 ```
@@ -201,14 +227,14 @@ const retry  = await retryBackfillFailures(spec);
 조건:
 
 - 묶음 커밋 뒤에 watermark를 기록하므로 중단 직후 같은 묶음이 한 번 더 실행될 수 있다. `where`는 갱신된 행을 대상에서 제외해 같은 갱신을 반복해도 결과가 같아야 한다.
-- 같은 `job`을 동시에 둘 이상 실행하지 않는다.
+- 같은 `job`을 동시에 둘 이상 실행하지 않는다. watermark는 읽은 값과 같을 때만 갱신하므로 겹쳐 실행해도 뒤로 가지 않으며, 다른 실행이 진행한 것을 발견한 실행은 `BackfillConcurrentRunError`로 멈추고 완료로 표시하지 않는다.
 - 완료된 `job`은 `restart: true`를 주지 않는 한 아무것도 하지 않는다. `restart`는 watermark와 실패 행 기록을 지우고 처음부터 실행한다.
 - `job` 이름은 소문자 영숫자와 `.`, `_`, `-`로 1~64자다.
 
 실패 행 확인과 재시도:
 
 ```sql
-SELECT row_id, sqlstate, attempts, error
+SELECT row_id, sqlstate, error_class, constraint_name, attempts
   FROM agent_memory.backfill_failures
  WHERE job = 'example-backfill'
  ORDER BY row_id;

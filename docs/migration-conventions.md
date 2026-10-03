@@ -93,6 +93,8 @@ CREATE INDEX IF NOT EXISTS idx_fragments_embedding
 - `CONCURRENTLY`를 쓰지 않는다.
 - 대형 표 색인은 `scripts/ops/index-manifest.json`에 등록하고 `scripts/ops/online-index.mjs`로 먼저 만든다. 파일에는 같은 이름의 `CREATE INDEX IF NOT EXISTS` 문만 둔다.
 
+열 추가와 `NOT VALID` 제약도 짧은 표 잠금을 잡으므로, 대형 표를 바꾸는 파일의 본문 맨 위에 `SET LOCAL lock_timeout = '3s';`를 두기를 권장한다. 파일은 러너의 트랜잭션 안에서 실행되므로 `SET LOCAL`은 그 파일에만 적용된다.
+
 절차, 백필 도우미, 제약 검증은 [operations/online-migration.md](operations/online-migration.md)에 있다.
 
 ---
