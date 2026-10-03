@@ -118,6 +118,12 @@ outbox 게이지는 작업자를 돌리는 프로세스만 갱신한다. 작업�
 
 `operation` 값은 `lib/tools/lock-retry.js`의 `LOCK_RETRY_OPERATIONS` 닫힌 집합이다(access, touch_linked, embedding, link_sync, unlink, delete, gc_delete, score_batch, activation, feedback, case_reward, merge_links, tier, ema_decay, anchor_promotion, stale_importance).
 
+### 만료 정리 지표
+
+| 지표 | 라벨 | 의미 |
+|-|-|-|
+| `memento_gc_backlog` | 없음 | 정리 단계 `expired_delete`가 끝난 직후 센 남은 만료 후보 수(상한 100000에서 세기를 멈추는 근사값). 정리 주기(`CONSOLIDATE_INTERVAL_MS`, 기본 6시간)마다 갱신하며 첫 정리 전에는 0이다. 값이 주기마다 줄지 않고 쌓이면 `MEMENTO_GC_MAX_DELETE_PER_CYCLE`과 `MEMENTO_GC_TIME_BUDGET_MS`를 본다 |
+
 ---
 
 ## 반영과 검증

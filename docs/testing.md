@@ -168,6 +168,10 @@ MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test \
 | `shutdown-guard.test.js` | `createShutdownGuard`의 1회 실행, 이후 신호 무시, 종료 상한 |
 | `config-env-parse.test.js` | `envInt`, `envFloat`, `envBool`, `envEnum` 파싱과 모듈 적재 시점, 호출 시점의 값 검사 |
 | `id-ordered-update.test.js` | `idOrderedUpdate.js`의 id 오름차순 묶음 갱신과 최소 변화량 계산 |
+| `gc-chunk-loop.test.js` | 만료 삭제 청크 반복이 시간 예산, 주기당 상한, 후보 소진, 청크 실패에서 멈춤(가짜 시계) |
+| `gc-expired-delete.test.js` | `FragmentGC.deleteExpired`의 청크 크기와 잠금 대기 상한, 스위치 off의 50건, 청크 실패 처리, 적체 게이지(대역 DB) |
+| `gc-single-implementation.test.js` | 만료 후보 SQL과 삭제 메서드가 `FragmentGC` 한 곳에만 있음 |
+| `gc-throughput-config.test.js` | `MEMENTO_GC_MAX_DELETE_PER_CYCLE`, `MEMENTO_GC_TIME_BUDGET_MS`, `MEMENTO_GC_THROUGHPUT`의 기본값, 허용 범위, 기동 시 설정 문제 기록 |
 | `release-script.test.js` | `scripts/release.js`의 문서 변환 함수와 임시 git 저장소 위의 전체 절차 |
 | `check-coverage.test.js` | 커버리지 하한 점검 함수(허용 폭, 기준선 갱신, 입력 오류 종료 코드) |
 | `lint-ratchet.test.js` | `scripts/lint-ratchet.js`의 기준선 비교 로직 |
@@ -202,6 +206,7 @@ MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test \
 | `online-index.test.js` | `scripts/ops/online-index.mjs`의 색인 생성, 재실행 건너뜀, 무효 색인 재구성, 잠금 대기 초과 뒤 재시도와 소진, 디스크 여유 거부, 확인 플래그 없는 실행 거부 |
 | `resumable-backfill.test.js` | 재개형 백필의 watermark 이어하기와 행 단위 오류 기록, 행 단위가 아닌 오류의 전파 |
 | `dedup-scope.test.js` | 세 색인 상태에서 insert, amend, batch_remember의 판정, 실행 중 색인 제거(42P10), 무효 상태로 남은 키 범위 색인, 마무리 스크립트, workspace 정규화, reflect workspace 백필의 같은 본문 제외 |
+| `gc-throughput.test.js` | 만료 삭제의 주기당 상한, 청크 반복, 스위치 off의 50건, 보호 대상 보존, 작업 기억 행 정리, 청크 잠금 대기 상한, 적체 게이지 |
 | `working-memory-rows.test.js` | 작업 기억 행의 기록, 조회, 보관 시간 만료, 보관량 제거, 세션 격리, 조회 대상 제외 |
 | `working-memory-exclusion.test.js` | 기억을 보여 주거나 세는 경로가 작업 기억 행을 빼고 일반 파편과 닫힌 파편은 그대로 보임 |
 | `outbox-worker.test.js` | outbox 기록의 트랜잭션 원자성, 두 작업자 동시 점유에서 이벤트마다 한 번 처리, 임대 만료 재점유, 재시도와 dead-letter, 반납, 보존 정리의 묶음 상한 |
