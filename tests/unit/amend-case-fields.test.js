@@ -53,7 +53,9 @@ describe("FragmentReader.getById 만료 조회 옵션", () => {
   it("includeExpired 미지정 시 valid_to IS NULL 조건을 유지한다", async () => {
     const { FragmentReader } = await import("../../lib/memory/read/FragmentReader.js");
     const src = FragmentReader.prototype.getById.toString();
-    assert.ok(src.includes("valid_to IS NULL"), "기본 경로는 유효 파편만 조회해야 한다");
+    const { liveOrClosedCondition } = await import("../../lib/memory/WorkingMemorySql.js");
+    assert.ok(src.includes("liveOrClosedCondition(opts.includeExpired === true)"), "만료 포함 여부로 유효성 조건을 정해야 한다");
+    assert.equal(liveOrClosedCondition(false), "valid_to IS NULL", "기본 경로는 유효 파편만 조회해야 한다");
     assert.ok(src.includes("includeExpired"), "만료 포함 옵션이 있어야 한다");
   });
 });

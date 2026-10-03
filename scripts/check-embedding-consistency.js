@@ -16,6 +16,7 @@
 import { getPrimaryPool }                                     from "../lib/tools/db.js";
 import { EMBEDDING_DIMENSIONS, EMBEDDING_PROVIDER, EMBEDDING_MODEL } from "../lib/config.js";
 import { getSchedulerRegistry } from "../lib/scheduler-registry.js";
+import { NOT_WM_ROW } from "../lib/memory/WorkingMemorySql.js";
 import { resolveEmbeddingColumnSpec, embeddingColumnMismatch, fetchEmbeddingColumn }
   from "../lib/memory/embedding/column-spec.js";
 
@@ -79,7 +80,7 @@ export async function checkEmbeddingConsistency() {
     const { rows } = await pool.query(`
       SELECT count(*)::int AS cnt
       FROM agent_memory.fragments
-      WHERE morpheme_indexed = false
+      WHERE morpheme_indexed = false AND ${NOT_WM_ROW}
     `);
     if (rows.length > 0 && rows[0].cnt > 0) {
       console.warn(`[embedding-consistency] morpheme_indexed=false 파편 ${rows[0].cnt}개 (형태소 미인덱싱)`);

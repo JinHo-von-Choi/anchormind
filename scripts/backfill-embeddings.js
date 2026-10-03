@@ -17,6 +17,7 @@
  */
 
 import { getPrimaryPool, queryWithAgentVector } from "../lib/tools/db.js";
+import { NOT_WM_ROW } from "../lib/memory/WorkingMemorySql.js";
 import {
   generateEmbedding, prepareTextForEmbedding,
   vectorToSql, EMBEDDING_ENABLED
@@ -40,6 +41,8 @@ async function main() {
     const { rows } = await queryWithAgentVector("system",
       `SELECT id, content FROM ${SCHEMA}.fragments
        WHERE embedding IS NULL
+         AND valid_to IS NULL
+         AND ${NOT_WM_ROW}
        ORDER BY importance DESC, created_at DESC
        LIMIT $1`,
       [BATCH]
