@@ -12,8 +12,10 @@
 import { describe, it, mock, afterEach } from "node:test";
 import assert                            from "node:assert/strict";
 
-import { contextAnnotation, formatUtcDate, renderContextSectionLines } from "../../lib/memory/read/ContextLines.js";
-import { ContextBuilder }                                             from "../../lib/memory/read/ContextBuilder.js";
+import {
+  CONTEXT_ANNOTATION_MAX_CHARS, CONTEXT_ANNOTATION_TOKENS, contextAnnotation, formatUtcDate, renderContextSectionLines
+} from "../../lib/memory/read/ContextLines.js";
+import { ContextBuilder, buildRankedInjection } from "../../lib/memory/read/ContextBuilder.js";
 
 const ANNOTATION_TAIL = /\(\d{4}-\d{2}-\d{2}(, (observed|inferred|verified|rejected))?\)$/;
 
@@ -185,5 +187,69 @@ describe("ContextBuilder 주입 줄과 MEMENTO_CONTEXT_ANNOTATE", () => {
     await builder.build({});
     assert.ok(calls.length > 0);
     for (const sql of calls) assert.match(sql, /\bassertion_status\b/);
+  });
+});
+
+describe("주석 비용과 tokenBudget", () => {
+  const saved   = process.env.MEMENTO_CONTEXT_ANNOTATE;
+  const weights = { importance: 1.0, ema_activation: 0.5 };
+  const body    = i => `${String(i).padStart(2, "0")} ${"x".repeat(45)}`;
+  const cost    = (content, extra) => Math.ceil(content.length / 4) + extra;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.MEMENTO_CONTEXT_ANNOTATE;
+    else process.env.MEMENTO_CONTEXT_ANNOTATE = saved;
+  });
+
+  it("고정 비용은 가장 긴 주석의 문자 수 / 4 올림이다", () => {
+    const longest = contextAnnotation({ created_at: "2026-12-31T00:00:00Z", assertion_status: "observed" });
+    assert.equal(longest.length, CONTEXT_ANNOTATION_MAX_CHARS);
+    assert.equal(CONTEXT_ANNOTATION_TOKENS, Math.ceil(CONTEXT_ANNOTATION_MAX_CHARS / 4));
+  });
+
+  it("buildRankedInjection은 주석 비용을 더해 예산 200 안에서 고른다", () => {
+    const others = Array.from({ length: 15 }, (_, i) => ({ id: `o${i}`, type: "fact", content: body(i), importance: 1 - i / 100 }));
+    const off    = buildRankedInjection([], others, 200, weights);
+    const on     = buildRankedInjection([], others, 200, weights, null, [], null, CONTEXT_ANNOTATION_TOKENS);
+
+    assert.equal(off.items.length, 15);
+    assert.equal(off.totalTokens, others.reduce((sum, f) => sum + cost(f.content, 0), 0));
+    const onCost = on.items.reduce((sum, item) => sum + cost(item.content, CONTEXT_ANNOTATION_TOKENS), 0);
+    assert.ok(on.items.length < off.items.length);
+    assert.ok(onCost <= 200);
+    assert.ok(onCost + cost(body(0), CONTEXT_ANNOTATION_TOKENS) > 200);
+    assert.equal(on.totalTokens, on.items.reduce((sum, item) => sum + cost(item.content, 0), 0));
+  });
+
+  function makeBuilder() {
+    return new ContextBuilder({
+      recall : async params => ({
+        fragments: params.topic === "session_reflect" ? [] : Array.from({ length: 6 }, (_, i) => ({
+          id: `${params.type}-${i}`, type: params.type, content: body(i), importance: 0.9 - i / 100,
+          agent_id: "default", key_id: null, workspace: null, created_at: "2026-09-20T10:00:00Z", assertion_status: "observed"
+        }))
+      }),
+      store  : { searchBySource: async () => [] },
+      index  : { getWorkingMemory: async () => [], setSeenIds: async () => {} },
+      getPool: () => null
+    });
+  }
+
+  it("on이면 주석을 포함한 주입 줄 비용이 예산 200 안에 들고 off는 기존 선택 그대로다", async () => {
+    const params = { types: ["preference", "error", "procedure"], tokenBudget: 200 };
+
+    process.env.MEMENTO_CONTEXT_ANNOTATE = "off";
+    const off = await makeBuilder().build({ ...params });
+    process.env.MEMENTO_CONTEXT_ANNOTATE = "on";
+    const on  = await makeBuilder().build({ ...params });
+
+    const offCost = off.fragments.reduce((sum, f) => sum + cost(f.content, 0), 0);
+    const onCost  = on.fragments.reduce((sum, f) => sum + cost(f.content, CONTEXT_ANNOTATION_TOKENS), 0);
+    assert.equal(off.count, 15);
+    assert.ok(offCost <= 200);
+    assert.ok(on.count < off.count);
+    assert.ok(onCost <= 200, String(onCost));
+    const annotated = on.injectionText.split("\n").filter(line => line.includes("x".repeat(45)));
+    assert.equal(annotated.length, on.count);
+    for (const line of annotated) assert.ok(line.endsWith(" (2026-09-20, observed)"), line);
   });
 });
