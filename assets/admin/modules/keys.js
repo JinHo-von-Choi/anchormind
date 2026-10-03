@@ -9,6 +9,7 @@ import { state }                        from "./state.js";
 import { api }                           from "./api.js";
 import { showToast, showModal, closeModal } from "./ui.js";
 import { fmt, fmtDate, loadingHtml }     from "./format.js";
+import { renderKeyLifecycleCard, secretOnceDisplay } from "./key-lifecycle.js";
 
 export function renderKeyKpiRow(keys) {
   const total    = keys.length;
@@ -657,6 +658,7 @@ export function renderKeyInspector(key, container) {
 
   panel.appendChild(idCard);
   panel.appendChild(renderKeyPolicyCard(key, container));
+  panel.appendChild(renderKeyLifecycleCard(key, () => renderKeys(container)));
 
   /* Assigned Groups */
   const groupsSection = document.createElement("div");
@@ -1031,26 +1033,7 @@ export async function renderKeys(container) {
         const res = await api("/keys", { method: "POST", body });
         closeModal();
         if (res.ok && res.data?.raw_key) {
-          const keyDisplay = document.createElement("div");
-          const note = document.createElement("p");
-          note.className = "text-xs text-primary leading-relaxed mb-4";
-          note.textContent = "This secret key will only be displayed once. Store it in a secure vault.";
-          keyDisplay.appendChild(note);
-
-          const copyWrap = document.createElement("div");
-          copyWrap.className = "copy-wrap";
-          const copyVal = document.createElement("span");
-          copyVal.className = "copy-value";
-          copyVal.textContent = res.data.raw_key;
-          copyWrap.appendChild(copyVal);
-          const copyBtn = document.createElement("button");
-          copyBtn.className = "copy-btn";
-          copyBtn.textContent = "COPY";
-          copyBtn.addEventListener("click", () => {
-            navigator.clipboard.writeText(res.data.raw_key).then(() => showToast("Copied", "success"));
-          });
-          copyWrap.appendChild(copyBtn);
-          keyDisplay.appendChild(copyWrap);
+          const keyDisplay = secretOnceDisplay(res.data.raw_key);
 
           showModal("Credential Generated", keyDisplay, [
             { id: "done", label: "DONE", cls: "btn-primary", handler: () => { closeModal(); renderKeys(container); } }
