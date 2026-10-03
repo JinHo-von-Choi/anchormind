@@ -11,6 +11,11 @@
  *   1. 개정이 예약한 오류 코드 구간(-32020~-32099, 정의된 코드는 -32020, -32021, -32022)의 수치를
  *      lib, bin, server.js 어디에도 두지 않는다.
  *   2. server/discover 메서드 이름을 처리 경로에 두지 않고, 디스패처는 그 요청을 -32601로 돌려준다.
+ *
+ * 정적 검사의 범위: 수치는 숫자 리터럴과 단항 +, -, 이항 +, -, *만으로 된 식을 접어서 본다
+ * (-(32020), -(32000 + 20), -32000 - 20). 문자열은 리터럴의 + 연결, 템플릿, 같은 파일의 문자열
+ * 상수 보간을 펼쳐서 본다("server/" + "discover"). 다른 모듈의 상수, 함수 호출이나 배열 join으로
+ * 만든 값은 정적으로 보지 않으며, 메서드 이름은 디스패처 행동 시험이 실행 시점에 확인한다.
  */
 
 import { describe, it } from "node:test";
@@ -19,7 +24,7 @@ import { readFileSync } from "node:fs";
 import path             from "node:path";
 import { Linter }       from "eslint";
 
-import { ROOT, listSourceFiles, scanFile } from "./_source-scan.js";
+import { ROOT, listSourceFiles, scanFile, scanSource } from "./_source-scan.js";
 
 process.env.DOTENV_CONFIG_PATH      ??= ".env.test";
 process.env.MEMENTO_METRICS_DEFAULT ??= "off";
@@ -36,22 +41,46 @@ function isReservedCode(value) {
   return Number.isInteger(value) && value >= RESERVED_LOW && value <= RESERVED_HIGH;
 }
 
+const FOLD_UNARY  = { "-": (a) => -a, "+": (a) => a };
+const FOLD_BINARY = { "+": (a, b) => a + b, "-": (a, b) => a - b, "*": (a, b) => a * b };
+
 /**
- * 소스의 음수 수치 리터럴(-N)과 문자열 안의 -320NN 표기를 모은다.
+ * 숫자 리터럴과 단항 +, -, 이항 +, -, *만으로 된 식을 접는다. 그 밖이면 null.
+ *
+ * @param {object} node
+ * @returns {number|null}
+ */
+function foldNumber(node) {
+  if (node.type === "Literal") return typeof node.value === "number" ? node.value : null;
+  if (node.type === "UnaryExpression" && FOLD_UNARY[node.operator]) {
+    const a = foldNumber(node.argument);
+    return a === null ? null : FOLD_UNARY[node.operator](a);
+  }
+  if (node.type === "BinaryExpression" && FOLD_BINARY[node.operator]) {
+    const a = foldNumber(node.left);
+    const b = a === null ? null : foldNumber(node.right);
+    return b === null ? null : FOLD_BINARY[node.operator](a, b);
+  }
+  return null;
+}
+
+/**
+ * 소스의 상수 수치 식(-N, -(N), -(N + M), -N - M 등)을 접은 값과 문자열 안의 -320NN 표기를 모은다.
  *
  * @param {string} source
  * @returns {Array<{ value: number, line: number }>}
  */
 function negativeNumbers(source) {
   const found = [];
+  const fold  = (node) => {
+    const value = foldNumber(node);
+    if (value !== null && value < 0) found.push({ value, line: node.loc.start.line });
+  };
   const rule  = {
     create() {
       return {
-        UnaryExpression(node) {
-          if (node.operator === "-" && node.argument.type === "Literal" && typeof node.argument.value === "number") {
-            found.push({ value: -node.argument.value, line: node.loc.start.line });
-          }
-        },
+        UnaryExpression : fold,
+        BinaryExpression: fold,
         Literal(node) {
           if (typeof node.value !== "string") return;
           for (const m of node.value.matchAll(/-320\d\d\b/g)) found.push({ value: Number(m[0]), line: node.loc.start.line });
@@ -93,10 +122,13 @@ describe("개정 예약 오류 코드", () => {
       "const b = { code: -32022 };",
       "const c = \"code -32021\";",
       "const d = -32000;",
-      "const e = -32601;"
+      "const e = -32601;",
+      "const f = -(32023);",
+      "const g = -(32000 + 24);",
+      "const h = -32000 - 25;"
     ].join("\n");
     const values = negativeNumbers(sample).map(n => n.value);
-    assert.deepEqual(values.filter(isReservedCode).sort(), [-32022, -32021, -32020].sort());
+    assert.deepEqual([...new Set(values.filter(isReservedCode))].sort((a, b) => a - b), [-32025, -32024, -32023, -32022, -32021, -32020]);
     assert.ok(values.includes(-32000) && !isReservedCode(-32000));
     assert.ok(values.includes(-32601) && !isReservedCode(-32601));
   });
@@ -111,6 +143,18 @@ describe("server/discover", () => {
       }
     }
     assert.deepEqual(hits, []);
+  });
+
+  it("문자열 수집은 + 연결, 템플릿, 같은 파일 상수 보간을 펼쳐 server/discover를 찾는다", () => {
+    const sample = [
+      "const A = \"server/\" + \"discover\";",
+      "const SUFFIX = \"discover\";",
+      "const B = `server/${SUFFIX}`;",
+      "const C = \"server/\" + SUFFIX;",
+      "const D = \"server/list\";"
+    ].join("\n");
+    const hits = scanSource(sample).strings.filter(s => s.text.includes(DISCOVER)).map(s => s.line);
+    assert.deepEqual([...new Set(hits)].sort((a, b) => a - b), [1, 3, 4]);
   });
 
   it("디스패처는 server/discover 요청에 결과 없이 -32601을 돌려준다", async () => {
