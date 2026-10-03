@@ -1,0 +1,8 @@
+// EXAMPLE ONLY. Synthetic lines that show the file format. The ids do not exist in any database and the text is not memory content.
+{"id": "ex-hk-001", "subset": "human_ko", "domain": "ops", "query": "백업 파일은 어디에 두기로 했더라", "keywords": ["백업", "파일", "위치"], "tags": ["particle"], "relevant": [{"id": "frag-example-0001", "grade": 3}, {"id": "frag-example-0002", "grade": 1}], "author": "example", "example": true}
+{"id": "ex-hk-002", "subset": "human_ko", "domain": "coding", "query": "recall 결과 개수 제한 설정이 어디 있지", "tags": ["mixed_ko_en", "spacing"], "example": true}
+{"id": "ex-id-001", "subset": "identifier", "query": "EXAMPLE_SETTING_NAME", "tags": ["en_identifier"], "relevant": [{"id": "frag-example-0003", "grade": 3}], "example": true}
+{"id": "ex-th-001", "subset": "temporal_holdout", "referenceDate": "2026-01-01", "query": "지난달에 정한 점검 일정", "relevant": [{"id": "frag-example-0004", "grade": 3}], "example": true}
+{"id": "ex-pb-001", "subset": "paraphrase_blind", "query": "서비스를 내렸다 올릴 때 순서가 어떻게 되나", "relevant": [{"id": "frag-example-0005", "grade": 2}], "example": true}
+{"id": "ex-hn-001", "subset": "hard_negative", "query": "예시 포트 번호 변경 이력", "relevant": [{"id": "frag-example-0006", "grade": 3}], "distractors": ["frag-example-0007"], "example": true}
+{"id": "ex-sy-001", "subset": "synthetic", "query": "예시 합성 질의", "relevant": [{"id": "frag-example-0008", "grade": 3}], "example": true}
