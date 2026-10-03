@@ -104,7 +104,7 @@ describe("sensitiveStep 규칙 표와 필드", () => {
     assert.equal(next.fields.keywords[0], "deploy");
 
     const rules = next.violations.map(v => v.rule).sort();
-    assert.deepEqual(rules, ["sensitive.bearer_token", "sensitive.email", "sensitive.github_token"]);
+    assert.deepEqual(rules, ["sensitive.bearer_token", "sensitive.github_token"]);
     const github = next.violations.find(v => v.rule === "sensitive.github_token");
     assert.equal(github.severity, "high");
     assert.equal(github.detail, "fields: content, keywords");
@@ -122,7 +122,7 @@ describe("sensitiveStep 규칙 표와 필드", () => {
     assert.equal(sensitiveStep(state), state);
   });
 
-  it("off는 기존 4개 규칙을 content에만 적용하고 경고를 남기지 않는다", () => {
+  it("off는 레거시 규칙을 content에만 적용하고 경고를 남기지 않는다", () => {
     const state = stateOf({ fields: { content: `메일 ops@example.com 토큰 ${token}`, goal: "ops@example.com", keywords: [token] } });
     const next  = sensitiveStep(state, { sensitiveScanMode: () => "off" });
     assert.ok(next.fields.content.includes("[REDACTED_EMAIL]"));
@@ -167,10 +167,12 @@ describe("민감 정보 탐지 판정", () => {
     );
   });
 
-  it("hard gate 키도 저신뢰 탐지(이메일)는 경고로만 다룬다", async () => {
+  it("hard gate 키도 저신뢰 탐지(이메일)는 거부하지 않고 경고도 남기지 않는다", async () => {
     const gate = new WriteGate({ getHardGate: async () => true });
     const out  = await gate.check({ ...emailOnly(), ctx: { keyId: "k1" } });
-    assert.deepEqual(out.warnings, ["sensitive.email"]);
+    assert.deepEqual(out.warnings, []);
+    assert.deepEqual(out.draft.validation_warnings, []);
+    assert.ok(out.draft.content.includes("[REDACTED_EMAIL]"));
   });
 
   it("reject는 키 정보가 없어도 고신뢰 탐지에서 거부한다", async () => {
@@ -181,10 +183,29 @@ describe("민감 정보 탐지 판정", () => {
     );
   });
 
-  it("reject도 저신뢰 탐지(이메일)는 거부하지 않는다", async () => {
+  it("reject도 저신뢰 탐지(이메일)는 거부하지 않고 가리기만 한다", async () => {
     const gate = new WriteGate({ sensitiveScanMode: () => "reject" });
     const out  = await gate.check(emailOnly());
-    assert.deepEqual(out.warnings, ["sensitive.email"]);
+    assert.deepEqual(out.warnings, []);
+    assert.ok(out.draft.content.includes("[REDACTED_EMAIL]"));
+  });
+
+  it("레거시 규칙인 비밀번호 필드는 hard gate 키에서 거부한다", async () => {
+    const gate = new WriteGate({ getHardGate: async () => true });
+    await assert.rejects(
+      () => gate.check(request({ fields: { content: "DB 접속은 password: s3cr3t-pass 로 설정했다", type: "fact", topic: "t" }, ctx: { keyId: "k1" } })),
+      (err) => err instanceof SymbolicPolicyViolationError && err.violations.includes("sensitive.password_field")
+    );
+  });
+
+  it("keywords는 소문자로 정규화되기 전의 값을 검사해 대문자 접두 규칙을 찾는다", async () => {
+    const gate = new WriteGate();
+    const key  = `AKIA${"A1".repeat(8)}`;
+    const out  = await gate.check(request({ fields: { content: "배포 설정을 정리한 메모를 남긴다", type: "fact", topic: "t", keywords: ["Deploy", key] } }));
+    assert.deepEqual(out.warnings, ["sensitive.aws_access_key"]);
+    assert.equal(out.fields.keywords[0], "deploy");
+    assert.ok(out.fields.keywords.every(k => k === k.toLowerCase()));
+    assert.ok(!out.fields.keywords.join(" ").toLowerCase().includes(key.toLowerCase()));
   });
 
   it("reject의 dryRun은 거부하지 않고 규칙 이름만 돌려준다", async () => {
@@ -342,7 +363,7 @@ describe("WriteGate.check", () => {
     assert.ok(!built.content.includes("hunter2"));
     assert.ok(!built.content.includes("010-1234-5678"));
     assert.equal(out.draft.content, built.content);
-    assert.deepEqual(out.warnings, ["sensitive.email", "sensitive.password_field", "sensitive.phone_kr"]);
+    assert.deepEqual(out.warnings, ["sensitive.password_field"]);
   });
 
   it("갱신은 현재 행에 바뀐 값을 겹친 후보를 판정한다", async () => {
@@ -357,7 +378,8 @@ describe("WriteGate.check", () => {
     assert.equal(out.draft.type, "decision");
     assert.ok(out.fields.content.includes("[REDACTED_EMAIL]"));
     assert.ok(out.warnings.includes("decisionHasRationale"));
-    assert.ok(out.warnings.includes("sensitive.email"));
+    assert.ok(out.warnings.includes("sensitive.password_field"));
+    assert.ok(!out.warnings.includes("sensitive.email"));
   });
 
   it("생성 위반은 후보의 validation_warnings에 쌓인다", async () => {

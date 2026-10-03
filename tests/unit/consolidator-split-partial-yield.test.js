@@ -29,6 +29,7 @@ mock.module("../../lib/config.js", {
     /** 분할 자식이 거치는 의미 쓰기 관문과 서버 관문 의존성(ApiKeyStore)이 읽는 값 */
     writeGateEnabled       : () => true,
     sensitiveScanMode      : () => "mask",
+    sensitiveScanEffectiveMode: () => "mask",
     workspaceGateEnforced  : () => false,
     DEFAULT_DAILY_LIMIT    : 1000,
     DEFAULT_FRAGMENT_LIMIT : 5000,

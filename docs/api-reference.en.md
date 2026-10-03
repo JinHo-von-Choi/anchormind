@@ -711,7 +711,7 @@ Sampling follows `feedback.sampling` in `config/memory.js`: per-tool rates are r
 
 ### Error codes
 
-- `-32003` (SYMBOLIC_POLICY_VIOLATION): PolicyRules violations on a key with the symbolic hard gate enabled. Storage is rejected. This is a JSON-RPC **protocol-level** error, not an MCP tool error (isError: true).
+- `-32003` (SYMBOLIC_POLICY_VIOLATION): PolicyRules violations or high-confidence `sensitive.*` detections on a key with the symbolic hard gate enabled, or high-confidence `sensitive.*` detections under `MEMENTO_SENSITIVE_SCAN=reject` (master key included). Storage is rejected. Retry `sensitive.*` after removing the secret or identification number. This is a JSON-RPC **protocol-level** error, not an MCP tool error (isError: true).
 - `-32602`: `content` exceeds 4000 characters. It is returned as a tool result `{ "success": false, "error": "content length N exceeds max 4000", "code": -32602 }`, not as a JSON-RPC error.
 
 ```json
@@ -1274,7 +1274,7 @@ curl -si -X POST https://anchormind.example.com/mcp \
 |-|-|-|
 | `MEMENTO_REMEMBER_ATOMIC` | `false` | When `true`, the remember path switches to `_rememberAtomic`. Quota re-validation and INSERT are handled atomically within a single BEGIN/COMMIT transaction using `SELECT api_keys FOR UPDATE`. The semantic write gate runs identically before the transaction on both paths, so the `validation_warnings` format is unchanged. |
 | `MEMENTO_WRITE_GATE` | `on` | Semantic write gate switch. With `on`, remember, amend, batch_remember, reflect-derived writes, AutoReflect, imports and the CLI remember local mode pass the same gate. With `off`, each entry point applies only its base steps (remember: all, amend: input size limit and keyword normalization, batch_remember, reflect and CLI remember: normalization, masking and truncation, imports: none). |
-| `MEMENTO_SENSITIVE_SCAN` | `mask` | Detection mode for secrets and personal data in written values (`mask`, `reject`, `off`). `mask` replaces matches with markers before storage and keeps only `sensitive.<rule>` names in `validation_warnings`. Hard gate keys reject on high-confidence rules and `reject` rejects for every key. `off` applies only the four base rules to content. |
+| `MEMENTO_SENSITIVE_SCAN` | `mask` | Detection mode for secrets and personal data in written values (`mask`, `reject`, `off`). `mask` replaces matches with markers before storage; detections other than email addresses and phone numbers keep only `sensitive.<rule>` names in `validation_warnings` (informational, no retry needed). Hard gate keys reject high-confidence detections (password fields, API key patterns, tokens, private keys, resident registration numbers, card numbers) with `-32003`, and `reject` rejects for every key. `off` applies only the legacy rules to content. |
 | `MEMENTO_CASE_BACKPROP_ENABLED` | `false` | When `true`, amending a fragment with a case_id (specifically changing resolutionStatus) triggers importance backpropagation to all fragments sharing the same caseId. Exported as the `CASE_BACKPROP_ENABLED` constant in `lib/config.js`. Boosts activation scores of related fragments after case resolution, improving subsequent recall precision. |
 | `MEMENTO_STORAGE` | `pgvector` | Storage backend name. Currently `pgvector` only; this value does not affect behavior. |
 | `MEMENTO_SYMBOLIC_POLICY_RULES` | `false` | When `true`, the policy step of the semantic write gate evaluates PolicyRules soft gates and accumulates failed rule names into `validation_warnings`. |

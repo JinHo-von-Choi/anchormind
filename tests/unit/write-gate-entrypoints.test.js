@@ -628,3 +628,88 @@ describe("reflect 개별 저장 경로의 관문 값", () => {
     assert.equal(index.evictWorkingMemoryItems.mock.callCount(), 1, "거부된 그룹의 작업 기억도 걷어 낸다");
   });
 });
+
+/** 레거시 규칙 밖의 규칙(GitHub 토큰)과 레거시 규칙(이메일)이 함께 든 본문 */
+const OFF_TOKEN   = `ghp_${"a1".repeat(18)}`;
+const OFF_CONTENT = `배포 담당 ops-team@example.com 의 토큰 ${OFF_TOKEN} 을 환경 변수에 둔다`;
+
+describe("탐지 방식 off의 저장 경로", () => {
+  afterEach(() => {
+    delete process.env.MEMENTO_SENSITIVE_SCAN;
+    delete process.env.MEMENTO_WRITE_GATE;
+  });
+
+  /** 레거시 규칙만 적용한 결과인지 본다. */
+  function assertLegacyOnly(stored) {
+    assert.equal(typeof stored, "string", "기록된 본문이 없다");
+    assert.ok(stored.includes("[REDACTED_EMAIL]"), stored);
+    assert.ok(stored.includes(OFF_TOKEN), stored);
+  }
+
+  function assertFullyMasked(stored) {
+    assert.ok(stored.includes("[REDACTED_EMAIL]"), stored);
+    assert.ok(!stored.includes(OFF_TOKEN), stored);
+  }
+
+  const MODES = [
+    ["MEMENTO_SENSITIVE_SCAN=off", () => { process.env.MEMENTO_SENSITIVE_SCAN = "off"; }],
+    ["MEMENTO_WRITE_GATE=off",     () => { process.env.MEMENTO_WRITE_GATE = "off"; }]
+  ];
+
+  for (const [label, setMode] of MODES) {
+    describe(label, () => {
+      beforeEach(setMode);
+
+      it("FragmentFactory.create는 레거시 규칙만 적용한다", () => {
+        assertLegacyOnly(new FragmentFactory().create({ content: OFF_CONTENT, topic: "ops", type: "fact" }).content);
+      });
+
+      it("FragmentFactory.splitAndCreate는 레거시 규칙만 적용한다", () => {
+        const parts = new FragmentFactory().splitAndCreate(OFF_CONTENT, { topic: "ops", type: "fact" });
+        assert.ok(parts.length > 0);
+        assertLegacyOnly(parts.map(p => p.content).join(" "));
+      });
+
+      it("세션 범위 remember는 레거시 규칙만 적용한다", async () => {
+        const { rememberer } = makeRememberer();
+        const stored = [];
+        rememberer.index.addToWorkingMemory = async (sessionId, fragment) => { stored.push(fragment); };
+        await rememberer.remember({ content: OFF_CONTENT, topic: "ops", type: "fact", scope: "session", sessionId: "sess-off-1" });
+        assertLegacyOnly(stored[0]?.content);
+      });
+
+      it("reflect의 문자열 요약과 배열 요약과 범주 항목은 레거시 규칙만 적용한다", async () => {
+        for (const params of [{ summary: OFF_CONTENT }, { summary: [OFF_CONTENT] }, { decisions: [OFF_CONTENT] }]) {
+          const inserted = [];
+          const reflect  = makeReflectProcessor({ inserted });
+          await reflect.process({ ...params, agentId: "a1" });
+          assert.ok(inserted.length > 0, JSON.stringify(Object.keys(params)));
+          assertLegacyOnly(inserted.map(f => f.content).join(" "));
+        }
+      });
+
+      it("관문을 거치는 remember도 새 규칙을 적용하지 않는다", async () => {
+        const { rememberer, inserted } = makeRememberer();
+        await rememberer.remember({ content: OFF_CONTENT, topic: "ops", type: "fact" });
+        assertLegacyOnly(inserted[0]?.content);
+      });
+    });
+  }
+
+  describe("기본값(mask)", () => {
+    it("같은 입력의 모든 호출자가 새 규칙까지 적용한다", async () => {
+      assertFullyMasked(new FragmentFactory().create({ content: OFF_CONTENT, topic: "ops", type: "fact" }).content);
+      assertFullyMasked(new FragmentFactory().splitAndCreate(OFF_CONTENT, { topic: "ops", type: "fact" }).map(p => p.content).join(" "));
+
+      const { rememberer } = makeRememberer();
+      const stored = [];
+      rememberer.index.addToWorkingMemory = async (sessionId, fragment) => { stored.push(fragment); };
+      await rememberer.remember({ content: OFF_CONTENT, topic: "ops", type: "fact", scope: "session", sessionId: "sess-mask-1" });
+      assertFullyMasked(stored[0]?.content);
+
+      const inserted = [];
+      await makeReflectProcessor({ inserted }).process({ summary: [OFF_CONTENT], agentId: "a1" });
+      assertFullyMasked(inserted.map(f => f.content).join(" "));
+    });
+  });
+});

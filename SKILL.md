@@ -387,7 +387,7 @@ Symbolic Verification Layer는 확률론적 검색 파이프라인 위에 추가
 신규 응답 필드 요약:
 - `remember` → `validation_warnings: string[]` (`MEMENTO_SYMBOLIC_POLICY_RULES=true` 시, rule 이름 배열)
 - `recall` → 각 파편의 `explanations: [{code, detail, ruleVersion}]` (`MEMENTO_SYMBOLIC_EXPLAIN=true` 시)
-- 에러 `-32003 SYMBOLIC_POLICY_VIOLATION` (해당 키의 `symbolic_hard_gate=true` 상태에서 PolicyRules 위반 시)
+- 에러 `-32003 SYMBOLIC_POLICY_VIOLATION` (해당 키의 `symbolic_hard_gate=true` 상태에서 PolicyRules 위반 또는 고신뢰 민감 정보 탐지 시, `MEMENTO_SENSITIVE_SCAN=reject`이면 모든 키에서 고신뢰 민감 정보 탐지 시)
 
 ## 보안 기본값 및 설정
 
@@ -1645,7 +1645,7 @@ Gemini CLI 외 `agy-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`를 포함한 18
 
 ### validation_warnings 해석
 
-`remember` 응답에 `validation_warnings: string[]` 필드가 포함된다 (`MEMENTO_SYMBOLIC_POLICY_RULES=true` 시, violations 있을 때만). 각 요소는 rule 이름 문자열이다. 필드 자체가 없으면 위반 없음.
+`remember` 응답에 `validation_warnings: string[]` 필드가 포함된다 (violations 있을 때만). 각 요소는 rule 이름 문자열이다. 필드 자체가 없으면 위반 없음. 정책 규칙 이름은 `MEMENTO_SYMBOLIC_POLICY_RULES=true`일 때, `sensitive.<규칙>` 이름은 `MEMENTO_SENSITIVE_SCAN`이 off가 아닐 때 담긴다.
 
 예시: `{"success": true, "id": "frag-...", "validation_warnings": ["decisionHasRationale"]}`
 
@@ -1658,7 +1658,9 @@ Gemini CLI 외 `agy-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`를 포함한 18
 - `assertionNotContradictory` - assertion이 verified이면서 rejected로 표시됨 → `amend` 또는 `forget`으로 정리
 - `fragmentHasWorkspace` - workspace가 명시값과 키 기본값 어느 쪽으로도 해석되지 않음 → `workspace` 명시. 저장 차단 대상은 `MEMENTO_WORKSPACE_GATE=true`일 때뿐이다
 
-경고는 soft gate이므로 기본적으로 저장을 차단하지 않는다. `api_keys.symbolic_hard_gate=true`로 전환하면 해당 키는 경고 발생 시 저장이 거부된다. 이 경우 MCP 도구 에러가 아닌 JSON-RPC **프로토콜 레벨** 에러 코드 `-32003` (SYMBOLIC_POLICY_VIOLATION)이 반환된다:
+`sensitive.<규칙>` 항목은 알림이다. 서버가 비밀이나 개인 식별 번호를 이미 가려 저장했으므로 재호출하지 않는다. 이메일과 전화번호는 가리기만 하고 경고에 나타나지 않는다. 저장된 파편의 `validation_warnings` 열에도 규칙 이름만 남고 일치한 문자열은 남지 않는다. 규칙 이름: `api_key_legacy`, `password_field`, `anthropic_key`, `openai_project_key`, `api_key_generic`, `github_token`, `aws_access_key`, `slack_token`, `jwt`, `private_key`, `mmcp_key`, `bearer_token`, `rrn_kr`, `card_number`.
+
+정책 경고는 soft gate이므로 기본적으로 저장을 차단하지 않는다. `api_keys.symbolic_hard_gate=true`로 전환하면 해당 키는 정책 경고와 고신뢰 `sensitive.*` 경고(레거시 규칙인 `password_field`와 `api_key_legacy` 포함) 발생 시 저장이 거부된다. `MEMENTO_SENSITIVE_SCAN=reject`이면 키와 관계없이(마스터 키 포함) 고신뢰 `sensitive.*` 탐지에서 거부된다. 이 경우 MCP 도구 에러가 아닌 JSON-RPC **프로토콜 레벨** 에러 코드 `-32003` (SYMBOLIC_POLICY_VIOLATION)이 반환된다:
 
 ```json
 {"jsonrpc": "2.0", "id": 5, "error": {"code": -32003, "message": "policy_violation: decisionHasRationale", "data": {"violations": ["decisionHasRationale"], "fragmentType": "decision"}}}
@@ -1700,6 +1702,6 @@ reason code 6종 (`code` 필드값):
 | 불필요한 remember 남발 | fragment_limit 쿼터 소진, 노이즈 증가로 검색 품질 저하 | 저장 전 "다음 세션에서 필요한가?" 자문, 일시적 정보는 저장하지 않음 |
 | importance 미지정 (모든 파편 0.5) | recall 시 중요/비중요 파편 구분 불가, 핵심 정보가 노이즈에 묻힘 | 상황별 중요도 기본값 표 참조, 최소 0.6 이상 명시 |
 | keywords 미지정 | 자동 추출에 의존하면 프로젝트명/호스트명 등 핵심 키워드 누락 | 프로젝트명 + 토픽 + 고유 식별자를 keywords에 명시적으로 포함. 지정해도 본문 추출 결과가 병합되므로 본문의 코드 식별자는 별도로 적지 않아도 색인된다 |
-| validation_warnings 무시 후 반복 remember | 동일 경고 파편이 누적되면 symbolic_hard_gate 활성화 시 전면 차단됨 | 경고 내용에 따라 content/linkedTo/resolutionStatus를 보강 후 재저장 |
+| 정책 validation_warnings 무시 후 반복 remember | 동일 경고 파편이 누적되면 symbolic_hard_gate 활성화 시 전면 차단됨 | 경고 내용에 따라 content/linkedTo/resolutionStatus를 보강 후 재저장. `sensitive.*` 경고는 서버가 이미 가렸으므로 재저장 대상이 아니다 |
 | recall 결과의 explanations reasonCodes를 fragment content에 복사 저장 | 검색 품질 메타데이터는 저장하면 안 됨. 노이즈로 검색 정밀도 저하 | reasonCodes는 UI 표시나 컨텍스트 힌트용으로만 사용, 저장 금지 |
 | Shadow mode 없이 Phase 2+ 직행 | 기존 데이터의 claim 백필 없이 explain/policy 활성화 시 경고 오탐 증가 | `MEMENTO_SYMBOLIC_SHADOW=true` + `scripts/backfill-claims.js --dry-run` 선행 후 단계적 활성화 |

@@ -23,6 +23,20 @@ function rrnDigits(first12) {
   return `${first12}${(11 - (sum % 11)) % 10}`;
 }
 
+/** 13자리 연속 숫자 중 Luhn과 EAN-13 검증 자릿수가 모두 맞는 값을 찾는다. */
+function luhnAndEan13() {
+  const ean = (d) => {
+    let sum = 0;
+    for (let i = 0; i < 12; i++) sum += Number(d[i]) * (i % 2 === 0 ? 1 : 3);
+    return (10 - (sum % 10)) % 10 === Number(d[12]);
+  };
+  for (let n = 0; n < 100000; n++) {
+    const candidate = `40${String(n).padStart(11, "0")}`;
+    if (luhnValid(candidate) && ean(candidate)) return candidate;
+  }
+  throw new Error("unreachable");
+}
+
 /** 접두를 주면 길이 n에서 Luhn이 맞는 숫자열을 만든다. */
 function luhnNumber(prefix, length) {
   const body = prefix + rep("1", length - prefix.length - 1);
@@ -71,11 +85,11 @@ const POSITIVE = {
   ],
   rrn_kr: [
     rrnDigits("850315223456"), `${rrnDigits("850315223456").slice(0, 6)}-${rrnDigits("850315223456").slice(6)}`,
-    `${rrnDigits("920722145678").slice(0, 6)}-${rrnDigits("920722145678").slice(6)}`, "850315-1234567", "850315-4234567"
+    `${rrnDigits("920722145678").slice(0, 6)}-${rrnDigits("920722145678").slice(6)}`, "250315-4234567", "201001-3123456"
   ],
   card_number: [
-    "4111111111111111", "4111 1111 1111 1111", "5555-5555-5555-4444", luhnNumber("37", 15),
-    "3782 822463 10005", luhnNumber("65", 16), luhnNumber("35", 16), luhnNumber("2223", 16), luhnNumber("62", 19)
+    "카드 4111111111111111", "4111 1111 1111 1111", "5555-5555-5555-4444", `card: ${luhnNumber("37", 15)}`,
+    "3782 822463 10005", `visa ${luhnNumber("65", 16)} 승인`, `결제 ${luhnNumber("35", 16)}`, `${luhnNumber("2223", 16)} master`, `cvc ${luhnNumber("62", 19)}`
   ],
   email: ["ops-team@example.com", "a.b+c@sub.example.co.kr"],
   password_field: ["password: hunter2", "비밀번호=abc123!", "PWD : s3cret"],
@@ -94,20 +108,31 @@ const NEGATIVE = {
   private_key: [
     `-----BEGIN PUBLIC KEY-----\n${rep("MIIB", 20)}\n-----END PUBLIC KEY-----`,
     `-----BEGIN CERTIFICATE-----\n${rep("MIIC", 20)}\n-----END CERTIFICATE-----`,
-    "PRIVATE KEY 파일 경로는 /etc/ssl/private 이다"
+    "PRIVATE KEY 파일 경로는 /etc/ssl/private 이다",
+    "-----BEGIN PRIVATE KEY----- 헤더로 시작한다는 점을 문서에 적는다. 이후 설정 단계 3개가 남는다.",
+    "-----BEGIN RSA PRIVATE KEY----- then continue with the following configuration steps and verify the result",
+    `-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----`
   ],
   mmcp_key: ["mmcp_session", "mmcp_server_config", "mmcp_session=abcdef", "emmcp_" + rep("a", 24)],
   bearer_token: ["Bearer token", "Bearer authentication-scheme-implementation", "BearerTokenFilter", "Bearer short1"],
   rrn_kr: [
     "123456-1234567",
+    "850315-1234567",
+    "850315-4234567",
+    "250315-1234560",
+    "200930-3123456",
+    "110111-1234567",
+    "220101-1234567",
     "8503151234567",
+    "2503153234567",
     `${rrnDigits("850315223456")}0`,
     "20230101-1234567",
     "900101-9234567",
     "991341-1234567"
   ],
   card_number: [
-    "4111111111111112", "1700000000000", "0000000000000000", rep("4", 20), "1234 5678 9012 3456", "9999999999999995"
+    "4111111111111112", "1700000000000", "0000000000000000", rep("4", 20), "1234 5678 9012 3456", "9999999999999995",
+    "4111111111111111", "주문번호 4111111111111111 접수", `결제 ${luhnAndEan13()}`, "카드 8801234567890", `${rep("a", 40)} 4111111111111111`
   ],
   email: ["user@localhost", "@example.com", "name@", "no-at-sign.example.com"],
   password_field: ["password", "passwords are rotated", "비밀번호 정책"],
@@ -115,11 +140,12 @@ const NEGATIVE = {
 };
 
 describe("규칙 표 구조", () => {
-  it("규칙 이름이 겹치지 않고 저장 경로 패턴이 전역 정규식이다", () => {
+  it("규칙 이름이 겹치지 않고 저장 경로 패턴이 전역 정규식이거나 apply 구현이다", () => {
     const names = SENSITIVE_PATTERNS.map((e) => e.id);
     assert.equal(new Set(names).size, names.length);
     for (const entry of SENSITIVE_PATTERNS) {
-      if (entry.store !== null) assert.ok(entry.pattern.global, `${entry.id}은 전역 정규식이어야 한다`);
+      assert.equal(entry.pattern === null, typeof entry.apply === "function", `${entry.id}: 패턴과 apply는 둘 중 하나만 둔다`);
+      if (entry.store !== null && entry.pattern) assert.ok(entry.pattern.global, `${entry.id}은 전역 정규식이어야 한다`);
       assert.ok(entry.severity === "high" || entry.severity === "low", entry.id);
     }
   });
@@ -132,7 +158,7 @@ describe("규칙 표 구조", () => {
     }
   });
 
-  it("저장 경로의 기존 4개 규칙이 앞에 있다", () => {
+  it("저장 경로의 레거시 규칙이 앞에 있다", () => {
     const store = patternsFor("store").map((e) => e.id);
     assert.deepEqual(store.slice(0, 4), ["api_key_legacy", "email", "password_field", "phone_kr"]);
     assert.deepEqual(SENSITIVE_PATTERNS.filter((e) => e.legacy).map((e) => e.id), store.slice(0, 4));
@@ -184,7 +210,7 @@ describe("규칙별 음성 표본", () => {
   }
 });
 
-describe("기존 4개 규칙의 결과", () => {
+describe("레거시 규칙의 결과", () => {
   it("이메일, 비밀번호, 전화번호, API 키를 이전과 같은 표식으로 바꾼다", () => {
     const text = `메일 ops@example.com, password: hunter2, 전화 010-1234-5678, 키 sk-${rep("a", 40)} 끝`;
     const out  = maskText(text);
@@ -206,7 +232,7 @@ describe("기존 4개 규칙의 결과", () => {
     assert.ok(out.includes("<[REDACTED_EMAIL]>") && out.includes("([REDACTED_EMAIL])"));
   });
 
-  it("legacyOnly 옵션은 기존 4개 규칙만 적용한다", () => {
+  it("legacyOnly 옵션은 레거시 규칙만 적용한다", () => {
     const text = `ops@example.com ${`ghp_${rep("a1", 18)}`}`;
     const out  = scanText(text, { legacyOnly: true });
     assert.deepEqual(out.rules.map((r) => r.id), ["email"]);
@@ -276,10 +302,90 @@ describe("재탐지와 필드 검사", () => {
     assert.deepEqual(out.findings, []);
   });
 
-  it("소문자로 정규화된 키워드의 대문자 접두 규칙도 찾는다", () => {
-    const lowered = ("AKIA" + rep("A1", 8)).toLowerCase();
-    const { findings } = scanFields({ keywords: [lowered, `eyJ${rep("a", 10)}.eyJ${rep("b", 10)}.${rep("c", 10)}`.toLowerCase()] }, []);
-    assert.deepEqual(findings.map((f) => f.rule).sort(), ["aws_access_key", "jwt"]);
+  it("대소문자 무시 판은 JWT 접두를 찾고 AWS 키 규칙은 대문자만 일치시킨다", () => {
+    const jwt = `eyJ${rep("a", 10)}.eyJ${rep("b", 10)}.${rep("c", 10)}`.toLowerCase();
+    const { findings } = scanFields({ keywords: [jwt, ("AKIA" + rep("A1", 8)).toLowerCase(), "asiapacificoperation", "ASIAPACIFIC-OPERATION"] }, []);
+    assert.deepEqual(findings.map((f) => f.rule), ["jwt"]);
+    assert.deepEqual(scanText("AKIA" + rep("A1", 8)).rules.map((r) => r.id), ["aws_access_key"]);
+    assert.deepEqual(scanText("asiapacificoperation ASIAPACIFIC_OPERATION").rules, []);
+  });
+
+  it("foldCaseArrays를 끄면 키워드 항목을 대소문자 구분으로 찾는다", () => {
+    const keys = ["AKIA" + rep("A1", 8)];
+    assert.equal(scanFields({ keywords: keys }, [], { foldCaseArrays: false }).findings[0].rule, "aws_access_key");
+    assert.equal(scanFields({ keywords: [keys[0].toLowerCase()] }, [], { foldCaseArrays: false }).findings.length, 0);
+  });
+
+  it("소문자로 다시 보낸 표식은 재탐지되지 않는다", () => {
+    assert.deepEqual(scanText("password: [redacted_pwd]").rules, []);
+    assert.deepEqual(scanText("PASSWORD=[REDACTED_PWD]").rules, []);
+    assert.deepEqual(scanText("password: hunter2").rules.map((r) => r.id), ["password_field"]);
+  });
+});
+
+describe("PEM 개인 키 규칙", () => {
+  const body = (lines, width = 64) => Array.from({ length: lines }, (_, i) => rep(String.fromCharCode(65 + (i % 26)), width)).join("\n");
+
+  it("머리말만 언급한 글은 가리지 않고 뒤 문장을 보존한다", () => {
+    for (const text of [
+      "문서에는 -----BEGIN PRIVATE KEY----- 머리말로 시작한다고 적는다. 이후 설정 단계 3개가 남는다.",
+      "note: -----BEGIN RSA PRIVATE KEY-----\nthis is only an example header\nand the rest of the note continues here",
+      "-----BEGIN PRIVATE KEY-----"
+    ]) {
+      assert.deepEqual(scanText(text).rules, [], text);
+      assert.equal(maskText(text), text);
+    }
+  });
+
+  it("닫는 표지까지 있는 키를 가리고 앞뒤 글을 보존한다", () => {
+    for (const eol of ["\n", "\r\n", "\\n"]) {
+      const pem = `-----BEGIN RSA PRIVATE KEY-----${eol}${body(3).split("\n").join(eol)}${eol}-----END RSA PRIVATE KEY-----`;
+      const out = maskText(`앞 문장 ${pem} 뒤 문장`);
+      assert.equal(out, "앞 문장 [REDACTED_PRIVATE_KEY] 뒤 문장", JSON.stringify(eol));
+    }
+  });
+
+  it("닫는 표지가 없는 키는 머리말과 base64 줄만 가리고 첫 비 base64 줄에서 멈춘다", () => {
+    const text = `설정 메모\n-----BEGIN PRIVATE KEY-----\n${body(2)}\n\n이 뒤의 메모는 유지한다: 단계 1, 단계 2\n마지막 줄`;
+    const out  = maskText(text);
+    assert.ok(out.startsWith("설정 메모\n[REDACTED_PRIVATE_KEY]"), out);
+    assert.ok(out.includes("이 뒤의 메모는 유지한다: 단계 1, 단계 2\n마지막 줄"), out);
+    assert.ok(!out.includes(rep("A", 64)) && !out.includes("BEGIN"));
+  });
+
+  it("키 본문이 base64 40자 미만이면 가리지 않는다", () => {
+    const text = `-----BEGIN PRIVATE KEY-----\n${rep("A", 39)}\n-----END PRIVATE KEY-----`;
+    assert.deepEqual(scanText(text).rules, []);
+    assert.deepEqual(scanText(`-----BEGIN PRIVATE KEY-----\n${rep("A", 40)}`).rules.map((r) => r.id), ["private_key"]);
+  });
+
+  it("암호화된 키의 머리 줄을 건너뛰고 본문을 가린다", () => {
+    const pem = `-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,0123ABCD\n\n${body(2)}\n-----END RSA PRIVATE KEY-----`;
+    assert.equal(maskText(`x ${pem} y`), "x [REDACTED_PRIVATE_KEY] y");
+  });
+});
+
+describe("카드 번호 규칙의 문맥과 바코드", () => {
+  const card = "4111111111111111";
+
+  it("구분자 없는 숫자열은 앞뒤 24자 안에 카드 단어가 있을 때만 가린다", () => {
+    assert.deepEqual(scanText(`영수증 번호 ${card} 끝`).rules, []);
+    for (const text of [`card ${card}`, `${card} visa`, `결제 수단 ${card}`, `승인 번호가 아닌 ${card}`, `${card} 카드`, `MasterCard: ${card}`, `amex ${card}`, `${card}, cvc 123`]) {
+      assert.deepEqual(scanText(text).rules.map((r) => r.id), ["card_number"], text);
+    }
+    assert.deepEqual(scanText(`카드${rep("가", 30)} ${card}`).rules, []);
+  });
+
+  it("구분자가 있는 4-4-4-4 형식은 단어 없이 Luhn만으로 가린다", () => {
+    assert.deepEqual(scanText(`값 4111 1111 1111 1111 끝`).rules.map((r) => r.id), ["card_number"]);
+    assert.deepEqual(scanText(`값 4111-1111-1111-1111 끝`).rules.map((r) => r.id), ["card_number"]);
+    assert.deepEqual(scanText(`값 4111 1111 1111 1112 끝`).rules, []);
+  });
+
+  it("13자리 바코드(880 시작, EAN-13 검증 자릿수 일치)는 카드 단어가 있어도 가리지 않는다", () => {
+    const cardRules = (text) => ids(text).filter((id) => id === "card_number");
+    assert.deepEqual(cardRules(`카드 결제 ${luhnAndEan13()}`), []);
+    assert.deepEqual(cardRules("결제 8801234567890"), []);
   });
 });
 
@@ -352,6 +458,10 @@ describe("적대적 입력의 처리 시간", () => {
     "mmcp_ 반복"           : rep("mmcp_", SIZE / 5),
     "PEM 시작 반복"        : rep("-----BEGIN PRIVATE KEY-----", SIZE / 27),
     "PEM 시작 꼬리 없음"   : `-----BEGIN RSA PRIVATE KEY-----${rep("A", SIZE)}`,
+    "PEM 머리말과 헤더 줄 반복": rep("-----BEGIN PRIVATE KEY-----\nA: b\n", SIZE / 33),
+    "PEM 줄 구분자 반복"   : `-----BEGIN PRIVATE KEY-----${rep("\\n" + rep("A", 3), SIZE / 5)}`,
+    "PEM 짧은 줄 반복"     : `-----BEGIN PRIVATE KEY-----\n${rep("A", 39)}${rep("\nA", SIZE / 2)}`,
+    "카드 숫자 반복 문맥"  : rep("card 4111111111111111 ", SIZE / 22),
     "Bearer 반복"          : rep("Bearer ", SIZE / 7),
     "Bearer 공백"          : `Bearer${rep(" ", SIZE)}`,
     "password 반복"        : rep("password:", SIZE / 9),

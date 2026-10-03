@@ -81,7 +81,7 @@ export const SWITCHES = Object.freeze([
   boolOff("MEMENTO_REMEMBER_DUPLICATE_GUARD", "쓰기 경로", "remember 중복 적중 시 기존 파편을 고치지 않고 상태만 알린다"),
   boolOff("MEMENTO_WORKSPACE_GATE", "쓰기 경로", "workspace가 없는 파편의 저장을 거부한다"),
   enumOf("MEMENTO_WRITE_GATE", ["on", "off"], "on", "쓰기 경로", "의미 쓰기 진입점이 쓰기 관문의 전체 단계를 거친다", { off: ["off"] }),
-  enumOf("MEMENTO_SENSITIVE_SCAN", ["mask", "reject", "off"], "mask", "쓰기 경로", "쓰기 값의 비밀과 개인정보를 가리고(mask) 고신뢰 탐지는 전 키 거부(reject)하거나 기존 4개 규칙만 적용한다(off)", { off: ["off"] }),
+  enumOf("MEMENTO_SENSITIVE_SCAN", ["mask", "reject", "off"], "mask", "쓰기 경로", "쓰기 값의 비밀과 개인정보를 가리고(mask) 고신뢰 탐지는 전 키 거부(reject)하거나 레거시 규칙만 적용한다(off)", { off: ["off"] }),
 
   /* 저장소와 캐시 */
   boolOff("REDIS_ENABLED", "저장소", "Redis를 쓴다(L1 검색, 세션, 캐시)"),
