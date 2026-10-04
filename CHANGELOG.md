@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-10-04
+
 ### 업그레이드 주의
 
 - 배포 전에 `scripts/grant-anchor-permission.js --apply`로 앵커를 쓰는 키에 `anchor` 권한을 준다. 그렇지 않으면 배포 직후 그 키의 앵커 지정이 일반 파편으로 저장된다(`MEMENTO_ANCHOR_PERMISSION=warn`).
