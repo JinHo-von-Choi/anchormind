@@ -20,6 +20,14 @@ v3.2.0부터 Phase 1~7 구현 검증용 통합 테스트 4건이 추가되었다
 
 ## 환경변수 가드
 
+### 필수 DB 정합성 레인
+
+GitHub Actions의 `db-correctness` job은 `MEMENTO_REQUIRE_TEST_DB=true`로 embedding/amend, synthetic-query/amend, case-event/forget 경합 시험을 순차 실행한다. 이 레인은 DB 연결이나 setup 실패를 skip하지 않고 실패로 처리하며 `continue-on-error`가 아니다. 로컬의 전체 DB 레인은 다음 명령으로 같은 일회용 PostgreSQL 포트(기본 35433)를 사용한다.
+
+```bash
+MEMENTO_REQUIRE_TEST_DB=true npm run test:db
+```
+
 ### 기존 LLM E2E 테스트 (활성화 변수 필요)
 
 이 디렉터리의 LLM E2E 통합 테스트는 환경변수 가드로 기본 skip 처리된다.

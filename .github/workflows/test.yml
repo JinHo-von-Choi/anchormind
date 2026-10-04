@@ -147,3 +147,54 @@ jobs:
           npm run migrate
       - name: DB concurrency tests
         run: npm run test:db
+
+  db-correctness:
+    name: DB Correctness Races (blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_DB:       memento_test
+          POSTGRES_USER:     memento
+          POSTGRES_PASSWORD: memento_test
+        ports:
+          - 35433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      CI:                 "true"
+      MEMENTO_REQUIRE_TEST_DB: "true"
+      POSTGRES_HOST:      localhost
+      POSTGRES_PORT:      35433
+      POSTGRES_DB:        memento_test
+      POSTGRES_USER:      memento
+      POSTGRES_PASSWORD:  memento_test
+      DATABASE_URL:       postgresql://memento:memento_test@localhost:35433/memento_test
+      REDIS_ENABLED:      "false"
+      EMBEDDING_ENABLED:  "false"
+      MEMENTO_ACCESS_KEY: ci-test-key
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Initialize schema and run migrations
+        run: |
+          DB_URL="postgresql://memento:memento_test@localhost:35433/memento_test"
+          psql "$DB_URL" -c "CREATE EXTENSION IF NOT EXISTS vector;"
+          psql "$DB_URL" -f lib/memory/memory-schema.sql
+          npm run migrate
+      - name: Correctness race tests
+        run: >-
+          DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off
+          node --experimental-test-module-mocks --test --test-concurrency=1
+          tests/db-concurrency/embedding-amend-race.test.js
+          tests/db-concurrency/synthetic-query-amend-race.test.js
+          tests/db-concurrency/forget-cascade.test.js

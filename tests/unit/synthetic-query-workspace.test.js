@@ -45,6 +45,7 @@ describe("SyntheticQuerySearch workspace-before-limit", () => {
 
     assert.equal(queries.length, 2);
     assert.match(queries[0].sql, /\(f\.workspace = \$\d+ OR f\.workspace IS NULL\)/);
+    assert.match(queries[0].sql, /q\.source_content_hash = f\.content_hash/);
     assert.match(queries[1].sql, /\(f\.workspace = \$\d+ OR f\.workspace IS NULL\)/);
   });
 

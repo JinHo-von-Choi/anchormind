@@ -1217,6 +1217,8 @@ Loads Anchor, Core, Learning, and Working Memory plus session_reflect separately
 | structured | boolean | - | When true, returns hierarchical tree structure; when false/omitted, returns existing flat list (default: false) |
 | includeKeyName | boolean | - | When true, each fragment carries key_id and key_name (the access key label). Only information within the same key group scope is exposed, and it does not apply to the structured=true tree response. Default false. |
 
+The response `budget` object contains `requested`, the exact content-token count in `used`, and `exceededByGuaranteed` when guaranteed slots exceed the target. The existing `totalTokens` equals `budget.used`.
+
 ### Anchor selection metadata
 
 `_meta.anchorSelection` reports `totalLimit`, `workspaceReserve`, and `reserveApplied`, plus workspace/global/unscoped/total counts under `candidates`, `selected`, and `excluded`. `selected.reservedWorkspace` is the number of workspace anchors admitted during the reservation phase. `loadStatus` reports whether each candidate scope loaded successfully (or `null` when not applicable). If any load fails, `partial=true` and unknown candidate/excluded counts are `null`. With an effective workspace, its top reserved anchors are selected first and the remaining slots are filled by a combined importance ranking of leftover workspace and global anchors. Without an effective workspace, it applies no reserve, selects the top anchors from the single permitted candidate scope, and reports that count as `unscoped`. Normal calls include only global (NULL) anchors; candidates across all workspaces are included only for a server-authenticated master request with `allWorkspaces=true`.
@@ -1266,7 +1268,9 @@ Returns search quality and downstream task outcome indicators. Ratio fields are 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| rolling_precision_at_5 | number \| null | Rolling Precision@5 over the last 100 sessions |
+| rolling_session_relevance_rate | number \| null | Feedback relevance rate over the latest 100 sessions |
+| rolling_precision_at_5 | number \| null | Deprecated alias of `rolling_session_relevance_rate` |
+| deprecated_metrics | object | Deprecated metric names mapped to replacements |
 | sufficient_rate | number \| null | Share of tool_feedback entries with sufficient=true |
 | sample_sessions | number | Sessions used to compute precision |
 | task_success_rate | number \| null | Share of `overall_success=true` over the last 30 days, denominated by every task_feedback row |

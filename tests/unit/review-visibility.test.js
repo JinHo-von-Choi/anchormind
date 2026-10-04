@@ -171,7 +171,7 @@ describe("recall 질의의 술어", () => {
     const options = { keyId: ["own", "peer"], viewerKeyId: "own", agentId: "default" };
     await reader.searchByKeywords(["k"], options);
     assert.equal(viewerParam(last()), "own");
-    assert.match(last().sql, /f\.affect, f\.review_state/);
+    assert.match(last().sql, /f\.affect,\s+f\.content_hash, f\.review_state/);
     await reader.searchByTopic("t", options);
     assert.equal(viewerParam(last()), "own");
     await reader.searchByTimeRange(null, null, options);

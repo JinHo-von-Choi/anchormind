@@ -47,7 +47,7 @@ const ALLOWED = {
   "memory/consolidate/UtilityBaseline.js": 1,
   "memory/consolidate/idOrderedUpdate.js": 3, // id 순 묶음 갱신은 잠금 CTE와 갱신 문장을, 재개형 백필의 후보 id 조회는 같은 조건식을 함께 쓴다
   "memory/embedding/EmbeddingWorker.js": 5, // 배치 저장은 id 순 잠금 CTE와 갱신 문장을 함께 쓴다
-  "memory/embedding/SyntheticQueryWorker.js": 3,
+  "memory/embedding/SyntheticQueryWorker.js": 4, // 생성 결과 INSERT도 원문 content_hash를 같은 문장에서 대조해 오래된 파생 자료 저장을 막는다
   "memory/link/ContradictionDetector.js": 12,
   "memory/link/GraphLinker.js": 11,
   "memory/link/LinkStore.js": 9, // 가져온 링크의 양 끝 linked_to 갱신은 id 순 잠금 CTE와 갱신 문장을 함께 쓴다
@@ -57,7 +57,7 @@ const ALLOWED = {
   "memory/read/CaseRecall.js": 2,
   "memory/CaseEventStore.js": 1,
   "memory/read/ContextBuilder.js": 1,
-  "memory/read/FragmentReader.js": 17, // recall 예산 선택의 저장 토큰 수 조회(getStoredTokenCounts), 모순 감사 기록의 원본 등급 조회(getTrustTiers)
+  "memory/read/FragmentReader.js": 18, // recall 예산 선택 토큰, 모순 감사 등급, Hot Cache 본문·검토 버전 재검증
   "memory/read/HistoryReconstructor.js": 1,
   "memory/read/KeyNameEnricher.js": 1,
   "memory/read/ProvenanceLoader.js": 1, // 답 꾸러미, recall 응답, context core 후보의 출처 열(source, origin, trust_tier)을 대체 체인 조회와 같은 recall의 agent, 키, workspace 범위 절로 읽는다. 답 꾸러미 source 조회를 옮겨 와 AnswerPackLoader에는 직접 접근이 없다. FragmentReader 메서드로 옮기면 그 범위 절을 중복한다
@@ -68,7 +68,7 @@ const ALLOWED = {
   "memory/read/TopicResolver.js": 1,
   "memory/read/quotaQueries.js": 1,
   "memory/signals/CaseRewardBackprop.js": 1,
-  "memory/signals/RecallBenchmark.js": 1,
+  "memory/signals/RecallBenchmark.js": 2, // 임베딩 누락 계수와 --no-seed 기존 스코프 content_hash 대응
   "memory/signals/SpreadingActivation.js": 2,
   "memory/transfer/FragmentExporter.js": 1, // 내보내기는 호출자가 넘긴 조건과 연결로 파편 열 전체를 id 순 묶음으로 읽는다. 관리 API와 CLI가 함께 쓴다
   "memory/write/BatchRememberProcessor.js": 1,

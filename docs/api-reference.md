@@ -1234,6 +1234,8 @@ Anchor + Core + Learning + Working Memory와 session_reflect를 분리 로드한
 | structured | boolean | - | true 시 계층적 트리 구조 반환, false/미지정 시 기존 flat list (기본값: false) |
 | includeKeyName | boolean | - | true 시 fragments 각 항목에 key_id와 key_name(액세스 키 라벨)을 포함한다. 같은 키 그룹 스코프의 정보만 노출되며, structured=true 트리 응답에는 적용되지 않는다. 기본 false. |
 
+응답의 `budget`은 `requested`, 정확한 본문 토큰 수인 `used`, 보장 슬롯 때문에 넘긴 `exceededByGuaranteed`를 제공한다. 기존 `totalTokens`는 `budget.used`와 같다.
+
 ### Anchor 선택 메타
 
 응답의 `_meta.anchorSelection`은 `totalLimit`, `workspaceReserve`, `reserveApplied`와 함께 `candidates`, `selected`, `excluded`의 workspace/global/unscoped/total 수를 제공한다. `selected.reservedWorkspace`는 예약 단계에서 먼저 포함된 workspace anchor 수다. `loadStatus`는 각 후보 범위의 조회 성공 여부(적용하지 않은 범위는 `null`)를 나타내고, 하나라도 실패하면 `partial=true`이며 알 수 없는 후보·제외 수는 `null`이다. effective workspace가 있으면 workspace 상위 예약분을 먼저 선택한 뒤, 남은 슬롯을 잔여 workspace와 전역 anchor의 통합 importance 순으로 채운다. effective workspace가 없으면 reserve 없이 현재 허용된 단일 후보 범위의 상위 anchor를 선택하고 그 수를 `unscoped`로 보고한다. 일반 호출에서는 전역(NULL) anchor만 해당하며, 서버가 인증한 master의 `allWorkspaces=true` 호출에서만 전체 workspace 후보를 포함한다.
@@ -1283,7 +1285,9 @@ master key 전용 파편 기억 시스템 통계 조회. 전체 파편 수, TTL 
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
-| rolling_precision_at_5 | number \| null | 최근 100세션 기준 rolling Precision@5 |
+| rolling_session_relevance_rate | number \| null | 최근 100세션의 피드백 관련성 비율 |
+| rolling_precision_at_5 | number \| null | 폐기 예정 별칭. `rolling_session_relevance_rate`와 같은 값 |
+| deprecated_metrics | object | 폐기 예정 지표 이름과 대체 이름의 대응 |
 | sufficient_rate | number \| null | tool_feedback의 sufficient=true 비율 |
 | sample_sessions | number | precision 산출에 사용된 세션 수 |
 | task_success_rate | number \| null | 최근 30일 `overall_success=true` 비율. 분모는 전체 task_feedback 행 |

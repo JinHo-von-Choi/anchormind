@@ -222,7 +222,7 @@ node bin/memento.js benchmark --key-scope corpus --repeat 3
 
 To compare against the baseline, add `--baseline scripts/baseline-recall.json`. Regression decisions are made with this comparison.
 
-Baselines are produced in isolated mode with `Xenova/bge-m3` (1024 dimensions) and `--repeat 3` on a freshly migrated database. `--save-baseline` records the embedding provider, model and dimensions, and `--baseline` warns when the model differs. When the baseline file has no `embedding` field, no warning is printed, so the absence of a warning does not mean the models match. A run that embedded 0 fragments is refused by `--save-baseline` and exits with code 1. A `--no-seed` run neither seeds nor embeds anything, so it cannot be saved as a baseline, and the refusal message says so. The regression tolerance is 2pp for Recall and MRR and 15% for p95 latency.
+Baselines are produced in isolated mode with `Xenova/bge-m3` (1024 dimensions) and `--repeat 3` on a freshly migrated database. `--save-baseline` records the embedding provider, model and dimensions, and `--baseline` warns when the model differs. When the baseline file has no `embedding` field, no warning is printed, so the absence of a warning does not mean the models match. A run that embedded 0 fragments is refused by `--save-baseline` and exits with code 1. `--no-seed` maps every goldset store text by content hash in the selected agent/workspace/key scope; missing, duplicate, or incomplete mappings fail with exit code 1 and existing fragments are never cleaned up. The regression tolerance is 2pp for Recall and MRR and 15% for p95 latency.
 
 `scripts/baseline-recall.json` is the stored baseline. It is refreshed by running the procedure below with an embedding model and overwriting it with `--save-baseline`. The table below holds measurements taken on 2026-10-03 on a fresh isolated database with `Xenova/bge-m3`, the 100-entry goldset and `--repeat 3`; it is separate from the contents of the stored baseline file.
 
@@ -250,7 +250,7 @@ Seeding creates one `api_keys` row with id `benchmark-harness-key` and status `i
 DELETE FROM agent_memory.api_keys WHERE id = 'benchmark-harness-key' AND status = 'inactive';
 ```
 
-Deleting the `api_keys` row sets `key_id` of the remaining fragments to NULL, which makes them master-scope. A row in `link_reconsolidations` that references the key makes the DELETE fail. A run with `--no-seed` has no embedded fragments, so the benchmark refuses `--save-baseline` together with `--no-seed`.
+Deleting the `api_keys` row sets `key_id` of the remaining fragments to NULL, which makes them master-scope. A row in `link_reconsolidations` that references the key makes the DELETE fail. Saving a `--no-seed` baseline still requires every mapped fragment to be embedded.
 
 `isolated` keeps only the seeded goldset fragments as candidates, so results are identical between runs. Use this mode for regression decisions. `corpus` fluctuates by about 3 points depending on when it runs, because production data keeps changing. When quoting an absolute figure, state the run time and the repeat count together.
 

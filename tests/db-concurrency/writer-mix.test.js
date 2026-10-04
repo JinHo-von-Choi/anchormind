@@ -176,7 +176,9 @@ describe("파편 쓰기 경로 혼합 부하", () => {
         jobs.push(writer.incrementAccess(subset(), "default").catch(record("access")));
         jobs.push(writer.incrementAccess(subset(), "default", { noEma: true }).catch(record("access_noema")));
         jobs.push(writer.touchLinked(subset(), "default", null, { allWorkspaces: true }).catch(record("touch")));
-        jobs.push(worker._embedChunk(subset().map(id => ({ id, content: `db-lane ${id}` }))).catch(record("embed")));
+        jobs.push(worker._embedChunk(subset().map(id => ({
+          id, content: `db-lane ${id}`, content_hash: crypto.createHash("md5").update(id).digest("hex")
+        }))).catch(record("embed")));
         jobs.push(links.createLinks(linkPairs(), "default").catch(record("links")));
         jobs.push(staleKeyShare(subset().slice(0, 6)).catch(record("keyshare")));
         jobs.push(linkInsert().catch(record("link_insert")));

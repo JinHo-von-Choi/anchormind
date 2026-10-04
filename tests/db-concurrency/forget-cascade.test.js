@@ -30,6 +30,7 @@ await prepareLaneDatabase();
 const { shutdownPool, getPrimaryPool } = await import("../../lib/tools/db.js");
 const { MemoryManager }                = await import("../../lib/memory/MemoryManager.js");
 const { FragmentWriter }               = await import("../../lib/memory/write/FragmentWriter.js");
+const { CaseEventStore }               = await import("../../lib/memory/CaseEventStore.js");
 const {
   DELETED_SUMMARY, CONTRADICTION_AUDIT_TOPIC, purgeOrphanCaseSummaries
 } = await import("../../lib/memory/write/ForgetCascade.js");
@@ -156,6 +157,54 @@ describe("forget 삭제 연쇄(실제 행)", () => {
     assert.equal(rows.length, 1);
     assert.equal(rows[0].valid, true);
     assert.match(rows[0].def, /\(source_fragment_id\) WHERE \(source_fragment_id IS NOT NULL\)/);
+  });
+
+  it("event append와 forget이 겹쳐도 삭제된 원문의 요약 사본이 남지 않는다", { timeout: 30_000 }, async () => {
+    const id = await insertFragment({ id: fid(), content: "fc append-delete race", keyId: KEY_A });
+    await directQuery(`
+      CREATE OR REPLACE FUNCTION ${SCHEMA}.test_delay_case_event() RETURNS trigger
+      LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.25); RETURN NEW; END $$;
+      CREATE TRIGGER test_delay_case_event BEFORE INSERT ON ${SCHEMA}.case_events
+      FOR EACH ROW EXECUTE FUNCTION ${SCHEMA}.test_delay_case_event()`);
+    try {
+      const append = new CaseEventStore().append({
+        case_id: `fc-case-${crypto.randomUUID()}`,
+        event_type: "decision_committed",
+        summary: "fc append-delete race original summary",
+        source_fragment_id: id,
+        key_id: KEY_A
+      });
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const deletion = new FragmentWriter().deleteWithCascade([id], "default", KEY_A);
+      const [event, removed] = await Promise.all([append, deletion]);
+      assert.equal(event.inserted, true);
+      assert.equal(removed.deleted, 1);
+      const { rows } = await directQuery(
+        `SELECT summary FROM ${SCHEMA}.case_events WHERE event_id = $1`, [event.event_id]
+      );
+      assert.equal(rows[0].summary, DELETED_SUMMARY);
+    } finally {
+      await directQuery(`DROP TRIGGER IF EXISTS test_delay_case_event ON ${SCHEMA}.case_events`);
+      await directQuery(`DROP FUNCTION IF EXISTS ${SCHEMA}.test_delay_case_event()`);
+    }
+  });
+
+  it("forget이 먼저 커밋되면 늦은 event append가 원문 사본을 만들지 않는다", async () => {
+    const id = await insertFragment({ id: fid(), content: "fc forget-first race", keyId: KEY_A });
+    const removed = await new FragmentWriter().deleteWithCascade([id], "default", KEY_A);
+    assert.equal(removed.deleted, 1);
+    const event = await new CaseEventStore().append({
+      case_id: `fc-case-${crypto.randomUUID()}`,
+      event_type: "decision_committed",
+      summary: "fc forget-first original summary",
+      source_fragment_id: id,
+      key_id: KEY_A
+    });
+    assert.deepEqual(event, { inserted: false, reason: "source_missing" });
+    const { rows } = await directQuery(
+      `SELECT count(*)::int AS n FROM ${SCHEMA}.case_events WHERE source_fragment_id = $1`, [id]
+    );
+    assert.equal(rows[0].n, 0);
   });
 
   it("id forget이 요약을 바꾸고 서버 해소 기록을 지우며 영수증을 돌려준다", async () => {

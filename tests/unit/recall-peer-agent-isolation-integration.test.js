@@ -212,6 +212,7 @@ function fragment(overrides) {
     is_anchor  : false,
     agent_id   : "agent-a",
     workspace  : "ws-a",
+    content_hash: `hash-${overrides?.id ?? "fragment"}`,
     ...overrides
   };
 }
@@ -240,6 +241,10 @@ async function runHotCacheSearch(includePeerAgents) {
     searchByKeywords: async () => [],
     searchByTopic   : async () => [],
     getByIds        : async () => [],
+    getCacheValidation: async ids => rows.filter(row => ids.includes(row.id)).map(row => ({
+      id: row.id, content_hash: row.content_hash, review_state: row.review_state ?? null,
+      key_id: row.key_id ?? null, valid_to: row.valid_to ?? null
+    })),
     incrementAccess : () => {},
     touchLinked     : async () => {}
   };

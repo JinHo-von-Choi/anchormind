@@ -37,7 +37,8 @@ for (const source of [undefined, "private-fragment-id"]) {
     assert.match(warnings[0], /snapshot unavailable/);
     assert.doesNotMatch(warnings[0], /private-/);
     const insert = calls.find(q => /INSERT INTO/.test(q.sql));
-    assert.deepEqual(insert.params.slice(-2), [null, null]);
+    if (source) assert.equal(insert, undefined);
+    else assert.deepEqual(insert.params.slice(-2), [null, null]);
     if (source) {
       const lookup = calls.find(q => /SELECT agent_id/.test(q.sql));
       assert.deepEqual(lookup.params, [source, "private-key"]);

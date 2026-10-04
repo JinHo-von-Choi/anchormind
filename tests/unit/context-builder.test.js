@@ -21,6 +21,7 @@ import {
   seedGuaranteed,
   selectGuaranteedCoreFragments
 } from "../../lib/memory/read/ContextBuilder.js";
+import { countContentTokens } from "../../lib/memory/read/BudgetSelector.js";
 
 /* ── 헬퍼: 파편 팩토리 ── */
 function frag(id, type, content, extra = {}) {
@@ -451,7 +452,7 @@ describe("ContextBuilder.build()", () => {
       structured : true,
       sessionId  : "synthetic-session",
       types      : ["fact"],
-      tokenBudget: 2000
+      tokenBudget: 500
     });
 
     const fragmentIds = result.fragments.map(item => item.id);
@@ -460,7 +461,12 @@ describe("ContextBuilder.build()", () => {
     assert.deepEqual(result.rankedInjection.items.map(item => item.id), fragmentIds);
     assert.equal(result.rankedInjection.totalTokens, result.totalTokens);
     assert.equal(result.count, 13);
-    assert.ok(result.totalTokens > 2000);
+    assert.ok(result.totalTokens > 500);
+    assert.deepEqual(result.budget, {
+      requested: 500,
+      used: result.totalTokens,
+      exceededByGuaranteed: result.totalTokens - 500
+    });
     assert.ok(result.coreTokens > 0);
     assert.ok(result.learningTokens > 0);
     assert.ok(result.wmTokens > 0);
@@ -510,7 +516,8 @@ describe("ContextBuilder.build()", () => {
     assert.deepEqual(result.fragments.map(item => item.id), ["core-guaranteed"]);
     assert.match(result.injectionText, /g{100}/);
     assert.doesNotMatch(result.injectionText, /x{100}/);
-    assert.equal(result.totalTokens, 100);
+    assert.equal(result.totalTokens, countContentTokens("g".repeat(400)));
+    assert.equal(result.budget.used, result.totalTokens);
   });
 
   it("ID 없는 추가 후보도 ranked 선택에서 빠지면 flat/structured 출력에서 제외한다", async () => {

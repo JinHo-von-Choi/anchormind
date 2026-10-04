@@ -51,9 +51,9 @@ beforeEach(() => {
 
 describe("EmbeddingWorker 배치 저장 잠금 순서", () => {
   const rows = [
-    { id: "f-c", content: "gamma" },
-    { id: "f-a", content: "alpha" },
-    { id: "f-b", content: "beta" }
+    { id: "f-c", content: "gamma", content_hash: "hash-c" },
+    { id: "f-a", content: "alpha", content_hash: "hash-a" },
+    { id: "f-b", content: "beta",  content_hash: "hash-b" }
   ];
 
   it("대상 행을 id 오름차순으로 먼저 잠그는 문장을 함께 넘긴다", async () => {
@@ -72,14 +72,16 @@ describe("EmbeddingWorker 배치 저장 잠금 순서", () => {
     const { sql } = queries[0];
     assert.match(sql, /UPDATE \S*fragments AS f[\s\S]*SET embedding = v\.vec::vector/);
     assert.match(sql, /AND f\.id = ANY\(\$1::text\[\]\)/);
+    assert.match(sql, /AND f\.content_hash = v\.source_hash/);
+    assert.match(sql, /AND f\.embedding IS NULL/);
     assert.doesNotMatch(sql, /FOR NO KEY UPDATE|locked/);
   });
 
   it("행마다 id와 벡터를 짝지어 $2부터 바인딩한다", async () => {
     await buildWorker()._embedChunk(rows);
     const { sql, params } = queries[0];
-    assert.deepEqual(params, ["f-c", "[1]", "f-a", "[2]", "f-b", "[3]"]);
-    assert.match(sql, /\(\$2::text, \$3::vector\), \(\$4::text, \$5::vector\), \(\$6::text, \$7::vector\)/);
+    assert.deepEqual(params, ["f-c", "hash-c", "[1]", "f-a", "hash-a", "[2]", "f-b", "hash-b", "[3]"]);
+    assert.match(sql, /\(\$2::text, \$3::text, \$4::vector\), \(\$5::text, \$6::text, \$7::vector\), \(\$8::text, \$9::text, \$10::vector\)/);
     assert.match(sql, /WHERE f\.id = v\.id/);
   });
 });

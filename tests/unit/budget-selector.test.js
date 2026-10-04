@@ -24,6 +24,14 @@ const totalOf  = (pool, ids) => pool.filter(f => ids.has(f.id)).reduce((sum, f) 
 const tokensOf = (pool, ids) => pool.filter(f => ids.has(f.id)).reduce((sum, f) => sum + fragmentTokens(f), 0);
 
 describe("selectWithinBudget", () => {
+  it("utilityOf를 기본 이름으로 받고 scoreOf 별칭도 유지한다", () => {
+    const pool = [frag("a", 0.9, 10), frag("b", 0.1, 10)];
+    const modern = selectWithinBudget(pool, { budget: 10, utilityOf: scoreOf });
+    const legacy = selectWithinBudget(pool, { budget: 10, scoreOf });
+    assert.deepEqual(idsOf(modern), ["a"]);
+    assert.deepEqual(idsOf(legacy), ["a"]);
+  });
+
   it("토큰 합이 예산 이하이면 전부 고른다", () => {
     const pool      = [frag("a", 0.1, 30), frag("b", 0.9, 30), frag("c", 0.5, 40)];
     const selection = selectWithinBudget(pool, { budget: 100, scoreOf });
@@ -438,4 +446,3 @@ describe("확인된 기준 집합 보호", () => {
     assert.ok(taggedBelowOff / tagged < 0.25, `태그 검색의 off 미달 비율 ${taggedBelowOff}/${tagged}`);
   });
 });
-

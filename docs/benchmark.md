@@ -123,7 +123,7 @@ node bin/memento.js benchmark --key-scope corpus --repeat 3
 
 기준선과 비교하려면 `--baseline scripts/baseline-recall.json`을 붙인다. 회귀 판정은 이 비교로 한다.
 
-기준선은 isolated 모드, `Xenova/bge-m3`(1024차원), `--repeat 3`으로 새로 마이그레이션한 DB에서 만든다. `--save-baseline`은 임베딩 provider, 모델, 차원을 함께 기록하고, `--baseline` 비교 시 모델이 다르면 경고한다. 기준선 파일에 `embedding` 필드가 없으면 경고를 내지 않으므로, 경고가 없다는 사실이 모델이 같다는 뜻은 아니다. 임베딩된 파편이 0건인 실행은 `--save-baseline`을 거부하고 종료 코드 1로 끝난다. `--no-seed` 실행은 파편을 적재하지도 임베딩하지도 않으므로 기준선으로 저장할 수 없고, 거부 메시지가 이를 밝힌다. 회귀 판정 허용 하락폭은 Recall과 MRR 2pp, p95 지연 15%다.
+기준선은 isolated 모드, `Xenova/bge-m3`(1024차원), `--repeat 3`으로 새로 마이그레이션한 DB에서 만든다. `--save-baseline`은 임베딩 provider, 모델, 차원을 함께 기록하고, `--baseline` 비교 시 모델이 다르면 경고한다. 기준선 파일에 `embedding` 필드가 없으면 경고를 내지 않으므로, 경고가 없다는 사실이 모델이 같다는 뜻은 아니다. 임베딩된 파편이 0건인 실행은 `--save-baseline`을 거부하고 종료 코드 1로 끝난다. `--no-seed`는 지정 agent/workspace/key 스코프에서 골드셋 저장문의 content hash를 정확히 한 건씩 찾는다. 누락·중복 또는 평가 건수 불일치가 있으면 종료 코드 1이며 기존 파편은 정리하지 않는다. 회귀 판정 허용 하락폭은 Recall과 MRR 2pp, p95 지연 15%다.
 
 `scripts/baseline-recall.json`은 저장된 기준선이다. 임베딩 모델을 지정해 아래 절차를 실행하고 `--save-baseline`으로 덮어써서 갱신한다. 아래 표는 2026-10-03에 isolated 새 DB, `Xenova/bge-m3`, 골드셋 100문항, `--repeat 3`으로 측정한 값이며 저장된 기준선 파일의 내용과는 별개다.
 
@@ -151,7 +151,7 @@ EMBEDDING_ENABLED=true node bin/memento.js benchmark --repeat 3 --save-baseline 
 DELETE FROM agent_memory.api_keys WHERE id = 'benchmark-harness-key' AND status = 'inactive';
 ```
 
-`api_keys` 행을 지우면 남아 있는 파편의 `key_id`는 NULL이 되며, 이 파편은 마스터 범위로 바뀐다. `link_reconsolidations`에 이 키를 참조하는 행이 있으면 DELETE는 실패한다. `--no-seed`로 실행한 결과에는 임베딩된 파편이 없으므로 벤치마크는 `--no-seed`와 `--save-baseline`을 함께 쓰는 실행을 거부한다.
+`api_keys` 행을 지우면 남아 있는 파편의 `key_id`는 NULL이 되며, 이 파편은 마스터 범위로 바뀐다. `link_reconsolidations`에 이 키를 참조하는 행이 있으면 DELETE는 실패한다. `--no-seed` 기준선 저장도 기존 스코프의 모든 골드셋 항목이 정확히 대응되고 임베딩되어 있어야 한다.
 
 `isolated`는 적재한 골드셋 파편만 후보로 두므로 회차 간 결과가 동일하다. 회귀 판정에는 이 모드를 쓴다. `corpus`는 운영 데이터가 계속 변하므로 실행 시점에 따라 3포인트 안팎으로 흔들린다. 절대 수치를 인용할 때는 실행 시각과 반복 횟수를 함께 적는다.
 

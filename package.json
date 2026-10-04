@@ -40,6 +40,7 @@
     "lint": "eslint .",
     "lint:ratchet": "node scripts/lint-ratchet.js",
     "backfill:embeddings": "node scripts/backfill-embeddings.js",
+    "backfill:synthetic-query-versions": "node scripts/backfill-synthetic-query-versions.js",
     "lint:migrations": "node scripts/lint-migrations.js",
     "switches": "node scripts/switch-report.mjs",
     "audit:ci": "audit-ci --config audit-ci.jsonc",

@@ -102,12 +102,14 @@ export const SWITCHES = Object.freeze([
   boolOn("MEMENTO_KEYWORD_SEMANTIC_FALLBACK", "검색", "keywords만 있는 recall에 시맨틱 보조 검색을 더한다"),
   boolOn("MEMENTO_WORKSPACE_DECAY", "검색", "workspace가 다른 파편의 순위 점수를 낮춘다"),
   enumOf("MEMENTO_RANK_BEFORE_BUDGET", ["on", "off"], "on", "검색", "recall이 최종 점수를 매긴 뒤 토큰 예산 안에서 파편을 고른다", { off: ["off"] }),
+  enumOf("MEMENTO_RANKING_FIX_V2", ["on", "off"], "on", "검색", "검색 채널 증거와 lexical-only 순위 계층을 효용 점수와 분리한다", { off: ["off"] }),
   enumOf("MEMENTO_CONTEXT_ANNOTATE", ["on", "off"], "on", "검색", "context 주입 줄 끝에 저장일과 assertion 주석을 붙인다", { off: ["off"] }),
   enumOf("MEMENTO_LEXICAL_CHANNEL", ["on", "off"], "on", "검색", "본문 형태소 토큰 전문 검색 후보를 RRF에 더하고 저장 시 content_tokens를 채운다", { off: ["off"] }),
   offDisables("MEMENTO_VECTOR_FORCE_INDEX", "검색", "벡터 검색에 인덱스 강제 planner 힌트를 쓴다"),
   boolOff("ENABLE_SPREADING_ACTIVATION", "검색", "recall의 contextText로 활성 확산 검색을 한다"),
   boolOff("MEMENTO_SYNTHETIC_QUERY_ENABLED", "검색", "파편 저장 시 LLM으로 합성 역질의를 만들어 색인한다"),
   boolOn("MEMENTO_SYNTHETIC_QUERY_SEARCH", "검색", "합성 역질의 벡터를 검색에 반영한다"),
+  boolOn("MEMENTO_DERIVED_FRESHNESS_ENFORCE", "검색", "현재 본문 버전에서 생성된 합성 역질의만 검색한다"),
 
   /* 기억 처리 */
   boolOff("ENABLE_RECONSOLIDATION", "기억 처리", "재공고화 엔진으로 링크 가중치와 대체를 갱신한다"),

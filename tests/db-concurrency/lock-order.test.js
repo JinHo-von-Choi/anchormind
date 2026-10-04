@@ -141,7 +141,9 @@ describe("파편 행 잠금 순서", () => {
       for (let k = 0; k < PER_KIND; k++) {
         jobs.push(writer.incrementAccess(shuffled(ids).slice(0, SUBSET_SIZE), "default").catch(record("access")));
         jobs.push(writer.touchLinked(shuffled(ids).slice(0, SUBSET_SIZE), "default", null, { allWorkspaces: true }).catch(record("touch")));
-        jobs.push(worker._embedChunk(shuffled(ids).slice(0, SUBSET_SIZE).map(id => ({ id, content: `db-lane ${id}` }))).catch(record("embed")));
+        jobs.push(worker._embedChunk(shuffled(ids).slice(0, SUBSET_SIZE).map(id => ({
+          id, content: `db-lane ${id}`, content_hash: crypto.createHash("md5").update(id).digest("hex")
+        }))).catch(record("embed")));
         jobs.push(links.createLinks(linkPairs(), "default").catch(record("links")));
       }
       await Promise.all(jobs);

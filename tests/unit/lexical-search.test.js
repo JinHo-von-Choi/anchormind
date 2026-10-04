@@ -258,14 +258,14 @@ describe("검색 계층 연결 도우미", () => {
     assert.deepEqual(none, []);
   });
 
-  it("mergeRRF: 다른 계층에 있는 후보는 그 객체를 그대로 두고 RRF 점수만 더한다", () => {
+  it("mergeRRF: 다른 계층에 있는 후보도 어휘 증거를 보존한다", () => {
     const merged = mergeRRF([
       { name: "l3",      results: [{ id: "a", content: "x", similarity: 0.8 }], weightFactor: 1 },
       { name: "lexical", results: [{ id: "a", content: "x", _lexicalScore: 0.6 }, { id: "b", content: "y", _lexicalScore: 1 }], weightFactor: 1 }
     ]);
     const a = merged.find(f => f.id === "a");
     assert.equal(a.similarity, 0.8);
-    assert.equal("_lexicalScore" in a, false);
+    assert.equal(a._lexicalScore, 0.6);
     assert.equal(merged.find(f => f.id === "b")._lexicalScore, 1);
   });
 

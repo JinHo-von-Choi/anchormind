@@ -17,6 +17,7 @@ import {
   CONTEXT_ANNOTATION_MAX_CHARS, CONTEXT_ANNOTATION_TOKENS, contextAnnotation, formatUtcDate, renderContextSectionLines
 } from "../../lib/memory/read/ContextLines.js";
 import { ContextBuilder, buildRankedInjection } from "../../lib/memory/read/ContextBuilder.js";
+import { countContentTokens } from "../../lib/memory/read/BudgetSelector.js";
 
 /** 앵커 줄 주체 표지는 별도 시험이 본다. 여기서는 주석만 보도록 앵커 권한 집행을 끈다. */
 process.env.MEMENTO_ANCHOR_PERMISSION = "off";
@@ -196,7 +197,7 @@ describe("주석 비용과 tokenBudget", () => {
   const saved   = process.env.MEMENTO_CONTEXT_ANNOTATE;
   const weights = { importance: 1.0, ema_activation: 0.5 };
   const body    = i => `${String(i).padStart(2, "0")} ${"x".repeat(45)}`;
-  const cost    = (content, extra) => Math.ceil(content.length / 4) + extra;
+  const cost    = (content, extra) => countContentTokens(content) + extra;
   afterEach(() => {
     if (saved === undefined) delete process.env.MEMENTO_CONTEXT_ANNOTATE;
     else process.env.MEMENTO_CONTEXT_ANNOTATE = saved;

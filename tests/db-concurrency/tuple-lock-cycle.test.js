@@ -29,6 +29,7 @@
 import { describe, it, before, after } from "node:test";
 import assert                          from "node:assert/strict";
 import pg                              from "pg";
+import crypto                          from "node:crypto";
 
 const {
   SCHEMA, prepareLaneDatabase, dropLaneDatabase, laneDatabaseName, directClientConfig, directQuery,
@@ -232,6 +233,8 @@ describe("행 버전 잠금 대기열", () => {
     const worker = new EmbeddingWorker();
     worker.embeddingCache = { get: async () => vector, set() {} };
     assertNoDeadlock(await runScenario(rows =>
-      worker._embedChunk([rows.Z, rows.R, rows.A].map(id => ({ id, content: `db-lane ${id}` })))));
+      worker._embedChunk([rows.Z, rows.R, rows.A].map(id => ({
+        id, content: `db-lane ${id}`, content_hash: crypto.createHash("md5").update(id).digest("hex")
+      })))));
   });
 });

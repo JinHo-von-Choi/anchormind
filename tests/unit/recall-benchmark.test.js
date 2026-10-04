@@ -158,6 +158,16 @@ describe("compareToBaseline", () => {
     assert.equal(r.regressed, false);
     assert.ok(r.deltas.offline_recall_at_5 > 0);
   });
+
+  test("현재 핵심 지표가 null이면 비교 불가다", () => {
+    const r = compareToBaseline(baseline, {
+      offline_recall_at_1: null, offline_recall_at_5: null,
+      offline_recall_at_10: null, offline_mrr: null, latency_ms: { p95: null }
+    });
+    assert.equal(r.comparable, false);
+    assert.equal(r.regressed, false);
+    assert.ok(r.reasons[0].includes("비교할 수 없다"));
+  });
 });
 
 describe("validateGoldsetEntry", () => {

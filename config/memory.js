@@ -166,6 +166,8 @@ export const MEMORY_CONFIG = {
   syntheticQuery: {
     enabled          : process.env.MEMENTO_SYNTHETIC_QUERY_ENABLED === "true",
     searchEnabled    : process.env.MEMENTO_SYNTHETIC_QUERY_SEARCH  !== "false",
+    /** 긴급 롤백용 스위치. false이면 버전 열이 없는 기존 행도 검색에 허용한다. */
+    freshnessEnforce : process.env.MEMENTO_DERIVED_FRESHNESS_ENFORCE !== "false",
     /** 적용 대상 제한. 이득이 확인되기 전에 넓히면 비용이 먼저 늘어난다. */
     minImportance    : Number(process.env.MEMENTO_SYNTHETIC_QUERY_MIN_IMPORTANCE || 0.8),
     types            : (process.env.MEMENTO_SYNTHETIC_QUERY_TYPES || "error,procedure,decision")

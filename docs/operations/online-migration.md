@@ -5,6 +5,18 @@
 
 대형 표(fragments, fragment_links, case_events, search_events)에 색인, 제약, 열 변경을 적용할 때 쓰기를 멈추지 않는 절차다. `scripts/migrate.js`가 마이그레이션 파일마다 트랜잭션을 열기 때문에 `CREATE INDEX CONCURRENTLY`를 파일 안에서 쓸 수 없고, 일반 `CREATE INDEX`는 표 전체 쓰기를 막는다. 아래 네 규칙으로 이 구간을 운영 단계로 분리한다.
 
+## 합성 역질의 원본 버전(061)
+
+`migration-061-synthetic-query-source-version.sql`은 nullable `source_content_hash`만 추가하므로 기존 행을 최신으로 간주해 일괄 채우지 않는다. 코드 배포 뒤 아래 순서로 실제 현재 본문에서 파생 질의를 다시 만든다.
+
+```bash
+npm run migrate
+npm run backfill:synthetic-query-versions -- --limit=100
+npm run backfill:synthetic-query-versions -- --apply --limit=100
+```
+
+첫 실행은 dry-run이며 현재 버전이 없는 파편과 stale 행 수만 보여준다. 생성 coverage가 100%이고 실패가 없는 것을 확인한 뒤에만 `--apply --delete-stale`로 NULL·불일치 행을 지운다. 긴급 복귀는 스키마를 내리지 않고 `MEMENTO_DERIVED_FRESHNESS_ENFORCE=false`로 읽기 검증만 끈다.
+
 ---
 
 ## 규칙 요약
