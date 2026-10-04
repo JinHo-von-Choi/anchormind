@@ -1,7 +1,5 @@
 /** 대규모 지식 그래프용 결정적 은하 레이아웃과 시각 모델. DOM 의존이 없는 순수 모듈이다. */
 
-const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
-
 const TYPE_PALETTES = Object.freeze({
   fact:       ["#78b7ff", "#2b62aa", "#b9dcff"],
   decision:   ["#bd9cff", "#6540b8", "#eadcff"],
@@ -21,6 +19,53 @@ const KIND_BY_TYPE = Object.freeze({
   relation: "dwarf",
   episode: "ice"
 });
+
+function orbitSlot(index) {
+  let remaining = index - 1;
+  let ring = 1;
+  let capacity = 10;
+  while (remaining >= capacity) {
+    remaining -= capacity;
+    ring++;
+    capacity = 6 + ring * 4;
+  }
+  return { ring, slot: remaining, capacity };
+}
+
+function systemRadius(memberCount) {
+  if (memberCount <= 1) return 96;
+  const { ring } = orbitSlot(memberCount - 1);
+  return 112 + ring * 48;
+}
+
+/** 큰 태양계부터 동심원 띠에 배치해 계 경계가 겹치지 않게 한다. */
+function placeSystems(systems) {
+  if (systems.length === 0) return;
+  const gap = 110;
+  systems[0].x = 0;
+  systems[0].y = 0;
+
+  let ringRadius = systems[0].radius + (systems[1]?.radius || 0) + gap;
+  let ringMax = systems[1]?.radius || 0;
+  let cursor = 0;
+  const phase = -Math.PI * 0.42;
+
+  for (let index = 1; index < systems.length; index++) {
+    const system = systems[index];
+    let arc = 2 * Math.asin(Math.min(0.92, (system.radius + gap / 2) / Math.max(ringRadius, 1)));
+    if (cursor > 0 && cursor + arc > Math.PI * 2) {
+      ringRadius += ringMax + system.radius + gap;
+      ringMax = system.radius;
+      cursor = 0;
+      arc = 2 * Math.asin(Math.min(0.92, (system.radius + gap / 2) / ringRadius));
+    }
+    const angle = phase + cursor + arc / 2;
+    system.x = Math.cos(angle) * ringRadius;
+    system.y = Math.sin(angle) * ringRadius;
+    cursor += arc;
+    ringMax = Math.max(ringMax, system.radius);
+  }
+}
 
 /** FNV-1a 기반 0~1 결정값. */
 export function stableUnit(value, salt = "") {
@@ -64,30 +109,40 @@ export function buildGalaxyLayout(nodes) {
     .map(([key, members]) => ({ key, members }))
     .sort((a, b) => b.members.length - a.members.length || a.key.localeCompare(b.key));
 
-  const spacing = Math.max(190, 120 + Math.sqrt(nodes.length) * 4);
-  for (let systemIndex = 0; systemIndex < systems.length; systemIndex++) {
-    const system = systems[systemIndex];
-    const spiral = Math.sqrt(systemIndex) * spacing;
-    system.x = Math.cos(systemIndex * GOLDEN_ANGLE) * spiral;
-    system.y = Math.sin(systemIndex * GOLDEN_ANGLE) * spiral;
-    system.radius = 60 + Math.sqrt(system.members.length) * 28;
-
+  for (const system of systems) {
+    system.radius = systemRadius(system.members.length);
     system.members.sort((a, b) => {
       const anchorDiff = Number(Boolean(b.is_anchor)) - Number(Boolean(a.is_anchor));
       return anchorDiff || Number(b.importance || 0) - Number(a.importance || 0) || String(a.id).localeCompare(String(b.id));
     });
 
+  }
+  placeSystems(systems);
+
+  for (const system of systems) {
+    const systemPhase = stableUnit(system.key, "system-phase") * Math.PI * 2;
+    system.orbits = [];
     system.members.forEach((node, index) => {
       node._systemStar = index === 0;
       if (index === 0) {
         node.x = system.x;
         node.y = system.y;
+        node._orbit = null;
       } else {
-        const orbit = 34 + Math.sqrt(index) * 22;
-        const angle = index * GOLDEN_ANGLE + stableUnit(node.id, "orbit") * Math.PI * 2;
-        const eccentricity = 0.72 + stableUnit(node.id, "eccentricity") * 0.25;
-        node.x = system.x + Math.cos(angle) * orbit;
-        node.y = system.y + Math.sin(angle) * orbit * eccentricity;
+        const { ring, slot, capacity } = orbitSlot(index);
+        const radius = 66 + ring * 46 + (stableUnit(node.id, "orbit-radius") - 0.5) * 8;
+        const angle = systemPhase + (slot / capacity) * Math.PI * 2 + (stableUnit(node.id, "orbit-angle") - 0.5) * 0.12;
+        const eccentricity = 0.64 + stableUnit(system.key, `eccentricity-${ring}`) * 0.18;
+        const rotation = (stableUnit(system.key, `rotation-${ring}`) - 0.5) * 0.5;
+        const direction = stableUnit(node.id, "orbit-direction") < 0.18 ? -1 : 1;
+        node._orbit = { radius, angle, eccentricity, rotation, ring, direction };
+        const ox = Math.cos(angle) * radius;
+        const oy = Math.sin(angle) * radius * eccentricity;
+        node.x = system.x + ox * Math.cos(rotation) - oy * Math.sin(rotation);
+        node.y = system.y + ox * Math.sin(rotation) + oy * Math.cos(rotation);
+        if (!system.orbits.some(orbit => orbit.ring === ring)) {
+          system.orbits.push({ ring, radius: 66 + ring * 46, eccentricity, rotation });
+        }
       }
       node._system = system.key;
       node._celestial = celestialStyle(node);

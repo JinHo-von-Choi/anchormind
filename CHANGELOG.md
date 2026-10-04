@@ -10,7 +10,7 @@
 
 ### Added
 
-- 관리 콘솔 지식 그래프에 토픽별 태양계와 타입별 천체 외형을 추가했다. 700개 노드 또는 5,000개 링크 이상은 Canvas LOD·결정적 O(N) 배치·quadtree hit-test·6만 링크 예산을 사용하는 고밀도 렌더러로 자동 전환하며 기존 소규모 SVG 그래프는 유지한다.
+- 관리 콘솔 지식 그래프에 겹치지 않는 토픽별 태양계, 타입별 입체 천체, 공전 애니메이션과 Canvas 노드 드래그를 추가했다. 700개 노드 또는 5,000개 링크 이상은 통제된 원거리 팔레트, LOD, 계 단위 가시 영역 컬링, 6만 링크 예산을 사용하는 고밀도 렌더러로 자동 전환하며 기존 소규모 SVG 그래프는 유지한다.
 - `GET /health/live`(항상 200)와 `GET /health/ready`(주 DB가 상한 안에 응답하면 200, 아니면 `db_timeout` 또는 `db_error` 사유의 503). `GET /health`의 응답은 같다.
 - `MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`(기본 2000): `/health/ready`의 DB 확인 상한.
 - `MEMENTO_SHUTDOWN_DEADLINE_MS`(기본 60000, 0은 상한 없음): 종료 절차 전체 상한. 두 번째 종료 신호는 기록만 한다.

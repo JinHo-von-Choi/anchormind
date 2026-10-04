@@ -41,6 +41,32 @@ describe("은하 그래프 모델", () => {
     }
   });
 
+  it("태양계 경계와 행성 궤도가 겹쳐 뭉치지 않는다", () => {
+    const nodes = Array.from({ length: 240 }, (_, index) => ({
+      id: `node-${index}`,
+      topic: `topic-${index % 12}`,
+      type: "fact",
+      importance: (index % 10) / 10
+    }));
+    const systems = buildGalaxyLayout(nodes);
+
+    for (let left = 0; left < systems.length; left++) {
+      for (let right = left + 1; right < systems.length; right++) {
+        const a = systems[left];
+        const b = systems[right];
+        assert.ok(
+          Math.hypot(a.x - b.x, a.y - b.y) >= a.radius + b.radius,
+          `${a.key}와 ${b.key} 경계가 겹친다`
+        );
+      }
+    }
+    for (const system of systems) {
+      assert.ok(system.orbits.length >= 2);
+      assert.equal(system.members[0]._celestial.kind, "star");
+      assert.ok(system.members.slice(1).every(node => node._orbit?.radius > 0));
+    }
+  });
+
   it("내부 링크만 남기고 중요 링크 우선으로 예산을 적용한다", () => {
     const edges = [
       { from_id: "a", to_id: "b", weight: 0.2 },
