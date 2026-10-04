@@ -354,12 +354,12 @@ describe("GET /search-events", () => {
     assert.equal(body.zeroHitRate, 0.2);
   });
 
-  it("key_ids 제공 시 귀속 불가 안내(keyScopeNote)를 포함한다", async () => {
+  it("key_ids 제공 시 키 범위를 적용하고 귀속 오류 안내가 없다", async () => {
     queryResults = [{ rows: [{ total_searches: 0, avg_result_count: "0", zero_hit_count: 0 }] }];
     const res = fakeRes();
     await handleSearchEvents({ method: "GET" }, res, makeUrl(`${ADMIN_BASE}/search-events?key_ids=a`));
     const body = JSON.parse(res.body);
-    assert.ok(body.keyScopeNote);
+    assert.equal(body.keyScopeNote, null);
   });
 });
 

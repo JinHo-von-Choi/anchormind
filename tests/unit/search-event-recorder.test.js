@@ -219,4 +219,26 @@ describe("buildSearchEvent", () => {
         assert.strictEqual(event.l3_count, 0);
         assert.strictEqual(event.l1_is_fallback, true);
     });
+
+    it("본문과 질의 없이 선택 ID와 안전한 근거만 투영한다", () => {
+        const event = buildSearchEvent(
+            { text: "절대 저장되면 안 되는 원문" },
+            [{
+                id: "frag-1",
+                content: "절대 저장되면 안 되는 본문",
+                origin: "codex",
+                trust_tier: "verified",
+                explanations: [{ code: "topic_match", detail: "민감한 설명" }]
+            }],
+            { keyId: "key-uuid" }
+        );
+
+        assert.deepStrictEqual(event.selected_fragment_ids, ["frag-1"]);
+        assert.deepStrictEqual(event.selection_reasons, {
+            "frag-1": { codes: ["topic_match"], origin: "codex", trustTier: "verified" }
+        });
+        assert.strictEqual(event.key_id, "key-uuid");
+        assert.ok(!JSON.stringify(event).includes("절대 저장되면 안 되는"));
+        assert.ok(!JSON.stringify(event).includes("민감한 설명"));
+    });
 });

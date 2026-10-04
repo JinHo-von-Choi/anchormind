@@ -42,13 +42,14 @@ beforeEach(() => {
 });
 
 describe("search_events 예산 선택 열", () => {
-  it("열이 있으면 20개 값을 기록하고 present가 된다", async () => {
+  it("열이 있으면 예산과 설명 프로젝션 22개 값을 기록하고 present가 된다", async () => {
     const id = await recordSearchEvent(event, 1000);
     assert.equal(id, 1);
     assert.equal(queries.length, 1);
     assert.ok(hasBudgetColumns(queries[0].sql));
-    assert.equal(queries[0].params.length, 20);
-    assert.deepEqual(queries[0].params.slice(18), [7, 3]);
+    assert.equal(queries[0].params.length, 22);
+    assert.deepEqual(queries[0].params.slice(18, 20), [7, 3]);
+    assert.deepEqual(queries[0].params[20], ["x"]);
     assert.equal(budgetColumnState().status, "present");
   });
 
