@@ -1360,7 +1360,7 @@ Returns the AnchorMind best practices guide. Comprehensive skill reference cover
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| section | string | - | Query a specific section only. Returns full guide if not specified. Possible values: overview, lifecycle, keywords, search, episode, multiplatform, collaboration, codex, tools, importance, experiential, cbr, triggers, workspace, antipatterns |
+| section | string | - | Query a specific section only. Returns full guide if not specified. Possible values: release, overview, lifecycle, keywords, search, episode, multiplatform, collaboration, codex, tools, importance, experiential, cbr, triggers, workspace, antipatterns |
 
 ---
 

@@ -9,7 +9,7 @@ AnchorMind 서버는 AI 에이전트의 세션 간 장기 기억을 파편(Fragm
 주요 현재 기능:
 
 - `batch_remember`는 동기(기본)와 비동기(`async: true`) 두 모드를 지원한다. 비동기 모드에서는 선검증 후 Redis 큐에 적재하고 `{async, accepted, jobId}`를 즉시 반환하며, 워커가 ack·재시도(최대 3회)·dead-letter·기동 복구(RPOPLPUSH reliable queue)로 at-least-once 처리를 보장한다. `batch_status(jobId)`로 처리 상태(queued/processing/completed/dead)를 조회한다. Redis 비활성 환경에서는 자동으로 동기 모드로 폴백한다. `batch_remember`와 `memory_consolidate`는 표준 단일 JSON-RPC 응답으로 반환되며 `stream` 파라미터는 동작하지 않는다(하위 호환 유지).
-- 검색은 3계층(L1 키워드 → L2 pgvector 시맨틱 → L3 RRF 하이브리드)으로 자동 라우팅되며, `computeRecallScore` 함수가 cross-encoder reranker 결과에 topic/keyword 직접 일치 신호를 log 정규화된 가산항으로 반영한다. 시맨틱 임계값 기본값은 0.4이고, `SearchParamAdaptor`가 50회 이상 샘플 축적 후 키별·시간대별로 임계값을 자동 조정한다.
+- 검색은 3계층(L1 Redis 역색인 → L2 PostgreSQL 키워드·메타데이터 → L3 pgvector 시맨틱)으로 후보를 찾고, 그래프·시간·본문 어휘 후보와 함께 RRF로 병합한다. `computeRecallScore` 함수가 cross-encoder reranker 결과에 topic/keyword 직접 일치 신호를 log 정규화된 가산항으로 반영한다. 시맨틱 임계값 기본값은 0.4이고, `SearchParamAdaptor`가 50회 이상 샘플 축적 후 키별·시간대별로 임계값을 자동 조정한다.
 - 형태소 분석은 로컬 CPU 분석기(`MorphemeTokenizer`)가 담당한다. 한글 garu-ko·영어 PorterStemmer·중국어 @node-rs/jieba·일본어 kuromoji로 라우팅하며, 벤치마크 기준 1.06ms/call 수준이다. `MEMENTO_MORPHEME_TOKENIZER=llm` 설정 시에만 LLM 경로가 활성화된다.
 - 코어 도구는 MCP `title` + `annotations`(readOnlyHint/idempotentHint/openWorldHint) 메타데이터를 포함한다. Codex Desktop 등 deferred/lazy 로딩 클라이언트를 위한 재검색 가이드가 서버 initialize instructions에 포함된다.
 - recall/context/reflect 응답 `_meta`에 `serverTime { iso, epoch_ms, display_kst, timezone }` 필드가 포함되어 LLM 클라이언트가 매 응답마다 서버 현재 시각을 재확인할 수 있다.
@@ -437,9 +437,24 @@ Symbolic Verification Layer는 확률론적 검색 파이프라인 위에 추가
 
 ---
 
+## v6.0.0에서 달라진 점
+
+`get_skill_guide(section="release")`로 이 요약만 조회할 수 있다.
+
+- 본문 어휘 검색이 3계층 검색을 보강한다. 임베딩을 사용할 수 없어도 코드명, 오류 문구, 한글 단어를 본문에서 직접 찾는다.
+- `recall(format="pack")`은 저장일, 확인 상태, 출처가 붙은 답 꾸러미를 반환한다. `context`도 날짜와 assertion 주석을 붙여 오래된 정보와 추정을 구분한다.
+- `remember(origin=...)`이 기억의 출처와 신뢰 등급을 기록한다. 신뢰도가 낮거나 지시문 덮어쓰기가 의심되는 기억은 핵심 맥락에서 제외하고 검토 대기열로 보낸다.
+- `forget`은 대상 기억이 남긴 사례 요약과 모순 해소 기록의 본문 사본까지 같은 트랜잭션에서 정리한다.
+- workspace 읽기 허가, 앵커 권한과 상한, API 키 만료·회전·폐기, 관리자 역할과 TOTP를 지원한다. 폐기된 키의 활성 세션도 다시 검사해 종료한다.
+- 외부 LLM 전송은 키와 workspace별 정책으로 제한·마스킹·감사할 수 있다. 관리 변경과 기억 쓰기 기록은 해시 체인으로 위변조 여부를 검증한다.
+- Claude Code와 Codex용 세션 시작·종료 훅이 맥락 주입과 회고를 자동화한다. `anchormind init --target claude|codex`로 필요한 파일을 만든다.
+- 지식 그래프는 항성계 형태의 배치, 거리별 세부 표현, 대규모 링크 예산을 사용해 수천 개 기억을 탐색할 수 있게 바뀌었다.
+
+---
+
 ## 서버 개요
 
-AnchorMind는 MCP(Model Context Protocol) 기반의 장기 기억 서버다. AI 에이전트의 세션 간 지식을 파편(Fragment) 단위로 영속화하고, 3계층 검색(키워드 L1 -> 시맨틱 L2 -> 하이브리드 RRF L3)으로 맥락에 맞는 기억을 회상한다.
+AnchorMind는 MCP(Model Context Protocol) 기반의 장기 기억 서버다. AI 에이전트의 세션 간 지식을 파편(Fragment) 단위로 영속화하고, L1 Redis 역색인·L2 PostgreSQL 키워드/메타데이터·L3 pgvector 시맨틱 검색의 후보를 RRF로 병합해 맥락에 맞는 기억을 회상한다.
 
 ### 핵심 개념
 
@@ -594,17 +609,19 @@ remember(content="선호하는 코딩 스타일: ...", topic="preference", type=
 질문: "정확한 용어/키워드를 알고 있는가?"
   |
   +-- YES --> recall(keywords=["정확한용어"])
-  |           * 가장 빠름 (L1 ILIKE -> L2 pgvector)
+  |           * L1 Redis 역색인 -> L2 PostgreSQL 키워드 검색
+  |           * 필요하면 합성 질의 L3 시맨틱 보조(L3kw)를 병렬 실행
   |           * 설정값, 포트번호, 파일 경로 등 검색에 최적
   |
   +-- NO --> "자연어로 설명할 수 있는가?"
               |
               +-- YES --> recall(text="자연어 설명")
-              |           * L3 시맨틱 검색 (임베딩 + RRF)
+              |           * L2 키워드/메타데이터 + L3 시맨틱을 병렬 검색하고 RRF 병합
+              |           * 본문 어휘 채널도 병렬로 후보를 보강
               |           * 개념적 유사성 기반 검색
               |
               +-- 둘 다 --> recall(keywords=["키워드"], text="보충 설명")
-                            * L1+L2+L3 병합. 최고 품질.
+                            * L1+L2+L3와 보조 후보를 RRF 병합. 최고 품질.
                             * 토큰 비용 가장 높음
 
 추가 필터:
@@ -641,7 +658,7 @@ recall은 연결 파편을 포함한 후보에 최종 점수를 매긴 뒤 token
     "similarity": 0.85,
     "stale_warning": true
   }],
-  "searchPath": "L1+L2+RRF",
+  "searchPath": "L1:2 → L2:5 → L3:4 → RRF",
   "_meta": {
     "searchEventId": 1234,
     "hints": [
@@ -899,8 +916,8 @@ async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기�
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| keywords | string[] | - | 키워드 검색 (L1->L2) |
-| text | string | - | 자연어 쿼리 (L3 시맨틱) |
+| keywords | string[] | - | 정확 키워드 검색(L1 Redis, L2 PostgreSQL). text가 없으면 합성 질의 L3 보조가 실행될 수 있음. |
+| text | string | - | 자연어 쿼리. L2와 L3를 병렬 실행하고 본문 어휘 후보를 보강한 뒤 RRF로 병합. |
 | topic | string | - | 주제 필터 |
 | type | string | - | 타입 필터 (fact, decision, error, preference, procedure, relation, episode) |
 | tokenBudget | number | - | 최대 반환 토큰. 기본 1000. |
@@ -1100,7 +1117,7 @@ id가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permissio
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| section | string | - | overview, lifecycle, keywords, search, episode, multiplatform, collaboration, codex, tools, importance, experiential, cbr, triggers, workspace, antipatterns |
+| section | string | - | release, overview, lifecycle, keywords, search, episode, multiplatform, collaboration, codex, tools, importance, experiential, cbr, triggers, workspace, antipatterns |
 
 미지정 시 전체 가이드를 반환한다. 활성 mode에 `skill_guide_override`가 있고 `section`이 없으면 그 텍스트가 우선 반환된다.
 
@@ -1274,12 +1291,14 @@ git 설치본에서 `UPDATE_REQUIRE_SIGNED_TAG=true`(기본 `false`)이면 `inst
 
 | 계층 | 방식 | 용도 | 속도 |
 |------|------|------|------|
-| L1 | PostgreSQL ILIKE | 정확한 용어 검색 | 가장 빠름 |
-| L2 | pgvector cosine | 의미적 유사 검색 | 빠름 |
+| L1 | Redis 역색인·Hot Cache | 저장 키워드·topic·type의 빠른 후보 조회 | 가장 빠름 |
+| L2 | PostgreSQL 키워드·메타데이터 | 정확 키워드와 필터 조건 검색, L1 후보 hydration | 빠름 |
 | L2.5 | 그래프 이웃 | 연결된 파편 확장 (deleted_at IS NULL 활성 링크만) | 빠름 |
-| L3 | RRF 하이브리드 | L1+L2 결과 합산 | 보통 |
+| L3 | pgvector cosine | 자연어 의미 유사도 검색 | 보통 |
+| 본문 어휘 | PostgreSQL GIN 전문 검색 | 코드명·오류 문구·한글 단어 후보 보강 | 빠름 |
+| 병합 | RRF + 최종 재정렬 | L1·L2·L2.5·L3·시간·본문 어휘 후보 통합 | 보통 |
 
-recall 호출 시 keywords만 전달하면 L1->L2, text를 전달하면 L3까지 자동 확장.
+`keywords`는 L1과 L2를 거치며 설정에 따라 합성 질의 L3 보조를 병렬 실행한다. `text`를 전달하면 L2와 L3, 본문 어휘 검색을 병렬 실행한 뒤 RRF로 합친다.
 
 ## 경험적 기억 활용 (Experiential Memory)
 

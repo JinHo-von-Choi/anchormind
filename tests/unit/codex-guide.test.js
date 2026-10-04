@@ -73,6 +73,16 @@ describe("issue #21: title/annotations 메타데이터 — Task 2", () => {
 });
 
 describe("issue #21: get_skill_guide codex 섹션 — Task 3", () => {
+  test("get_skill_guide(section=release)가 v6 변경 요약을 반환한다", async () => {
+    const { tool_getSkillGuide } = await import("../../lib/tools/memory.js");
+    const r = await tool_getSkillGuide({ section: "release" });
+    assert.equal(r.success, true, `release 섹션 반환 실패: ${r.error}`);
+    assert.equal(r.section, "release");
+    assert.match(r.content, /v6\.0\.0/);
+    assert.match(r.content, /format="pack"/);
+    assert.match(r.content, /Claude Code와 Codex/);
+  });
+
   test("get_skill_guide(section=codex)가 deferred 가이드를 반환한다", async () => {
     const { tool_getSkillGuide } = await import("../../lib/tools/memory.js");
     const r = await tool_getSkillGuide({ section: "codex" });

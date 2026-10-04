@@ -64,7 +64,7 @@ AnchorMind는 세션 사이의 지식을 파편(1~3문장의 자기완결 단위
 
 ## 4. workspace
 
-- 한 API 키를 여러 프로젝트가 함께 쓰면 remember, batch_remember, reflect, recall, context에 매번 `workspace`를 준다. 빠뜨리면 다른 프로젝트 기억과 섞인다.
+- 한 API 키를 여러 프로젝트가 함께 쓰면 remember, batch_remember, reflect, recall, context에 매번 `workspace`를 준다. 생략하면 키 기본값을 쓰고, 기본값도 없으면 전역 기억만 읽고 쓰므로 의도한 프로젝트 기억이 누락될 수 있다.
 - 키에 `default_workspace`가 지정된 프로젝트 전용 키만 생략할 수 있다.
 - 모든 workspace에서 보여야 하는 전역 기억(예: 사용자 공통 선호)은 의도적으로 workspace를 비운다.
 - recall에 workspace를 주면 그 workspace와 전역 파편이 함께 나온다.
@@ -160,6 +160,7 @@ AnchorMind는 세션 사이의 지식을 파편(1~3문장의 자기완결 단위
 
 | 필요한 것 | 호출 |
 |-|-|
+| v6.0.0 핵심 변경 | `get_skill_guide(section="release")` |
 | 도구별 파라미터 전체 | `get_skill_guide(section="tools")` |
 | 세션 시작, 작업 중, 종료 절차 | `get_skill_guide(section="lifecycle")` |
 | 키워드 작성 규칙 | `get_skill_guide(section="keywords")` |

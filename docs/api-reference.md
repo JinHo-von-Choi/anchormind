@@ -1381,7 +1381,7 @@ AnchorMind 최적 활용 가이드를 반환한다. 기억 도구 사용법, 세
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| section | string | - | 특정 섹션만 조회. 미지정 시 전체 가이드 반환. 가능한 값: overview, lifecycle, keywords, search, episode, multiplatform, collaboration, codex, tools, importance, experiential, cbr, triggers, workspace, antipatterns |
+| section | string | - | 특정 섹션만 조회. 미지정 시 전체 가이드 반환. 가능한 값: release, overview, lifecycle, keywords, search, episode, multiplatform, collaboration, codex, tools, importance, experiential, cbr, triggers, workspace, antipatterns |
 
 ---
 
