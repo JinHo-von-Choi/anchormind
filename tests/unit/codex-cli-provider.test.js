@@ -11,7 +11,7 @@ import { teardownTestResources } from "../_lifecycle.js";
 const mockRunCodexCLI   = mock.fn();
 const mockRawIsCodexCli = mock.fn();
 
-mock.module("../../lib/codex.js", {
+mock.module("../../lib/llm/runners/codex.js", {
   namedExports: {
     runCodexCLI            : (...args) => mockRunCodexCLI(...args),
     _rawIsCodexCLIAvailable: (...args) => mockRawIsCodexCli(...args)

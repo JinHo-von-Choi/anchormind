@@ -454,18 +454,19 @@ describe("GET /memory/graph", () => {
     assert.strictEqual(response.edges[0].to_id, "f2");
   });
 
-  it("limit 파라미터를 10-200 범위로 캡핑한다", () => {
+  it("limit 파라미터를 10-10000 범위로 캡핑한다", () => {
     const cases = [
       { input: "5",   expected: 10 },
       { input: "50",  expected: 50 },
-      { input: "300", expected: 200 },
+      { input: "300", expected: 300 },
+      { input: "20000", expected: 10000 },
       { input: "abc", expected: 50 },
       { input: null,  expected: 50 }
     ];
 
     for (const c of cases) {
       const raw = parseInt(c.input || "50", 10);
-      const limit = Math.min(200, Math.max(10, Number.isNaN(raw) ? 50 : raw));
+      const limit = Math.min(10000, Math.max(10, Number.isNaN(raw) ? 50 : raw));
       assert.strictEqual(limit, c.expected, `input=${c.input}`);
     }
   });

@@ -165,6 +165,30 @@ describe("GET /memory/fragments 확장", () => {
   });
 });
 
+describe("GET /memory/graph", () => {
+  it("선택된 노드 양쪽에 속한 내부 링크만 조회한다", async () => {
+    queryResults = [
+      { rows: [
+        { id: "f1", content: "alpha", topic: "t", type: "fact", importance: "0.8" },
+        { id: "f2", content: "beta", topic: "t", type: "decision", importance: "0.7" }
+      ] },
+      { rows: [{ from_id: "f1", to_id: "f2", relation_type: "related", weight: 1 }] }
+    ];
+    const res = fakeRes();
+    await handleMemory({ method: "GET" }, res, makeUrl(`${ADMIN_BASE}/memory/graph?limit=10000`));
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(JSON.parse(res.body).nodes.length, 2);
+    assert.equal(JSON.parse(res.body).edges_truncated, false);
+    const edgeCall = queryCalls.find(call => call.sql.includes("fragment_links"));
+    assert.match(edgeCall.sql, /from_id = ANY\(\$1\) AND to_id = ANY\(\$1\)/);
+    assert.match(edgeCall.sql, /ORDER BY weight DESC NULLS LAST/);
+    assert.match(edgeCall.sql, /LIMIT \$2/);
+    assert.deepEqual(edgeCall.params[0], ["f1", "f2"]);
+    assert.equal(edgeCall.params[1], 60001);
+  });
+});
+
 /* ── GET /memory/fragments/:id key_ids 스코프 ── */
 describe("GET /memory/fragments/:id key_ids 스코프", () => {
   it("key_ids가 오면 keyScopeClause 조건이 붙는다", async () => {

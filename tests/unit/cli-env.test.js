@@ -55,7 +55,7 @@ describe("buildCliEnv", () => {
 describe("CLI provider 자식 프로세스 환경", () => {
   for (const name of ["gemini", "codex", "copilot", "qwen", "agy", "opencode"]) {
     it(`${name} 은 부모 환경 전체를 넘기지 않는다`, () => {
-      const src = readFileSync(path.join(ROOT, `lib/${name}.js`), "utf8");
+      const src = readFileSync(path.join(ROOT, `lib/llm/runners/${name}.js`), "utf8");
       assert.match(src, /buildCliEnv\(/);
       assert.doesNotMatch(src, /\.\.\.process\.env/);
     });

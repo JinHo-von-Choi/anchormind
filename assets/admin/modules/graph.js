@@ -1,11 +1,23 @@
 import { api }       from "./api.js";
 import { showToast } from "./ui.js";
+import { renderGalaxyCanvas } from "./galaxy-canvas.js";
 
 /** 노드 색상 모드: "type"(기본) | "agent" — 토글 버튼으로 전환 */
 let colorMode       = "type";
 let applyColorModeFn = null;
+const DENSE_GRAPH_THRESHOLD = 700;
+const DENSE_EDGE_THRESHOLD = 5000;
+
+let denseGalaxy = null;
+let graphSimulation = null;
+let visibilityHandler = null;
 
 const AGENT_PALETTE = ["#aa8855", "#557799", "#669944", "#cc7755", "#8878d0", "#50a8a0", "#c4a06a", "#a05580"];
+const TYPE_LEGEND_COLORS = {
+  fact: "#5b8ef0", decision: "#8b5cf6", error: "#ef4444",
+  procedure: "#22c55e", preference: "#f59e0b", relation: "#6b7280",
+  episode: "#ec4899"
+};
 
 /** agent_id 문자열을 팔레트 색으로 결정적 매핑한다. */
 function agentColor(agentId) {
@@ -15,7 +27,43 @@ function agentColor(agentId) {
   return AGENT_PALETTE[hash % AGENT_PALETTE.length];
 }
 
+function updateGraphLegend(nodes = []) {
+  const legend = document.getElementById("graph-legend");
+  if (!legend) return;
+  legend.textContent = "";
+  const entries = colorMode === "agent"
+    ? [...new Set(nodes.map(node => node.agent_id ?? "default"))]
+      .slice(0, 8)
+      .map(agentId => [agentId, agentColor(agentId)])
+    : Object.entries(TYPE_LEGEND_COLORS);
+
+  for (const [label, color] of entries) {
+    const chip = document.createElement("span");
+    chip.className = "flex items-center gap-1 text-xs text-slate-400";
+    const dot = document.createElement("span");
+    dot.className = "inline-block w-2.5 h-2.5 rounded-full";
+    dot.style.backgroundColor = color;
+    chip.appendChild(dot);
+    chip.appendChild(document.createTextNode(String(label)));
+    legend.appendChild(chip);
+  }
+}
+
+function disposeGraphRenderer() {
+  applyColorModeFn = null;
+  denseGalaxy?.destroy();
+  denseGalaxy = null;
+  graphSimulation?.stop();
+  graphSimulation = null;
+  if (visibilityHandler) document.removeEventListener("visibilitychange", visibilityHandler);
+  visibilityHandler = null;
+  if (_moonRafId !== null) cancelAnimationFrame(_moonRafId);
+  _moonRafId = null;
+}
+
 async function renderGraph(container) {
+  disposeGraphRenderer();
+  document.getElementById("graph-tooltip")?.remove();
   container.textContent = "";
 
   const wrap = document.createElement("div");
@@ -146,11 +194,6 @@ async function renderGraph(container) {
   controls.appendChild(loadBtn);
 
   /* Legend */
-  const TYPE_COLORS = {
-    fact: "#5b8ef0", decision: "#8b5cf6", error: "#ef4444",
-    procedure: "#22c55e", preference: "#f59e0b", relation: "#6b7280",
-    episode: "#ec4899"
-  };
   const colorToggle = document.createElement("button");
   colorToggle.id = "graph-color-mode";
   colorToggle.className = "flex items-center gap-2 bg-transparent border border-outline-variant px-3 py-1 text-[10px] font-bold text-slate-400 hover:text-primary";
@@ -165,7 +208,7 @@ async function renderGraph(container) {
   const legend = document.createElement("div");
   legend.id = "graph-legend";
   legend.className = "flex items-center gap-3 ml-auto";
-  for (const [t, c] of Object.entries(TYPE_COLORS)) {
+  for (const [t, c] of Object.entries(TYPE_LEGEND_COLORS)) {
     const chip = document.createElement("span");
     chip.className = "flex items-center gap-1 text-xs text-slate-400";
     const dot = document.createElement("span");
@@ -201,17 +244,29 @@ async function renderGraph(container) {
   });
   document.body.appendChild(tooltip);
 
-  /* SVG Canvas */
+  /* 저밀도 SVG + 고밀도 Canvas가 같은 뷰포트를 공유한다. */
   const canvasWrap = document.createElement("div");
   canvasWrap.style.position = "relative";
+  canvasWrap.style.height = "clamp(600px, 60vh, 1200px)";
+  canvasWrap.style.minHeight = "600px";
   canvasWrap.className = "glass-panel rounded-sm overflow-hidden";
+
+  const denseCanvas = document.createElement("canvas");
+  denseCanvas.id = "graph-canvas-dense";
+  denseCanvas.setAttribute("aria-label", "대규모 지식 은하 그래프");
+  Object.assign(denseCanvas.style, {
+    display: "none",
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#03050d"
+  });
+  canvasWrap.appendChild(denseCanvas);
 
   const svgNS = "http://www.w3.org/2000/svg";
   const svg   = document.createElementNS(svgNS, "svg");
   svg.id = "graph-canvas";
   svg.setAttribute("width", "100%");
-  svg.style.minHeight       = "600px";
-  svg.style.height          = "clamp(600px, 60vh, 1200px)";
+  svg.style.height          = "100%";
   svg.style.backgroundColor = "#0e1322";
   canvasWrap.appendChild(svg);
 
@@ -225,7 +280,7 @@ async function renderGraph(container) {
 let _moonRafId = null; // 위성 애니메이션 rAF ID — 재로딩 시 취소
 
 async function loadGraph() {
-  if (_moonRafId !== null) { cancelAnimationFrame(_moonRafId); _moonRafId = null; }
+  disposeGraphRenderer();
   const topic   = document.getElementById("graph-topic")?.value   || "";
   const limit   = document.getElementById("graph-limit")?.value   || "50";
   const keyId   = document.getElementById("graph-key-id")?.value  || "";
@@ -248,6 +303,34 @@ async function loadGraph() {
     showToast("D3.js가 로드되지 않았습니다", "error");
     return;
   }
+
+  const svgElement   = document.getElementById("graph-canvas");
+  const denseCanvas  = document.getElementById("graph-canvas-dense");
+  if (!svgElement || !denseCanvas) return;
+
+  if (data.nodes.length >= DENSE_GRAPH_THRESHOLD || data.edges.length >= DENSE_EDGE_THRESHOLD) {
+    svgElement.style.display = "none";
+    denseCanvas.style.display = "block";
+    denseGalaxy = renderGalaxyCanvas(denseCanvas, data, { colorMode });
+    applyColorModeFn = () => {
+      denseGalaxy?.setColorMode(colorMode);
+      updateGraphLegend(data.nodes);
+    };
+    applyColorModeFn();
+    const statsEl = document.getElementById("graph-stats");
+    if (statsEl) {
+      const edgeStats = data.edges_truncated
+        ? `${denseGalaxy.renderedEdges}+ edges`
+        : denseGalaxy.renderedEdges === denseGalaxy.totalEdges
+        ? `${denseGalaxy.renderedEdges} edges`
+        : `${denseGalaxy.renderedEdges}/${denseGalaxy.totalEdges} edges`;
+      statsEl.textContent = `${data.nodes.length} nodes, ${edgeStats} · Canvas LOD`;
+    }
+    return;
+  }
+
+  denseCanvas.style.display = "none";
+  svgElement.style.display = "block";
 
   const TYPE_COLORS = {
     fact:       { base: "#5592d0", light: "#9ec4e8", dark: "#2a4f8a", link: "#4582c0" },
@@ -495,6 +578,7 @@ async function loadGraph() {
     .force("charge",  d3.forceManyBody().strength(chargeStrength))
     .force("center",  d3.forceCenter(width / 2, height / 2))
     .force("collide", d3.forceCollide().radius(d => 8 + (d.importance || 0.5) * 10));
+  graphSimulation = sim;
 
   /** 링크 색상 헬퍼 — 소스 노드 타입 기준 */
   const linkColor = (d) => {
@@ -612,28 +696,7 @@ async function loadGraph() {
       halo.attr("stroke", d => (TYPE_COLORS[d.type] || FALLBACK).base);
     }
 
-    /** 범례 갱신: agent 모드면 노드에 존재하는 agent_id 상위 8개 */
-    const legendEl = document.getElementById("graph-legend");
-    if (legendEl) {
-      legendEl.textContent = "";
-      const entries = colorMode === "agent"
-        ? [...new Set(data.nodes.map(n => n.agent_id ?? "default"))].slice(0, 8).map(a => [a, agentColor(a)])
-        : Object.entries({
-            fact: "#5b8ef0", decision: "#8b5cf6", error: "#ef4444",
-            procedure: "#22c55e", preference: "#f59e0b", relation: "#6b7280",
-            episode: "#ec4899"
-          });
-      for (const [t, c] of entries) {
-        const chip = document.createElement("span");
-        chip.className = "flex items-center gap-1 text-xs text-slate-400";
-        const dot = document.createElement("span");
-        dot.className = "inline-block w-2.5 h-2.5 rounded-full";
-        dot.style.backgroundColor = c;
-        chip.appendChild(dot);
-        chip.appendChild(document.createTextNode(String(t)));
-        legendEl.appendChild(chip);
-      }
-    }
+    updateGraphLegend(data.nodes);
   };
   applyColorModeFn();
 
@@ -824,14 +887,15 @@ async function loadGraph() {
   }
 
   /** G3d: 탭 숨김 시 위성 rAF 정지 / 복귀 시 재개 */
-  document.addEventListener("visibilitychange", () => {
+  visibilityHandler = () => {
     if (document.hidden && _moonRafId !== null) {
       cancelAnimationFrame(_moonRafId);
       _moonRafId = null;
     } else if (!document.hidden && moonEntries.length > 0 && _moonRafId === null) {
       _moonRafId = requestAnimationFrame(_animateMoons);
     }
-  });
+  };
+  document.addEventListener("visibilitychange", visibilityHandler);
 }
 
 export { renderGraph, loadGraph };

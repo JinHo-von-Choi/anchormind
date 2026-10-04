@@ -11,7 +11,7 @@ import { teardownTestResources } from "../_lifecycle.js";
 const mockRunOpenCodeCLI   = mock.fn();
 const mockRawIsOpenCodeCli = mock.fn();
 
-mock.module("../../lib/opencode.js", {
+mock.module("../../lib/llm/runners/opencode.js", {
   namedExports: {
     runOpenCodeCLI            : (...args) => mockRunOpenCodeCLI(...args),
     _rawIsOpenCodeCLIAvailable: (...args) => mockRawIsOpenCodeCli(...args)

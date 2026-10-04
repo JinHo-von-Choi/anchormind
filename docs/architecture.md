@@ -1,7 +1,7 @@
 # Architecture
 
 작성자: 최진호
-수정일: 2026-10-03
+수정일: 2026-10-04
 
 ## 시스템 구조
 
@@ -217,6 +217,7 @@ lib/admin/
 ├── admin-review.js    검토 대기열 라우트(GET /review, POST /review/:id/approve, /reject)와 요청 검증
 ├── ReviewStore.js     검토 대기 목록, 승인과 거절(대상 행 잠금, 결정 기록, 멱등 키), 30일 미결정 자동 거절(6시간 주기)
 ├── admin-route-table.js 관리 API 라우트 표. 라우트마다 요구 능력(cap), 범위 종류(scope), 감사 행위(audit)
+├── admin-handler-registry.js 라우트 모듈→핸들러 레지스트리와 명시적 디스패치 순서. 직접 처리 모듈을 제외한 라우트 표 모듈과 정확히 일치하는지 기동 시 검사하며 admin-audit를 admin-export보다 먼저 실행
 ├── admin-audit-actions.js 라우트 표에서 뽑은 감사 행위 선언(GET이 아닌 관리 라우트와 내보내기 GET), 처리기의 감사 메모(`noteAdminAudit`)
 ├── capabilities.js    관리 능력 목록, Core 역할 프리셋 6종(owner, admin, reviewer, auditor, viewer, service), API 키 permissions 변환
 ├── AdminAuthz.js      판정 결정 표(`decide`), `requireCapability`, 라우트 판정(`authorizeAdminRoute`), 요청별 질의 범위(`adminScopeOf`), 전체 범위 가드(`requireFullScope`)
@@ -1348,6 +1349,8 @@ LocalTransformersEmbedder.embed(text) / embedBatch(texts)
 ### LLM Dispatcher — dispatchChain 및 CLI Providers
 
 `lib/llm/index.js`는 `dispatchChain(chain, prompt, options, deps)` 함수를 분리 export한다. `llmJson()`은 `redactPrompt()` 처리, 외부 전송 관문(`lib/llm/EgressGate.js`) 열기, chain 빌드와 거르기를 수행한 뒤 이 함수에 위임한다.
+
+CLI provider의 프로세스 실행 구현은 `lib/llm/runners/{agy,codex,copilot,gemini,opencode,qwen}.js`에 있다. `lib/llm/providers/*CliProvider.js`는 runner만 정적으로 가져오며, 기존 `lib/{agy,codex,copilot,gemini,opencode,qwen}.js`는 공개 import 호환 shim이다. shim의 체인 가용성 함수만 `lib/llm/index.js`를 지연 import하므로 provider→공개 진입점→dispatcher 순환이 생기지 않는다. raw runner는 provider와 shim 외부에서 직접 호출하지 않는다.
 
 ```
 llmJson(prompt, options)

@@ -11,7 +11,7 @@
  * 규칙
  *   providerCalls     제공자 호출(callJson, callText)은 lib/llm/index.js, LlmProvider.js, providers/ 안에만 있다.
  *   providerImports   제공자 모듈은 lib/llm 안에서만 가져온다. registry.js는 lib/llm 밖에서 listProviderNames만 가져온다.
- *   runnerImports     CLI 실행 함수(run*CLI)는 lib/llm/providers/에서만 가져오거나 다시 내보낸다.
+ *   runnerImports     raw CLI 실행 함수(run*CLI)는 provider와 기존 lib/*.js 호환 shim만 가져오거나 다시 내보낸다.
  *   dispatchImports   dispatchChain은 lib/llm/index.js 밖에서 가져오거나 다시 내보내지 않는다(관문 없이 체인을 부르는 길).
  *   namespaceImports  진입 모듈(lib/llm/index.js, lib/gemini.js, lib/qwen.js)과 CLI 모듈은 lib/llm 밖에서
  *                     이름공간(import * as, export *)으로 가져오지 않는다.
@@ -40,6 +40,14 @@ export const ENTRY_MODULES = Object.freeze({
 export const CLI_MODULES = Object.freeze([
   "lib/gemini.js", "lib/codex.js", "lib/qwen.js", "lib/agy.js", "lib/copilot.js", "lib/opencode.js"
 ]);
+
+/** provider가 직접 의존하는 순수 CLI 실행 모듈 */
+export const RUNNER_MODULES = Object.freeze([
+  "lib/llm/runners/gemini.js", "lib/llm/runners/codex.js", "lib/llm/runners/qwen.js",
+  "lib/llm/runners/agy.js", "lib/llm/runners/copilot.js", "lib/llm/runners/opencode.js"
+]);
+
+const COMPAT_RUNNER = Object.freeze(Object.fromEntries(CLI_MODULES.map((file, i) => [file, RUNNER_MODULES[i]])));
 
 /** 진입 모듈과 CLI 모듈 */
 const WATCHED_MODULES = new Set([...Object.keys(ENTRY_MODULES), ...CLI_MODULES]);
@@ -148,7 +156,10 @@ export function checkEgressStructure(sources) {
       if (!inLlm && target === "lib/llm/registry.js" && !(spec.kind === "named" && spec.imported === "listProviderNames")) {
         out.providerImports.push(label);
       }
-      if (CLI_MODULES.includes(target) && !file.startsWith("lib/llm/providers/")
+      const rawRunnerTarget = RUNNER_MODULES.includes(target);
+      const legacyTarget    = CLI_MODULES.includes(target);
+      const compatReexport  = COMPAT_RUNNER[file] === target && spec.kind === "reexport";
+      if ((rawRunnerTarget || legacyTarget) && !file.startsWith("lib/llm/providers/") && !compatReexport
           && (spec.kind === "named" || spec.kind === "reexport") && RUNNER_NAME.test(spec.imported ?? "")) {
         out.runnerImports.push(label);
       }

@@ -10,6 +10,7 @@
 
 ### Added
 
+- 관리 콘솔 지식 그래프에 토픽별 태양계와 타입별 천체 외형을 추가했다. 700개 노드 또는 5,000개 링크 이상은 Canvas LOD·결정적 O(N) 배치·quadtree hit-test·6만 링크 예산을 사용하는 고밀도 렌더러로 자동 전환하며 기존 소규모 SVG 그래프는 유지한다.
 - `GET /health/live`(항상 200)와 `GET /health/ready`(주 DB가 상한 안에 응답하면 200, 아니면 `db_timeout` 또는 `db_error` 사유의 503). `GET /health`의 응답은 같다.
 - `MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`(기본 2000): `/health/ready`의 DB 확인 상한.
 - `MEMENTO_SHUTDOWN_DEADLINE_MS`(기본 60000, 0은 상한 없음): 종료 절차 전체 상한. 두 번째 종료 신호는 기록만 한다.
@@ -38,7 +39,7 @@
 - 기동 점검 실패는 `[Startup]` 오류 로그로, 리랭커 사전 적재 실패는 `[Reranker] preload failed (non-fatal)` 경고로 남는다.
 - `MEMENTO_DECAY_MIN_DELTA`(기본 0): 묶음 갱신에서 감쇠량이 이 값보다 작은 행을 건너뛴다. 마지막 감쇠 후 24시간이 지난 행은 항상 갱신한다. 숫자가 아니거나 음수인 값은 0으로 처리하고 경고를 남기며 1을 넘는 값은 1로 제한한다. `MEMENTO_SCORE_UPDATE_BATCH`가 0이면 적용하지 않는다.
 - `MEMENTO_UTILITY_MIN_DELTA`(기본 0): 묶음 갱신에서 저장된 `utility_score`와의 차이가 이 값 이하인 행을 다시 쓰지 않는다. 값 처리와 적용 조건은 `MEMENTO_DECAY_MIN_DELTA`와 같다.
-- `node scripts/import-cycles.js`: `lib`, `config`, `scripts`, `bin`, `server.js`의 상대 경로 import에서 크기 2 이상의 순환을 찾아 정적 import만 본 결과와 동적 import를 포함한 결과를 따로 출력한다. 단위 시험은 정적 순환이 없고 동적 포함 순환이 허용 목록 안에 있는지 확인한다.
+- `node scripts/import-cycles.js`: `lib`, `config`, `scripts`, `bin`, `server.js`의 상대 경로 import에서 크기 2 이상의 순환을 찾아 정적 import만 본 결과와 동적 import를 포함한 결과를 따로 출력한다. 단위 시험은 정적·동적 포함 순환 모두 0건인지 확인한다.
 - `docs/operations/monitoring.md`: 공유 Prometheus 인스턴스용 스크레이프 잡과 경보 규칙. 문서의 규칙이 참조하는 지표 이름과 라벨은 단위 시험이 등록된 지표와 대조한다.
 - 지표 `mcp_session_rotation_total{outcome}`(`rotated`, `not_found`, `expired`, `forbidden`, `unavailable`, `error`)와 `mcp_rotate_rate_limited_total`: 세션 회전 요청의 결과와 rate limit 거부를 센다.
 - 지표 `mcp_sse_rate_limited_total`: IP 한도로 거부된 `GET /sse` 요청 수를 센다. 거부는 주소를 담지 않는 `[SSE] connection request rejected by IP rate limit` 경고 로그로도 남는다.
@@ -87,6 +88,11 @@
 - 측정 스크립트: `scripts/measure/context-annotation-tokens.mjs`(context 주입 줄 주석과 답 꾸러미의 토큰 증가를 DB 없이 측정), `scripts/measure-hook-latency.mjs`(훅 회고 접수 지연을 일회용 시험 서버에서 측정), `scripts/measure/protocol-era-probe.mjs`(현대식 MCP 요청의 era 판정과 initialize 폴백 관찰).
 
 ### Changed
+
+- LLM CLI 실행 구현을 `lib/llm/runners/`로 분리하고 provider는 raw runner만 참조하도록 정리했다. 기존 `lib/agy.js`, `lib/codex.js`, `lib/copilot.js`, `lib/gemini.js`, `lib/opencode.js`, `lib/qwen.js` 공개 경로와 export는 호환 shim으로 유지한다.
+- 모순 해소 감사 기록은 `MemoryManager` 역참조 대신 생성자에 주입한 `rememberAudit` 콜백을 사용한다. 감사 기록 실패가 모순 해소를 되돌리지 않는 계약은 유지된다.
+- 관리자 모듈 디스패치를 `admin-handler-registry.js`로 분리했다. 라우트 표와 레지스트리 모듈 집합의 누락·추가·중복을 기동 시 거부하고 `admin-audit`를 `admin-export`보다 먼저 실행한다.
+- import 순환 허용 목록을 비웠다. 정적 순환과 동적 import 포함 순환은 모두 0건이어야 한다.
 
 - API 키로 연 MCP 세션은 사용할 때 키 상태를 `MEMENTO_SESSION_KEY_RECHECK_MS`(기본 30000ms, `0`이면 끔) 주기로 다시 읽는다. 비활성 또는 삭제된 키의 세션은 닫히고 404 `Session not found`를 받으며, 권한 변경은 열린 세션에 반영된다. 관리 API로 키를 비활성화하거나 삭제하면 이 프로세스의 그 키 세션이 즉시 닫힌다.
 - 전이 의존성 `moment`를 2.31.0으로 올렸다(`package-lock.json`).

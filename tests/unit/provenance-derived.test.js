@@ -17,18 +17,13 @@ process.env.REDIS_ENABLED           ??= "false";
 process.env.CACHE_ENABLED           ??= "false";
 
 const remembered = [];
-/** DB 모듈을 먼저 대역으로 바꿔야 MemoryManager가 불러오는 모듈도 대역을 쓴다. */
+/** DB 모듈을 먼저 대역으로 바꿔 통합기의 직접 SQL을 막는다. */
 const realDb = await import("../../lib/tools/db.js");
 mock.module("../../lib/tools/db.js", {
   namedExports: { ...realDb, queryWithAgentVector: async () => ({ rows: [] }) }
 });
-const realManager = await import("../../lib/memory/MemoryManager.js");
-mock.module("../../lib/memory/MemoryManager.js", {
-  namedExports: {
-    ...realManager,
-    MemoryManager: { getInstance: () => ({ remember: async (params) => { remembered.push(params); return { id: "audit" }; } }) }
-  }
-});
+
+const rememberAudit = async (params) => { remembered.push(params); return { id: "audit" }; };
 
 const { ContradictionDetector }    = await import("../../lib/memory/link/ContradictionDetector.js");
 const { MemoryConsolidator }       = await import("../../lib/memory/consolidate/MemoryConsolidator.js");
@@ -84,7 +79,7 @@ describe("모순 감사 파편", () => {
   });
 
   it("resolveContradiction의 감사 remember는 패자 등급 1을 상한으로 받아 등급 1로 기록된다", async () => {
-    const detector = new ContradictionDetector(storeWith({ old: 1, new: 3 }));
+    const detector = new ContradictionDetector(storeWith({ old: 1, new: 3 }), { rememberAudit });
     await detector.resolveContradiction(
       { id: "new", content: "새 본문", created_at: "2026-10-02T00:00:00Z", key_id: null, keywords: [] },
       { id: "old", content: "외부에서 들어온 낡은 본문", created_at: "2026-10-01T00:00:00Z", key_id: null, is_anchor: false },
@@ -98,7 +93,7 @@ describe("모순 감사 파편", () => {
 
 describe("통합 경로의 모순 감사 파편", () => {
   it("MemoryConsolidator도 같은 감사 기록으로 낮은 원본 등급을 상한으로 넘긴다", async () => {
-    const consolidator = new MemoryConsolidator();
+    const consolidator = new MemoryConsolidator({ rememberAudit });
     const store        = storeWith({ older: 0, newer: 2 });
     consolidator.store = store;
     consolidator.contradictionDetector.store = store;

@@ -213,6 +213,7 @@ lib/admin/
 +-- admin-review.js    Review queue routes (GET /review, POST /review/:id/approve, /reject) and request validation
 +-- ReviewStore.js     Pending review list, approval and rejection (row lock, decision record, idempotency key) and automatic rejection after 30 undecided days (every 6 hours)
 +-- admin-route-table.js Admin API route table. Per route: required capability (cap), scope kind (scope), audit action (audit)
++-- admin-handler-registry.js Route-module-to-handler registry and explicit dispatch order. At startup it checks exact correspondence with route-table modules except direct handlers, and dispatches admin-audit before admin-export
 +-- admin-audit-actions.js Audit action declarations taken from the route table (admin routes other than GET and export GETs), handler audit notes (`noteAdminAudit`)
 +-- capabilities.js    Admin capability list, 6 Core role presets (owner, admin, reviewer, auditor, viewer, service), API key permissions conversion
 +-- AdminAuthz.js      Decision table (`decide`), `requireCapability`, route decision (`authorizeAdminRoute`), per-request query scope (`adminScopeOf`), full-scope guard (`requireFullScope`)
@@ -1344,6 +1345,8 @@ For detailed migration steps, see [docs/embedding-local.md](embedding-local.md).
 ### LLM Dispatcher -- dispatchChain and CLI Providers
 
 `lib/llm/index.js` exports `dispatchChain(chain, prompt, options, deps)` as a separate function. `llmJson()` handles `redactPrompt()` processing, opens the egress gate (`lib/llm/EgressGate.js`), builds and filters the chain, then delegates to this function.
+
+CLI process execution lives in `lib/llm/runners/{agy,codex,copilot,gemini,opencode,qwen}.js`. `lib/llm/providers/*CliProvider.js` statically imports only its runner. The existing `lib/{agy,codex,copilot,gemini,opencode,qwen}.js` paths remain public compatibility shims; only their chain-level availability functions dynamically import `lib/llm/index.js`. This prevents a provider-to-public-entrypoint-to-dispatcher cycle. Raw runners must not be called directly outside providers and compatibility shims.
 
 ```
 llmJson(prompt, options)

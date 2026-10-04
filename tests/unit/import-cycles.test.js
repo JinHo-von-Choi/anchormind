@@ -16,21 +16,7 @@ import path                    from "node:path";
 
 import { buildImportGraph, findCycles } from "../../scripts/import-cycles.js";
 
-const ALLOWED_DYNAMIC_CYCLES = [
-  {
-    reason: "공급자 어댑터가 lib/*.js 실행기를 정적으로 가져오고, 그 실행기는 lib/llm/index.js 를 함수 안의 지연 import()로만 가져온다",
-    files : ["lib/agy.js", "lib/codex.js", "lib/copilot.js", "lib/gemini.js", "lib/llm/index.js",
-      "lib/llm/providers/AgyCliProvider.js", "lib/llm/providers/CodexCliProvider.js",
-      "lib/llm/providers/CopilotCliProvider.js", "lib/llm/providers/GeminiCliProvider.js",
-      "lib/llm/providers/OpenCodeCliProvider.js", "lib/llm/providers/QwenCliProvider.js",
-      "lib/llm/registry.js", "lib/opencode.js", "lib/qwen.js"]
-  },
-  {
-    reason: "MemoryManager 가 MemoryConsolidator 를 정적으로 가져오고, 통합기와 모순 탐지기는 MemoryManager 를 메서드 안의 지연 import()로만 가져온다",
-    files : ["lib/memory/MemoryManager.js", "lib/memory/consolidate/MemoryConsolidator.js",
-      "lib/memory/link/ContradictionDetector.js"]
-  }
-];
+const ALLOWED_DYNAMIC_CYCLES = [];
 
 const ALLOWED_KEYS = ALLOWED_DYNAMIC_CYCLES.map(c => c.files.join(" | "));
 

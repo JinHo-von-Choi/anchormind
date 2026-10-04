@@ -2,7 +2,7 @@
 
 작성자: 최진호
 작성일: 2026-04-29
-수정일: 2026-10-03
+수정일: 2026-10-04
 
 ---
 
@@ -68,7 +68,7 @@ npm run test:integration:llm
 | `npm run audit:ci` | 런타임 의존성 audit-ci 검사 |
 | `npm run lint:migrations` | migration SQL body-only 규약 검사 (MIGRATION_LINT_FROM 기준) |
 | `npm run switches` | 기능 스위치의 적용 값, 기본값, 상태를 표로 출력(`scripts/switch-report.mjs`). `-- --strict`는 값이 잘못된 스위치가 있으면 종료 코드 1 |
-| `node scripts/import-cycles.js` | `lib`, `config`, `server.js`의 상대 경로 import 순환 검사. 정적 import만 본 결과와 동적 import를 포함한 결과를 따로 출력한다. 단위 시험(`import-cycles.test.js`)이 정적 순환 0건과 동적 포함 순환의 허용 목록을 확인한다 |
+| `node scripts/import-cycles.js` | `lib`, `config`, `scripts`, `bin`, `server.js`의 상대 경로 import 순환 검사. 정적 import와 동적 import 포함 결과, 비리터럴 동적 import, 해석되지 않는 상대 경로를 따로 출력한다. 단위 시험(`import-cycles.test.js`)은 정적·동적 포함 순환 모두 0건을 요구한다 |
 | `npm run release -- X.Y.Z` | 작업 트리와 HEAD의 Tests 워크플로 결과를 확인한 뒤 CHANGELOG와 버전 표기를 갱신하고 `release: X.Y.Z` 커밋과 annotated tag를 만든다. main 브랜치에서만 실행한다(`scripts/release.js`, 시험은 `release-script.test.js`) |
 
 CI(.github/workflows/test.yml): `unit` 작업(lint, lint:ratchet, lint:migrations, test:coverage, 외부 서비스 없는 통합시험), `runtime-matrix` 작업(Node 20/22/24에서 모듈 적재와 키 미설정 기동 거부 종료 코드 78 확인), `e2e` 작업(pgvector/pgvector:pg15, migrate 후 test:e2e), `db-concurrency` 작업(같은 DB 구성에서 test:db, 제한 시간 10분, `continue-on-error`로 결과만 보고하고 워크플로 결론에는 반영하지 않음). 별도 워크플로 `.github/workflows/audit.yml`(push, pull_request, 매일 예약 실행에서 `audit:ci`), `.github/workflows/codeql.yml`(CodeQL 정적 분석), 로컬 임베딩 e2e는 `.github/workflows/e2e-local-embed.yml`이 맡는다.
@@ -176,7 +176,10 @@ MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test \
 | `check-coverage.test.js` | 커버리지 하한 점검 함수(허용 폭, 기준선 갱신, 입력 오류 종료 코드) |
 | `lint-ratchet.test.js` | `scripts/lint-ratchet.js`의 기준선 비교 로직 |
 | `eslint-no-silent-catch.test.js` | `scripts/eslint-rules/no-silent-catch.js` 규칙 |
-| `import-cycles.test.js` | 정적 import 순환 0건과 동적 포함 순환 허용 목록 |
+| `import-cycles.test.js` | 정적·동적 포함 import 순환 0건, 비리터럴 동적 import와 해석되지 않는 상대 경로 0건 |
+| `llm-runner-boundary.test.js` | CLI 호환 shim의 공개 export와 provider→raw runner 경계 |
+| `contradiction-audit-dependency.test.js` | 모순 해소 감사 콜백 주입, 실패 격리, 미주입 no-op |
+| `admin-handler-registry.test.js` | 관리자 라우트 모듈 집합 정합성, 중복·누락 거부, 감사/내보내기 디스패치 순서 |
 | `monitoring-doc-structure.test.js` | `docs/operations/monitoring.md` 규칙이 참조하는 지표 이름과 라벨이 등록된 지표와 일치하는지 |
 | `ci-workflow-layout.test.js` | 의존성 감사가 별도 워크플로에서 돌고 예약 실행을 가지는지 |
 | `db-lane-guard.test.js` | DB 동시성 레인의 실행 허용 조건(로컬 시험 서버, 전용 데이터베이스 이름 형식)을 DB 없이 확인 |

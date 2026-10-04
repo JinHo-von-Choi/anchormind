@@ -11,7 +11,7 @@ import { teardownTestResources } from "../_lifecycle.js";
 const mockRunQwenCLI   = mock.fn();
 const mockRawIsQwenCli = mock.fn();
 
-mock.module("../../lib/qwen.js", {
+mock.module("../../lib/llm/runners/qwen.js", {
   namedExports: {
     runQwenCLI            : (...args) => mockRunQwenCLI(...args),
     _rawIsQwenCLIAvailable: (...args) => mockRawIsQwenCli(...args)

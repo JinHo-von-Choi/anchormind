@@ -48,7 +48,7 @@
   },
   "max-lines-per-function": {
     "lib/admin/admin-logs.js": 162,
-    "lib/admin/admin-routes.js": 144,
+    "lib/admin/admin-routes.js": 143,
     "lib/admin/admin-sessions.js": 188,
     "lib/cli/inspect.js": 142,
     "lib/cli/stats.js": 128,
@@ -79,7 +79,6 @@
     "lib/cli/benchmark.js": 1,
     "lib/cli/recall.js": 1,
     "lib/cli/session.js": 1,
-    "lib/codex.js": 1,
     "lib/config.js": 1,
     "lib/handlers/health-handler.js": 2,
     "lib/handlers/mcp-handler.js": 1,

@@ -11,7 +11,7 @@ import { teardownTestResources } from "../_lifecycle.js";
 const mockRunAgyCLI   = mock.fn();
 const mockRawIsAgyCli = mock.fn();
 
-mock.module("../../lib/agy.js", {
+mock.module("../../lib/llm/runners/agy.js", {
   namedExports: {
     runAgyCLI            : (...args) => mockRunAgyCLI(...args),
     _rawIsAgyCLIAvailable: (...args) => mockRawIsAgyCli(...args)

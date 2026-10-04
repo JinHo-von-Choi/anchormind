@@ -33,9 +33,6 @@ mock.module("../../lib/memory/write/FragmentStore.js", {
   }
 });
 const audits = [];
-mock.module("../../lib/memory/MemoryManager.js", {
-  namedExports: { MemoryManager: { getInstance: () => ({ remember: async p => { audits.push(p); return { id: "audit" }; } }) } }
-});
 mock.module("../../lib/logger.js", {
   namedExports: { logDebug() {}, logWarn() {}, logInfo() {}, logError() {} }
 });
@@ -127,7 +124,10 @@ describe("ContradictionDetector 모순 해소", () => {
     if (mode === "write") writes.push({ sql: norm(sql), params: [...params] });
     return { rows: [], rowCount: 1 };
   };
-  const detector = () => new ContradictionDetector({ createLink: async (from, to, rel) => links.push({ from, to, rel }) });
+  const detector = () => new ContradictionDetector(
+    { createLink: async (from, to, rel) => links.push({ from, to, rel }) },
+    { rememberAudit: async params => { audits.push(params); return { id: "audit" }; } }
+  );
 
   it("오래된 쪽을 대체·폐기하고 해소 기록은 탐지 대상 밖 topic에 남긴다", async () => {
     vectorHandler = captureWrites;

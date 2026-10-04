@@ -10,7 +10,6 @@
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert                                  from "node:assert/strict";
-import { readFileSync }                        from "node:fs";
 
 import {
   decideReview,
@@ -358,9 +357,8 @@ describe("라우트", () => {
     assert.equal(await handleReview({ method: "GET", url: "/", headers: {} }, res, new URL(`http://localhost${ADMIN_BASE}/keys`)), false);
   });
 
-  it("관리 API 라우터가 검토 핸들러를 모듈 핸들러 표에 둔다", () => {
-    const src = readFileSync(new URL("../../lib/admin/admin-routes.js", import.meta.url), "utf8");
-    const table = src.slice(src.indexOf("const MODULE_HANDLERS"), src.indexOf("]);", src.indexOf("const MODULE_HANDLERS")));
-    assert.match(table, /handleKeys, handleReview,/);
+  it("관리 API 레지스트리가 검토 핸들러를 등록한다", async () => {
+    const { ADMIN_HANDLER_REGISTRY } = await import("../../lib/admin/admin-handler-registry.js");
+    assert.ok(ADMIN_HANDLER_REGISTRY["admin-review"].includes(handleReview));
   });
 });

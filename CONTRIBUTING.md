@@ -47,6 +47,20 @@ facade와 프로세서 간 공유 프로퍼티(embedder, fragmentStore 등)는 `
 
 테스트에서 메서드 본문을 검증할 때는 `MemoryManager.prototype.remember.toString()` 대신 `MemoryRememberer.prototype.remember.toString()`을 사용한다.
 
+`ContradictionDetector`는 `MemoryManager`를 직접 가져오지 않는다. 모순 해소 감사 기록이 필요한 생성 경로는 `MemoryConsolidator({ rememberAudit })` 또는 `ContradictionDetector(store, { rememberAudit })`로 콜백을 주입한다. 독립 생성에서 콜백을 생략하면 감사 기록만 건너뛰며 모순 해소는 유지된다.
+
+## LLM CLI 경계
+
+- `lib/llm/providers/*CliProvider.js`: provider 계약과 설정 fallback
+- `lib/llm/runners/*.js`: CLI 바이너리 확인과 프로세스 실행
+- `lib/{agy,codex,copilot,gemini,opencode,qwen}.js`: 기존 공개 import 호환 shim
+
+새 CLI provider는 provider에서 raw runner를 직접 import한다. 다른 모듈에서 runner를 직접 호출하거나 provider에서 호환 shim을 import하면 구조 시험이 실패한다. 공개 shim 경로와 export는 호환성 때문에 유지한다.
+
+## Admin 라우트 등록
+
+라우트를 추가할 때 `lib/admin/admin-route-table.js`와 실제 처리 모듈을 함께 갱신한다. 새 처리 모듈은 `lib/admin/admin-handler-registry.js`에 명시적 순서로 등록한다. `admin-routes`와 `admin-user-auth`는 직접 처리 모듈이라 레지스트리 대상이 아니다. `/audit/export` 순서를 보존하기 위해 `admin-audit`는 `admin-export`보다 앞에 둔다.
+
 ## Testing
 
 - Unit tests: `tests/unit/` (node:test runner)
@@ -55,7 +69,7 @@ facade와 프로세서 간 공유 프로퍼티(embedder, fragmentStore 등)는 `
 - DB concurrency tests: `tests/db-concurrency/` - `npm run test:db` (requires PostgreSQL; creates and drops a dedicated database per run)
 - Run all unit tests: `npm test`
 - Unit tests with coverage: `npm run test:coverage` compares line, branch and function coverage totals with `coverage-baseline.json` (tolerance 0.5 percentage points) through `scripts/check-coverage.js`. Lowering the baseline needs `--allow-decrease`
-- Import cycles: `node scripts/import-cycles.js` lists cycles of size 2 or more among relative imports under `lib`, `config` and `server.js`; a unit test requires that there is no static cycle
+- Import cycles: `node scripts/import-cycles.js` lists cycles of size 2 or more among relative imports under `lib`, `config`, `scripts`, `bin` and `server.js`; a unit test requires zero static and zero dynamic-inclusive cycles
 
 ### 신규 unit 테스트 작성 시 lifecycle 가드 필수
 

@@ -144,7 +144,7 @@ memory_consolidate 도구가 실행되거나 서버 내부 스케줄러(6시간 
 11. `utility_score_update`: `importance * (1 + ln(max(access_count,1))) / age_months^0.3` 공식 갱신. 저장값이 실제로 바뀌는 행만 id 오름차순 묶음으로 기록하며 `MEMENTO_UTILITY_MIN_DELTA`가 0보다 크면 저장값과의 차이가 그 값 이하인 행도 다시 쓰지 않는다
 12. `requeue_high_ema` — ema_activation>0.3 AND importance<0.4 파편을 MemoryEvaluator 재평가 큐에 등록
 13. `promote_anchors` — access_count >= 10 + importance >= 0.8 파편을 `is_anchor=true`로 승격. `MEMENTO_AUTO_PROMOTE_ANCHORS=false`이면 이 stage만 `disabled_by_config` 사유로 건너뛴다(기본 true).
-14. `detect_contradictions`: 3단계 하이브리드 모순 탐지. pgvector cosine > 0.85 후보 추출 → mDeBERTa NLI → Gemini CLI 에스컬레이션. 모순이면 `contradicts` 링크를 걸고 오래된 쪽의 importance를 절반으로 낮춘 뒤 `superseded_by`로 닫는다. 오래된 쪽이 앵커면 닫지 않는다. 해소 기록은 `contradiction_audit` topic에 남기며 이 topic은 모순·대체 탐지 대상에서 빠진다. 결과는 `nliResolvedDirectly`, `nliSkippedAsNonContra`로 분리 반환
+14. `detect_contradictions`: 3단계 하이브리드 모순 탐지. pgvector cosine > 0.85 후보 추출 → mDeBERTa NLI → Gemini CLI 에스컬레이션. 모순이면 `contradicts` 링크를 걸고 오래된 쪽의 importance를 절반으로 낮춘 뒤 `superseded_by`로 닫는다. 오래된 쪽이 앵커면 닫지 않는다. 해소 기록은 `contradiction_audit` topic에 남기며 이 topic은 모순·대체 탐지 대상에서 빠진다. 기록 함수는 `MemoryManager`가 `MemoryConsolidator`에 주입한 `rememberAudit` 콜백이며 `ContradictionDetector`는 facade를 import하지 않는다. 콜백이 없거나 기록에 실패해도 해소 결과는 유지된다. 결과는 `nliResolvedDirectly`, `nliSkippedAsNonContra`로 분리 반환
 15. `detect_supersessions`: 임베딩 유사도 0.7~0.85 구간 파편 쌍에 대해 Gemini CLI로 대체 관계 판단. GraphLinker는 유사도만으로 대체 관계를 만들지 않고 0.7 초과 후보를 `related`로만 잇는다. 파편 대체는 이 판정과 remember의 명시 `supersedes` 인자로만 일어난다
 16. `process_pending_contradictions` — Gemini CLI 가용 시 Redis pending 큐에서 최대 10건 꺼내 재판정
 17. `feedback_report` — tool_feedback/task_feedback 집계 리포트 생성. 무관 판정이 1건 이상이면 원인(not_stored/search_miss/scope_leak/topic_mismatch/other/미보고) 분포 표를 덧붙이고, 작업 레벨 통계에는 outcome 분포·outcome 보고 세션 수·human 판정 세션 수·미충족 요구사항 보유 세션 수를 포함한다. outcome 미보고가 있으면 과대 해석 경고를, 성공 비율 100%인데 미보고가 보고보다 많으면 자기보고 편향 주의 문구를 남긴다
@@ -866,6 +866,8 @@ export async function dispatchChain(chain, prompt, options = {}, deps = {})
 
 체인은 provider 설정 배열이며, 첫 번째 provider부터 순서대로 시도하여 성공 시 결과를 반환한다. 실패(429, semaphore timeout, 오류) 시 다음 fallback provider로 이동한다.
 
+CLI 경계는 세 층이다. `lib/llm/providers/*CliProvider.js`는 provider 계약을 구현하고, `lib/llm/runners/*.js`는 바이너리 확인과 프로세스 실행만 담당한다. 기존 `lib/agy.js`, `lib/codex.js`, `lib/copilot.js`, `lib/gemini.js`, `lib/opencode.js`, `lib/qwen.js`는 공개 import 호환 shim으로 유지한다. provider는 raw runner만 정적으로 import하고 shim의 체인 가용성 함수만 dispatcher를 지연 import한다. 구조 시험은 runner를 provider와 shim 외부에서 호출하는 경로와 모든 정적·동적 import 순환을 거부한다.
+
 **동시성 제어:** `getSemaphore(chainKey, limit, waitMs)`로 provider별 독립 semaphore를 획득한다. chainKey는 `provider|baseUrl|model|apiKeyHash` 조합. `LLM_CONCURRENCY_WAIT_MS`(기본 30000ms) 초과 시 해당 provider 실패 처리. chain deadline은 `deps.startedAt`과 `LLM_CHAIN_TIMEOUT_MS`로 계산하며, 잔여 시간이 0 이하이면 즉시 chain 종료.
 
 ## Agent scope와 snapshot 이관
@@ -912,4 +914,4 @@ server.js의 onFatal은 `gracefulShutdown("uncaughtException", { exitCode: 1 })`
 - 소비자: `lib/logging/audit-consumer.js`. 스위치를 읽어야 하므로 모듈을 불러올 때가 아니라 스케줄러가 outbox 작업자를 시작하기 직전에 `registerAuditConsumer()`로 한 번 등록한다. 처리기는 `readAuditPayload`로 다시 검증하고(실패하면 `OutboxPermanentError`) `AuditStore.append(record, idempotencyKey)`로 표를 잠근 뒤 체인 끝에 기록한다.
 - 처리기 연쇄: 같은 topic에 처리기가 여럿이면 `registerOutboxHandler(topic, handler, { onDuplicate: "chain" })`로 등록한다(기본 `error`는 두 번째 등록을 거부, `replace`는 교체). 연쇄는 앞 처리기가 성공한 뒤 뒤 처리기를 같은 이벤트로 부르고, 하나가 실패하면 이벤트 전체가 재시도되므로 묶인 처리기는 모두 멱등이어야 한다. 다른 payload 형식의 감사 topic은 `registerAuditTopic(topic, toAuditEvent)`(`lib/logging/audit-consumer.js`)로 감사 체인에 연쇄 등록한다. 외부 전송 감사 topic `audit.llm.egress`는 `registerAuditConsumer()`가 `egressAuditEvent`로 연쇄 등록하므로 같은 topic의 파일 기록 처리기와 함께 불린다.
 - 보존 정리: `AuditStore.cleanup`은 기록과 같은 표 잠금 아래에서 앞부분을 지우고 같은 트랜잭션에서 보존 기준점 행(`audit.retention.prune`, `boundarySeq`, `boundaryHash`)을 체인 끝에 남긴다. 검증은 이 기준점이 남은 첫 행과 맞을 때만 앞부분 공백을 받는다.
-- 관리 라우트를 더할 때는 GET이 아닌 라우트마다 `lib/admin/admin-audit-actions.js`에 행위를 선언한다(`tests/unit/admin-audit-actions.test.js`). 처리기는 `noteAdminAudit(res, { targetId, detail })`로 생성한 자원 id와 변경 전후 값을 덧붙인다.
+- 관리 라우트를 더할 때는 `lib/admin/admin-route-table.js`에 라우트를 선언한다. 새 처리 모듈이면 `lib/admin/admin-handler-registry.js`에도 모듈과 핸들러를 명시적 순서로 등록한다. 레지스트리는 `admin-routes`, `admin-user-auth` 직접 처리 모듈을 제외한 라우트 표 모듈과 정확히 같아야 하며 누락·추가·중복을 기동 시 거부한다. GET이 아닌 라우트에는 감사 행위를 선언하고, 처리기는 `noteAdminAudit(res, { targetId, detail })`로 생성한 자원 id와 변경 전후 값을 덧붙인다.

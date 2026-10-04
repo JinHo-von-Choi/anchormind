@@ -63,6 +63,8 @@ describe("변이마다 규칙이 잡는다", () => {
       ].join("\n") }],
     ["CLI 실행 함수 다시 내보내기", "runnerImports",
       { [LEAK]: `export { runCodexCLI } from "../../codex.js";\n` }],
+    ["raw runner 직접 호출", "runnerImports",
+      { [LEAK]: `import { runCodexCLI } from "../../llm/runners/codex.js";\nexport const f = (t) => runCodexCLI("", t);\n` }],
     ["진입 모듈 이름공간 import", "namespaceImports",
       { [LEAK]: `import * as llm from "../../llm/index.js";\nexport const f = (t) => llm.llmJson(t, {});\n` }],
     ["CLI 모듈 이름공간 import", "namespaceImports",
