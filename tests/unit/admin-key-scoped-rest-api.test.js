@@ -343,7 +343,10 @@ describe("POST /search", () => {
 /* ── GET /search-events ── */
 describe("GET /search-events", () => {
   it("30일 기본 요약(총수·평균·zero-hit)을 반환한다", async () => {
-    queryResults = [{ rows: [{ total_searches: 100, avg_result_count: "3.50", zero_hit_count: 20 }] }];
+    queryResults = [
+      { rows: [{ total_searches: 100, avg_result_count: "3.50", zero_hit_count: 20, p50_latency_ms: 21, p95_latency_ms: 84 }] },
+      { rows: [{ feedback_count: 25 }] }
+    ];
     const res = fakeRes();
     const handled = await handleSearchEvents({ method: "GET" }, res, makeUrl(`${ADMIN_BASE}/search-events`));
     assert.equal(handled, true);
@@ -352,6 +355,9 @@ describe("GET /search-events", () => {
     assert.equal(body.totalSearches, 100);
     assert.equal(body.avgResultCount, 3.5);
     assert.equal(body.zeroHitRate, 0.2);
+    assert.equal(body.p50LatencyMs, 21);
+    assert.equal(body.p95LatencyMs, 84);
+    assert.equal(body.feedbackRate, 0.25);
   });
 
   it("key_ids 제공 시 키 범위를 적용하고 귀속 오류 안내가 없다", async () => {
@@ -360,6 +366,21 @@ describe("GET /search-events", () => {
     await handleSearchEvents({ method: "GET" }, res, makeUrl(`${ADMIN_BASE}/search-events?key_ids=a`));
     const body = JSON.parse(res.body);
     assert.equal(body.keyScopeNote, null);
+  });
+
+  it("저장된 질의 없이 현재 선택 스냅샷만 안전하게 재현한다", async () => {
+    queryResults = [
+      { rows: [{ id: 17, key_id: "a", selected_fragment_ids: ["f1", "f2"], selection_reasons: { f1: { codes: ["topic_match"] } }, search_path: "L1", created_at: "2026-10-04T00:00:00Z" }] },
+      { rows: [{ id: "f1", origin: "codex", trust_tier: "trusted", review_state: "approved" }] }
+    ];
+    const res = fakeRes();
+    await handleSearchEvents(jsonReq("POST", { memory: "current" }), res, makeUrl(`${ADMIN_BASE}/search-events/17/replay?key_ids=a`));
+    const body = JSON.parse(res.body);
+    assert.equal(body.replay.sideEffects, false);
+    assert.equal(body.replay.replayKind, "privacy_safe_snapshot");
+    assert.deepEqual(body.replay.selected.map(item => item.id), ["f1"]);
+    assert.deepEqual(body.replay.unavailableIds, ["f2"]);
+    assert.doesNotMatch(JSON.stringify(body), /queryText|content/);
   });
 });
 

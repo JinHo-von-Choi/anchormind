@@ -30,7 +30,7 @@ const LIB  = path.resolve(HERE, "..", "..", "lib");
 const ALLOWED = {
   "admin/ApiKeyStore.js": 2, // 키 삭제 전 그 키의 파편 수(닫힌 파편 포함)를 키 행 잠금과 같은 트랜잭션에서 센다
   "admin/admin-keys.js": 1,
-  "admin/admin-memory.js": 15, // 모순 결정은 링크·결정과 파편 만료를 한 트랜잭션에서 잠그고, 과거 시점 투영은 관리 범위로 읽는다
+  "admin/admin-memory.js": 16, // 모순 결정은 링크·결정과 파편 만료를 한 트랜잭션에서 잠그고, replay·과거 시점 투영은 관리 범위로 읽는다
   "admin/admin-routes.js": 6,
   "admin/ReviewStore.js": 7, // 검토 대기 목록, 잠금 순서용 결정 대상 사전 조회, 결정 대상 행 잠금과 승인, 거절 상태 변경, 자동 거절의 잠금과 갱신. 결정 기록 표와 같은 트랜잭션에 쓰므로 데이터 계층 객체를 거치지 않는다
   "admin/ScopeFilter.js": 1, // fragment_links 범위 술어가 양 끝 파편의 workspace를 보는 EXISTS 부분 질의다. 관리 SQL의 술어 조각이며 질의를 실행하지 않는다
