@@ -45,7 +45,7 @@ const pool = {
     if (/to_jsonb\(k\) -> 'egress_policy'/.test(sql)) return { rows: row ? [{ egress_policy: row.egress_policy ?? null }] : [] };
     if (/SELECT symbolic_hard_gate FROM/.test(sql))  return { rows: row ? [{ symbolic_hard_gate: row.symbolic_hard_gate }] : [] };
     if (/SELECT allowed_workspaces FROM/.test(sql))  return { rows: row ? [{ allowed_workspaces: row.allowed_workspaces }] : [] };
-    if (/INSERT INTO .*api_keys/.test(sql))          return { rows: [{ id: KEY_ID, name: params[0], permissions: params[3] }] };
+    if (/INSERT INTO .*api_keys/.test(sql))          return { rows: [{ id: KEY_ID, name: params[0], permissions: params[3], fragment_limit: params[5] }] };
     return { rows: [], rowCount: 0 };
   }
 };
@@ -343,5 +343,27 @@ describe("POST /keys 권한 검증", () => {
     const { res } = await create({ name: "k" });
     assert.equal(res.statusCode, 201);
     assert.ok(Array.isArray(inserts()[0].params[3]) && inserts()[0].params[3].length > 0);
+  });
+
+  it("fragment_limit를 저장 계층에 그대로 전달한다", async () => {
+    const { res } = await create({ name: "limited", fragment_limit: 5000 });
+    assert.equal(res.statusCode, 201);
+    assert.equal(inserts()[0].params[5], 5000);
+    assert.equal(res.body.fragment_limit, 5000);
+  });
+
+  it("fragment_limit의 잘못된 숫자를 거부한다", async () => {
+    for (const value of [0, -1, 1.5, "5000"]) {
+      const { res } = await create({ name: "invalid-limit", fragment_limit: value });
+      assert.equal(res.statusCode, 400);
+      assert.equal(res.body.field, "fragment_limit");
+    }
+    assert.equal(inserts().length, 0);
+  });
+
+  it("fragment_limit null은 관리자 무제한 키로 전달한다", async () => {
+    const { res } = await create({ name: "unlimited", fragment_limit: null });
+    assert.equal(res.statusCode, 201);
+    assert.equal(inserts()[0].params[5], null);
   });
 });
