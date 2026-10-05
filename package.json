@@ -43,6 +43,7 @@
     "backfill:synthetic-query-versions": "node scripts/backfill-synthetic-query-versions.js",
     "lint:migrations": "node scripts/lint-migrations.js",
     "switches": "node scripts/switch-report.mjs",
+    "env-access": "node scripts/env-access-report.mjs",
     "audit:ci": "audit-ci --config audit-ci.jsonc",
     "migrate": "node scripts/migrate.js",
     "release": "node scripts/release.js",
@@ -66,6 +67,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "acorn": "^8.18.0",
     "audit-ci": "^7.1.0",
     "eslint": "^10.11.0"
   },
