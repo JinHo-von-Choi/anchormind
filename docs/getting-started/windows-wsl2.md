@@ -32,7 +32,7 @@ sudo apt update
 sudo apt install -y curl ca-certificates gnupg postgresql-client redis-tools
 ```
 
-Node.js는 20 이상을 사용한다. 설치 방법은 팀 표준 방식에 맞추면 된다.
+Node.js는 22 이상을 사용한다. 설치 방법은 팀 표준 방식에 맞추면 된다.
 
 ## 3. 프로젝트 위치
 

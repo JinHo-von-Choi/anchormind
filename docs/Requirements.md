@@ -2,8 +2,8 @@
 
 ### 런타임
 
-- Node.js 20 이상 (ESM, top-level await)
-  - 서버 실행은 20 이상에서 동작한다. 개발용 단위시험은 `--experimental-test-module-mocks`를 쓰며 이 기능은 24에서만 안정적이다.
+- Node.js 22 이상 (ESM, top-level await)
+  - 서버 실행은 22 이상에서 동작한다. 개발용 단위시험은 `--experimental-test-module-mocks`를 쓰며 이 기능은 24에서만 안정적이다.
 - PostgreSQL 14 이상 + pgvector 확장
   - HNSW 인덱스: pgvector 0.5.0 이상 필요
   - `halfvec(N)` 지원(3073차원 이상 모델): pgvector 0.7.0 이상 필요

@@ -33,12 +33,12 @@ jobs:
         run: DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test tests/integration/*.test.js
 
   runtime-matrix:
-    name: Runtime Boot (Node 20/22/24)
+    name: Runtime Boot (Node 22/24)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        node-version: ["20", "22", "24"]
+        node-version: ["22", "24"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0

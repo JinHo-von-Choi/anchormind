@@ -15,7 +15,7 @@ updated: 2026-10-03
 
 ## 1. 전제 조건
 
-- Node.js 20+
+- Node.js 22+
 - PostgreSQL + `vector` extension
 - `psql` 명령이 PATH에 있어야 함
 
