@@ -197,8 +197,10 @@ export const MEMORY_CONFIG = {
   },
   /** 임베딩 비동기 워커 설정 */
   embeddingWorker: {
-    batchSize   : 10,
-    intervalMs  : 5000,
+    batchSize    : envInt("MEMENTO_EMBEDDING_WORKER_BATCH", 32, 1, 200),
+    /** 큐가 비었을 때의 폴링 간격. idleOnlyDelay가 켜져 있으면 일을 한 회차 뒤에는 쉬지 않는다. */
+    intervalMs   : envInt("MEMENTO_EMBEDDING_WORKER_INTERVAL_MS", 5000, 100, 600000),
+    idleOnlyDelay: (process.env.MEMENTO_EMBEDDING_WORKER_IDLE_ONLY_DELAY ?? "true") === "true",
     retryLimit  : 3,
     retryDelayMs: 2000,
     queueKey    : "memento:embedding_queue"
