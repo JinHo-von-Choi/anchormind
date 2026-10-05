@@ -64,6 +64,23 @@ The name, documented default, purpose and category of each feature switch are in
 - Startup log: one line `[Startup] switches: total=N on=N off=N mode=N nonDefault=N (name=on|off|enum value, ...) invalid=N (name, ...)`.
 - New switches: a boolean or enum variable read with `envBool` or `envEnum` gets an entry in the registry and a row in `.env.example`, this document and the Korean version. `tests/unit/switch-ledger-structure.test.js` fails when an entry is missing. A variable that only selects a method, without opening or closing a feature, goes into that test's exclusion list with a reason.
 
+### Environment Variable Access Rules
+
+Read new environment variables in `lib/config.js` or a central module under `config/`, using helpers such as `envInt`, `envBool` and `envEnum`. An exception where another file reads `process.env` directly is registered in `config/env-access.js` with its file, kind, variables and a reason.
+
+The kind is determined automatically from the code and must match the registry.
+
+| Kind | Meaning | When an environment change takes effect |
+|------|---------|------------------------------------------|
+| startup | Read at module top level | After the server restarts |
+| runtime | Read inside a function | Immediately, because it is read on every call |
+| cli | Read or written by the CLI entry points in `lib/cli` and `bin` | When the command runs |
+
+- Check: `npm run env-access` (`node scripts/env-access-report.mjs`) prints the number of variables per kind. `-- --strict` exits with code 1 when there is a violation.
+- Violations: an unregistered access, a registration with no matching code, or a registration whose kind differs. `tests/structure/env-access.test.js` runs the same check as a test.
+- Moving a runtime entry to startup stops toggles that were changed while the server was running from taking effect. Add a test that changes the value at call time if you move one.
+- The direct-read figure in `lint:ratchet` is a per-file upper bound on the count, while this registry requires a kind and a reason. They complement each other.
+
 ### Server
 
 | Variable | Default | Description |

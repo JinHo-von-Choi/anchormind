@@ -27,18 +27,25 @@
 
 ## What is it
 
-An MCP server that gives AI agents (Claude Code, Cursor, Codex and others) long-term memory that survives the end of a session. You host it yourself and it stores data in PostgreSQL.
+AnchorMind is an MCP server that gives AI agents, including Claude Code, Cursor, Codex and others, long-term memory across sessions. It stores data in PostgreSQL. You host it yourself.
 
-An agent forgets the conversation when a session ends. You have to explain the project setup, yesterday's bug fix and your preferred way of working again each time. AnchorMind stores these as short units (fragments) and returns only the relevant ones in the next session.
+Agents forget the conversation when a session ends, so you end up explaining the project setup, yesterday's bug fix and your preferred workflow again. That gets old fast. AnchorMind saves those details as short units, called fragments, and returns only the relevant ones in the next session.
+
+### When to use it
+
+- You use AI agents every day and keep repeating the same explanations.
+- You want Claude Code, Cursor, Codex and other agents to share the same memory across several machines.
+- You want separate memory for each project or client.
+- You want memory on your own server and database.
 
 ## How does it work
 
 1. Run the AnchorMind server.
 2. Register it as an MCP server in your agent.
-3. When a session starts, the agent fetches core memories from the server. During the conversation it searches when needed and saves what is worth keeping.
-4. The agent answers using those memories.
+3. At the start of a session, the agent fetches core memories from the server. As the conversation continues, it searches when it needs context and saves anything worth keeping.
+4. The agent uses those memories in its answer.
 
-What you see:
+Example:
 
 ```
 [Session 1]
@@ -51,7 +58,7 @@ You:   How do I run the tests again?
 Agent: (calls recall) This project uses Vitest. Run it with npx vitest.
 ```
 
-You do not repeat the same explanation every session. The full sequence:
+You do not have to repeat the same explanation every session. Here is the full sequence:
 
 ```mermaid
 sequenceDiagram
@@ -73,13 +80,13 @@ sequenceDiagram
     A->>M: reflect (session summary)
 ```
 
-The agent makes the tool calls. The server never initiates anything. To make the agent call them reliably, set up hooks or an instruction file ([make the agent use memory automatically](#how-do-i-make-the-agent-use-the-memory-tools-on-its-own)).
+The agent makes the tool calls. The server does not start them on its own, so use hooks or an instruction file to make those calls reliable ([make the agent use memory automatically](#how-do-i-make-the-agent-use-the-memory-tools-on-its-own)).
 
 ## How do I install it
 
 ### Install the server
 
-You need: Node.js 20+, and Docker (not needed if you already have PostgreSQL with pgvector).
+You need: Node.js 22+, and Docker (not needed if you already have PostgreSQL with pgvector).
 
 **1. Database** (skip if you already have one)
 
@@ -158,51 +165,134 @@ To make the agent use the memory tools on its own after connecting, see the [FAQ
 
 ## FAQ
 
-### How is this different from file-based memory such as CLAUDE.md or MEMORY.md?
+Each question has one answer. If you do not find what you need, check [Troubleshooting](docs/getting-started/troubleshooting.md) or the [issues](https://github.com/JinHo-von-Choi/anchormind/issues).
 
-File memory has to be read in full every session. The more it grows, the more tokens it costs, and old and new entries start to contradict each other. AnchorMind searches and returns only the relevant fragments within a `tokenBudget`, and keeps memory tidy through duplicate merging, contradiction detection, importance decay and TTL expiry. Several agents and machines can share one server, and `workspace` separates memory per project.
+### Is this the right tool
 
-### When is it not a good fit?
+#### How is this different from file-based memory such as CLAUDE.md or MEMORY.md?
+
+File memory is read in full. As it grows, it costs more tokens, and old entries can start to conflict with newer ones. AnchorMind searches instead and returns only the relevant fragments within a `tokenBudget`.
+
+#### How is this different from RAG?
+
+RAG works from existing documents. It indexes them and finds the matching ones for you, while AnchorMind is memory the agent writes and reads during conversation. The server also cleans up what gets stored, including duplicate merging, contradiction detection, and importance decay.
+
+#### Can I use it as a knowledge base?
+
+Yes. Store facts as fragments of one or two sentences, and `recall` can return them later. It is not designed to index long documents as whole files.
+
+#### Can I use it together with another memory tool I already have?
+
+Yes. AnchorMind is an MCP server, so you can register it in the same agent. The server name is prefixed to the tool name, which keeps tools separate, for example `mcp__anchormind__recall`.
+
+#### How do I decide whether to switch from the tool I use?
+
+Use this test. If any one of these applies, AnchorMind is worth trying; if none does, your current tool is probably enough.
+
+- The data must stay on your own server.
+- Several agents and machines need the same memory.
+- You want the server to clean up duplicates and contradictions.
+
+#### When is it not a good fit?
 
 - If what you need to remember fits on one `CLAUDE.md` page, a file is simpler.
 - You must operate PostgreSQL (pgvector).
 - Search is tuned for fact-sized units. Questions that require synthesizing long reasoning are weaker ([Benchmark](#benchmark)).
 
-### Do I need an embedding model or an OpenAI key?
+### Installation and requirements
 
-Not strictly. PostgreSQL alone gives you storage, keyword recall, links and the admin features.
+#### Do I need an embedding model or an OpenAI key?
 
-Without embeddings, though, natural-language questions (`text` queries) return zero results. That is why the install steps above turn on local embeddings.
+Not strictly. PostgreSQL alone handles storage, keyword recall, links, and the admin features, but natural-language questions (`text` queries) return zero results without embeddings. That is why the install steps above enable local embeddings.
 
-- Local model: `EMBEDDING_PROVIDER=transformers` in `.env`. No API key is needed and the text never leaves your machine.
-- External API: an embedding API key such as OpenAI.
+#### Should embeddings come from a local model or an external API?
 
-You cannot switch and mix embedding methods inside one database because the vector dimensions differ. Details: [Local embedding guide](docs/embedding-local.md).
+- Local model: set `EMBEDDING_PROVIDER=transformers` in `.env`. No API key is needed, and the text stays on your machine.
+- External API: use an embedding API key such as OpenAI.
 
-### Do I need Redis?
+Do not mix them. One database has to use one method because the vector dimensions are different. Details: [Local embedding guide](docs/embedding-local.md).
 
-Optional. Adding it enables the search cache and session activity tracking. Without Redis, a newly stored fragment can take up to 5 minutes to show up in natural-language search (the server builds embeddings every 5 minutes).
+#### Do I need Redis?
 
-### Where is my memory stored, and does it leave my machine?
+No. Redis only adds the search cache and session activity tracking.
 
-It is stored in the PostgreSQL you operate. Data leaves only along paths you configure. With an external embedding API, the text you store is sent to that API; use local embeddings to avoid that. If you connect an external LLM for quality evaluation and automatic reflect, restrict providers per key and workspace with `egress_policy`, which also masks outgoing text ([Security and Operations Checklist](docs/operations/hardening.en.md)).
+#### What changes if I run without Redis?
 
-### Can I store passwords or tokens?
+Keyword search is immediate. A newly stored fragment can take up to 5 minutes to appear in natural-language search, because the server builds embeddings every 5 minutes.
 
-Not recommended. Sensitive patterns are masked when saving, but not every format is caught. Keep secrets in environment variables or a secret store and record only their location in memory.
+#### How much memory do the local models use?
 
-### How do I make the agent use the memory tools on its own?
+| Model | Extra memory | Used for |
+|-------|--------------|----------|
+| Local embedding (`multilingual-e5-small`) | about 150 MB | natural-language search |
+| NLI for contradiction detection (mDeBERTa) | about 250 to 280 MB | judging whether a new fragment contradicts an existing one |
 
-Two ways, and you can combine them.
+Together, they add about 0.4 GB to the server process. The reranker is off by default, and with an external embedding API, the local embedding share is not used. Per-configuration figures: [Requirements](docs/Requirements.md).
 
-1. Hooks or the plugin: call `context` at session start and run a retrospective at session end automatically. `anchormind init --target claude --write` builds the Claude Code plugin ([Plugin install](docs/getting-started/plugins.en.md), [Hooks](docs/getting-started/hooks.en.md)).
-2. Instructions: after connecting MCP, ask the agent to read the guide from the `get_skill_guide` tool and configure itself to use the memory tools actively. The server provides the guide.
+#### Can I keep the NLI model from using memory?
 
-### What if a memory conflicts with a rule in CLAUDE.md?
+Yes, if you run NLI as a separate service with `NLI_SERVICE_URL`; that keeps it out of the server process. `MEMENTO_CONSOLIDATE_DETECT_CONTRADICT=false` only disables contradiction detection, so the model still loads when the server starts.
 
-Injected memories rank below the system prompt and instruction files. A fact like "we use PostgreSQL 15" works well, but a behavior rule like "write tests in Given-When-Then" can be ignored when it conflicts. Put behavior rules in `CLAUDE.md`, `AGENTS.md`, hooks or skills.
+### Connecting agents
 
-### I stored something but recall does not return it
+#### How do I make the agent use the memory tools on its own?
+
+Two options. You can use both.
+
+1. Hooks or the plugin: call `context` when a session starts, then run a retrospective automatically when it ends. `anchormind init --target claude --write` creates the Claude Code plugin ([Plugin install](docs/getting-started/plugins.en.md), [Hooks](docs/getting-started/hooks.en.md)).
+2. Instructions: after you connect MCP, ask the agent to read the guide from the `get_skill_guide` tool and set itself up to use the memory tools actively. The server includes that guide.
+
+#### What if a memory conflicts with a rule in CLAUDE.md?
+
+Injected memories sit below the system prompt and instruction files. Facts work well, such as "we use PostgreSQL 15"; behavior rules, such as "write tests in Given-When-Then," may be ignored if they conflict. Put behavior rules in `CLAUDE.md`, `AGENTS.md`, hooks, or skills.
+
+### Data and security
+
+#### Where is my memory stored?
+
+In the PostgreSQL you operate.
+
+#### Does memory ever leave my machine?
+
+Only through paths you configure.
+
+- If you use an external embedding API, the text you store is sent to that API. Local embeddings send nothing.
+- LLM features, including quality evaluation and automatic reflect, need an LLM provider. The default is `gemini-cli`, and you can [change the provider](docs/operations/llm-providers.md).
+- A per-key and per-workspace `egress_policy` limits external LLM providers, masks outgoing text, and records transmissions ([Security and Operations Checklist](docs/operations/hardening.en.md)).
+
+#### Can I store passwords or tokens?
+
+Not recommended. Sensitive patterns are masked on save, but some formats may be missed. Keep secrets in environment variables or a secret store, and save only their location in memory.
+
+### Memory quality
+
+#### Can wrong content be kept out of memory?
+
+Not completely. People also drift a little each time they recall something. So the design does not try to prevent it entirely; it keeps the damage from spreading and makes it findable and fixable. The four items below explain how.
+
+#### How do I fix wrong memory?
+
+Memory is stored per fragment, so you fix only the wrong fragment with `amend` or remove it with `forget`. One summary cannot be wrong as a whole.
+
+#### What happens when new content contradicts existing content?
+
+The server detects the contradiction and expires the old fragment (anchors are exempt). Nothing is deleted; history stays through `valid_to` and `superseded_by`. The steps are in [Internals](docs/internals.en.md#contradiction-detection-pipeline).
+
+#### How do I mark content I am not sure about?
+
+Store it as `assertionStatus=inferred`. Change it to `verified` once confirmed, or `rejected` if it was wrong.
+
+#### Does it catch content that was stored wrongly from the start?
+
+No. The server only catches contradictions when a conflicting fragment arrives. Keep important memories as anchors and check them yourself. Low-trust fragments, such as content from external documents, are left out of the ANCHOR and CORE injected at session start, and text that tries to override the agent's instructions goes to a review queue.
+
+#### What happens as memory keeps growing?
+
+Duplicate merging, contradiction detection, importance decay and TTL expiry run periodically. Fragments that stop being used move to lower tiers and eventually disappear. Mark a fragment as an anchor to exempt it from decay and expiry; setting an anchor requires the `anchor` permission.
+
+### Troubleshooting
+
+#### I stored something but recall does not return it
 
 - If it shows `pending_review: true` it is in the review queue ([Troubleshooting #17](docs/getting-started/troubleshooting.md)).
 - A different workspace is invisible. Use the same `workspace` for saving and reading.
@@ -210,17 +300,12 @@ Injected memories rank below the system prompt and instruction files. A fact lik
 
 Other symptoms are in [Troubleshooting](docs/getting-started/troubleshooting.md), which has 17 entries.
 
-### What happens as memory keeps growing?
-
-Duplicate merging, contradiction detection, importance decay and TTL expiry run periodically. Fragments that stop being used move to lower tiers and eventually disappear. Mark a fragment as an anchor to exempt it from decay and expiry; setting an anchor requires the `anchor` permission.
-
-### I remember this being called memento-mcp
+#### I remember this being called memento-mcp
 
 Same project. It was renamed to AnchorMind because many projects have the same or similar names. Both `anchormind` and `memento-mcp` work as commands, and some environment variables keep the `MEMENTO_` prefix.
-
 ## Fragment types
 
-Memory is stored as fragments of one or two sentences. Each fragment is one of 7 types.
+Memory is stored in short fragments, usually one or two sentences. Each one has one of 7 types.
 
 | Type | Content |
 |------|---------|
@@ -232,18 +317,18 @@ Memory is stored as fragments of one or two sentences. Each fragment is one of 7
 | `relation` | Relations and dependencies between entities |
 | `episode` | Narrative with before and after (1000 chars; the rest 300) |
 
-The main tools are `context` (restore core memory at session start), `recall` (search), `remember` (save) and `reflect` (save a summary at session end). All tools and usage rules: [SKILL.md](SKILL.md). Full feature list: [Capabilities](docs/capabilities.en.md).
+The main tools are `context` for restoring core memory at session start, `recall` for search, `remember` for saving fragments, and `reflect` for saving a session-end summary. Short version: these four cover the normal flow. All tools and usage rules: [SKILL.md](SKILL.md). Full feature list: [Capabilities](docs/capabilities.en.md).
 
 ## Benchmark
 
 [LongMemEval-S](https://arxiv.org/abs/2410.10813), 500 questions (measured 2026-03-29, reader and judge Gemini 2.5 Flash):
 
-| Metric | Score |
-|-|-|
-| Retrieval recall_any@5 | 88.3% (text-embedding-3-small) |
-| QA accuracy | 44.9% |
+| Metric | Score | Condition |
+|-|-|-|
+| Retrieval recall_any@5 | 88.3% | text-embedding-3-small |
+| QA accuracy | 44.9% | temporal metadata and abstention detection |
 
-Retrieval finds the fragments, but accuracy drops at the step that synthesizes an answer from them (multi-session and temporal reasoning). Conditions and analysis: [Benchmark Report](docs/benchmark.en.md).
+Retrieval finds the fragments. Accuracy drops later, when the system has to synthesize an answer from them, especially with multi-session and temporal reasoning. Conditions and analysis: [Benchmark Report](docs/benchmark.en.md).
 
 ## Documentation
 

@@ -64,6 +64,23 @@
 - 기동 로그: `[Startup] switches: total=N on=N off=N mode=N nonDefault=N (이름=on|off|열거 값, ...) invalid=N (이름, ...)` 한 줄을 기록한다.
 - 새 스위치: `envBool`, `envEnum`으로 읽는 불리언과 열거 변수는 레지스트리에 항목을 추가하고 `.env.example`, 이 문서, 영문판에 적는다. `tests/unit/switch-ledger-structure.test.js`가 빠진 항목을 실패로 알린다. 기능 개폐가 아니라 방식만 고르는 변수는 그 시험의 제외 목록에 이유와 함께 둔다.
 
+### 환경 변수 접근 규칙
+
+새 환경 변수는 `lib/config.js`나 `config/` 아래 중앙 모듈에서 `envInt`, `envBool`, `envEnum` 같은 도우미로 읽는다. 그 밖의 파일이 `process.env`를 직접 읽는 예외는 `config/env-access.js`에 파일, 분류, 변수, 사유를 적어 등록한다.
+
+분류는 코드에서 자동으로 판정하며 대장의 값과 같아야 한다.
+
+| 분류 | 뜻 | 환경 변경 반영 |
+|------|----|---------------|
+| startup | 모듈 최상위에서 읽는다 | 서버를 다시 시작해야 반영된다 |
+| runtime | 함수 안에서 읽는다 | 호출할 때마다 읽으므로 바로 반영된다 |
+| cli | `lib/cli`, `bin`의 CLI 진입점이 읽거나 쓴다 | 명령을 실행할 때 반영된다 |
+
+- 점검: `npm run env-access`(`node scripts/env-access-report.mjs`)가 분류별 변수 수를 출력한다. `-- --strict`는 위반이 있으면 종료 코드 1로 끝난다.
+- 위반: 등록되지 않은 접근, 코드에 없는 등록, 분류가 어긋난 등록이다. `tests/structure/env-access.test.js`가 같은 검사를 시험으로 돌린다.
+- runtime 항목을 startup으로 옮기면 서버를 켠 채 바꾸던 토글이 더는 반영되지 않는다. 옮기려면 호출 시점 변경 시험을 함께 둔다.
+- `lint:ratchet`의 직접 읽기 수치는 파일별 개수의 상한이고, 이 대장은 분류와 사유를 요구한다. 둘은 서로 보완한다.
+
 ### 서버
 
 | 변수 | 기본값 | 설명 |

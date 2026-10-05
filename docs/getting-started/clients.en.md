@@ -1,10 +1,10 @@
 # Connecting Clients
 
-AnchorMind is a standard MCP server (Streamable HTTP). Server URL: `http://localhost:57332/mcp`. Authentication: `Authorization: Bearer <access key>` header.
+AnchorMind is a standard MCP server (Streamable HTTP). Server URL: `http://localhost:57332/mcp`. Authentication uses the `Authorization: Bearer <access key>` header.
 
 ## Platforms
 
-AnchorMind is a standard MCP (Model Context Protocol) server. It works with any AI platform that supports MCP — not just Claude Code.
+AnchorMind is a standard MCP (Model Context Protocol) server. It works with any AI platform that supports MCP, not only Claude Code, as long as the client supports the required transport.
 
 | Platform | Config Location | Transport |
 |----------|----------------|-----------|
@@ -18,17 +18,17 @@ AnchorMind is a standard MCP (Model Context Protocol) server. It works with any 
 | ChatGPT Desktop | Developer Mode > Apps | OAuth (RFC 7591) |
 | Continue | config.json | Streamable HTTP |
 
-Common setup: Server URL `http://localhost:57332/mcp`, Authorization header `Bearer YOUR_ACCESS_KEY`.
+Common setup: use Server URL `http://localhost:57332/mcp` and the Authorization header `Bearer YOUR_ACCESS_KEY`.
 
-For Claude.ai Web and ChatGPT, AnchorMind uses OAuth. Enter your API key (`mmcp_xxx`) as the `client_id` -- no Dynamic Client Registration (RFC 7591) flow required. Redirect URIs from trusted domains (claude.ai, chatgpt.com) are auto-approved.
+For Claude.ai Web and ChatGPT, AnchorMind uses OAuth. Enter your API key (`mmcp_xxx`) as the `client_id`; no Dynamic Client Registration (RFC 7591) flow is required. Redirect URIs from trusted domains, including claude.ai and chatgpt.com, are auto-approved.
 
-A client registered through `POST /register` with the API key in an `Authorization: Bearer` header (a key-bound client) always passes through the consent screen on authorization, and must present the same key as `client_secret` (or through Basic authentication) at token exchange. Without it, `POST /token` returns 401 `invalid_client`. `/register` accepts up to `MEMENTO_DCR_MAX_PER_HOUR` registrations per hour per process (default 100, 0 means no cap) and answers 429 (`Retry-After` is the seconds remaining in the current window) above that. Key-bound registrations are counted separately.
+A client registered through `POST /register` with the API key in an `Authorization: Bearer` header is a key-bound client and always goes through the consent screen during authorization. At token exchange, it must present the same key as `client_secret` or through Basic authentication; otherwise, `POST /token` returns 401 `invalid_client`. `/register` accepts up to `MEMENTO_DCR_MAX_PER_HOUR` registrations per hour per process (default 100; 0 means no cap) and returns 429 above that, with `Retry-After` set to the seconds remaining in the current window. Key-bound registrations are counted separately.
 
 See [integration guides]() for platform-specific setup.
 
 ## Codex Desktop tool discovery
 
-Some MCP clients such as Codex Desktop use deferred/lazy tool discovery. tool_search may expose only a subset of tools depending on the query and limit, so recall — which always exists in tools/list — can be missing from storage-biased queries with a low limit. If recall is not visible, retry with a broader query and limit 20 or above. Recommendation: seed this retry rule into the agent system prompt/instructions upfront to prevent the initial discovery loop.
+Some MCP clients, including Codex Desktop, use deferred/lazy tool discovery. Depending on the query and limit, tool_search may show only part of the tool list, so recall can be missing from storage-biased queries with a low limit even though it always exists in tools/list. If recall is not visible, retry with a broader query and limit 20 or above. Recommended: put this retry rule in the agent system prompt/instructions upfront to avoid the initial discovery loop.
 
 - query: `memento context recall remember reflect batch_remember search_traces reconstruct_history`
 - limit: 20 or above

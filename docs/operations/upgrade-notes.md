@@ -1,10 +1,10 @@
 # 업그레이드 노트
 
-이미 설치해서 쓰고 있는 서버를 새 버전으로 올릴 때 보는 문서다. 처음 설치한다면 [README](../../README.md#어떻게-설치하는데)를 본다.
+이미 설치해 쓰는 서버를 새 버전으로 올릴 때 보는 문서다. 처음 설치하는 경우에는 [README](../../README.md#어떻게-설치하는데)를 본다.
 
 ## 공통 절차
 
-모든 업그레이드는 같은 순서다.
+업그레이드는 모두 같은 순서로 진행한다.
 
 1. 백업한다. `scripts/ops/backup.sh --label pre-migration`
 2. 코드를 받는다.
@@ -12,15 +12,15 @@
    git pull origin main
    npm install
    ```
-3. 마이그레이션을 먼저 적용한다. 서버 재시작보다 먼저 해야 한다. 새 코드가 새 컬럼을 쓰기 때문이다.
+3. 마이그레이션을 먼저 적용한다. 서버 재시작보다 앞서 해야 한다. 새 코드가 새 컬럼을 쓰기 때문이다.
    ```bash
    npm run migrate
    ```
 4. 서비스를 재시작한다. (systemd, pm2, docker 등 쓰는 방식대로)
 
-`npm run migrate`는 아직 적용하지 않은 마이그레이션만 순서대로 적용한다. 오래된 버전에서 올려도 같은 명령이다. DB 접속 정보는 `.env`에서 읽는다.
+`npm run migrate`는 아직 적용하지 않은 마이그레이션만 순서대로 적용한다. 오래된 버전에서 올릴 때도 명령은 같다. DB 접속 정보는 `.env`에서 읽는다.
 
-대부분의 업그레이드는 여기서 끝난다. 아래 경우에만 추가 작업이 있다.
+대부분은 여기서 끝난다. 아래 경우에만 작업이 더 필요하다.
 
 ## 추가 작업이 필요한 경우
 
@@ -34,15 +34,15 @@
 
 ## 1. 앵커 권한, 관리자 계정, 본문 어휘 검색 (migration-053 ~ 060)
 
-바뀌는 것:
+바뀌는 내용은 다음과 같다.
 
 - 앵커를 지정하려면 키에 `anchor` 권한이 있어야 한다.
 - 비밀번호와 TOTP로 로그인하는 관리자 계정이 생긴다.
 - `recall`에 본문 단어로 찾는 검색 경로가 추가된다.
 
-이 마이그레이션은 열과 표만 더한다. 행이 많은 표의 색인은 마이그레이션이 만들지 않고 `scripts/ops/online-index.mjs`가 쓰기를 막지 않고 만든다.
+이 마이그레이션은 열과 표만 더한다. 행이 많은 표의 색인은 마이그레이션에서 만들지 않고, `scripts/ops/online-index.mjs`가 쓰기를 막지 않은 채 만든다.
 
-기존 설치의 순서:
+기존 설치에서는 이 순서로 진행한다.
 
 1. 배포 전에 앵커를 쓰는 키에 권한을 준다.
    ```bash
@@ -50,7 +50,7 @@
    ```
 2. `npm run migrate` 전에 `case_events(source_fragment_id)` 색인을 만든다. 명령은 [online-migration.md](online-migration.md#migration-053--060-배포-순서)에 있다.
 3. `npm run migrate`를 실행한다.
-4. 마이그레이션 뒤에 본문 어휘 색인을 만든다. 빈 표에서는 바로 끝난다.
+4. 마이그레이션 뒤에 본문 어휘 색인을 만든다. 빈 표라면 바로 끝난다.
    ```bash
    node scripts/ops/online-index.mjs --dry-run --index idx_fragments_content_tokens
    PGHOST=<호스트> PGDATABASE=<DB> PGUSER=<사용자> PGPASSWORD=<비밀번호> \
@@ -67,7 +67,7 @@
 참고:
 
 - 4번의 색인이 유효해지기 전에는 본문 어휘 검색이 동작하지 않는다.
-- 관리자 계정을 쓰려면 먼저 환경 변수 `MEMENTO_ADMIN_SEAL_KEY`(32바이트, base64 또는 64자 hex)를 설정한다. `openssl rand -hex 32`의 출력을 쓰면 된다. 이 값은 서버 환경 변수와 오프라인 사본에만 두고 저장소나 로그에 쓰지 않는다.
+- 관리자 계정을 쓰려면 먼저 환경 변수 `MEMENTO_ADMIN_SEAL_KEY`(32바이트, base64 또는 64자 hex)를 설정한다. `openssl rand -hex 32`의 출력을 쓰면 된다. 이 값은 서버 환경 변수와 오프라인 사본에만 두고, 저장소나 로그에는 남기지 않는다.
 - 관리자 계정이 없으면 마스터 키 로그인만 동작한다. 첫 owner 계정은 마스터 키로 `POST /v1/internal/model/nothing/admin-users/bootstrap`을 호출해 만든다.
 
 되돌리기는 [online-migration.md](online-migration.md#migration-053--060-배포-순서)에 있다.
@@ -147,18 +147,18 @@ SELECT c.relname, i.indisvalid, i.indisready
 
 ## 4. 임베딩 제공자나 차원을 바꿨을 때
 
-`.env`의 `EMBEDDING_PROVIDER`나 `EMBEDDING_DIMENSIONS`를 바꾸면 벡터 컬럼의 차원을 맞추고 기존 파편의 임베딩을 다시 만들어야 한다.
+`.env`에서 `EMBEDDING_PROVIDER`나 `EMBEDDING_DIMENSIONS`를 바꾸면 벡터 컬럼 차원을 새 설정에 맞춰야 한다. 기존 파편의 임베딩도 다시 만든다.
 
 ```bash
 EMBEDDING_DIMENSIONS=<새 차원> node scripts/post-migrate-flexible-embedding-dims.js
 node scripts/backfill-embeddings.js
 ```
 
-2000차원을 넘는 모델(예: Gemini `gemini-embedding-001`, 3072차원)도 같은 스크립트로 맞춘다. 로컬 모델로 바꾸는 전체 절차는 [로컬 임베딩 가이드](../embedding-local.md)에 있다.
+2000차원을 넘는 모델도 같은 스크립트로 맞출 수 있다. 예를 들어 Gemini `gemini-embedding-001`은 3072차원이다. 로컬 모델로 바꾸는 전체 절차는 [로컬 임베딩 가이드](../embedding-local.md)에 정리돼 있다.
 
 ## 5. 행이 매우 많은 운영 DB
 
-migration-034 번들은 트랜잭션 안에서 `CREATE UNIQUE INDEX`를 실행한다. 수백만 건 이상의 표에서 잠금을 줄이려면 `npm run migrate` 전에 아래 두 문을 직접 실행한다. 이미 있으면 마이그레이션이 건너뛴다.
+migration-034 번들은 트랜잭션 안에서 `CREATE UNIQUE INDEX`를 실행한다. 표에 수백만 건 이상이 있고 잠금을 줄여야 한다면, `npm run migrate`를 실행하기 전에 아래 두 문을 직접 실행한다. 이미 색인이 있으면 마이그레이션은 해당 작업을 건너뛴다.
 
 ```sql
 CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_fragments_idempotency_tenant
@@ -170,12 +170,12 @@ CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_fragments_idempotency_master
   WHERE idempotency_key IS NOT NULL AND key_id IS NULL;
 ```
 
-적용 여부는 psql에서 `\d agent_memory.fragments`로 두 색인이 보이는지 확인한다.
+적용됐는지는 psql에서 `\d agent_memory.fragments`를 실행해 두 색인이 보이는지 확인한다.
 
 ## 마이그레이션 파일을 직접 다룰 때
 
-- 파일 하나만 수동 적용: `psql $DATABASE_URL -f lib/memory/migrations/<파일>`. 되도록 `npm run migrate`를 쓴다. 적용 이력과 opclass 치환을 자동으로 처리한다.
+- 파일 하나만 수동으로 적용: `psql $DATABASE_URL -f lib/memory/migrations/<파일>`. 가능하면 `npm run migrate`를 쓴다. 적용 이력과 opclass 치환을 자동으로 처리한다.
 - migration-046은 결번이다.
-- 새 마이그레이션 파일을 추가했다면 실행 전에 `npm run lint:migrations`로 규약을 검사한다. 규약은 [migration-conventions.md](../migration-conventions.md).
-- 롤백용 SQL은 `rollback-migration-NNN-*.sql`로 이름 짓는다. `migrate`는 `migration-*.sql`만 자동으로 집으므로 `rollback-` 접두어가 붙은 파일은 실행되지 않는다.
-- 선택 정리: `node scripts/cleanup-noise.js --dry-run`으로 미리 보고 `--execute`로 노이즈 파편을 지운다. 오래된 설치에서 임베딩 정규화를 한 번 해야 하면 `node scripts/normalize-vectors.js`.
+- 새 마이그레이션 파일을 추가했다면 실행 전에 `npm run lint:migrations`로 규약을 검사한다. 규약은 [migration-conventions.md](../migration-conventions.md)에 있다.
+- 롤백용 SQL은 `rollback-migration-NNN-*.sql` 형식으로 이름 짓는다. `migrate`는 `migration-*.sql`만 자동으로 집으므로, `rollback-` 접두어가 붙은 파일은 실행하지 않는다.
+- 선택 정리: `node scripts/cleanup-noise.js --dry-run`으로 먼저 확인하고 `--execute`로 노이즈 파편을 지운다. 오래된 설치에서 임베딩 정규화가 한 번 필요하면 `node scripts/normalize-vectors.js`를 실행한다.

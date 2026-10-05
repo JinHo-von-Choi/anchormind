@@ -1,10 +1,10 @@
 # Upgrade Notes
 
-For servers that are already installed and need to move to a new version. For a first install, see the [README](../../README.en.md#how-do-i-install-it).
+Use this for servers that are already installed and need to move to a new version, with the existing data and setup kept in place. First install? See the [README](../../README.en.md#how-do-i-install-it).
 
 ## Common procedure
 
-Every upgrade follows the same order.
+Use this order every time. It keeps migrations ahead of the restart, which matters because the new code expects the new columns to exist.
 
 1. Back up. `scripts/ops/backup.sh --label pre-migration`
 2. Get the code.
@@ -12,35 +12,35 @@ Every upgrade follows the same order.
    git pull origin main
    npm install
    ```
-3. Apply migrations first, before restarting. The new code uses the new columns.
+3. Run migrations before restarting. The new code uses the new columns.
    ```bash
    npm run migrate
    ```
-4. Restart the service (systemd, pm2, docker, whatever you use).
+4. Restart the service: systemd, pm2, docker, or whatever you use.
 
-`npm run migrate` applies only the migrations not yet applied, in order. The command is the same when upgrading from an old version. It reads DB connection settings from `.env`.
+`npm run migrate` applies only migrations that have not been applied yet, in order. Same command for old versions. It reads DB connection settings from `.env`.
 
-Most upgrades end here. Only the cases below need extra work.
+Most upgrades stop here. Only the cases below need extra work.
 
 ## When extra work is needed
 
 | Situation | What to do |
 |-----------|-----------|
-| Update that adds anchor permission, admin accounts and body lexical search (migration-053 to 060) | [Section 1](#1-anchor-permission-admin-accounts-body-lexical-search-migration-053-to-060) |
-| Update that changes how duplicates are judged (migration-050) | [Section 2](#2-duplicate-scope-switch-migration-050) |
-| Update that introduces agent scope (migration-047) | [Section 3](#3-agent-scope-switch-migration-047) |
+| Update adds anchor permission, admin accounts, and body lexical search (migration-053 to 060) | [Section 1](#1-anchor-permission-admin-accounts-body-lexical-search-migration-053-to-060) |
+| Update changes how duplicates are judged (migration-050) | [Section 2](#2-duplicate-scope-switch-migration-050) |
+| Update introduces agent scope (migration-047) | [Section 3](#3-agent-scope-switch-migration-047) |
 | You changed the embedding provider or dimension | [Section 4](#4-after-changing-the-embedding-provider-or-dimension) |
-| Production DB with millions of rows | [Section 5](#5-very-large-production-databases) |
+| Production DB has millions of rows | [Section 5](#5-very-large-production-databases) |
 
 ## 1. Anchor permission, admin accounts, body lexical search (migration-053 to 060)
 
 What changes:
 
-- Setting an anchor requires the `anchor` permission on the key.
-- Admin accounts that sign in with a password and TOTP are added.
-- `recall` gains a search path that matches words in the body text.
+- Setting an anchor now requires the `anchor` permission on the key.
+- Admin accounts can sign in with a password and TOTP.
+- `recall` can now match words in the body text.
 
-These migrations only add columns and tables. Indexes on large tables are not created by the migration; `scripts/ops/online-index.mjs` builds them without blocking writes.
+These migrations only add columns and tables. They do not create indexes on large tables; use `scripts/ops/online-index.mjs` to build those indexes while writes continue.
 
 Order for an existing installation:
 
@@ -48,9 +48,9 @@ Order for an existing installation:
    ```bash
    node scripts/grant-anchor-permission.js --apply
    ```
-2. Before `npm run migrate`, build the `case_events(source_fragment_id)` index. The command is in [online-migration.md](online-migration.md#migration-053--060-배포-순서).
+2. Before `npm run migrate`, build the `case_events(source_fragment_id)` index. See [online-migration.md](online-migration.md#migration-053--060-배포-순서) for the command.
 3. Run `npm run migrate`.
-4. After the migration, build the body lexical index. On an empty table it finishes immediately.
+4. After the migration, build the body lexical index. It finishes right away on an empty table.
    ```bash
    node scripts/ops/online-index.mjs --dry-run --index idx_fragments_content_tokens
    PGHOST=<host> PGDATABASE=<db> PGUSER=<user> PGPASSWORD=<password> \
@@ -62,21 +62,21 @@ Order for an existing installation:
    node scripts/ops/backfill-key-secrets.mjs --confirm
    ```
 
-A newly installed server only needs step 4.
+A new server only needs step 4.
 
 Notes:
 
-- Until the index in step 4 is valid, body lexical search does not take part in `recall`.
-- To use admin accounts, first set the environment variable `MEMENTO_ADMIN_SEAL_KEY` (32 bytes, base64 or 64-char hex). The output of `openssl rand -hex 32` works. Keep it only in the server environment and an offline copy, never in the repository or logs.
-- Without admin accounts only master-key sign-in works. Create the first owner by calling `POST /v1/internal/model/nothing/admin-users/bootstrap` with the master key.
+- Body lexical search is not used by `recall` until the index in step 4 is valid.
+- To use admin accounts, first set `MEMENTO_ADMIN_SEAL_KEY` in the environment. It must be 32 bytes, either base64 or 64-char hex; `openssl rand -hex 32` produces a valid value. Keep it in the server environment and in an offline copy, never in the repository or logs.
+- Without admin accounts, only master-key sign-in works. Create the first owner by calling `POST /v1/internal/model/nothing/admin-users/bootstrap` with the master key.
 
-Rollback is described in [online-migration.md](online-migration.md#migration-053--060-배포-순서).
+Rollback is covered in [online-migration.md](online-migration.md#migration-053--060-배포-순서).
 
 ## 2. Duplicate scope switch (migration-050)
 
-What changes: identical text is now judged a duplicate per key and workspace instead of per key (`MEMENTO_DEDUP_SCOPE=workspace`, the default).
+What changes: identical text is now judged a duplicate by key plus workspace, rather than by key alone (`MEMENTO_DEDUP_SCOPE=workspace`, the default). Workspace is part of the check.
 
-The migration alone does not finish the switch. The per-key indexes are still there, so a finishing command is needed.
+The migration does not complete the switch by itself. The old per-key indexes remain in place, so you still need to run the finishing command.
 
 ```bash
 # Without options it only prints what it would do
@@ -87,7 +87,7 @@ PGHOST=<host> PGDATABASE=<db> PGUSER=<user> PGPASSWORD=<password> \
   node scripts/ops/finish-dedup-scope.mjs --confirm
 ```
 
-To see which indexes currently exist:
+To check which indexes exist now:
 
 ```sql
 SELECT c.relname, i.indisvalid, i.indisready
@@ -99,7 +99,7 @@ SELECT c.relname, i.indisvalid, i.indisready
                      'uq_frag_hash_ws_per_key', 'uq_frag_hash_ws_master');
 ```
 
-On a large production DB, build the new index before `npm run migrate`. Procedure and rollback: [online-migration.md](online-migration.md#중복-판정-범위-전환).
+For a large production DB, build the new index before `npm run migrate`. See the procedure and rollback notes here: [online-migration.md](online-migration.md#중복-판정-범위-전환).
 
 ## 3. Agent scope switch (migration-047)
 
@@ -147,18 +147,18 @@ Rows whose source is missing or deleted stay quarantined. If any exist the run f
 
 ## 4. After changing the embedding provider or dimension
 
-If you change `EMBEDDING_PROVIDER` or `EMBEDDING_DIMENSIONS` in `.env`, align the vector column dimension and regenerate embeddings for existing fragments.
+If you change `EMBEDDING_PROVIDER` or `EMBEDDING_DIMENSIONS` in `.env`, make the vector column dimension match and regenerate embeddings for existing fragments. Keep them in sync.
 
 ```bash
 EMBEDDING_DIMENSIONS=<new dimension> node scripts/post-migrate-flexible-embedding-dims.js
 node scripts/backfill-embeddings.js
 ```
 
-Models above 2000 dimensions (for example Gemini `gemini-embedding-001`, 3072) use the same script. The full procedure for switching to a local model is in the [local embedding guide](../embedding-local.md).
+Use the same script for models above 2000 dimensions, including Gemini `gemini-embedding-001` at 3072; for switching to a local model, follow the [local embedding guide](../embedding-local.md). No separate path is needed.
 
 ## 5. Very large production databases
 
-The migration-034 bundle runs `CREATE UNIQUE INDEX` inside a transaction. On tables with millions of rows, run these two statements by hand before `npm run migrate` to reduce locking. If they already exist the migration skips them.
+The migration-034 bundle runs `CREATE UNIQUE INDEX` inside a transaction. This can lock busy tables. On tables with millions of rows, run these two statements by hand before `npm run migrate` to reduce locking; if the indexes already exist, the migration skips them.
 
 ```sql
 CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_fragments_idempotency_tenant
@@ -174,8 +174,8 @@ To confirm, run `\d agent_memory.fragments` in psql and check that both indexes 
 
 ## Working with migration files directly
 
-- To apply a single file by hand: `psql $DATABASE_URL -f lib/memory/migrations/<file>`. Prefer `npm run migrate`, which also records history and handles the opclass replacement.
-- migration-046 does not exist (a deliberate gap).
-- If you added a new migration file, run `npm run lint:migrations` first. Conventions: [migration-conventions.md](../migration-conventions.md).
-- Name rollback SQL `rollback-migration-NNN-*.sql`. `migrate` only picks up `migration-*.sql`, so files with the `rollback-` prefix are never run automatically.
-- Optional cleanup: preview with `node scripts/cleanup-noise.js --dry-run`, then remove noise fragments with `--execute`. If an old installation needs a one-time embedding normalization, run `node scripts/normalize-vectors.js`.
+- To apply one file by hand: `psql $DATABASE_URL -f lib/memory/migrations/<file>`. Use `npm run migrate` when you can; it also records history and handles the opclass replacement.
+- migration-046 does not exist. The gap is deliberate.
+- If you added a new migration file, run `npm run lint:migrations` first. Conventions are in [migration-conventions.md](../migration-conventions.md).
+- Name rollback SQL `rollback-migration-NNN-*.sql`. `migrate` only picks up `migration-*.sql`, so files with the `rollback-` prefix never run automatically.
+- Optional cleanup: preview with `node scripts/cleanup-noise.js --dry-run`, then remove noise fragments with `--execute`. For old installations that need one-time embedding normalization, run `node scripts/normalize-vectors.js`.

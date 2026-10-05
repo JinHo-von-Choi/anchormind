@@ -62,15 +62,15 @@ AnchorMind가 제공하는 기능, 응답 메타, 선택 모듈, 기술 스택�
 
 ## 사용 패턴
 
-AnchorMind는 사실 기억(fact cache)에 잘 맞다. 전후관계가 중요하다면 다음 방식을 쓴다.
+AnchorMind는 사실 기억(fact cache)에 맞다. 전후관계가 중요할 때는 아래 방식을 쓴다.
 
-- `episode` 유형으로 서사를 저장하면 "왜 그런 결정을 했는지"까지 복원된다.
-- `contextSummary`를 함께 저장하면 recall 때 맥락도 같이 반환된다.
-- 메인 메모리 시스템(MEMORY.md 등)과 함께 쓰는 방식도 쓸 만하다. 사실 검색은 AnchorMind가 맡고, 맥락 복원은 메인 메모리가 맡는 이원화 구조다.
+- `episode` 유형으로 서사를 저장하면 "왜 그런 결정을 했는지"까지 되살릴 수 있다.
+- `contextSummary`를 함께 저장하면 recall 때 맥락도 같이 돌아온다.
+- 메인 메모리 시스템(MEMORY.md 등)과 나눠 쓰는 방식도 괜찮다. 사실 검색은 AnchorMind가 맡고, 맥락 복원은 메인 메모리가 맡는 구조다.
 
 ## API 응답 메타
 
-`recall` / `context` 응답에는 `_meta: { searchEventId, hints, suggestion, serverTime }` 필드가 포함된다. `serverTime`은 LLM 클라이언트가 학습 시점의 시간에 묶이지 않도록, 매 응답마다 서버의 현재 시각을 노출한다.
+`recall` / `context` 응답에는 `_meta: { searchEventId, hints, suggestion, serverTime }` 필드가 들어간다. `serverTime`은 LLM 클라이언트가 학습 시점의 시간에 묶이지 않도록, 응답마다 서버의 현재 시각을 보여준다.
 
 ```json
 {
@@ -93,18 +93,18 @@ AnchorMind는 사실 기억(fact cache)에 잘 맞다. 전후관계가 중요하
 
 `remember` / `amend` / `forget`의 성공 응답에는 일정 확률로 `_meta.hints`에 `feedback_sampled` 신호가 실린다. 힌트의 `args`를 그대로 `tool_feedback`에 넘겨 결과를 평가하면 된다(`MEMENTO_FEEDBACK_SAMPLING=false`로 비활성화).
 
-`remember` / `link` / `forget` / `amend`는 `dryRun: true` 파라미터를 받으며, 이 경우 부작용 없이 예상 결과만 반환한다. API 키 세션의 `POST /mcp` 응답에는 `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Resource: fragments` 헤더가 붙는다(파편 할당량 기준). master key이거나 할당량이 null이면 이 헤더는 생략된다. `recall`은 `fields` 배열을 통해 반환 필드를 19개 화이트리스트 안에서 제한할 수 있다. `remember` / `batchRemember`는 `idempotencyKey` 파라미터로 같은 key_id 범위 안의 중복 저장을 막는다(최대 128자). `remember` / `batchRemember` 항목 / `amend`의 `content`가 4000자를 넘으면 JSON-RPC -32602 에러로 거부된다. 앞서 말한 파편 유형별 저장 절삭(1000자/300자)과는 별개로, 그보다 앞단에서 적용되는 수신 게이트다. `batchRemember`에서는 초과 항목만 실패 처리되고 나머지 배치는 그대로 진행된다.
+`remember` / `link` / `forget` / `amend`는 `dryRun: true` 파라미터를 받는다. 이 값을 쓰면 부작용 없이 예상 결과만 돌려준다. API 키 세션의 `POST /mcp` 응답에는 `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Resource: fragments` 헤더가 붙는다(파편 할당량 기준). master key이거나 할당량이 null이면 이 헤더는 생략된다. `recall`은 `fields` 배열로 반환 필드를 19개 화이트리스트 안에서 제한할 수 있다. `remember` / `batchRemember`는 `idempotencyKey` 파라미터로 같은 key_id 범위 안의 중복 저장을 막는다(최대 128자). `remember` / `batchRemember` 항목 / `amend`의 `content`가 4000자를 넘으면 JSON-RPC -32602 에러로 거부된다. 앞서 말한 파편 유형별 저장 절삭(1000자/300자)과는 별개로, 그보다 먼저 적용되는 수신 게이트다. `batchRemember`에서는 초과 항목만 실패하고 나머지 배치는 그대로 진행된다.
 
 ## Symbolic Verification Layer
 
-선택적 설명 가능성, advisory 링크 무결성, 극성 충돌 탐지, 정책 규칙 soft gating을 다룬다. 구성은 8 core 모듈 + 2 규칙 파일이며, 모든 플래그는 기본값이 비활성이다.
+선택적 설명 가능성, advisory 링크 무결성, 극성 충돌 탐지, 정책 규칙 soft gating을 다룬다. 구성은 8 core 모듈 + 2 규칙 파일이다. 모든 플래그의 기본값은 비활성이다.
 
 ## Smart Recall
 
 - ProactiveRecall: `remember()` 시 키워드 오버랩을 기준으로 유사 파편을 자동 링크한다.
 - CaseRewardBackprop: case verification 이벤트가 발생하면 증거 파편의 importance를 자동 역전파한다.
 - SearchParamAdaptor: 사용 패턴에 맞춰 검색 임계값을 자동 조정한다.
-- CBR(Case-Based Reasoning): `recall(caseMode=true)`로 유사 사례의 goal → events → outcome 흐름을 찾아 과거 해결 패턴을 다시 쓴다.
+- CBR(Case-Based Reasoning): `recall(caseMode=true)`로 유사 사례의 goal → events → outcome 흐름을 찾고, 과거 해결 패턴을 다시 쓴다.
 - depth 필터: Planner/Executor 역할에 따라 검색 깊이를 조정한다(`"high-level"` / `"detail"` / `"tool-level"`).
 - recall 응답 `key_id`: 반환 파편에 소유 테넌트 식별자를 포함한다.
 - Reconsolidation: `tool_feedback`을 바탕으로 `fragment_links` weight/confidence를 실시간 갱신한다(`ENABLE_RECONSOLIDATION=true`).
@@ -114,13 +114,13 @@ AnchorMind는 사실 기억(fact cache)에 잘 맞다. 전후관계가 중요하
 
 ## 기술 스택
 
-- Node.js 20+
+- Node.js 22+
 - PostgreSQL 14+ (pgvector 확장)
 - Redis 6+ (선택)
 - OpenAI Embedding API (선택) 또는 `EMBEDDING_PROVIDER=transformers` (로컬 저비용 모드)
-- garu-ko / natural PorterStemmer / @node-rs/jieba / kuromoji (로컬 형태소 분석, 언어별 CPU 라우팅; `MEMENTO_MORPHEME_TOKENIZER=local` 기본)
-- LLM provider 18종(CLI: gemini-cli, agy-cli, codex-cli, copilot-cli, qwen-cli, opencode-cli / HTTP: openai, anthropic, gemini, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai). 품질 평가와 자동 reflect 등에 선택적으로 쓰며, LLM_PRIMARY / LLM_FALLBACKS로 체인을 구성한다(기본 `gemini-cli`).
+- garu-ko / natural PorterStemmer / @node-rs/jieba / kuromoji (로컬 형태소 분석, 언어별 CPU 라우팅. 기본값은 `MEMENTO_MORPHEME_TOKENIZER=local`)
+- LLM provider 18종(CLI: gemini-cli, agy-cli, codex-cli, copilot-cli, qwen-cli, opencode-cli / HTTP: openai, anthropic, gemini, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai). 품질 평가와 자동 reflect 등에 선택적으로 사용하며, LLM_PRIMARY / LLM_FALLBACKS로 체인을 구성한다. 기본값은 `gemini-cli`다.
 - @huggingface/transformers + ONNX Runtime (NLI 모순 분류 + 로컬 임베딩, CPU 전용)
 - MCP Protocol 2025-11-25
 
-PostgreSQL만 있어도 저장, keywords 배열 일치 회상, 링크, 관리 기능은 동작한다. 자연어 `text` 질의 회상은 임베딩이 있어야 결과를 낸다. Redis를 추가하면 L1 캐스케이드 검색과 SessionActivityTracker가 활성화되고, OpenAI API 또는 `EMBEDDING_PROVIDER=transformers`를 추가하면 L3 시맨틱 검색과 자동 링크가 활성화된다.
+PostgreSQL만 있어도 저장, keywords 배열 일치 회상, 링크, 관리 기능은 동작한다. 자연어 `text` 질의 회상은 임베딩이 있어야 결과를 낸다. Redis를 붙이면 L1 캐스케이드 검색과 SessionActivityTracker가 켜진다. OpenAI API 또는 `EMBEDDING_PROVIDER=transformers`를 추가하면 L3 시맨틱 검색과 자동 링크도 사용할 수 있다.

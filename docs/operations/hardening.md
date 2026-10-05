@@ -1,6 +1,6 @@
 # 보안과 운영 점검
 
-서버를 인터넷에 열기 전에 할 일, 이미 적용되는 보호 장치, 운영 중 점검 항목을 모았다.
+서버를 인터넷에 열기 전 해야 할 일을 정리했다. 지금 적용된 보호 장치와 운영 중 확인할 항목도 함께 모았다.
 
 ## 외부에 공개하기 전에 할 일
 
@@ -51,15 +51,15 @@
 
 ## 항상 적용되는 보호
 
-- 권한 기본 거부: `TOOL_PERMISSIONS`에 없는 도구 이름은 권한 설정과 관계없이 거부한다.
-- 키별 격리: `forget`, `amend`, `link`, `fragment_history`는 SQL 조건에 `key_id`를 넣어 다른 키의 파편에 닿지 못하게 한다. "없음"과 "권한 없음"에는 같은 메시지를 돌려 존재 여부도 드러나지 않는다.
-- 세션 정보 위조 차단: 클라이언트가 `_keyId`, `_permissions` 같은 내부 필드를 보내도 서버의 인증 결과로 다시 덮어쓴다.
-- 키 상태 재확인: API 키로 연 세션은 `MEMENTO_SESSION_KEY_RECHECK_MS`(기본 30000ms, 0이면 끔)마다 키 상태를 다시 읽는다. 키가 비활성화되거나 삭제되면 해당 세션은 닫히고 404 `Session not found`를 받는다. 권한 변경도 열려 있는 세션에 반영된다.
-- 관리 API 권한: 요청마다 라우트에 지정된 능력을 확인하고, 표에 없는 경로는 owner만 쓴다. 관리자 계정은 TOTP(owner와 admin 필수)로 로그인하며, 세션 쿠키에는 `SameSite=Strict`와 이중 제출 CSRF 확인을 쓴다. 마스터 키 로그인은 비상용으로 남겨 둔다.
-- 출처와 검토: 파편의 `origin`과 `trust_tier`를 보고 신뢰가 낮은 내용은 ANCHOR와 CORE 주입에서 뺀다. 지시를 덮어쓰려는 문구는 검토 대기열로 보낸다.
+- 기본 권한 거부: `TOOL_PERMISSIONS`에 없는 도구 이름은 권한 설정과 무관하게 거부한다.
+- 키별 격리: `forget`, `amend`, `link`, `fragment_history`는 SQL 조건에 `key_id`를 넣는다. 다른 키의 파편에 닿지 못하게 하기 위해서다. "없음"과 "권한 없음"에는 같은 메시지를 돌려 존재 여부도 드러내지 않는다.
+- 세션 정보 위조 차단: 클라이언트가 `_keyId`, `_permissions` 같은 내부 필드를 보내더라도 서버의 인증 결과로 다시 덮어쓴다.
+- 키 상태 재확인: API 키로 연 세션은 `MEMENTO_SESSION_KEY_RECHECK_MS`(기본 30000ms, 0이면 끔)마다 키 상태를 다시 읽는다. 키가 비활성화되거나 삭제되면 세션은 닫히고 404 `Session not found`를 받는다. 권한 변경도 열린 세션에 반영된다.
+- 관리 API 권한: 요청마다 라우트에 지정된 능력을 확인한다. 표에 없는 경로는 owner만 쓴다. 관리자 계정은 TOTP(owner와 admin 필수)로 로그인하고, 세션 쿠키에는 `SameSite=Strict`와 이중 제출 CSRF 확인을 쓴다. 마스터 키 로그인은 비상용으로 남겨 둔다.
+- 출처와 검토: 파편의 `origin`과 `trust_tier`를 확인해 신뢰가 낮은 내용은 ANCHOR와 CORE 주입에서 제외한다. 지시를 덮어쓰려는 문구는 검토 대기열로 보낸다.
 - 키 수명: 만료, 허용 주소 대역, 교체, 폐기를 지원한다. 폐기한 키의 세션은 즉시 닫힌다.
-- 호출 제한: `/auth`, `/keys` POST, `/import` POST에는 IP 기준 제한을 둔다. 그 밖에는 API 키당 분당 100회, IP당 분당 30회이며 환경 변수로 조정한다. `initialize`, `GET /sse`, `/token`, `/register`, `/authorize`는 IP 한도를 함께 쓰고, 한도를 넘으면 429와 `Retry-After`를 돌려준다.
-- 감사 기록: 도구 호출 기록에는 행위자(`key=`, `sid=` 앞 8자, `ip=`)가 붙는다. 관리 API의 변경 요청(GET 제외)과 관리 인증의 성공·실패도 남긴다.
+- 호출 제한: `/auth`, `/keys` POST, `/import` POST에는 IP 기준 제한을 둔다. 그 밖의 요청은 API 키당 분당 100회, IP당 분당 30회이며 환경 변수로 조정할 수 있다. `initialize`, `GET /sse`, `/token`, `/register`, `/authorize`는 IP 한도를 함께 쓰고, 한도를 넘으면 429와 `Retry-After`를 돌려준다.
+- 감사 기록: 도구 호출 기록에는 행위자(`key=`, `sid=` 앞 8자, `ip=`)를 남긴다. 관리 API의 변경 요청(GET 제외)과 관리 인증의 성공·실패도 기록한다.
 - 응답 헤더: 모든 응답에 `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`를 붙인다.
 - OpenAPI: `ENABLE_OPENAPI=true`이면 `GET /openapi.json`을 연다. 마스터 키는 전체 경로를 받고, API 키는 권한으로 걸러진 명세만 받는다.
 
@@ -69,30 +69,30 @@
 
 | 주소 | 의미 |
 |------|------|
-| `/health` | DB, Redis, pgvector, 워커 상태를 함께 본다. 일부만 죽으면 degraded로 응답한다. 인증 없는 요청에는 상태만 돌려준다. |
-| `/health/live` | 프로세스가 살아 있는지만 확인한다. 항상 200이다. |
-| `/health/ready` | 주 DB가 `MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`(기본 2000) 안에 응답하면 200이다. 응답하지 못하면 `db_timeout` 또는 `db_error`와 함께 503을 돌려준다. |
+| `/health` | DB, Redis, pgvector, 워커 상태를 함께 확인한다. 일부만 죽어 있으면 degraded로 응답한다. 인증 없는 요청에는 상태만 반환한다. |
+| `/health/live` | 프로세스가 살아 있는지만 본다. 항상 200이다. |
+| `/health/ready` | 주 DB가 `MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`(기본 2000) 안에 응답하면 200이다. 응답하지 못하면 `db_timeout` 또는 `db_error`와 함께 503을 반환한다. |
 
-`memento-watchdog.sh`는 `/health/live`가 응답하지 않을 때만 서비스를 재시작한다. 연속 재시작이 일어나면 간격을 지수로 늘리고, 중복 실행은 잠금으로 막는다.
+`memento-watchdog.sh`는 `/health/live`가 응답하지 않을 때만 서비스를 재시작한다. 재시작이 연속으로 일어나면 간격을 지수로 늘리고, 잠금으로 중복 실행을 막는다.
 
 ### 자동으로 되는 것
 
-- 워커 복구: 임베딩 워커와 평가 워커가 오류를 내면 1초에서 60초까지 지수 백오프로 다시 시도한다.
-- 정상 종료: `SIGTERM`을 받으면 진행 중인 워커를 최대 30초까지 기다린 뒤 세션의 auto-reflect를 실행한다. 전체 종료 절차는 `MEMENTO_SHUTDOWN_DEADLINE_MS`(기본 60000, 0이면 제한 없음) 안에서 끝내며, 시간을 넘기면 종료 코드 1로 강제 종료한다.
-- OAuth 오류 응답: 인증에 실패하면 `WWW-Authenticate` 헤더를 돌려 OAuth 클라이언트가 인증 흐름을 시작할 수 있게 한다. 세션 TTL 기본값은 43200분(30일)이고 `SESSION_TTL_MINUTES`로 바꾼다.
+- 워커 복구: 임베딩 워커와 평가 워커가 오류를 내면 1초부터 60초까지 지수 백오프로 다시 시도한다.
+- 정상 종료: `SIGTERM`을 받으면 진행 중인 워커를 최대 30초까지 기다린 뒤 세션의 auto-reflect를 실행한다. 전체 종료 절차는 `MEMENTO_SHUTDOWN_DEADLINE_MS`(기본 60000, 0이면 제한 없음) 안에서 끝낸다. 시간을 넘기면 종료 코드 1로 강제 종료한다.
+- OAuth 오류 응답: 인증에 실패하면 `WWW-Authenticate` 헤더를 반환해 OAuth 클라이언트가 인증 흐름을 시작할 수 있게 한다. 세션 TTL 기본값은 43200분(30일)이며 `SESSION_TTL_MINUTES`로 바꿀 수 있다.
 
 ### 직접 실행하는 것
 
-- 백업: `scripts/ops/backup.sh`가 `agent_memory` 스키마를 `pg_dump`하고 기본 14일 동안 보관한다. `scripts/ops/restore-verify.mjs`는 일회용 시험 서버에 복원한 뒤 매니페스트와 대조한다. 절차는 [backup-restore.md](backup-restore.md)에 있다.
+- 백업: `scripts/ops/backup.sh`가 `agent_memory` 스키마를 `pg_dump`하고 기본 14일 동안 보관한다. `scripts/ops/restore-verify.mjs`는 일회용 시험 서버에 복원한 뒤 매니페스트와 맞는지 확인한다. 절차는 [backup-restore.md](backup-restore.md)에 있다.
 - 큰 표의 색인: `scripts/ops/online-index.mjs`가 쓰기를 막지 않고 색인을 만든다(`--dry-run`, `--confirm`). 절차는 [online-migration.md](online-migration.md)를 따른다.
 - 감사 기록 검증: `anchormind audit verify`가 해시 체인을 다시 계산한다. 끊어진 곳이 있으면 종료 코드 1로 끝난다. 관리자 계정을 잃었을 때는 `anchormind admin recover --confirm`로 비상 복구한다.
-- 기능 스위치 점검: `npm run switches`가 스위치마다 적용된 값, 기본값, 상태를 표로 보여 준다. `--strict`를 붙이면 값이 잘못된 스위치가 있을 때 종료 코드 1로 끝난다.
+- 기능 스위치 점검: `npm run switches`가 스위치마다 적용값, 기본값, 상태를 표로 보여 준다. `--strict`를 붙이면 값이 잘못된 스위치가 있을 때 종료 코드 1로 끝난다.
 - 마이그레이션 검사: `npm run lint:migrations`.
 - 메트릭: `/metrics`는 Prometheus 형식으로 열린다. `MEMENTO_ACCESS_KEY`가 설정되어 있으면 마스터 키 인증이 필요하다. 공유 Prometheus용 설정은 [monitoring.md](monitoring.md)에 있다.
 
-더 많은 운영 문서는 이 디렉터리에 있다. LLM provider 체인, symbolic hard gate, agent worktree, upstream porting 등을 다룬다.
+운영 문서는 이 디렉터리에 더 있다. LLM provider 체인, symbolic hard gate, agent worktree, upstream porting 등을 다룬다.
 
 ## 알려진 제한사항
 
-- 자동 품질 평가는 `decision`, `preference`, `relation` 유형만 대상으로 한다. `fact`, `procedure`, `error`는 평가 대기열에 들어가지 않는다.
-- L1 Redis 색인은 API 키 단위다. 핫 캐시와 작업 기억을 채울 때 유효한 agent 범위를 다시 확인하며, agent 정보가 없는 옛 캐시 항목은 안전하게 제외한다.
+- 자동 품질 평가는 `decision`, `preference`, `relation` 유형만 대상으로 한다. `fact`, `procedure`, `error`는 평가 대기열에 넣지 않는다.
+- L1 Redis 색인은 API 키 단위다. 핫 캐시와 작업 기억을 채울 때 유효한 agent 범위를 다시 확인하며, agent 정보가 없는 옛 캐시 항목은 제외한다.

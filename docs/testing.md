@@ -68,10 +68,13 @@ npm run test:integration:llm
 | `npm run audit:ci` | 런타임 의존성 audit-ci 검사 |
 | `npm run lint:migrations` | migration SQL body-only 규약 검사 (MIGRATION_LINT_FROM 기준) |
 | `npm run switches` | 기능 스위치의 적용 값, 기본값, 상태를 표로 출력(`scripts/switch-report.mjs`). `-- --strict`는 값이 잘못된 스위치가 있으면 종료 코드 1 |
+| `npm run env-access` | `lib`, `bin`, `config`, `server.js`의 `process.env` 읽기를 구문 분석으로 찾아 startup, runtime, cli로 분류하고 `config/env-access.js` 대장과 대조한다(`scripts/env-access-report.mjs`, 시험은 `tests/structure/env-access.test.js`). `-- --strict`는 위반이 있으면 종료 코드 1로 끝난다 |
 | `node scripts/import-cycles.js` | `lib`, `config`, `scripts`, `bin`, `server.js`의 상대 경로 import 순환 검사. 정적 import와 동적 import 포함 결과, 비리터럴 동적 import, 해석되지 않는 상대 경로를 따로 출력한다. 단위 시험(`import-cycles.test.js`)은 정적·동적 포함 순환 모두 0건을 요구한다 |
 | `npm run release -- X.Y.Z` | 작업 트리와 HEAD의 Tests 워크플로 결과를 확인한 뒤 CHANGELOG와 버전 표기를 갱신하고 `release: X.Y.Z` 커밋과 annotated tag를 만든다. main 브랜치에서만 실행한다(`scripts/release.js`, 시험은 `release-script.test.js`) |
 
-CI(.github/workflows/test.yml): `unit` 작업(lint, lint:ratchet, lint:migrations, test:coverage, 외부 서비스 없는 통합시험), `runtime-matrix` 작업(Node 20/22/24에서 모듈 적재와 키 미설정 기동 거부 종료 코드 78 확인), `e2e` 작업(pgvector/pgvector:pg15, migrate 후 test:e2e), `db-concurrency` 작업(같은 DB 구성에서 test:db, 제한 시간 10분, `continue-on-error`로 결과만 보고하고 워크플로 결론에는 반영하지 않음). 별도 워크플로 `.github/workflows/audit.yml`(push, pull_request, 매일 예약 실행에서 `audit:ci`), `.github/workflows/codeql.yml`(CodeQL 정적 분석), 로컬 임베딩 e2e는 `.github/workflows/e2e-local-embed.yml`이 맡는다.
+CI(.github/workflows/test.yml): `unit` 작업(lint, lint:ratchet, lint:migrations, test:coverage, 외부 서비스 없는 통합시험), `runtime-matrix` 작업(Node 22/24에서 모듈 적재와 키 미설정 기동 거부 종료 코드 78 확인), `e2e` 작업(pgvector/pgvector:pg15, migrate 후 test:e2e), `db-concurrency` 작업(같은 DB 구성에서 test:db, 제한 시간 10분, `continue-on-error`로 결과만 보고하고 워크플로 결론에는 반영하지 않음). 별도 워크플로 `.github/workflows/audit.yml`(push, pull_request, 매일 예약 실행에서 `audit:ci`), `.github/workflows/codeql.yml`(CodeQL 정적 분석), 로컬 임베딩 e2e는 `.github/workflows/e2e-local-embed.yml`이 맡는다.
+
+별도 워크플로 `.github/workflows/iron-laws.yml`은 오철칙 점검을 돌려 기준선(`.iron-laws-baseline.json`)에 없던 새 지적만 판정한다. 시험 결과와 별개의 상태로 보고하며 병합을 막지 않는다(`continue-on-error`). 도구는 워크플로에 적힌 커밋으로 고정돼 있다. 점검 범위와 제외 목록은 `.iron-laws.yml`에 있다. 새 지적을 검토한 뒤 기준선을 다시 만들 때는 `iron-laws baseline create .`를 쓴다.
 
 ---
 
