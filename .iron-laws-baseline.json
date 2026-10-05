@@ -1,0 +1,6174 @@
+{
+  "schema_version": 1,
+  "kind": "debt",
+  "migrated_from": "",
+  "tool_version": "1.3.0",
+  "created": "2026-10-05",
+  "entries": [
+    {
+      "fingerprint": "0d3884ed874d4b3cf99b",
+      "loose": "6ae146267fd62e065a1c",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": ".env.example",
+      "line": 270,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "cb7541361d7fa43e8294",
+      "loose": "1a8b51ab2139f8a984da",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": ".env.example",
+      "line": 272,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "3a1df2cdf9a96a97984c",
+      "loose": "2a161a470f359cbb48e1",
+      "rule_id": "AI-104",
+      "rule_version": 1,
+      "path": ".env.test",
+      "line": 1,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "95367c2649f98ec3368c",
+      "loose": "9606e820a005755910e9",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": ".env.test",
+      "line": 5,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "779881eb76c6261ca39f",
+      "loose": "62f7e149c7841fb4d576",
+      "rule_id": "AI-121",
+      "rule_version": 1,
+      "path": ".github/workflows/audit.yml",
+      "line": 27,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "67368f24edeb10b52a2b",
+      "loose": "62933805e8b1273b7e77",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": ".github/workflows/test.yml",
+      "line": 70,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "6b1e6638ba9ca27cdf7c",
+      "loose": "62933805e8b1273b7e77",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": ".github/workflows/test.yml",
+      "line": 83,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "5e12619a4e03552bd835",
+      "loose": "c133053a43a71999f6e4",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": ".github/workflows/test.yml",
+      "line": 84,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "5a6200a1a2b68f312ce2",
+      "loose": "36c7b4d404ad8288d0b5",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": ".github/workflows/test.yml",
+      "line": 97,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "ae35328379a5c6d352f8",
+      "loose": "62933805e8b1273b7e77",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": ".github/workflows/test.yml",
+      "line": 117,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "5194a53609ac29d484ae",
+      "loose": "62933805e8b1273b7e77",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": ".github/workflows/test.yml",
+      "line": 130,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "6b3f598d8e6248a498d6",
+      "loose": "c133053a43a71999f6e4",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": ".github/workflows/test.yml",
+      "line": 131,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "266322f1d266111f13c2",
+      "loose": "36c7b4d404ad8288d0b5",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": ".github/workflows/test.yml",
+      "line": 144,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "480c42d8490016942514",
+      "loose": "62933805e8b1273b7e77",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": ".github/workflows/test.yml",
+      "line": 161,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "2a4ed7c0965c5f957206",
+      "loose": "62933805e8b1273b7e77",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": ".github/workflows/test.yml",
+      "line": 176,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "4659e9c2b8729dc36904",
+      "loose": "c133053a43a71999f6e4",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": ".github/workflows/test.yml",
+      "line": 177,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "dbbe56930490f45cbd4f",
+      "loose": "36c7b4d404ad8288d0b5",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": ".github/workflows/test.yml",
+      "line": 190,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "b17ca6188ab89c1f5ad4",
+      "loose": "193b8121cb09db132208",
+      "rule_id": "ARC-210",
+      "rule_version": 1,
+      "path": "assets/admin/admin.js",
+      "line": 53,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "881d5403d1febf03e987",
+      "loose": "cdd3ee1a9b239faa6347",
+      "rule_id": "ARC-205",
+      "rule_version": 1,
+      "path": "assets/admin/modules/api.js",
+      "line": 60,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "8c3bfed3a8230804df21",
+      "loose": "74873be44cff4646a317",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": "assets/admin/modules/auth.js",
+      "line": 78,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "fc4eef5825e00d44bdc9",
+      "loose": "d6215c06b24975154510",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/galaxy-canvas.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "d527c92217ff1927b125",
+      "loose": "1f650edf74d348468bdb",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/galaxy-canvas.js",
+      "line": 48,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "72e3a7c40ef7d96a04be",
+      "loose": "9e2569805e4a844b620e",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/galaxy-canvas.js",
+      "line": 335,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "f2ebd8825d4adf848ffd",
+      "loose": "ab498cd6483b0e7bfd5e",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/graph.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "509853969b5891d14735",
+      "loose": "cfb8acfc6b2b1ddfc72f",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/graph.js",
+      "line": 64,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "063fb49e6d3e2d47fe16",
+      "loose": "a4a5ec7342131783d2d0",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/graph.js",
+      "line": 282,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "d8cbd07dea48002f7cae",
+      "loose": "8d93a228616123174bd6",
+      "rule_id": "ARC-205",
+      "rule_version": 1,
+      "path": "assets/admin/modules/graph.js",
+      "line": 354,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "c547c857bdcb5929e2ec",
+      "loose": "c763264820c9558ec86c",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/groups.js",
+      "line": 53,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "29071082a13f7c4041e2",
+      "loose": "7588dad4b8345c0fbdc0",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/groups.js",
+      "line": 145,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "8b5a59fa404177694e24",
+      "loose": "fd1bb278504e208a2f88",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/groups.js",
+      "line": 263,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "d5033d97da94d4a2d498",
+      "loose": "f17a407eaf872236fcad",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "assets/admin/modules/key-lifecycle.js",
+      "line": 40,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "a0b3c104329bcc4cf65a",
+      "loose": "36ddb785026dbf3aa169",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/key-lifecycle.js",
+      "line": 162,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "512f2f6ed397e057c86e",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/keys.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "9bbd33274dcd17bb6991",
+      "loose": "a4babcfbef9c1876a3cf",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/keys.js",
+      "line": 194,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "7c58304ee9884278dd93",
+      "loose": "8bce071b4cdc7093de1a",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/keys.js",
+      "line": 289,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "cd98c37865e2df01a79d",
+      "loose": "40a6db18c195ef90028a",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/keys.js",
+      "line": 314,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "743d59310c9e9a7c1df9",
+      "loose": "e1fbccad7b0e560cdc13",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/keys.js",
+      "line": 453,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "a6734fb7d3976eb8108a",
+      "loose": "c483f5865e4a1b4a8434",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/keys.js",
+      "line": 804,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "870aa8e1d236fe8e18bc",
+      "loose": "ae4d4815c7719e2b27ac",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/keys.js",
+      "line": 932,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "8b1632fbc5c96a66e859",
+      "loose": "5ead4d4ec97d71e8b135",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/layout.js",
+      "line": 181,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "97f8c96597101cdabea6",
+      "loose": "088c6b2b632202149048",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/logs.js",
+      "line": 12,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "2cfaba4353555b6370e6",
+      "loose": "db3732196b4ac9df0e54",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/logs.js",
+      "line": 283,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "dbf769ced2b42b38094d",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/memory.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "6a18915ecd4a56955bb8",
+      "loose": "b1448ca801636aa2c0cb",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/memory.js",
+      "line": 13,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "a11e85ddb019c4ec6f57",
+      "loose": "27341bdcbb460899fd9f",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/memory.js",
+      "line": 128,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "c3f3b79c491d23c1a5c9",
+      "loose": "2602545919b714f4c0a7",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/memory.js",
+      "line": 264,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "2655524337026b110624",
+      "loose": "6abb96db0014cf255ab6",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/memory.js",
+      "line": 402,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "4323245d58292b87c4fa",
+      "loose": "cdebbc428c4b303555a6",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/memory.js",
+      "line": 493,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "b0eb69a68ba1f59a0261",
+      "loose": "674ab804ad8c6c71be02",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/memory.js",
+      "line": 780,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "08e3c8314b0577a0ecaf",
+      "loose": "54ca561fa4860fd1dcb6",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/metrics.js",
+      "line": 53,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "72d3e81a717739a90934",
+      "loose": "66aef2f8906a5ce155f7",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/metrics.js",
+      "line": 144,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "4c7f51da7da19f74997b",
+      "loose": "95920d9ddc3a101d0e79",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/metrics.js",
+      "line": 330,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "7e6ecf3b33e0de642693",
+      "loose": "1b654955e3379ac0bd89",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/overview.js",
+      "line": 65,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "9918610c68956036fc4f",
+      "loose": "f5a850b6210030586a51",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/sessions.js",
+      "line": 48,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "adf2bee4e8a220be946a",
+      "loose": "917b1f50a3b99e23fc69",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/sessions.js",
+      "line": 174,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "c1c8db4085efd92f3aad",
+      "loose": "ae3ff85439be92d14c4e",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "assets/admin/modules/sessions.js",
+      "line": 416,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "ed5b64faa5934a62d5de",
+      "loose": "977af02e8f036e5f2feb",
+      "rule_id": "AI-109",
+      "rule_version": 1,
+      "path": "assets/admin/modules/state.js",
+      "line": 13,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "c403cc69a1803015f288",
+      "loose": "863acb43542a6a972fba",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "bin/memento.js",
+      "line": 183,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "37d50e08df89ba4de90d",
+      "loose": "36fa0176b9828ee17e04",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "bin/memento.js",
+      "line": 192,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "1e048637db2ff25253d7",
+      "loose": "572ec02e943beecec144",
+      "rule_id": "AI-102",
+      "rule_version": 1,
+      "path": "config/memory.js",
+      "line": 408,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "c00573237abf2b241327",
+      "loose": "62933805e8b1273b7e77",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": "docker-compose.dev.yml",
+      "line": 7,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "930e859a417ced8b9a94",
+      "loose": "897d17b1dfd4356a3e66",
+      "rule_id": "IL-102",
+      "rule_version": 1,
+      "path": "docs/architecture.en.md",
+      "line": 824,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "bd8586726bc055189790",
+      "loose": "fdb15e3d7ca2c853b75b",
+      "rule_id": "IL-102",
+      "rule_version": 1,
+      "path": "docs/architecture.md",
+      "line": 828,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "a8298676926bf93a26b4",
+      "loose": "289daa8b052177c41772",
+      "rule_id": "IL-102",
+      "rule_version": 1,
+      "path": "docs/configuration.md",
+      "line": 594,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "49cce64c3bc093a527a5",
+      "loose": "8a991b83117a953afa7a",
+      "rule_id": "IL-102",
+      "rule_version": 1,
+      "path": "docs/operations/upstream-porting.md",
+      "line": 67,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "ddcc03e0a200e764ed4d",
+      "loose": "6ca5701bd357dfa7bf31",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/AdminUserStore.js",
+      "line": 115,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "a51c6c8e31dd4b96996e",
+      "loose": "5f5a56eea1cb3c78b07d",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/AdminUserStore.js",
+      "line": 125,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "74fad11f35eed9c06086",
+      "loose": "d986d07e18f9aa0d7ed5",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/AdminUserStore.js",
+      "line": 185,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "1582db412c09365d0909",
+      "loose": "d986d07e18f9aa0d7ed5",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/AdminUserStore.js",
+      "line": 201,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "5e52d15af99c6e446d74",
+      "loose": "3aa1f8148707d72d70b0",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/AdminUserStore.js",
+      "line": 471,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "c044ac055a13172231ea",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/admin/ApiKeyStore.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "c6712af17a908b7c8eda",
+      "loose": "46e485a3268ad1422497",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/ApiKeyStore.js",
+      "line": 654,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "e4111d9e265f3540eb87",
+      "loose": "516924b6b96ed20d251e",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/ApiKeyStore.js",
+      "line": 884,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "41e1a9f14d41c2a7199f",
+      "loose": "67fa0dfd4642a818ff11",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/ApiKeyStore.js",
+      "line": 885,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "c78d36aaaaff9576ad52",
+      "loose": "f74a956cc62794f189fe",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/OAuthClientStore.js",
+      "line": 72,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "8194cae64b09e10fa372",
+      "loose": "10122b4e019a004367ab",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/ReviewStore.js",
+      "line": 317,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "c0f369013cc07ef5d0e5",
+      "loose": "33f5fa62e5da1b84b1f7",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/ReviewStore.js",
+      "line": 319,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "49b795e9fa1df3d40be7",
+      "loose": "06f1510a9c68249d3605",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/ReviewStore.js",
+      "line": 322,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "fd6ec5aa4e8bf5fc70ea",
+      "loose": "5d9840f03287d6b4ea1d",
+      "rule_id": "ARC-205",
+      "rule_version": 1,
+      "path": "lib/admin/ScopeFilter.js",
+      "line": 22,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "51227942fead20d85fad",
+      "loose": "e2662ace328e439d95cf",
+      "rule_id": "ARC-205",
+      "rule_version": 1,
+      "path": "lib/admin/admin-audit.js",
+      "line": 72,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "ce552885c6ccac48ecc0",
+      "loose": "35c2939551f985edef40",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-audit.js",
+      "line": 99,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "b8f1097496f9befbe84b",
+      "loose": "6496db57941f4e0abad6",
+      "rule_id": "ARC-205",
+      "rule_version": 1,
+      "path": "lib/admin/admin-auth.js",
+      "line": 31,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "ee979232e314f8af7316",
+      "loose": "b27ce263cbede1492dad",
+      "rule_id": "ARC-205",
+      "rule_version": 1,
+      "path": "lib/admin/admin-auth.js",
+      "line": 137,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "5a151ce2e60db78cd890",
+      "loose": "b6b972d13ecd886e0453",
+      "rule_id": "ARC-210",
+      "rule_version": 1,
+      "path": "lib/admin/admin-auth.js",
+      "line": 137,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "43bfdfc59e35860c6307",
+      "loose": "61bc1b2356b5b9445319",
+      "rule_id": "IL-511",
+      "rule_version": 1,
+      "path": "lib/admin/admin-auth.js",
+      "line": 137,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "26a557d86d58e7e987fe",
+      "loose": "5252f370dc0cfb65ff11",
+      "rule_id": "ARC-205",
+      "rule_version": 1,
+      "path": "lib/admin/admin-auth.js",
+      "line": 148,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "eb8f8dc89affcb4ccef6",
+      "loose": "bfa5b33d9721d47aa2ee",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/admin-auth.js",
+      "line": 178,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "40b49eeb463b0a40d3c2",
+      "loose": "235d03adb5da24a6e0ad",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/admin-auth.js",
+      "line": 193,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "37ff4f473e3b3c74fd67",
+      "loose": "735840f980504689afb7",
+      "rule_id": "IL-511",
+      "rule_version": 1,
+      "path": "lib/admin/admin-auth.js",
+      "line": 244,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "2a83fcea012cb13a5176",
+      "loose": "6ed98e719b8f556d4675",
+      "rule_id": "IL-511",
+      "rule_version": 1,
+      "path": "lib/admin/admin-auth.js",
+      "line": 266,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "48a4281a44106472813b",
+      "loose": "977915f72ebf69bae2b0",
+      "rule_id": "IL-511",
+      "rule_version": 1,
+      "path": "lib/admin/admin-export.js",
+      "line": 141,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "8d422d22e4f0403730c3",
+      "loose": "39b810fd1de8198699ee",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/admin/admin-export.js",
+      "line": 240,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "26334b43d83fb557b01f",
+      "loose": "ff100f4933b38b790825",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-export.js",
+      "line": 347,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "768031f5b7e7d7f5c7c8",
+      "loose": "25c608db0276f81e27cc",
+      "rule_id": "ARC-205",
+      "rule_version": 1,
+      "path": "lib/admin/admin-handler-registry.js",
+      "line": 65,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "7d0cf3214f0c3ca4341f",
+      "loose": "f27318f2079cf9a345e2",
+      "rule_id": "ARC-205",
+      "rule_version": 1,
+      "path": "lib/admin/admin-handler-registry.js",
+      "line": 67,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "01a759b72df079572f2d",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/admin/admin-keys.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "ca607b10af95dc50b784",
+      "loose": "c99b263156bc2a49cc12",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "lib/admin/admin-keys.js",
+      "line": 74,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "7872ad78ac227def7ead",
+      "loose": "533a7cfe18382cae185e",
+      "rule_id": "IL-305",
+      "rule_version": 1,
+      "path": "lib/admin/admin-keys.js",
+      "line": 230,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "0b8368214b0c139c9796",
+      "loose": "aa4baf5d0a44833182bb",
+      "rule_id": "IL-305",
+      "rule_version": 1,
+      "path": "lib/admin/admin-keys.js",
+      "line": 235,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "7fd7836ff807c65fe7fe",
+      "loose": "53a141996ba31ebf3acd",
+      "rule_id": "IL-305",
+      "rule_version": 1,
+      "path": "lib/admin/admin-keys.js",
+      "line": 295,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "19a1f0835e9fa61878fe",
+      "loose": "7aa90d9667092f91f979",
+      "rule_id": "IL-305",
+      "rule_version": 1,
+      "path": "lib/admin/admin-keys.js",
+      "line": 404,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "dde58bb8a58633cb8433",
+      "loose": "442e70474936b438200c",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "lib/admin/admin-keys.js",
+      "line": 737,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "9c5b2a99a9ac6f1e9a77",
+      "loose": "1d1b8f5e976297be70e0",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/admin-login-guard.js",
+      "line": 33,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "00c2c92d7a58021c6cfc",
+      "loose": "1c9ea72e43dd4f33ea69",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/admin/admin-logs.js",
+      "line": 23,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "c29821ee4ec54c093908",
+      "loose": "73d61283ad8075cf09f6",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-logs.js",
+      "line": 132,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "49ef2490e28a5f1368f1",
+      "loose": "6bd2b91d732c915741eb",
+      "rule_id": "IL-516",
+      "rule_version": 1,
+      "path": "lib/admin/admin-logs.js",
+      "line": 173,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "655be0baf785fad2bee1",
+      "loose": "b698a0c076c1697fdf86",
+      "rule_id": "IL-516",
+      "rule_version": 1,
+      "path": "lib/admin/admin-logs.js",
+      "line": 187,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "381760beff82ffa32843",
+      "loose": "b822ab50a8334aed913c",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-me.js",
+      "line": 67,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "6893aaba99fdeb10d775",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 1,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "1047c41e4bd66e2b65a4",
+      "loose": "bce955622473731ca133",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 177,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "f52087a0afad7a7aae2d",
+      "loose": "a8c4e9309709482fe71c",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 309,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "0ef08eb3742c1b731af9",
+      "loose": "59923cd1c543928062f3",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 339,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "e7f7f57e1ad604c6d216",
+      "loose": "15634088246213a1c8e0",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 450,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "ba052aa740d99cdd92de",
+      "loose": "a2ec34985af2b2de22f6",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 454,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "333253345799aeb12b6e",
+      "loose": "99e1cb904023925a9701",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 548,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "5d7ee94fabc2dd200201",
+      "loose": "0110b582c47425cdc667",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 555,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "e9f38b8c6049272e65ec",
+      "loose": "7918166e3006f657dad4",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 584,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "73f4556572e6c5fa78ba",
+      "loose": "3c6746606a63239b7c0e",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 710,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "e12ba58fd5f44e37b45d",
+      "loose": "0b7567b6289da37cfd6b",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 716,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "2ab2c12adb21b957d424",
+      "loose": "f2976ae241ffc1dd32fe",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 745,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "f3e4a9a2dea790eabbee",
+      "loose": "f2976ae241ffc1dd32fe",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 751,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "8e74adc5664f95fa838f",
+      "loose": "a9b3e037319cc03f4b8a",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 777,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "d94c88c1e066f5e7372c",
+      "loose": "bd2f1bdbd49f46440833",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 782,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "7b746ccb12b110a89a47",
+      "loose": "bedeccfcbe3e2b08305c",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 883,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "62b75dedbc9a22207cd6",
+      "loose": "c6715c1551761035e28c",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 896,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "aa6536a611f979329cc2",
+      "loose": "6e1d096b081f0e16b2a9",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 906,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "3fd72ad4ffda11fbfb1f",
+      "loose": "273e2eadae0eec4b3043",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 1022,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "d27cd363a9f5b0dc29f7",
+      "loose": "b2171a815850aedab47d",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 1040,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "6663dc563ce8820c497a",
+      "loose": "8537965b8b5fc5d7ada6",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 1052,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "1bed3d610fd8e355a421",
+      "loose": "0e2aa43839f071ceabab",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 1078,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "df95ed939d092e3608ec",
+      "loose": "c09f4de9b728425a3a7d",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 1106,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "6d9dd63ba79a59a60813",
+      "loose": "00289bf755f29733df64",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 1211,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "0fbcaad70dcd23262de2",
+      "loose": "957cd784d948fcd02d11",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-memory.js",
+      "line": 1223,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "e900218ac80800fdefce",
+      "loose": "5c44cb76560de14ad728",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/admin/admin-metrics.js",
+      "line": 79,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "badb993308fbbc8a5cd1",
+      "loose": "9f2128430caab9a52377",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/admin/admin-metrics.js",
+      "line": 115,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "be8ca220acb95e43e3b0",
+      "loose": "83ef064ccd63f8479822",
+      "rule_id": "IL-108",
+      "rule_version": 1,
+      "path": "lib/admin/admin-password.js",
+      "line": 57,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "0b99a8d72b3469b30591",
+      "loose": "29a37053f33640a8c3ef",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/admin-principal.js",
+      "line": 61,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "7c12261f5058bf764150",
+      "loose": "a432ae92ebee41da4ea8",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/admin/admin-review.js",
+      "line": 148,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "98687bad4a6f25a8e328",
+      "loose": "0c07c4e24db6a329e4be",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-review.js",
+      "line": 151,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "bedfe257ac99e17aa1ae",
+      "loose": "3a132cb7a757b348e247",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/admin/admin-review.js",
+      "line": 170,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "90814c810231e39c230b",
+      "loose": "ded67298999a1d39cdb3",
+      "rule_id": "ARC-205",
+      "rule_version": 1,
+      "path": "lib/admin/admin-route-table.js",
+      "line": 56,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "c8f98be61bad2efeca68",
+      "loose": "524596e6286e51fa656b",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/admin/admin-routes.js",
+      "line": 113,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "9115ccb00d527ce9e44f",
+      "loose": "25421b1d52003e5ab556",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/admin-routes.js",
+      "line": 132,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "ce9179424907bd1b512e",
+      "loose": "2c49b7dd2bc03c89ec53",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/admin/admin-routes.js",
+      "line": 161,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "8f87835cf74ebd201a10",
+      "loose": "fd277db483d329b8fe0a",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/admin/admin-routes.js",
+      "line": 250,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "209e377dc67e3cea3b3c",
+      "loose": "870a40ad54ea3a5bb2cc",
+      "rule_id": "ARC-210",
+      "rule_version": 1,
+      "path": "lib/admin/admin-routes.js",
+      "line": 257,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "52fa9327390a66462305",
+      "loose": "81ca8a4f32f5fb7f1caf",
+      "rule_id": "IL-511",
+      "rule_version": 1,
+      "path": "lib/admin/admin-routes.js",
+      "line": 257,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "515cfb6f4d429810be16",
+      "loose": "8d6245e86c6d6c6f1e10",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/admin/admin-routes.js",
+      "line": 262,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "65fc72b1501b66efc55c",
+      "loose": "06795fefaca0f6696589",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/admin-routes.js",
+      "line": 281,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "36606b7c9254623710e8",
+      "loose": "e2cc486807ac5886ddaa",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/admin/admin-routes.js",
+      "line": 284,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "aff90a51affedb60cc30",
+      "loose": "07978fb6049943634877",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/admin/admin-routes.js",
+      "line": 321,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "ada505b49237da8e5080",
+      "loose": "07978fb6049943634877",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/admin/admin-routes.js",
+      "line": 329,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "a9c79a8d739580fb29fb",
+      "loose": "aadf9f3f323c2e120a30",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": "lib/admin/admin-session-policy.js",
+      "line": 93,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "6421f6789734ace97c0b",
+      "loose": "aadf9f3f323c2e120a30",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": "lib/admin/admin-session-policy.js",
+      "line": 121,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "be04140db979a9c585db",
+      "loose": "363e9e9e125e676d6948",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": "lib/admin/admin-session-policy.js",
+      "line": 146,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "4e2173e7f9b77161cb7c",
+      "loose": "14530e29a258686d3517",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/admin/admin-sessions.js",
+      "line": 49,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "39921cb163ed37c0ff64",
+      "loose": "c4899aaaf019f775f4b5",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/admin/admin-sessions.js",
+      "line": 78,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "57b763fc8397bb4810af",
+      "loose": "2ab8ebbd2499fbcc3b6a",
+      "rule_id": "ARC-205",
+      "rule_version": 1,
+      "path": "lib/admin/admin-sessions.js",
+      "line": 129,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "0e2c38bdc0173f180576",
+      "loose": "915ef5ed1402f78fe3f4",
+      "rule_id": "IL-102",
+      "rule_version": 1,
+      "path": "lib/admin/admin-totp.js",
+      "line": 92,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "a3be1c7737b2d5fa482e",
+      "loose": "22dc0fb237bc0d9fa558",
+      "rule_id": "IL-102",
+      "rule_version": 1,
+      "path": "lib/admin/admin-totp.js",
+      "line": 164,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "a7ded5cd1707abd4ad48",
+      "loose": "0d1096bf51231ef30598",
+      "rule_id": "IL-108",
+      "rule_version": 1,
+      "path": "lib/admin/admin-user-auth.js",
+      "line": 165,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "ef5ee0158e818a759832",
+      "loose": "238b22c60182463dc45e",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/admin-user-auth.js",
+      "line": 197,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "d237cdcc24126b810c5b",
+      "loose": "05268134946e17328a66",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": "lib/admin/admin-user-auth.js",
+      "line": 253,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "aeff8463560fb049445f",
+      "loose": "f2415e2bc87aedfbda01",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/admin-user-auth.js",
+      "line": 259,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "794a20f48efb7203f0af",
+      "loose": "4680e204d112642f8d72",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/admin-user-auth.js",
+      "line": 338,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "2ab226f29b217e342d4d",
+      "loose": "6f3900416c169f242149",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/admin-user-rules.js",
+      "line": 68,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "e14a315fe4be3beaf6b3",
+      "loose": "f387d08e6d95a6ba6668",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/key-cidr.js",
+      "line": 41,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "9a0c53bf3b1a1b4e76fa",
+      "loose": "9e55e30c35f2cb7ab2ad",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/key-cidr.js",
+      "line": 43,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "4225defa50a45d254f1c",
+      "loose": "2b5349354459d8adc173",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/key-cidr.js",
+      "line": 48,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "d232f58f41123aec1171",
+      "loose": "c09bcbd0e1369ce138bb",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/key-cidr.js",
+      "line": 55,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "3786c912629b7dc6e7fd",
+      "loose": "169b0707f1f980b7fb66",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/key-cidr.js",
+      "line": 136,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "8c605769acf00c3286f9",
+      "loose": "9dffab862ddd240132c6",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/key-lifecycle.js",
+      "line": 105,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "0d46b867f45ff5bfcd25",
+      "loose": "c083fd09c5b4392db99e",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/key-lifecycle.js",
+      "line": 111,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "16cc7409ce2faa821535",
+      "loose": "267ef20bfe609133ecba",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/key-lifecycle.js",
+      "line": 112,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "9651db385d0b7d85d82d",
+      "loose": "8596a893b1416ff291f6",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/key-lifecycle.js",
+      "line": 116,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "35ee1f734a5ea55ce118",
+      "loose": "e4f7c00773245d9ee8b8",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/key-policy.js",
+      "line": 52,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "304f5489cfee31e3a38a",
+      "loose": "4de94ce786e9ef6a2a88",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/key-policy.js",
+      "line": 108,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "7132f7b94bb759c49925",
+      "loose": "4aa2e2ebfbd3a1a032b7",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/admin/key-policy.js",
+      "line": 125,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "7a301de3f81cb5173364",
+      "loose": "c82174a1d6c845084df2",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": "lib/auth.js",
+      "line": 40,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "316ddcfdf9afbe10eed7",
+      "loose": "25b75e5d1a4e3c180cab",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/auth.js",
+      "line": 131,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "45a34188b9c04063d37a",
+      "loose": "49c2f3f16703f1c9dea3",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/auth.js",
+      "line": 132,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "6d6289343b6c0fa306d7",
+      "loose": "863f867936b5d98b62d9",
+      "rule_id": "IL-108",
+      "rule_version": 1,
+      "path": "lib/auth.js",
+      "line": 180,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "166f7f7625f1d752730b",
+      "loose": "9d5627a957a3661516c8",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/auth.js",
+      "line": 192,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "a093c795b1432dc8fdde",
+      "loose": "84019d897468b9811c4b",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/auth.js",
+      "line": 229,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "e3da15f8672af9999500",
+      "loose": "c2b32bc87088b5280723",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/auth.js",
+      "line": 294,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "9c85d951e877d8436671",
+      "loose": "7fe1951ea8f0f97c8572",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/auth.js",
+      "line": 335,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "d688e54ddb8d731930cc",
+      "loose": "43196afe1ae6ca65013e",
+      "rule_id": "ARC-210",
+      "rule_version": 1,
+      "path": "lib/auth.js",
+      "line": 359,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "d1659dc09d9d2ec2571f",
+      "loose": "d74dffa0e8478c113716",
+      "rule_id": "IL-511",
+      "rule_version": 1,
+      "path": "lib/auth.js",
+      "line": 359,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "82b2aaacb6691d0a7b61",
+      "loose": "500bd57996f0bb7c7039",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/cli/_fileTransaction.js",
+      "line": 34,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "b175fccecfe96396cf1f",
+      "loose": "1f80185a21f84d89d19a",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/cli/_mcpClient.js",
+      "line": 221,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "e1883f7f955aea370d2a",
+      "loose": "2886b36937a75b41b5ab",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": "lib/cli/admin.js",
+      "line": 35,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "83c3c1c0dad8755e6727",
+      "loose": "dd8029b08d1e350221d6",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/cli/anchor-scope.js",
+      "line": 47,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "c27119adeea790b3aac8",
+      "loose": "128eac74e17f507cd46d",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/cli/anchor-scope.js",
+      "line": 48,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "7dfc0b39a678a9e9a7e4",
+      "loose": "431bd8cecd1bfc6df698",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/cli/anchor-scope.js",
+      "line": 107,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "3188bcef2c52c1b22901",
+      "loose": "ebb8adba5769cb8ed495",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "lib/cli/backfill.js",
+      "line": 13,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "7fc3385560dd60ea9ce2",
+      "loose": "891688a634d4801875f0",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/cli/benchmark.js",
+      "line": 195,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "60f51f083576c8f18c7e",
+      "loose": "c0bc580fe3d7e2af5816",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/cli/benchmark.js",
+      "line": 273,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "62568639ff994e4395cb",
+      "loose": "f94f3f887b3ced94d980",
+      "rule_id": "ARC-205",
+      "rule_version": 1,
+      "path": "lib/cli/health.js",
+      "line": 33,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "16afb9e8d3e1f434f5aa",
+      "loose": "a23a6afedbdb3b24238c",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/cli/health.js",
+      "line": 85,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "a0519436d98b6e30f47d",
+      "loose": "a01cec6b29867ac41687",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/cli/health.js",
+      "line": 97,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "458c4b700427534f48a4",
+      "loose": "8f0df5b3c42c74520e2a",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/cli/hook.js",
+      "line": 120,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "f2a245b222ada12308dc",
+      "loose": "b50e8c982e0b36e929f7",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/cli/hook.js",
+      "line": 213,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "eae118e0f5d88a7b5418",
+      "loose": "fba22ebb3c0c07a3ca66",
+      "rule_id": "IL-516",
+      "rule_version": 1,
+      "path": "lib/cli/import.js",
+      "line": 68,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "c2b1977a78aab67e7410",
+      "loose": "091220a2604b0bee86c1",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/cli/inspect.js",
+      "line": 36,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "21d347ef590f539820f5",
+      "loose": "468089e731557c8e32fe",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "lib/cli/parseArgs.js",
+      "line": 17,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "bc52a25809230f0286c3",
+      "loose": "cbeb2001a7224ec9c9b3",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/cli/recall.js",
+      "line": 78,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "0da7dd168d1475a0f03c",
+      "loose": "c0bc580fe3d7e2af5816",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/cli/recall.js",
+      "line": 125,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "39d9a4cfe33a0c988862",
+      "loose": "0511afd12e27be039da3",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/cli/remember.js",
+      "line": 120,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "4e2184e7c6c25946a897",
+      "loose": "54ed135898595ad12929",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/cli/session.js",
+      "line": 128,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "eb803649afeec3d11980",
+      "loose": "329a3e73a232579f9aeb",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/cli/stats.js",
+      "line": 35,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "c2f310ddaffbfaca4c12",
+      "loose": "f521766a03bff44b60ed",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/cli/stats.js",
+      "line": 88,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "a0631de21c2e5c0eb7ef",
+      "loose": "f521766a03bff44b60ed",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/cli/stats.js",
+      "line": 96,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "72618a390db2c5382352",
+      "loose": "f521766a03bff44b60ed",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/cli/stats.js",
+      "line": 100,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "f0a7b5e5f5276a9c37f0",
+      "loose": "f521766a03bff44b60ed",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/cli/stats.js",
+      "line": 105,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "7ac574f1e6b466e9dc86",
+      "loose": "f521766a03bff44b60ed",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/cli/stats.js",
+      "line": 110,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "ee7d93e90bd4a311c385",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/config.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "7e6d6fba5aced31507c3",
+      "loose": "240c22c7cf43b4ebd58f",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/config.js",
+      "line": 639,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "9446c4260a65bcb57916",
+      "loose": "ca311b11829d5218c870",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/config.js",
+      "line": 640,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "da9efe82fb2d375d636c",
+      "loose": "9020b73ac5a7df0359e1",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/config.js",
+      "line": 1004,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "a1eb2ad47d06ca280820",
+      "loose": "c093e1c78d6d8e817cf9",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/config.js",
+      "line": 1025,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "23ec970daf6d24c11bf4",
+      "loose": "c093e1c78d6d8e817cf9",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/config.js",
+      "line": 1026,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "3a7e002907d2a9e44177",
+      "loose": "c093e1c78d6d8e817cf9",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/config.js",
+      "line": 1027,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "8aafb54217ccd7477ab9",
+      "loose": "c093e1c78d6d8e817cf9",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/config.js",
+      "line": 1029,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "febff6f2e2496c120464",
+      "loose": "a9c2925f7b2eda0b0dd5",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/config.js",
+      "line": 1114,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "f093f968e9cb852af226",
+      "loose": "9b2be78301f3bc1c223e",
+      "rule_id": "AI-105",
+      "rule_version": 1,
+      "path": "lib/handlers/_common.js",
+      "line": 71,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "c1153cf8e826a912c9fa",
+      "loose": "4e5a10380e361e44f99b",
+      "rule_id": "IL-511",
+      "rule_version": 1,
+      "path": "lib/handlers/_common.js",
+      "line": 85,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "63f42b032fdb8a44481f",
+      "loose": "92b56d9aacb01e413172",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/handlers/_common.js",
+      "line": 105,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "10cfb58f5b9773475ec9",
+      "loose": "92b56d9aacb01e413172",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/handlers/_common.js",
+      "line": 106,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "a4e6daf331b83bb444e2",
+      "loose": "92b56d9aacb01e413172",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/handlers/_common.js",
+      "line": 107,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "f67b4a3e6b51d4dc8d62",
+      "loose": "b876c038bc4dd24636e0",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/handlers/health-handler.js",
+      "line": 88,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "ddd393daebdfc6348a8c",
+      "loose": "0d4cc72600dbd926c353",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/handlers/health-handler.js",
+      "line": 101,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "c5907c8aa753b9076619",
+      "loose": "0d4cc72600dbd926c353",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/handlers/health-handler.js",
+      "line": 139,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "10f1f933584fed92364f",
+      "loose": "b380ec3df749eb2f58b4",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/handlers/health-handler.js",
+      "line": 167,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "30dce78dbaf3e6aedf42",
+      "loose": "b380ec3df749eb2f58b4",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/handlers/health-handler.js",
+      "line": 172,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "f2ecc21784ed2de4fdb2",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/handlers/mcp-handler.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "d2eee8064338165ffa85",
+      "loose": "e06f65c152498ce59636",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/handlers/mcp-handler.js",
+      "line": 224,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "31136aa37a2177a436fb",
+      "loose": "1a874dec1574ac2ec86e",
+      "rule_id": "IL-511",
+      "rule_version": 1,
+      "path": "lib/handlers/mcp-handler.js",
+      "line": 426,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "754c9d3c88b9d5f1e10d",
+      "loose": "7ad4d59b84983bc4fea9",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/handlers/mcp-handler.js",
+      "line": 594,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "13c94fd55a76c2879fa6",
+      "loose": "a148bcc0776c78809d3f",
+      "rule_id": "ARC-210",
+      "rule_version": 1,
+      "path": "lib/handlers/mcp-handler.js",
+      "line": 639,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "71cf39d454abab3588d4",
+      "loose": "b6afa105ba93efe5cb5a",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/handlers/mcp-handler.js",
+      "line": 655,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "c504593cf06ca69cbb85",
+      "loose": "6697f6479a7464db9c97",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/handlers/mcp-handler.js",
+      "line": 684,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "ad12551ff3ecdb23f996",
+      "loose": "c1afcf27cf0d7107e7e4",
+      "rule_id": "ARC-210",
+      "rule_version": 1,
+      "path": "lib/handlers/mcp-handler.js",
+      "line": 686,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "d4b0c46da271296ec79f",
+      "loose": "b5abff805931390b34a9",
+      "rule_id": "ARC-210",
+      "rule_version": 1,
+      "path": "lib/handlers/mcp-handler.js",
+      "line": 870,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "bfb5e947409997540ae9",
+      "loose": "af837add883bdbd298e4",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/handlers/oauth-handler.js",
+      "line": 45,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "ea555811441cdc65048b",
+      "loose": "abbf56fc745f1c9c1215",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/handlers/oauth-handler.js",
+      "line": 125,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "6cd990873dfadc2c4682",
+      "loose": "5f8cef38e179acd13b95",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "lib/handlers/oauth-handler.js",
+      "line": 150,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "8cf401dab5d8ae1f1662",
+      "loose": "2cbac28340b284a6495a",
+      "rule_id": "AI-105",
+      "rule_version": 1,
+      "path": "lib/handlers/oauth-handler.js",
+      "line": 155,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "d13303267ac9f242753e",
+      "loose": "363c7c29fb03bee0c251",
+      "rule_id": "AI-105",
+      "rule_version": 1,
+      "path": "lib/handlers/oauth-handler.js",
+      "line": 167,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "a93a3bf0f3087dc120a6",
+      "loose": "f396d7ea26d6715344fc",
+      "rule_id": "AI-105",
+      "rule_version": 1,
+      "path": "lib/handlers/oauth-handler.js",
+      "line": 175,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "563dbd845adb6bf2b3a7",
+      "loose": "dcf77d740894a71ed816",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/handlers/oauth-handler.js",
+      "line": 244,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "e00cecd8d74aaa043698",
+      "loose": "abf6e1f3f79d350bf2b8",
+      "rule_id": "IL-511",
+      "rule_version": 1,
+      "path": "lib/handlers/oauth-handler.js",
+      "line": 286,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "d7ccd926c8197e33ef3a",
+      "loose": "3e3746c9653daccf5264",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/handlers/oauth-handler.js",
+      "line": 308,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "26c38cac5e8c8b4240f1",
+      "loose": "07095006394d9b6ae607",
+      "rule_id": "IL-511",
+      "rule_version": 1,
+      "path": "lib/handlers/oauth-handler.js",
+      "line": 352,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "4d946c7192764e9273d5",
+      "loose": "9d076b1d0dbfaa6666dd",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/handlers/oauth-handler.js",
+      "line": 358,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "02833f151b53aa7e3094",
+      "loose": "07095006394d9b6ae607",
+      "rule_id": "IL-511",
+      "rule_version": 1,
+      "path": "lib/handlers/oauth-handler.js",
+      "line": 439,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "7d839f9200802d3c3681",
+      "loose": "08af0cd4ca6f35eeea7b",
+      "rule_id": "IL-505",
+      "rule_version": 1,
+      "path": "lib/handlers/oauth-handler.js",
+      "line": 448,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "a5d792e4e279390ead49",
+      "loose": "4e97342d606545f68e50",
+      "rule_id": "AI-105",
+      "rule_version": 1,
+      "path": "lib/handlers/oauth-handler.js",
+      "line": 485,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "c14a07c903ea65b2e6a0",
+      "loose": "89cc14d0b7afdecb830d",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/handlers/session-handler.js",
+      "line": 62,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "dab2f90bec316272a4ec",
+      "loose": "89cc14d0b7afdecb830d",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/handlers/session-handler.js",
+      "line": 63,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "f51a4f06293e04d50a32",
+      "loose": "fa36c148dcf2fd62bafc",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/handlers/session-handler.js",
+      "line": 127,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "c8e64175f709d7484430",
+      "loose": "81fce871e386d3d8ac4b",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/handlers/sse-handler.js",
+      "line": 61,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "2ec5be546561a064a8ef",
+      "loose": "cd2c3f9f9e6ab8e8c0fb",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/handlers/sse-handler.js",
+      "line": 70,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "34512134e73b080492ea",
+      "loose": "6fd1b71cd4ac8fc24c61",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/handlers/sse-handler.js",
+      "line": 106,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "93776a73ca7dc76a20b0",
+      "loose": "59d89a5590e9820b28c3",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/handlers/sse-handler.js",
+      "line": 180,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "e60921e136089f92245c",
+      "loose": "a9dfd15aab88dfa98d22",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/handlers/sse-handler.js",
+      "line": 181,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "f1ca2b0272ca3679d761",
+      "loose": "cd66aaf9f76ec3342137",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/hooks/hook-contract.js",
+      "line": 90,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "b37fe66bad5d261f9cd1",
+      "loose": "48af60febbf9499ae916",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/hooks/hook-contract.js",
+      "line": 181,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "4d247c8daee2471a3c8e",
+      "loose": "48af60febbf9499ae916",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/hooks/hook-contract.js",
+      "line": 188,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "d4bfa5b14faf1cd71cd0",
+      "loose": "ad577a329f96937cdd7c",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/hooks/hook-excerpt.js",
+      "line": 48,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "4e06837290d37398394b",
+      "loose": "7a3d19298219e3c66e28",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/hooks/hook-excerpt.js",
+      "line": 52,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "c44bf91990cfa66a8323",
+      "loose": "2c48927423ffff5bf2fc",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/http/helpers.js",
+      "line": 27,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "16dc1463c18f5c49e406",
+      "loose": "3b4b02bea158300a3a02",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/http/helpers.js",
+      "line": 46,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "f4ed8a887c16feead0f8",
+      "loose": "00018e66a1d08b3ad078",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/http/helpers.js",
+      "line": 148,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "d3f63dc29099359736c5",
+      "loose": "d3476f778eb165a1a2c9",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/http/helpers.js",
+      "line": 272,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "d9ae5639754365f35a8e",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/jsonrpc.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "db6088b05f6a651ad92a",
+      "loose": "3d66d37ee311d1fca3e7",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/jsonrpc.js",
+      "line": 124,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "338015f9d93b1c00035c",
+      "loose": "f1dcb5d6a891cdedc57a",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/jsonrpc.js",
+      "line": 464,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "94a7637f398afcf0e0eb",
+      "loose": "8f320d777a193bfc9c94",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/jsonrpc.js",
+      "line": 515,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "2477ab79bb3444d8b316",
+      "loose": "2b773e846f9cbf448408",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/jsonrpc.js",
+      "line": 530,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "b26fa9250a2f10c7547d",
+      "loose": "6fdbe5439dd6e7dfe265",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/jsonrpc.js",
+      "line": 533,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "d80527b6df04f7d34f14",
+      "loose": "1ca658f74311da22066f",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/jsonrpc.js",
+      "line": 544,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "6d94121342eb3b64b60f",
+      "loose": "8167f91bee616009cc6e",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "lib/jsonrpc.js",
+      "line": 652,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "6a1fdec0d39a72ea12a4",
+      "loose": "1a3ffe57dd2b6abbed53",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/jsonrpc.js",
+      "line": 763,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "7c791327cf0755507d39",
+      "loose": "b3da3298e12d1d6dc4ed",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/EgressPolicy.js",
+      "line": 154,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "e11d4c8290f7ea3afede",
+      "loose": "dcd27fdc9c561f450f05",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/llm/EgressPolicy.js",
+      "line": 187,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "85f2851fe2a7f70fb22b",
+      "loose": "6527a6e7fbdc930d5228",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/llm/EgressPolicy.js",
+      "line": 271,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "df6ef2919103b6d3fe37",
+      "loose": "de4df74119da68180a57",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/llm/index.js",
+      "line": 162,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "ef741687e7c03343733d",
+      "loose": "ff19023f05c99927d0ca",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/index.js",
+      "line": 208,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "79e3fab298d964163c8c",
+      "loose": "104143cfd49d40bf2d51",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "lib/llm/providers/AgyCliProvider.js",
+      "line": 25,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "48210892b58eb01804df",
+      "loose": "1b673ee5d04f7c12d464",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/llm/providers/AnthropicProvider.js",
+      "line": 24,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "4657da564f4ed8801cd4",
+      "loose": "1b673ee5d04f7c12d464",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/llm/providers/CohereProvider.js",
+      "line": 25,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "653d861d59e3db9ec689",
+      "loose": "92cdf25c7749340651ef",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/llm/providers/DeepSeekProvider.js",
+      "line": 21,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "4dd83c4b70cca69a6bfd",
+      "loose": "92cdf25c7749340651ef",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/llm/providers/GroqProvider.js",
+      "line": 21,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "d73e359afbda19e6a24f",
+      "loose": "92cdf25c7749340651ef",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/llm/providers/MistralProvider.js",
+      "line": 21,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "0d81b80dbd9412287c14",
+      "loose": "ede41fab92ca6d4772e7",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/llm/providers/OpenAICompatibleProvider.js",
+      "line": 90,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "7574bef738cde5060bcc",
+      "loose": "150de0e0130a85d23885",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/providers/OpenAICompatibleProvider.js",
+      "line": 129,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "9fc445fcc8ed191b3d4a",
+      "loose": "18283f8e6ea35ce6b4f0",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/providers/OpenAICompatibleProvider.js",
+      "line": 173,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "24f1d6f75bec279a7d1d",
+      "loose": "92cdf25c7749340651ef",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/llm/providers/OpenAIProvider.js",
+      "line": 25,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "714357b3845f9121402a",
+      "loose": "a96d7dedd2b7a62593f6",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/llm/providers/OpenRouterProvider.js",
+      "line": 22,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "1eec3dde6b503c049828",
+      "loose": "edfca3494916212d8727",
+      "rule_id": "ARC-205",
+      "rule_version": 1,
+      "path": "lib/llm/providers/OpenRouterProvider.js",
+      "line": 25,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "dea7a65cb518e02013b5",
+      "loose": "92cdf25c7749340651ef",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/llm/providers/XaiProvider.js",
+      "line": 21,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "e9bce7eed8875a3f7c2f",
+      "loose": "92cdf25c7749340651ef",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/llm/providers/ZaiProvider.js",
+      "line": 25,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "f4d08bcaef2df717bf46",
+      "loose": "e8f094554077d82f19bc",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "lib/llm/runners/agy.js",
+      "line": 18,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "d300eeaada94af3c81ab",
+      "loose": "e1838374479424d99c3c",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/runners/agy.js",
+      "line": 26,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "405b87e91d99c6f382ce",
+      "loose": "7188116312ea400361f3",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/runners/codex.js",
+      "line": 44,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "b92621eaf6f876884b09",
+      "loose": "a52b034409c0ae939bcc",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/llm/runners/codex.js",
+      "line": 73,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "1d1a4e6ec9df9e449d72",
+      "loose": "2095b56f6be1d731a88f",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/runners/copilot.js",
+      "line": 60,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "0507940fa14b1d716bc3",
+      "loose": "2ceeaedc0cc4cc8cf5c9",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/runners/gemini.js",
+      "line": 45,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "585d9b686f978b6a0175",
+      "loose": "af5cc8835804a8bbcbe4",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/runners/opencode.js",
+      "line": 27,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "1188ff86b136e2ec968b",
+      "loose": "2c3db80ee2067c79ad76",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/runners/opencode.js",
+      "line": 128,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "0c2cde6254e90318e664",
+      "loose": "a9587e29fa8361d24fe9",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/runners/qwen.js",
+      "line": 41,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "5095acdcaa2f0beee46d",
+      "loose": "0395a8220330c52f0a39",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/util/circuit-breaker.js",
+      "line": 66,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "d3d4f467362998a96487",
+      "loose": "51eb524b37f6d85bafdf",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/util/circuit-breaker.js",
+      "line": 89,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "13151614ff1a7ec5a89b",
+      "loose": "a2693a76025151f7d20a",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/util/circuit-breaker.js",
+      "line": 98,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "c3501ea5a1d3cce8fefe",
+      "loose": "089f356d67476da659d7",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/util/circuit-breaker.js",
+      "line": 105,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "3e9f829afcaccd6ed80b",
+      "loose": "a138e1578d09dfb8b481",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/util/fetch-with-timeout.js",
+      "line": 21,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "f99ae093e154da44a48b",
+      "loose": "598820a061c014339dd3",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/util/parse-json.js",
+      "line": 48,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "6dd80b1cf469dc8bd484",
+      "loose": "908345d29b276352f3b3",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/util/parse-json.js",
+      "line": 53,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "2c51fb9fa73911cb93f4",
+      "loose": "a7bed85b3e896686fbe8",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/util/parse-json.js",
+      "line": 60,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "a1032525094c3f15609b",
+      "loose": "3213c7750a6c56f1e68f",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/util/parse-json.js",
+      "line": 67,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "852c31a3cd3735ea568a",
+      "loose": "cca8e2792ede48e869cd",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/llm/util/retry-hints.js",
+      "line": 21,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "b24129dafba5ec07bfa9",
+      "loose": "c7847aca4f0e7acf0550",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/llm/util/retry-hints.js",
+      "line": 55,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "e217bf2552668a3bc688",
+      "loose": "d2387e3f8ab12313bdea",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/logging/AuditStore.js",
+      "line": 293,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "71f17efea7d2993a87f4",
+      "loose": "018a5b8fa3f1c7d978d4",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/logging/AuditStore.js",
+      "line": 318,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "8b6aef580a1ecfab9744",
+      "loose": "1d6e904a3f447bb5620e",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/logging/AuditStore.js",
+      "line": 338,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "b567e8411b3139ffa2b3",
+      "loose": "8d812a04be36dc008682",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/logging/AuditStore.js",
+      "line": 356,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "8a6629219cbca37de394",
+      "loose": "e79dec47fded2234d9b3",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/logging/audit-event.js",
+      "line": 238,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "0bc703e6128362ea7277",
+      "loose": "fd2a5e7888bae340b251",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/CaseEventStore.js",
+      "line": 59,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "66658cb74380e6d0127b",
+      "loose": "1bbceba868bd046dabcb",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "lib/memory/CaseEventStore.js",
+      "line": 158,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "28cae62d3632ba8ba94c",
+      "loose": "3763623ab9919bfe0c85",
+      "rule_id": "ARC-205",
+      "rule_version": 1,
+      "path": "lib/memory/CaseEventStore.js",
+      "line": 408,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "a9eaaf2c79798914a55d",
+      "loose": "93fd90b1212490388b5c",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/CaseEventStore.js",
+      "line": 497,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "c2f3e7ed2908d82df120",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/FragmentIndex.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "2c9054f91bfda555c885",
+      "loose": "603c9d4ef50425dbd412",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/FragmentIndex.js",
+      "line": 218,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "e3ab1dfc992762e437a5",
+      "loose": "feeceab54897937713c6",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/FragmentIndex.js",
+      "line": 222,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "8ca506e87d3c269dd330",
+      "loose": "999ed927b3bbacd76f18",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "lib/memory/FragmentIndex.js",
+      "line": 233,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "6dd8991c4913f343f3f4",
+      "loose": "a0f598af7b357b2c7b35",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/FragmentIndex.js",
+      "line": 236,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "3c242a1ad69611507fca",
+      "loose": "779c3fd1e4993f282608",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/FragmentIndex.js",
+      "line": 247,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "10ac7fb6085a858e9149",
+      "loose": "ef22b7079551c1f1a9e8",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/FragmentIndex.js",
+      "line": 259,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "10d53ad7d81c6a634a82",
+      "loose": "1b6f336efa7d3e22dfb6",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/FragmentIndex.js",
+      "line": 269,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "fc855fbc548b606d9399",
+      "loose": "0483b55b0703e0ab5235",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/FragmentIndex.js",
+      "line": 288,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "890a37a9599e275e3982",
+      "loose": "d2ee5aca2bed45a0630e",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/FragmentIndex.js",
+      "line": 306,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "651f6afdaebc7732ac5d",
+      "loose": "0f85d04ca6b45f136ba7",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/FragmentIndex.js",
+      "line": 425,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "7364195f44107a435bc3",
+      "loose": "5543bab21b317f0f9714",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/MemoryManager.js",
+      "line": 75,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "244dd67ed69fb0bd8af6",
+      "loose": "13f72faa9101092e0dd6",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/ModeRegistry.js",
+      "line": 36,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "379144667d509f4c40b9",
+      "loose": "3c611623e8becf936e11",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/QuotaChecker.js",
+      "line": 142,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "663f03969a6d3c725d44",
+      "loose": "343096243044009a3784",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/QuotaChecker.js",
+      "line": 185,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "cdfce7aa89c8050e04cc",
+      "loose": "6a59abe5348d31ff8df3",
+      "rule_id": "ARC-212",
+      "rule_version": 1,
+      "path": "lib/memory/WorkingMemoryRows.js",
+      "line": 368,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "c92aaeade3e1db868b24",
+      "loose": "2a9d7516418d6ca99508",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/admin/AgentScopeBackfill.js",
+      "line": 36,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "175647270aa69f74087d",
+      "loose": "1ed242304121641a9b83",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/admin/AgentScopeBackfill.js",
+      "line": 42,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "2e85035666312f3c7d1f",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/ConsolidatorGC.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "c93d589fc0f93651653b",
+      "loose": "f0f29386521282317b4e",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/ConsolidatorGC.js",
+      "line": 83,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "ad3b9ad8612fda76c730",
+      "loose": "6183ce109032b0fb95a6",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/ConsolidatorGC.js",
+      "line": 291,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "f96df3f04785aee92210",
+      "loose": "bf8a6f5600317152a3ba",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/ConsolidatorGC.js",
+      "line": 332,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "fd176ab338367bf5da44",
+      "loose": "5440b4cbe2691e950273",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/ConsolidatorGC.js",
+      "line": 458,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "6d9916bc7eec1f9830c4",
+      "loose": "ffc450c8d61b7c0f91d5",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/ConsolidatorGC.js",
+      "line": 704,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "fac31b7dff46521f3354",
+      "loose": "e7832b4ddc27e1edb97c",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/ConsolidatorGC.js",
+      "line": 708,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "ea8376360571e5b2e587",
+      "loose": "f5e47ba3ace08d0ca157",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/ConsolidatorGC.js",
+      "line": 742,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "53471d742b3181194253",
+      "loose": "b1dc88d97437a9bcfee7",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/ConsolidatorGC.js",
+      "line": 964,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "2f92c5ed0a0a7fa3f72c",
+      "loose": "ac239536f404827aeac4",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/FragmentGC.js",
+      "line": 284,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "52b3613b2b048fe1cbe8",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/MemoryConsolidator.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "3e7db807356cb49cd778",
+      "loose": "f618ce02530c9a51dda1",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/MemoryConsolidator.js",
+      "line": 186,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "0c5be4a7f4d9246b489f",
+      "loose": "625592816604da3bb822",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/MemoryConsolidator.js",
+      "line": 839,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "fb61c9a74254d5057273",
+      "loose": "9987f9a55289a1526b55",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/MemoryConsolidator.js",
+      "line": 866,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "66aea9d58cb1f6b4df39",
+      "loose": "9987f9a55289a1526b55",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/MemoryConsolidator.js",
+      "line": 872,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "e4919bff976aa0364cd3",
+      "loose": "9987f9a55289a1526b55",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/MemoryConsolidator.js",
+      "line": 882,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "cbb60c1bd16ada01b84d",
+      "loose": "4cd4313fca57efd1e1db",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/MemoryConsolidator.js",
+      "line": 945,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "d9c52255fe6c96dc35ad",
+      "loose": "30cdeb53addb4389affc",
+      "rule_id": "ARC-212",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/MorphemeBackfill.js",
+      "line": 45,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "88441b693feb505490cb",
+      "loose": "386213dd026a8ca25f73",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/UtilityBaseline.js",
+      "line": 25,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "58b153b77c9ff29a9fa7",
+      "loose": "a3adf853d7385e4c7e51",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/proper-nouns.js",
+      "line": 46,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "6560bb479ecc6ccb0a31",
+      "loose": "a3adf853d7385e4c7e51",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/consolidate/proper-nouns.js",
+      "line": 53,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "43b6601491a7118b6fd3",
+      "loose": "8447e5f73971f1fb07b9",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/embedding/EmbeddingCache.js",
+      "line": 56,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "da78312a3b85bf28c2d1",
+      "loose": "e91969fde6b4ec8b609b",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/embedding/EmbeddingCache.js",
+      "line": 72,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "25560fd33721f23f33c4",
+      "loose": "04941c5c4930646e2897",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/embedding/EmbeddingCache.js",
+      "line": 73,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "a318c0559330df3ce827",
+      "loose": "ab572dce8aedc3eb8122",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/embedding/EmbeddingWorker.js",
+      "line": 183,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "c95fd7454e687d83570c",
+      "loose": "c8dd0147a34832934556",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/embedding/EmbeddingWorker.js",
+      "line": 188,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "8e123144d3e1aaca1df0",
+      "loose": "5e0d8ab8a9e87461e3d3",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/embedding/LexicalTokens.js",
+      "line": 56,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "edb969729f1b5ebd5c21",
+      "loose": "174d3b16ef139d4b55ab",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/embedding/LexicalTokens.js",
+      "line": 103,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "94bfdf3a967c90468223",
+      "loose": "3a4466eac6bd35958276",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/embedding/MorphemeIndex.js",
+      "line": 312,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "0c3754adbfde421807fb",
+      "loose": "ed6bd7b6d7a1c33cd1ba",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/embedding/MorphemeTokenizer.js",
+      "line": 80,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "92a21ccca0fec7281f01",
+      "loose": "4693af67a3b1b6c67004",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/embedding/MorphemeTokenizer.js",
+      "line": 106,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "0189c837217cd93acd3f",
+      "loose": "9815cec6de8afd3833d5",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/embedding/MorphemeTokenizer.js",
+      "line": 117,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "5cb2301a90d72a41d09d",
+      "loose": "e2ec7faa7e7d60a3094d",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/embedding/MorphemeTokenizer.js",
+      "line": 130,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "078059ab58dcab1992dc",
+      "loose": "c1dc70aaeb07a5a1eab9",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/embedding/SyntheticQueryWorker.js",
+      "line": 158,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "a37d6ef4407489661d8d",
+      "loose": "849e5a31f0c052702ceb",
+      "rule_id": "IL-102",
+      "rule_version": 1,
+      "path": "lib/memory/embedding/SyntheticQueryWorker.js",
+      "line": 175,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "f19566fbc2088525eb98",
+      "loose": "708dfa4adb38518eac61",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/embedding/SyntheticQueryWorker.js",
+      "line": 307,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "61c54987d170753e264b",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/link/ContradictionDetector.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "d14fb45ee191f4f62619",
+      "loose": "6cf309ebbb7ed4677732",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/link/ContradictionDetector.js",
+      "line": 137,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "15d4adcec79e9f118c50",
+      "loose": "e2a50e0d1ec32ba78d6c",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "lib/memory/link/ContradictionDetector.js",
+      "line": 462,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "a23c7ae71216006a6044",
+      "loose": "da71b97affc4a9089009",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/link/ContradictionDetector.js",
+      "line": 604,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "6b3935600c63f07f5db8",
+      "loose": "15b3ef378c2d99bf39f6",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/link/GraphLinker.js",
+      "line": 41,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "2c7478c131f1e6cc4060",
+      "loose": "2f7883df001025f08360",
+      "rule_id": "ARC-205",
+      "rule_version": 1,
+      "path": "lib/memory/link/GraphLinker.js",
+      "line": 135,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "efa7737c640ca4ad5c48",
+      "loose": "d94687951da18aeea180",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/link/GraphLinker.js",
+      "line": 142,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "23226e6fd729a7c50362",
+      "loose": "60b080edd124d4ab1f31",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/link/GraphLinker.js",
+      "line": 216,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "bc16c6c9f02024fc9bbb",
+      "loose": "fb9a9d34701796226ed8",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/link/LinkStore.js",
+      "line": 181,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "b13abe88a8d493818838",
+      "loose": "880cc4d841d1f7b27db1",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/link/LinkStore.js",
+      "line": 229,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "a2630a9e85e4467cbf76",
+      "loose": "cb92c253bedb29ffbc6a",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/link/LinkStore.js",
+      "line": 336,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "6aa2c54ce0904e52a61f",
+      "loose": "caf1e66e2035941c6cbd",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/link/SessionLinker.js",
+      "line": 60,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "c38de8e12b648c3f52aa",
+      "loose": "597d690783c8c26efd4e",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/link/SessionLinker.js",
+      "line": 184,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "fe8fe7f2239da47ad744",
+      "loose": "4e1586838a980657f6cd",
+      "rule_id": "IL-102",
+      "rule_version": 1,
+      "path": "lib/memory/migrations/migration-043-fragment-synthetic-query.sql",
+      "line": 34,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "0181b7ecdc0f7281c39a",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/processors/MemoryRecaller.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "afce2ffa0a1a696ca6dc",
+      "loose": "6c34339955ba86b26854",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/processors/MemoryRecaller.js",
+      "line": 118,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "554a1e8570cc6d608ecd",
+      "loose": "1408aad6a87f878b2c50",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/processors/MemoryRecaller.js",
+      "line": 131,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "abe6a82c9ece8da4eeea",
+      "loose": "e3dcf57f5d1e5cc71df3",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/processors/MemoryRecaller.js",
+      "line": 263,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "946bd648bd96a1d26f70",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/processors/MemoryRememberer.js",
+      "line": 1,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "ead4418296cab37850e0",
+      "loose": "60c4cb87bc0fb7c25fb2",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/processors/MemoryRememberer.js",
+      "line": 361,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "400aad798cff75277afc",
+      "loose": "ef5a2d5360b1ad3f1e23",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/processors/MemoryRememberer.js",
+      "line": 511,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "1b162cef6ffb31eb0d81",
+      "loose": "343096243044009a3784",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/processors/MemoryRememberer.js",
+      "line": 651,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "e92cecfe9aa6cfc3a9d4",
+      "loose": "573c31dd5c8f5225d610",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/processors/MemoryRememberer.js",
+      "line": 775,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "45a18549b373e2bb3712",
+      "loose": "a2d523cbba3bfb862aad",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/processors/MemoryRememberer.js",
+      "line": 788,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "f6cad5b56b085d27180f",
+      "loose": "b6a9daa32d7fa30c852e",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/processors/MemoryRememberer.js",
+      "line": 798,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "a3dd59c62c1a9ca5a62b",
+      "loose": "ac262775b811089e87e1",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/processors/MemoryRememberer.js",
+      "line": 922,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "1b741383143da4d1503b",
+      "loose": "91985f4498a7c6a8a746",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/processors/MemoryRememberer.js",
+      "line": 965,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "dd66a103fa848db62658",
+      "loose": "91985f4498a7c6a8a746",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/processors/MemoryRememberer.js",
+      "line": 987,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "74af54e4b91e024c2360",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/processors/ReflectProcessor.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "11abb3b99a1073803bbe",
+      "loose": "f3925f84774d859a32e1",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/processors/ReflectProcessor.js",
+      "line": 457,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "05b2e5f7a3d7e4e4df4d",
+      "loose": "650ddb7f8acb8a94b555",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/processors/ReflectProcessor.js",
+      "line": 511,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "deb8bcaed4b28633cbe2",
+      "loose": "49255112d95baeebd870",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/processors/SessionActivityTracker.js",
+      "line": 104,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "e351f468162a04bae6eb",
+      "loose": "af136842710096778ed3",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/processors/SessionActivityTracker.js",
+      "line": 170,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "3ad0f89a71e155be836c",
+      "loose": "d82450dfb93fcedb416c",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/processors/SessionActivityTracker.js",
+      "line": 177,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "6291de52e807a080162c",
+      "loose": "649e44efe566d5bcc297",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/provenance.js",
+      "line": 118,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "19455f6e1e707811737b",
+      "loose": "611510142b0cfa316348",
+      "rule_id": "IL-108",
+      "rule_version": 1,
+      "path": "lib/memory/provenance.js",
+      "line": 224,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "8d992ffa7cc2344e8d7a",
+      "loose": "d41794781152b089b3cc",
+      "rule_id": "IL-108",
+      "rule_version": 1,
+      "path": "lib/memory/provenance.js",
+      "line": 227,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "e83ffbb11d8ac9c9b45c",
+      "loose": "dcb7ff114a9abda557a0",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/read/BudgetSelector.js",
+      "line": 290,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "2f9a3f9992b8c98c98c6",
+      "loose": "46dbfe68f41af917d967",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/read/BudgetSelector.js",
+      "line": 292,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "78f20523ae3d2b64aa9a",
+      "loose": "22f45853a4315de4c42b",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/read/CaseRecall.js",
+      "line": 46,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "adcdb264d041221c747a",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/read/ContextBuilder.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "3379a76389c50ab57e19",
+      "loose": "8f894c3f89179ec12673",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/read/ContextBuilder.js",
+      "line": 79,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "19e543aa1c97d2de4975",
+      "loose": "382bbcb63f88ecc1767a",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/read/ContextBuilder.js",
+      "line": 187,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "92955dabc574ad160731",
+      "loose": "c9056e497422fd7b05b0",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/read/ContextBuilder.js",
+      "line": 523,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "82cb9f78ac12c35a257b",
+      "loose": "ea8f18b44a827dc6b17a",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/read/ContextBuilder.js",
+      "line": 835,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "b9804744be8838a02e1e",
+      "loose": "f70dd19d1745b64059ee",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/ContextBuilder.js",
+      "line": 966,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "7683cf3df189f1971583",
+      "loose": "3f95e30befc7230ab417",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/ContextBuilder.js",
+      "line": 999,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "386c0b440d0d9bb6f74a",
+      "loose": "59b3aa385644d787db45",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/read/DeterministicRanking.js",
+      "line": 68,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "b31b948e7eeafdd08386",
+      "loose": "6fe6c2be475fda781bef",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/DeterministicRanking.js",
+      "line": 75,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "3898e43ae15326e7267b",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 1,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "826ed4826f87b40982d0",
+      "loose": "4203c85bd924958ae672",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 297,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "164f24e8ad1e406b69c2",
+      "loose": "eb56e2a3c498a5b31bc4",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 315,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "a0a851d0165ba1574b0f",
+      "loose": "8648e6ef9272d60681c0",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 322,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "7edb0a370772dc0394f0",
+      "loose": "69a26c931c99291d811e",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 428,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "159f2973e13c6608d7ae",
+      "loose": "02400c18caa0f852ab83",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 454,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "ed32cd59fbf30f2ae85e",
+      "loose": "3d47f8063e0e97b03a42",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 477,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "c85ad47bc0deba8b9507",
+      "loose": "35d0edb421a24bfb4534",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 483,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "4c27e28af56aba7a9c87",
+      "loose": "1f84488192e3d97af12f",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 504,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "17c21bcca781a217080d",
+      "loose": "09684a7b4acc654f10f5",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 539,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "593ecffa1fd0ef4412fe",
+      "loose": "3296af55bb12631a4e6d",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 591,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "57e7f3f4b3130baf7502",
+      "loose": "3d8de19830e531ef20f9",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 614,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "9db936038f0cffb0527d",
+      "loose": "9f6ceca5a22d791aba9c",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 832,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "8ee99c9d904d44b62bb0",
+      "loose": "4eae36dda36d9ab4786a",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 929,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "0f6610b3ce9e8ad0715f",
+      "loose": "1ed5e8de51a9f2c6834e",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 980,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "2e8fed9b0d142bac4e76",
+      "loose": "c34bd4739d36a31d611b",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 1191,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "58cf4a746019b2a1c2fa",
+      "loose": "c85d06728e2dfb659184",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 1220,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "9ae7612f26524129c70d",
+      "loose": "dd66abfb03a757da72c3",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 1242,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "0c67ad9370ca3bb1a068",
+      "loose": "e208cedb62a2ff74649f",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/read/FragmentSearch.js",
+      "line": 1262,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "1e1e6b7ef749788a77f8",
+      "loose": "5a182815439cb5d75918",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/read/GraphNeighborSearch.js",
+      "line": 36,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "e30eed20f552da3403b4",
+      "loose": "4c13738bbcb0dd66e77a",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/read/HistoryReconstructor.js",
+      "line": 60,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "b1f556400618212d5b9b",
+      "loose": "1899fc96e915b406b776",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/HistoryReconstructor.js",
+      "line": 99,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "0dc1987fae73530ad12d",
+      "loose": "9da91eff5d80a799cf17",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/read/HotCacheValidator.js",
+      "line": 12,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "858b32de6aa8b62f0429",
+      "loose": "621d1090cac7bf6c821a",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/read/RecallSuggestionEngine.js",
+      "line": 90,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "fbc7917767e5cfe6de9d",
+      "loose": "463e1e821721e5f5abb9",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/Reranker.js",
+      "line": 258,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "277059b6c3edfa9e103a",
+      "loose": "f3d7962979b98ce218c7",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/Reranker.js",
+      "line": 307,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "ccc557aa0f1a6f76d490",
+      "loose": "fd68f396df55828bbb8a",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/SearchSideEffects.js",
+      "line": 56,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "831a90cea795cf0685d1",
+      "loose": "360e135fe9c23549fdb9",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/SearchSideEffects.js",
+      "line": 66,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "733f43dd4bcd02a56850",
+      "loose": "5ccb7ef3faf95f97b714",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/TopicResolver.js",
+      "line": 112,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "a03a8ab48e5f22a54ec9",
+      "loose": "0a7b93761f0c2d800a66",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/TopicResolver.js",
+      "line": 119,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "c5db1699adeb13192593",
+      "loose": "30312d71308f5e7d98d4",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/TopicResolver.js",
+      "line": 124,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "e43e047443882a699713",
+      "loose": "c141d37f4f552f1ec65f",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/read/TopicResolver.js",
+      "line": 169,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "d2d01298de901725506d",
+      "loose": "cc91629c7c2fa5d048f7",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/read/WorkspaceReadAuthz.js",
+      "line": 71,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "a20c4bee5908b0da9315",
+      "loose": "44907ee527b6924acfe5",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/read/WorkspaceReadAuthz.js",
+      "line": 74,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "3f6aac9460b0e4e67ccd",
+      "loose": "d6e74fb5f1a440e402cf",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/reviewState.js",
+      "line": 57,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "d4ef7948157993257876",
+      "loose": "0ba0988b9ede68a0b8b5",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/signals/EvaluationMetrics.js",
+      "line": 66,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "f2523a8921557b5060cd",
+      "loose": "16d7da678f34897dc1fa",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/signals/EvaluationMetrics.js",
+      "line": 135,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "15dc499df5d81c83a328",
+      "loose": "807d3a0e820f6a8506d2",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/signals/EvaluationMetrics.js",
+      "line": 196,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "3c822312d66c99f86ae3",
+      "loose": "d9600cd6a9e687f1bb54",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/signals/FeedbackSampler.js",
+      "line": 95,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "ac58cb2c521f223bd95d",
+      "loose": "a12b4ea27fd7911ca978",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/signals/MemoryEvaluator.js",
+      "line": 84,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "ec2695685c78142de9e7",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/signals/RecallBenchmark.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "a3204a93b3065dc989f1",
+      "loose": "a44a896590e3100e8465",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/signals/RecallBenchmark.js",
+      "line": 495,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "f260be179d60d76d2101",
+      "loose": "b7c251b1850f98e1c890",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/signals/RecallBenchmark.js",
+      "line": 541,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "432950839dff891e8238",
+      "loose": "21238910a1d16a44a3cc",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/signals/RecallEvalSet.js",
+      "line": 103,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "fa19d2d3d7d178fde486",
+      "loose": "9ae6426688d380547271",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/signals/RecallEvalSet.js",
+      "line": 129,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "a665fa8af129e6704364",
+      "loose": "fea66bfac4c2bb61195d",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/signals/RecallEvalSet.js",
+      "line": 142,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "a031b834dbab6a146342",
+      "loose": "1609b8889cffdc0e7ad3",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/signals/RecallEvalSet.js",
+      "line": 167,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "e293943e22f80966b35d",
+      "loose": "cdd66f8aeeea038b05f6",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/signals/SearchEventAnalyzer.js",
+      "line": 146,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "e6a800455f7445f1ced3",
+      "loose": "d66edbefc721cedb3196",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/signals/SearchEventAnalyzer.js",
+      "line": 183,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "5fa974b6e06283af1475",
+      "loose": "a95e3097a94951011ff0",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/signals/SearchEventRecorder.js",
+      "line": 139,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "beac80308862e5b59482",
+      "loose": "a4bbb52ebd90acad94b4",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/signals/SearchMetrics.js",
+      "line": 34,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "7b90eed0c81210cf3df3",
+      "loose": "3d0150ba491a36f8b1ee",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/signals/SearchMetrics.js",
+      "line": 56,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "71942dea4c3c26f4947b",
+      "loose": "55dda37ec5a18e1f58f7",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/signals/SpreadingActivation.js",
+      "line": 130,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "9a64d1763c8f7bd1e210",
+      "loose": "408171633af794671f71",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/transfer/FragmentExporter.js",
+      "line": 36,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "323e88559da7c53fda2c",
+      "loose": "3a1939a12347887ba83d",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/transfer/FragmentExporter.js",
+      "line": 72,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "bb7188057dd1860507ff",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/write/BatchRememberProcessor.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "ce3f0b8c6d5b31d392ac",
+      "loose": "8d87c0581fdac3723a74",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/write/BatchRememberProcessor.js",
+      "line": 420,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "db164f65bb6aaf915496",
+      "loose": "343096243044009a3784",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/write/BatchRememberProcessor.js",
+      "line": 497,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "7f58ae56b5a6b183225b",
+      "loose": "b12fb26f828931d2871b",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/write/BatchRememberProcessor.js",
+      "line": 513,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "8610e98481cea47637ed",
+      "loose": "8eabfdc649326d06e88f",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/write/BatchRememberProcessor.js",
+      "line": 571,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "ca32f8c01835022f3df7",
+      "loose": "c09dd12c21f20b44c9f1",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/write/BatchRememberProcessor.js",
+      "line": 572,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "feecc45583c47bed7548",
+      "loose": "bb6e6d4007c3bd60312b",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/write/BatchRememberProcessor.js",
+      "line": 680,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "ea8f74d04834709c5918",
+      "loose": "50ba15810e93aae39bce",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "lib/memory/write/ConflictResolver.js",
+      "line": 58,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "e197f6e8f8e966c97432",
+      "loose": "2aa9ed6dd6e8378326f6",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/write/ConflictResolver.js",
+      "line": 59,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "e8842971627ec46b5f0d",
+      "loose": "d9b688dabac0c4ce836f",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/write/ConflictResolver.js",
+      "line": 147,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "296193bbd44648b2ff25",
+      "loose": "6a5d20b30e6c42d199e2",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/write/ConflictResolver.js",
+      "line": 173,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "c43ae516893dfc46066c",
+      "loose": "098d84cdaa80ff8b1de3",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/write/ContentTokens.js",
+      "line": 91,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "ba5cc1cc3c178f4b5d30",
+      "loose": "4cacd81aa9b4706486be",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/write/ContentTokens.js",
+      "line": 108,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "75df4f6e26c637077415",
+      "loose": "733c345f3fd60e2cb7b0",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/write/ContentTokens.js",
+      "line": 110,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "0e6ce72a953b4db62669",
+      "loose": "a3b5ffdefdf6f5be391b",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/write/ContentTokens.js",
+      "line": 150,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "1e965ec6f387bffbf436",
+      "loose": "ea8e8a1f1cadee5b9205",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "lib/memory/write/DedupScope.js",
+      "line": 102,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "efeac8e8cb3a51e85c1f",
+      "loose": "958244cb6bb26daedd69",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/write/DedupScope.js",
+      "line": 404,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "276534f1878c8cba52b2",
+      "loose": "dfe11c036af6c0e350f4",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/memory/write/ForgetCascade.js",
+      "line": 149,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "17a5de67e2837e7665af",
+      "loose": "f0cccee7254ceebfc64f",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/write/FragmentFactory.js",
+      "line": 35,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "58da3af982d8c581faf1",
+      "loose": "f17a407eaf872236fcad",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/write/FragmentImporter.js",
+      "line": 62,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "06d3e35f8dc08cb9dedb",
+      "loose": "5269c98069cc00e211cf",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": "lib/memory/write/IdempotencyStore.js",
+      "line": 153,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "6c6e7a79b9c8f3cbb6c3",
+      "loose": "b8c6f5c52df861c8f03d",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/write/RememberPostProcessor.js",
+      "line": 121,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "22e3a7a9a64a5b308494",
+      "loose": "f08187420d2dedb4bda5",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/write/RememberPostProcessor.js",
+      "line": 127,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "1865455fb4f6c8e15e55",
+      "loose": "5f329a1a143ba34f64a8",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/memory/write/RememberPostProcessor.js",
+      "line": 139,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "efaff8222bb23d9bce02",
+      "loose": "2aa9ed6dd6e8378326f6",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/write/RememberPostProcessor.js",
+      "line": 442,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "3c82cc01206cee67dfa3",
+      "loose": "0f3f37184a935333a022",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/memory/write/ReviewQueue.js",
+      "line": 291,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "991f830dda555a5f8540",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/memory/write/WriteGate.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "ade5b0de9c658fc62bce",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/metrics.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "218b1c5cb3d811ae4e65",
+      "loose": "e07f8710fa7ed0136627",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": "lib/metrics.js",
+      "line": 486,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "2f5d9a2fdfe65ea9cd5f",
+      "loose": "41c0a63a69e98479bbc1",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/oauth.js",
+      "line": 41,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "7e26e931feed96f0088c",
+      "loose": "da9fe587aafa80c05c3f",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/oauth.js",
+      "line": 120,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "7c55f9505b32ac53cd43",
+      "loose": "1de7f5d5508170477a18",
+      "rule_id": "IL-108",
+      "rule_version": 1,
+      "path": "lib/oauth.js",
+      "line": 257,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "be286b667168233fc0c2",
+      "loose": "a6090e4d992fc45bf0ad",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/oauth.js",
+      "line": 292,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "1a1daa389754a4a45bc4",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/openapi.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "5b9508ec3dd42f79a581",
+      "loose": "9c4ea33a3704e1766ae6",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/openapi.js",
+      "line": 113,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "379985c87067945f1e1d",
+      "loose": "416f2409f76ce9ca019d",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/openapi.js",
+      "line": 316,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "eae9d6b88ed39fbf3b70",
+      "loose": "aaa700a4f218d0fce442",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/openapi.js",
+      "line": 489,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "f45c67fa11f574fc1273",
+      "loose": "db3e091f119ee9f80919",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/outbox/Outbox.js",
+      "line": 96,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "9df747a779a1cb995a23",
+      "loose": "aa57e708acc53942aa24",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/outbox/Outbox.js",
+      "line": 110,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "4d066a2505633b56158d",
+      "loose": "139905e3a0dacf6fb192",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/outbox/OutboxHandlers.js",
+      "line": 82,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "9d70a42d3c9fce3ac60e",
+      "loose": "358692957f0f69bcbb3d",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/rbac.js",
+      "line": 85,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "b0d5c343f3c4927ef6a7",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/redis.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "311fe493b3521bab288c",
+      "loose": "1e25740cdf93e0c354b7",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "lib/redis.js",
+      "line": 311,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "e3b2ab2dd268d6b44469",
+      "loose": "efb930a7e022377b9ea4",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/redis.js",
+      "line": 403,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "05281cf0f6b7bc23034a",
+      "loose": "9a4a77ebd22ddd774f07",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/scheduler.js",
+      "line": 52,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "87877d37f375293dcba3",
+      "loose": "04a8d7602faa94c760c9",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/scheduler.js",
+      "line": 158,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "fc7ad5ed810554cf8f56",
+      "loose": "475d0eb1abf1c77061f5",
+      "rule_id": "IL-307",
+      "rule_version": 1,
+      "path": "lib/security/sensitivePatterns.js",
+      "line": 197,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "cd0d76622eabcea8c4fd",
+      "loose": "c06e323ae3128278f451",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/session-audit.js",
+      "line": 55,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "45fbc18d2e99768729ae",
+      "loose": "f2862abe31f0d784a6b2",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "lib/session-id.js",
+      "line": 24,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "524e65a448e80b4622f7",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/sessions.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "318704fca5f4020c08e8",
+      "loose": "f926c8cbc154535a56b1",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/sessions.js",
+      "line": 43,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "9bc2f1d44caf99b48f3b",
+      "loose": "939dbe40646846242f8b",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/sessions.js",
+      "line": 87,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "cb78c004e819edba2c4d",
+      "loose": "fea3fffe96b6be585c89",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/sessions.js",
+      "line": 100,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "e021560e6f23e017b85f",
+      "loose": "8c675b4818531d42c9e4",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/sessions.js",
+      "line": 113,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "ca0c0cf26d8428ee11e2",
+      "loose": "609e471a6021ca7f52c8",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/sessions.js",
+      "line": 135,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "f773b50261a28464a347",
+      "loose": "34cb6b716bd7a9b6aedc",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/sessions.js",
+      "line": 312,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "94cb35e5a6c93a60a191",
+      "loose": "f73ed5ff738cff32b8d5",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/sessions.js",
+      "line": 349,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "9bf045dd97782832a931",
+      "loose": "993a43bbe8a1fd2d738c",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/sessions.js",
+      "line": 451,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "0930846ec5afcf9caabd",
+      "loose": "fea3fffe96b6be585c89",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/sessions.js",
+      "line": 501,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "a7c414fa43b43e9b454b",
+      "loose": "eb51a22738840971fcb9",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/sessions.js",
+      "line": 559,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "5325bf214b72e7297d96",
+      "loose": "a8a9e55ab1dfc462385d",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/sessions.js",
+      "line": 566,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "43fa4546a0251a38037e",
+      "loose": "1d76f20d4a6e29e5ad29",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/sessions.js",
+      "line": 588,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "2ab963f81b39b418ec14",
+      "loose": "c1658d4d5f8a39994c33",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/sessions.js",
+      "line": 622,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "1753a4bc73b1070cfe9d",
+      "loose": "e99cfdde274f2413edc7",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/sessions.js",
+      "line": 660,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "3df9a1ae37c863524e15",
+      "loose": "b6d0ffdea96d4a28dc2d",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/sessions.js",
+      "line": 776,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "d4aba9812007d102af68",
+      "loose": "7c6ecd82458c1ffeb9dd",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/symbolic/ClaimExtractor.js",
+      "line": 142,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "9fc1297e26a447c7b659",
+      "loose": "3bde7c5282ad690185a3",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/symbolic/ClaimStore.js",
+      "line": 87,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "6f3232a19c0fbea29cd9",
+      "loose": "8f88386d9ddd6b37a8f5",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/symbolic/LinkIntegrityChecker.js",
+      "line": 72,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "2d4f2e11470a031b8840",
+      "loose": "93de8ec2d05e5006469e",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/symbolic/PolicyRules.js",
+      "line": 40,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "a64c4c92672d975596c2",
+      "loose": "f9a9ca7983a0e58f4224",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/symbolic/rules/v1/proactive-gate.js",
+      "line": 42,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "b88af816811a2df277ad",
+      "loose": "6667a935dc589d7cea16",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/symbolic/rules/v1/proactive-gate.js",
+      "line": 120,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "6d6b8b128b03e1100022",
+      "loose": "343096243044009a3784",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/db.js",
+      "line": 304,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "607b15e6c832f6e4a5af",
+      "loose": "7bf0db355d1a34045028",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/db.js",
+      "line": 326,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "13a7daaafbe681dbe217",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/tools/memory-schemas.js",
+      "line": 1,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "59b2cdc8cac4dc34a05b",
+      "loose": "62365b57db6bed417737",
+      "rule_id": "TYP-305",
+      "rule_version": 1,
+      "path": "lib/tools/memory-schemas.js",
+      "line": 433,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "14afa3e7efae816e5927",
+      "loose": "5138e91ae8b4a1878031",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 1,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "a4786740fd4db3990a69",
+      "loose": "0c62ccd6ba551e8e1467",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 174,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "7069c99bac52d5ee9f8f",
+      "loose": "e3c5e7d631a52d5f1b51",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 209,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "42f5433b8c841c578b21",
+      "loose": "20489e5cbc08af33f489",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 255,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "ac00b5055ecaf2622680",
+      "loose": "5c60ea9c1aa48f983ab0",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 283,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "ca71384bc201245d5204",
+      "loose": "05bc8f6d09fec0641785",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 292,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "e7059434ecf56b048b76",
+      "loose": "adfbbaf5c8d2649abd04",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 470,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "a1435e456fbfd1c77540",
+      "loose": "02434cbc63b31a7488a8",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 485,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "5a0f9b6d58b93c94b989",
+      "loose": "17d03b3f9fda6fd1c3cc",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 603,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "a105efa1c755a6fdb8a0",
+      "loose": "fea3fffe96b6be585c89",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 656,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "677c12ca21fd8fc177b1",
+      "loose": "60f2cd362e20d7469b3a",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 661,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "b29d28cd548c732b7163",
+      "loose": "0b21db2af7f3fa4fe78e",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 718,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "63777eae70da18853c2c",
+      "loose": "086d9201909317499649",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 751,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "b38cce1a39517bee1f61",
+      "loose": "fe035f5ee8af746b8856",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 752,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "cef852ed117f05939430",
+      "loose": "13e3fbb7336614f5ac98",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 789,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "dcb4d341455c5bb76d5b",
+      "loose": "40bd4fa78bc9b7032ea0",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 891,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "91bbf6777ea3a45ca4c1",
+      "loose": "b3ff81de4dbb89f3ce17",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 892,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "faf7cfad18fdf361df97",
+      "loose": "8ce9b014c2f64b96bb23",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/tools/memory.js",
+      "line": 1136,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "12e3b92e399791f25f4d",
+      "loose": "3b0359e963d60e81dfb7",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "lib/tools/resources.js",
+      "line": 62,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "07b13d63de0148b16a36",
+      "loose": "21bb4b41173faf2a58c7",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/tools/resources.js",
+      "line": 68,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "4594a7f8ef5880f4b762",
+      "loose": "353375424ed3a40b9e96",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "lib/tools/resources.js",
+      "line": 92,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "9f19fedd171a4d5b3084",
+      "loose": "8447e5f73971f1fb07b9",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/updater/cache.js",
+      "line": 18,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "cac7a2946dc6144e0877",
+      "loose": "785c7c334344e194e0e6",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/updater/cache.js",
+      "line": 27,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "1782166fecb984a1d073",
+      "loose": "c275675eed9c87508210",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "lib/updater/install-detector.js",
+      "line": 7,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "adff422f28557c164d58",
+      "loose": "22146f49eb72425774c4",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/updater/install-detector.js",
+      "line": 30,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "5714fee86f76cf6926ca",
+      "loose": "22146f49eb72425774c4",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/updater/install-detector.js",
+      "line": 36,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "e3b6ce294a7a19d0cae5",
+      "loose": "b6d2e3f80d47b98b1e39",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "lib/updater/version-checker.js",
+      "line": 60,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "5592bca510b7d84529ce",
+      "loose": "f3ee52726dee0bd23561",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/align-synthetic-query-embedding.js",
+      "line": 64,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "4c7efd4613ca024e9e17",
+      "loose": "ef1cde925a16eae1c325",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/align-synthetic-query-embedding.js",
+      "line": 65,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "3fe210fcf3b895acdc76",
+      "loose": "ef1cde925a16eae1c325",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/align-synthetic-query-embedding.js",
+      "line": 70,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "9dc08fcbc1af1caa1a73",
+      "loose": "343096243044009a3784",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "scripts/align-synthetic-query-embedding.js",
+      "line": 79,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "822c72b01f2cd9d83557",
+      "loose": "972901bb8c42a92a8895",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/backfill-body-keywords.js",
+      "line": 38,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "4de500e348178b6da5b6",
+      "loose": "41777897150233d1bb2d",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "scripts/backfill-claims.js",
+      "line": 213,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "ed354a2c8c8ce168e43b",
+      "loose": "e323e29de992739d389a",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "scripts/backfill-claims.js",
+      "line": 305,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "6a0e3ad72e41fccaf6f7",
+      "loose": "eeab4c1369c2e7b2021a",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "scripts/backfill-content-tokens.mjs",
+      "line": 108,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "41aaa2549d0c105f7ed5",
+      "loose": "bf730cf65b793de59466",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/backfill-morpheme-dict.js",
+      "line": 55,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "ec3e8dc10a8832ed2446",
+      "loose": "972901bb8c42a92a8895",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/backfill-morpheme-dict.js",
+      "line": 61,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "677a4c485762388db368",
+      "loose": "919825a871b527b3997d",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "scripts/backfill-reflect-workspace.js",
+      "line": 46,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "747cf67098261375bc35",
+      "loose": "2861f70fa7227a22f2a2",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/backfill-reflect-workspace.js",
+      "line": 55,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "e8a350a19d09509dbb3a",
+      "loose": "2ac146875bbd260e1b8a",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/backfill-reflect-workspace.js",
+      "line": 66,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "cd85fe0c805b3a165a7a",
+      "loose": "972901bb8c42a92a8895",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/backfill-split-keywords.js",
+      "line": 35,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "4cc2fdde764d87896d0c",
+      "loose": "c5cf83867687dd465272",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/backfill-workspace-inference.js",
+      "line": 58,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "740946b5fb828b6fe36d",
+      "loose": "ebc73c527d49fbc4a57d",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "scripts/backfill-workspace-inference.js",
+      "line": 106,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "499a88b5a1e2188697cc",
+      "loose": "2861f70fa7227a22f2a2",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/backfill-workspace-inference.js",
+      "line": 118,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "5d4ae3ea94f9328f72cf",
+      "loose": "21d12d224dc37decfb16",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/backfill-workspace-inference.js",
+      "line": 129,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "f0ae2df32c4a1bd22194",
+      "loose": "df16e19f9d24d6872185",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "scripts/benchmark-hot-path.js",
+      "line": 119,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "b8d78e1d4446816c1947",
+      "loose": "4615574ac03bcb040565",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "scripts/benchmark-hot-path.js",
+      "line": 159,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "8e299b8348e493a41210",
+      "loose": "1b9ef69dc7544eb4eaf8",
+      "rule_id": "IL-516",
+      "rule_version": 1,
+      "path": "scripts/check-coverage.js",
+      "line": 213,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "696264cbed9e8211a45c",
+      "loose": "88023d6dee509cfa5f19",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "scripts/check-embedding-consistency.js",
+      "line": 46,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "ffd3c79b5e687a140d54",
+      "loose": "2acc1b66c4313b8f27a3",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/check-embedding-consistency.js",
+      "line": 52,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "eb9d6573ada2fc51ff0e",
+      "loose": "88023d6dee509cfa5f19",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "scripts/check-embedding-consistency.js",
+      "line": 61,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "92cfd067495961a2dcdf",
+      "loose": "2acc1b66c4313b8f27a3",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/check-embedding-consistency.js",
+      "line": 80,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "b500de4b94ff7b24924c",
+      "loose": "88023d6dee509cfa5f19",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "scripts/check-embedding-consistency.js",
+      "line": 96,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "1e8909f25660efd47220",
+      "loose": "0bdb07ffd7e941e01170",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/cleanup-legacy-split-fragments.js",
+      "line": 44,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "8681a63db0a10ab5bd5b",
+      "loose": "b2084440ababb0dd6c20",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/cleanup-legacy-split-fragments.js",
+      "line": 50,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "aeb8907f43c90f2ea640",
+      "loose": "f2ebfbeae54c3e4083a7",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/cleanup-noise.js",
+      "line": 78,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "77d31313bd8b82e74649",
+      "loose": "dd923bb8c169bb0d2f84",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/cleanup-noise.js",
+      "line": 98,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "9286a4c85aa20a51e694",
+      "loose": "972901bb8c42a92a8895",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/downgrade-reflect-ttl.js",
+      "line": 28,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "a6bd70f6c16806ce7f85",
+      "loose": "d2e9406349c838faec07",
+      "rule_id": "IL-516",
+      "rule_version": 1,
+      "path": "scripts/lint-ratchet.js",
+      "line": 174,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "1236cf2bc7d57a3425d1",
+      "loose": "9616c2d8d31e47a72e1b",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "scripts/measure-hook-latency.mjs",
+      "line": 121,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "bc3015516363843a5f24",
+      "loose": "ec263b0226523aeff5dd",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": "scripts/measure/recall-metrics.mjs",
+      "line": 97,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "5b2cb5b4fa9913cdc02b",
+      "loose": "b53812e237f6fb0f1b70",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": "scripts/measure/recall-metrics.mjs",
+      "line": 126,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "a9aaf3af9b84403ff035",
+      "loose": "9dba5be89d60cfdf6f02",
+      "rule_id": "IL-516",
+      "rule_version": 1,
+      "path": "scripts/migrate.js",
+      "line": 75,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "29493a09c1222b792f5d",
+      "loose": "72d1404d9dafe92f71a0",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "scripts/migrate.js",
+      "line": 92,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "b3e2fef30792c7b13e9a",
+      "loose": "af7742e73821b10fda4d",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "scripts/migrate.js",
+      "line": 122,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "1ab490943b1b5f251417",
+      "loose": "af7742e73821b10fda4d",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "scripts/migrate.js",
+      "line": 138,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "5b5f072ef07ccee7629a",
+      "loose": "6e19ec27a0fe3bdf6f91",
+      "rule_id": "ARC-204",
+      "rule_version": 1,
+      "path": "scripts/ops/backfill-key-secrets.mjs",
+      "line": 135,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "0d549c7cf4f25e3c2522",
+      "loose": "5b95e5c402737dfe19f0",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": "scripts/ops/restore-lib.mjs",
+      "line": 17,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "982cea2bd49c5a2f923f",
+      "loose": "3e83497fc189fd7e9586",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": "scripts/ops/restore-lib.mjs",
+      "line": 47,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "0832caca196ceae894d6",
+      "loose": "6b8d42d18371bdd36a33",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": "scripts/ops/restore-lib.mjs",
+      "line": 63,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "e90d60f3bec17c725c0d",
+      "loose": "c2acb9c9aca9d8ec029a",
+      "rule_id": "IL-516",
+      "rule_version": 1,
+      "path": "scripts/ops/restore-verify.mjs",
+      "line": 103,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "14a68c3a78191e6cf3df",
+      "loose": "6b8d42d18371bdd36a33",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": "scripts/ops/restore-verify.mjs",
+      "line": 109,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "4e9c845e65eae21d1d9e",
+      "loose": "6b8d42d18371bdd36a33",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": "scripts/ops/restore-verify.mjs",
+      "line": 137,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "0e317f3364edd4bffc1a",
+      "loose": "6b8d42d18371bdd36a33",
+      "rule_id": "IL-111",
+      "rule_version": 1,
+      "path": "scripts/ops/restore-verify.mjs",
+      "line": 159,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "92f57b4d40ea3ba0f763",
+      "loose": "6a490436d4df70c0605e",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/post-migrate-flexible-embedding-dims.js",
+      "line": 83,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "26ffab12d85c743435cc",
+      "loose": "343096243044009a3784",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "scripts/post-migrate-flexible-embedding-dims.js",
+      "line": 96,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "67b984fb4cbb135f062e",
+      "loose": "affd1cdd5a11a65a8974",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/post-migrate-flexible-embedding-dims.js",
+      "line": 108,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "04489b10354e5353a57b",
+      "loose": "972901bb8c42a92a8895",
+      "rule_id": "IL-501",
+      "rule_version": 1,
+      "path": "scripts/reextract-reflect-keywords.js",
+      "line": 28,
+      "severity": "HIGH"
+    },
+    {
+      "fingerprint": "e9f794dc55d9bd31f821",
+      "loose": "3f5df0c0d0afd46cb734",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "scripts/release.js",
+      "line": 279,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "f4ed93970608bae85153",
+      "loose": "1e4bf79f6b4bf5496a68",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "scripts/release.js",
+      "line": 356,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "c41a81716070ed3dca1b",
+      "loose": "a660480eddf2f5464bd8",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": "scripts/run-e2e-tests.sh",
+      "line": 25,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "dfd7132e2e632188e0f5",
+      "loose": "a80301ce7ebee6e347fb",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": "scripts/smoke-test-symbolic.sh",
+      "line": 188,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "f09016f90adbadee741e",
+      "loose": "faba4f32a9e8f4674e56",
+      "rule_id": "ARC-201",
+      "rule_version": 1,
+      "path": "server.js",
+      "line": 128,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "b79742bfe2c78f26b116",
+      "loose": "b7525007e30f48433e82",
+      "rule_id": "AI-101",
+      "rule_version": 1,
+      "path": "server.js",
+      "line": 137,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "7c56428fbdb5ae0e2295",
+      "loose": "3e586ee7e7f46589f764",
+      "rule_id": "IL-301",
+      "rule_version": 1,
+      "path": "server.js",
+      "line": 425,
+      "severity": "LOW"
+    },
+    {
+      "fingerprint": "fc937af0fb821dbed461",
+      "loose": "4e43d6cf45818bd0faae",
+      "rule_id": "IL-101",
+      "rule_version": 1,
+      "path": "setup.sh",
+      "line": 260,
+      "severity": "CRITICAL"
+    },
+    {
+      "fingerprint": "2e3c21d0ad7004380729",
+      "loose": "8a0bf982b248ddda82d6",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/db-concurrency/anchor-quota-mixed.test.js",
+      "line": 211,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "be500826f082ff988b84",
+      "loose": "c549bd4fc2c80f4b20f4",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/db-concurrency/anchor-quota-mixed.test.js",
+      "line": 215,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "1e4952077f54754eac0c",
+      "loose": "945706547a190a2068d9",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/db-concurrency/anchor-quota-mixed.test.js",
+      "line": 226,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "6e536ed5c33b503f0d14",
+      "loose": "cac5e8dc386e388f92be",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/admin-key-policy-api.test.js",
+      "line": 203,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "e2e7d965c6e707ac5761",
+      "loose": "008dbc9f5bc0a6de3bde",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/admin-key-policy-api.test.js",
+      "line": 204,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "97c7f1b65980d5f38a76",
+      "loose": "baf7918471e22de85bca",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/admin-key-policy-api.test.js",
+      "line": 205,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "ecfc9fed5e19fddecfcb",
+      "loose": "e77d6d617883a0060e10",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/admin-key-policy-api.test.js",
+      "line": 206,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "69ce0ef0cfbe6a5a67e9",
+      "loose": "884c08e96efcf32f3e37",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/admin-key-policy-api.test.js",
+      "line": 208,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "c6b8e44cb6bcccb7f846",
+      "loose": "a14df3756b3771f04a6d",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/admin-key-policy-api.test.js",
+      "line": 209,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "f1aa781a921f17c715f6",
+      "loose": "6f20668ca0e822e6338a",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/admin-key-policy-api.test.js",
+      "line": 210,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "58d29873267af7b26d74",
+      "loose": "f3ad8c265b97524c4a0a",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/admin-key-policy-api.test.js",
+      "line": 211,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "d50cd72ff35d4c697c2a",
+      "loose": "21a4934bf0d68e1e49ba",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/case-reward-backprop.test.js",
+      "line": 87,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "3f8dfc2feaac32ae83e2",
+      "loose": "07c4df81b13798606571",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/import-runner.test.js",
+      "line": 512,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "53bdf3a71f3ae384ff60",
+      "loose": "fca04ad29df647a34030",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/key-policy-validation.test.js",
+      "line": 40,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "581eff24c48d0ff30944",
+      "loose": "a56f577837ef5c82625b",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/key-policy-validation.test.js",
+      "line": 44,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "bfbbc941bb3ba1282efe",
+      "loose": "8d4ace7d78b553dc96a4",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/key-policy-validation.test.js",
+      "line": 48,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "2941812fde719a0e0970",
+      "loose": "5fad71047dec56f11272",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/key-policy-validation.test.js",
+      "line": 63,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "33ff40ad5ea04376fdb4",
+      "loose": "d76729309bf2240be77c",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/key-policy-validation.test.js",
+      "line": 69,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "83bf92859ce1b5e664ff",
+      "loose": "d95a21e911932a147fdd",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/key-policy-validation.test.js",
+      "line": 83,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "470980c491cf61f157eb",
+      "loose": "2b2f9d43bf83675a71a5",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/key-policy-validation.test.js",
+      "line": 102,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "6872d992ab5f0de46a1c",
+      "loose": "b37898adb4a1222b054f",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/key-policy-validation.test.js",
+      "line": 107,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "b3bc984fc47828313e54",
+      "loose": "bf87a1b937cdbed4c059",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/key-policy-validation.test.js",
+      "line": 115,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "5b53389e6f6339f9e918",
+      "loose": "58c78383dc853b20f6a5",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/llm-egress-policy.test.js",
+      "line": 92,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "a856ba0819381ba825f3",
+      "loose": "fd10bfff39f22e423480",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/llm-egress-policy.test.js",
+      "line": 108,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "0e61cde5c1d1964461a5",
+      "loose": "743f6b4cc060a64c4e1e",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/mode-preset-authz-http.test.js",
+      "line": 89,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "5a609840fcf994c86b80",
+      "loose": "a390407ac7c898d22bee",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/mode-preset-authz-http.test.js",
+      "line": 93,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "dccd8e1391dfe644fe5e",
+      "loose": "53df6da5c5ccffe57541",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/mode-preset-authz-http.test.js",
+      "line": 98,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "4f85720c685b07454840",
+      "loose": "2dc4715c602c0d88bec4",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/outbox-enqueue.test.js",
+      "line": 119,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "f1cbc04f6ef5ab00a4e6",
+      "loose": "8114bb3e7404e96a324a",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/outbox-enqueue.test.js",
+      "line": 139,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "56c2fda61002b1ecf279",
+      "loose": "9d15d77806de9396bf8d",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/polling-worker.test.js",
+      "line": 112,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "2153e32bcad6c06af116",
+      "loose": "5587d498fb549e62c3db",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/recall-metrics.test.js",
+      "line": 49,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "f1b24cb9ae058bb7d468",
+      "loose": "2c4b92435897a6667dfe",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/recall-metrics.test.js",
+      "line": 57,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "e8648dead9ab194e5969",
+      "loose": "2c6c62646a8f6531ec19",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/recall-metrics.test.js",
+      "line": 261,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "0b2b129053e8b3b5b040",
+      "loose": "e68ddee78109a4fc921a",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/recall-metrics.test.js",
+      "line": 267,
+      "severity": "MEDIUM"
+    },
+    {
+      "fingerprint": "3cdf3192ad01285135ed",
+      "loose": "e9be6435794ff6e04fcb",
+      "rule_id": "IL-306",
+      "rule_version": 1,
+      "path": "tests/unit/search-param-adaptor.test.js",
+      "line": 97,
+      "severity": "MEDIUM"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+name: Iron Laws
+
+# 보안·품질 점검(오철칙). 기준선(.iron-laws-baseline.json)에 없던 새 지적만 판정한다.
+# 시험 결과와 별개의 상태로 보고하며 병합을 막지 않는다(continue-on-error).
+# 도구는 점검에 쓴 커밋으로 고정한다. 올릴 때는 로컬에서 같은 커밋으로 baseline을 다시 확인한다.
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "41 0 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  iron-laws:
+    name: Iron Laws (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install iron-laws (pinned commit)
+        run: pipx install "git+https://github.com/JinHo-von-Choi/iron-laws.git@847590199072f4e51f9f1a528d5f3e545b1abb65"
+      - name: Check for new findings against the baseline
+        run: iron-laws check . --baseline .iron-laws-baseline.json

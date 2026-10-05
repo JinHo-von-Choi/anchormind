@@ -1,0 +1,102 @@
+# 오철칙 (Iron Laws) 프로젝트 설정 파일
+fail_on: HIGH
+excludes:
+- .git
+- .svn
+- .hg
+- .venv
+- venv
+- env
+- node_modules
+- __pycache__
+- .pytest_cache
+- .mypy_cache
+- .ruff_cache
+- dist
+- build
+- target
+- obj
+- .next*
+- .nuxt*
+- .svelte-kit*
+- .vercel
+- .output
+- .expo
+- .dart_tool
+- .angular
+- .turbo
+- .cache
+- .parcel-cache
+- .gradle
+- .idea
+- .vscode
+- out
+- coverage
+- vendor
+- third_party
+- storybook-static
+- generated
+- __generated__
+- generated-assets
+- '*-build'
+- '*-dist'
+- '*.min.js'
+- '*.min.css'
+- '*.bundle.js'
+- '*.map'
+- package-lock.json
+- pnpm-lock.yaml
+- yarn.lock
+- '*.lock'
+include_extensions:
+- .py
+- .js
+- .jsx
+- .mjs
+- .cjs
+- .ts
+- .mts
+- .cts
+- .tsx
+- .java
+- .cs
+- .go
+- .rs
+- .php
+- .c
+- .h
+- .cpp
+- .cc
+- .cxx
+- .hpp
+- .hh
+- .sql
+- .sh
+- .xml
+- .yml
+- .yaml
+- .json
+- .properties
+- .toml
+- .rules
+- .html
+- .htm
+- .jinja
+- .j2
+- .cshtml
+- .gradle
+- .md
+limits:
+  max_function_lines: 80
+  max_file_lines: 600
+  max_parameters: 7
+  max_nesting: 5
+  duplicate_min_nodes: 40
+  duplicate_similarity: 0.9
+  max_file_bytes: 1000000
+  max_cross_file_lookups: 20000
+policies:
+  min_versions: {}
+respect_gitignore: true
+enabled_rules: null
+disabled_rules: []
