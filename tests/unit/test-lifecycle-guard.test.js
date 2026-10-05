@@ -9,7 +9,7 @@
  *
  * Case 1: 기본 import만 한 빈 테스트 — clean shutdown
  * Case 2: setInterval + unref() → unref는 event loop를 block하지 않으므로 clean
- * Case 3: setInterval + unref 없음 → assertCleanShutdown이 누수 감지 (negative case)
+ * Case 3: 닫지 않은 net.Server → assertCleanShutdown이 누수 감지 (negative case)
  * Case 4: lib/sessions.js import + after 훅 정리 → clean (CP2 MEMENTO_METRICS_DEFAULT=off 의존)
  * Case 5: lib/memory/processors/ReflectProcessor.js import + after 훅 정리 → clean
  * Case 6: 표준 출력 쓰기 요청과 소켓 쓰기 요청 구분
@@ -46,34 +46,34 @@ describe("Case 2: setInterval.unref() — clean shutdown", () => {
   });
 });
 
-/* ── Case 3: setInterval(no unref) → assertCleanShutdown이 누수 감지 (negative) ── */
-describe("Case 3: setInterval(no unref) — 누수 감지 (negative case)", () => {
-  let leakyTimer;
-
+/* ── Case 3: 닫지 않은 net.Server → assertCleanShutdown이 누수 감지 (negative) ── */
+describe("Case 3: 닫지 않은 서버 handle — 누수 감지 (negative case)", () => {
   /**
-   * Node 24 --test-isolation=process 환경에서 node:test runner가 test worker를
-   * 분리 관리하므로 process._getActiveHandles()의 Timeout 등록 타이밍이
-   * 재현 안정적이지 않다. CP2 + positive 경로 4건으로 회귀 가드 목적을 달성하며
-   * negative 케이스는 별건 조사 TODO.
+   * Node 11 이후 process._getActiveHandles()는 setInterval/setTimeout의 Timeout을 담지 않는다.
+   * 타이머 누수는 이 헬퍼로 검출할 수 없으므로 목록에 나타나는 handle(서버, 소켓)로 검출 경로를 확인한다.
    */
-  it.skip("unref 없는 interval을 assertCleanShutdown이 검출함 (flaky under --test-isolation=process)", async () => {
-    leakyTimer = setInterval(() => {}, 60_000);
-
-    await assert.rejects(
-      () => assertCleanShutdown(),
-      (err) => {
-        assert.ok(
-          err.message.includes("Active handles"),
-          `에러 메시지에 "Active handles"가 없음: ${err.message}`,
-        );
-        return true;
-      },
-    );
+  it("닫지 않은 net.Server를 assertCleanShutdown이 검출한다", async () => {
+    const server = net.createServer();
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      await assert.rejects(
+        () => assertCleanShutdown(),
+        (err) => {
+          assert.match(err.message, /Active handles after test/);
+          assert.match(err.message, /Server x1/);
+          return true;
+        },
+      );
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 
-  after(() => {
-    /* negative 케이스용 timer를 정리하여 이후 테스트에 영향 없도록 */
-    clearInterval(leakyTimer);
+  it("서버를 닫으면 같은 검사가 통과한다", async () => {
+    const server = net.createServer();
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    await new Promise((resolve) => server.close(resolve));
+    await assertCleanShutdown();
   });
 });
 
