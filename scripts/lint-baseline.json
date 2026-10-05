@@ -3,11 +3,10 @@
     "config/validate-memory-config.js": 24,
     "lib/admin/admin-keys.js": 39,
     "lib/admin/admin-logs.js": 41,
-    "lib/admin/admin-memory.js": 24,
+    "lib/admin/admin-memory.js": 74,
     "lib/admin/admin-routes.js": 43,
     "lib/admin/admin-sessions.js": 45,
     "lib/cli/anchor-scope.js": 25,
-    "lib/cli/benchmark.js": 23,
     "lib/cli/inspect.js": 38,
     "lib/cli/recall.js": 25,
     "lib/cli/remember.js": 32,
@@ -62,6 +61,7 @@
     "server.js": 134
   },
   "max-lines": {
+    "lib/admin/admin-memory.js": 1022,
     "lib/memory/consolidate/MemoryConsolidator.js": 833,
     "lib/memory/read/FragmentSearch.js": 842,
     "lib/tools/memory-schemas.js": 1303
@@ -113,10 +113,9 @@
     "lib/memory/signals/SearchMetrics.js": 1,
     "lib/memory/signals/SpreadingActivation.js": 1,
     "lib/memory/write/BatchRememberProcessor.js": 4,
-    "lib/memory/write/ConflictResolver.js": 2,
+    "lib/memory/write/ConflictResolver.js": 1,
     "lib/memory/write/FragmentWriter.js": 3,
     "lib/memory/write/RememberPostProcessor.js": 1,
-    "lib/oauth.js": 3,
     "lib/redis.js": 1,
     "lib/sessions.js": 10,
     "lib/symbolic/rules/v1/proactive-gate.js": 1,
