@@ -189,7 +189,7 @@ node --test tests/integration/reflect-large-payload.test.js
 node --test tests/integration/embedding-worker-batch.test.js
 
 # session-linker-deadlock: DB 필요
-DATABASE_URL=postgresql://user:pass@localhost:5432/bee_db \
+DATABASE_URL=postgresql://user:pass@localhost:5432/memento \
   node --test tests/integration/session-linker-deadlock.test.js
 ```
 

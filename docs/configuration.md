@@ -201,7 +201,7 @@
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| MEMENTO_CLI_REMOTE | (없음) | CLI `--remote` 플래그 미지정 시 사용할 원격 MCP 서버 URL. 예: `https://memento.anchormind.net/mcp` |
+| MEMENTO_CLI_REMOTE | (없음) | CLI `--remote` 플래그 미지정 시 사용할 원격 MCP 서버 URL. 예: `https://memento.example.com/mcp` |
 | MEMENTO_CLI_KEY | (없음) | CLI `--key` 플래그 미지정 시 사용할 원격 서버 인증용 API 키 |
 
 #### Symbolic Memory (opt-in)

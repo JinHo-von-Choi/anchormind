@@ -152,7 +152,7 @@ PowerShell에서 CLI 원격 접속 환경변수를 설정할 때 따옴표에 �
 
 ```powershell
 # 환경변수 설정 (세션 내 유효)
-$env:MEMENTO_CLI_REMOTE = "https://memento.anchormind.net/mcp"
+$env:MEMENTO_CLI_REMOTE = "https://memento.example.com/mcp"
 $env:MEMENTO_CLI_KEY = "mmcp_xxx"
 
 # 설정 후 CLI 사용
@@ -160,7 +160,7 @@ node bin/memento.js stats
 node bin/memento.js recall "검색어"
 
 # 일회성 실행 (환경변수 없이 직접 지정)
-node bin/memento.js stats --remote "https://memento.anchormind.net/mcp" --key "mmcp_xxx"
+node bin/memento.js stats --remote "https://memento.example.com/mcp" --key "mmcp_xxx"
 ```
 
 주의: PowerShell에서 `--key $env:MEMENTO_CLI_KEY` 형태로 전달할 때, 값에 특수문자가 있으면 따옴표로 감싸야 한다.

@@ -4,7 +4,7 @@
 작성일: 2026-08-13
 
 셀프호스팅 환경에서 AnchorMind를 Docker Compose로 상시 운영할 때의 구성 예시와,
-호스트 재부팅·Docker 엔진 재시작 후 무인 복구 패턴을 다룬다. (이슈 #53 대응)
+호스트 재부팅·Docker 엔진 재시작 후 무인 복구 패턴을 다룬다.
 
 저장소의 `docker-compose.dev.yml`·`docker-compose.test.yml`은 개발·테스트 전용으로
 restart 정책이 없다. 프로덕션은 아래 예시를 프로젝트 외부 경로에 복사해 사용한다.

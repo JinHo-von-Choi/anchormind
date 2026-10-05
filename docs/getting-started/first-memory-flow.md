@@ -7,7 +7,7 @@ updated: 2026-10-03
 
 # First Memory Flow
 
-이 문서는 설치 직후 Memento MCP가 실제로 기억을 저장하고 불러오는지 검증하는 절차다.
+이 문서는 설치 직후 AnchorMind가 실제로 기억을 저장하고 불러오는지 검증하는 절차다.
 
 ## 목표
 

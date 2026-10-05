@@ -1576,3 +1576,14 @@ curl -si -X POST https://anchormind.example.com/mcp \
 - [통합/E2E 테스트](../tests/integration/README.md) — 테스트 환경 구성 및 실행 방법
 - [아키텍처](architecture.md) — 컴포넌트 의존성 및 검색 파이프라인
 - [설정 레퍼런스](configuration.md) — 전체 환경변수 목록 및 MEMORY_CONFIG
+
+## 프로토콜 버전 협상
+
+서버는 아래 네 버전을 모두 광고하고, 클라이언트는 `initialize`에서 양쪽이 지원하는 가장 높은 버전으로 협상한다.
+
+| 버전 | 주요 추가 사항 |
+|---------|------------------|
+| `2025-11-25` | Tasks 추상화, 장기 실행 작업 지원 |
+| `2025-06-18` | 구조화된 도구 출력, 서버 주도 상호작용 |
+| `2025-03-26` | OAuth 2.1, Streamable HTTP 전송 |
+| `2024-11-05` | 최초 릴리즈, Legacy SSE 전송 |

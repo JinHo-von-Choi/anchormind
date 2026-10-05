@@ -18,456 +18,247 @@
 </p>
 
 <p align="center">
-  <a href="README.en.md">📖 English Documentation</a>
+  <a href="README.en.md">English</a>
 </p>
 
 # AnchorMind
 
-> AI에게 기억을 줍니다. 그리고 그 기억을 발판으로 성장하게 합니다.
+[이게 뭔데](#이게-뭔데) | [어떻게 돌아가는데](#어떻게-돌아가는데) | [어떻게 설치하는데](#어떻게-설치하는데) | [자주 묻는 질문](#자주-묻는-질문)
 
-매일 아침 기억이 리셋되는 신입직원을 상상해보라. 어제 가르친 것도, 지난주 함께 해결한 문제도, 취향도 전부 까먹는다. AnchorMind는 이 신입에게 기억을 심어준다.
+## 이게 뭔데
 
-AnchorMind는 MCP(Model Context Protocol) 기반 에이전트 장기 기억 서버다. 세션이 종료되어도 중요한 사실, 결정, 에러 패턴, 절차를 유지하고 다음 세션에서 복원한다.
+AI 에이전트(Claude Code, Cursor, Codex 등)에 세션이 끝나도 남아 있는 장기 기억을 붙여 주는 MCP 서버다. 직접 호스팅하고, 기억은 PostgreSQL에 저장한다.
 
-> 이 프로젝트는 memento-mcp라는 이름으로 시작했다. 기억을 다루는 프로젝트에 잘 어울리는 이름이라고 지금도 생각하지만, 같거나 비슷한 이름의 프로젝트가 많아 AnchorMind로 바꿨다. 흘러가는 대화 속에서 남길 가치가 있는 기억을 닻처럼 붙들어 고정한다는 뜻이며, 세션이 끝나도 유실되지 않는 이 시스템의 앵커 파편(anchor fragment) 개념과도 맞닿아 있다.
+에이전트는 세션이 끝나면 대화를 잊는다. 프로젝트 설정, 어제 해결한 버그, 선호하는 작업 방식을 매번 다시 설명해야 한다. AnchorMind는 이런 내용을 짧은 단위(파편)로 저장해 두고, 다음 세션에서 필요한 것만 꺼내 준다.
 
-단순한 기억의 도서관이 아니다. 피드백이 쌓이면 연결이 강해지고, 경험이 반복되면 패턴이 추상화되고, 세션이 이어지면 이야기가 생긴다. 기억하는 AI가 아니라 경험으로 성장하는 AI를 지향한다.
+## 어떻게 돌아가는데
 
-> [!TIP]
-> 설치·설정을 직접 다루기 부담스럽다면 Claude Code·Cursor·Codex 같은 AI 어시스턴트에 다음 한 문장을 전달하면 된다.
->
-> > "anchormind 저장소를 내 환경에 설치하고, `docs/INSTALL.md`와 `SKILL.md`를 읽어 권장 설정을 적용한 뒤 동작을 검증해 줘."
->
-> 의존성 설치, `.env` 구성, MCP 등록, 헬스 체크까지 AI가 안내한다. 자세한 위임 절차는 [`docs/INSTALL.md`](docs/INSTALL.md#ai에게-맡기기) 참고.
+1. AnchorMind 서버를 실행한다.
+2. 에이전트에 MCP 서버로 등록한다.
+3. 세션을 시작하면 에이전트가 서버에서 핵심 기억을 받아 온다. 대화 중에는 필요할 때 검색하고, 남겨야 할 내용은 저장한다.
+4. 에이전트가 그 기억을 참고해 답한다.
 
-## 30초 체험
-
-AI에게 무언가를 기억시키고, 다음 세션에서 꺼내 보는 흐름이다:
+사용자 눈에는 대략 이렇게 보인다.
 
 ```
 [세션 1]
-사용자: "우리 프로젝트는 PostgreSQL 15를 쓰고, 테스트는 Vitest로 돌려"
-  → AI가 remember 호출 → 파편 2개 저장
+사용자: 우리 프로젝트는 PostgreSQL 15를 쓰고 테스트는 Vitest로 돌려.
+에이전트: (remember 호출, 파편 2개 저장)
 
-[세션 2 — 다음 날]
-  → AI가 context 호출 → "PostgreSQL 15 사용", "Vitest 테스트" 자동 복원
-사용자: "테스트 어떻게 돌리더라?"
-  → AI가 recall 호출 → "Vitest로 테스트 실행" 파편 반환
-  → AI: "이 프로젝트는 Vitest를 사용합니다. npx vitest로 실행하세요."
+[다음 날, 새 세션]
+에이전트: (시작하며 context 호출, 저장해 둔 파편 2개를 받음)
+사용자: 테스트 어떻게 돌리더라?
+에이전트: (recall 호출) 이 프로젝트는 Vitest를 쓴다. npx vitest로 실행하면 된다.
 ```
 
-매 세션마다 같은 설명을 반복할 필요가 없다.
+세션이 바뀔 때마다 같은 설명을 반복할 필요가 없다. 전체 흐름은 아래 다이어그램과 같다.
 
-## 설치
+```mermaid
+sequenceDiagram
+    participant U as 사용자
+    participant A as 에이전트
+    participant M as AnchorMind 서버
+    participant D as PostgreSQL
 
-필수: Node.js 20+, PostgreSQL (pgvector 확장)
+    U->>A: 세션 시작
+    A->>M: context
+    M->>D: 선호, 에러, 절차, 결정 조회
+    M-->>A: 핵심 기억
+    U->>A: 질문
+    A->>M: recall
+    M-->>A: 관련 기억
+    A-->>U: 기억을 참고한 답변
+    A->>M: remember (새 결정, 해결한 에러)
+    U->>A: 세션 종료
+    A->>M: reflect (세션 요약)
+```
 
-> 서버 실행은 Node.js 20 이상에서 동작한다. 다만 개발용 단위시험은 `--experimental-test-module-mocks`를 쓰며 이 기능은 Node.js 24에서만 안정적이다. 시험을 돌리려면 Node.js 24를 쓴다.
+도구 호출은 에이전트가 한다. 서버가 먼저 말을 걸지는 않는다. 에이전트가 빼먹지 않고 호출하게 하려면 훅이나 지침 파일을 설정해야 한다([자동으로 쓰게 하려면](#에이전트가-기억-도구를-알아서-쓰게-하려면)).
+
+## 어떻게 설치하는데
+
+### 서버 설치
+
+필요한 것: Node.js 20+, Docker. pgvector가 설치된 PostgreSQL이 이미 있다면 Docker는 없어도 된다.
+
+**1. 데이터베이스** (이미 있으면 건너뛴다)
 
 ```bash
-cp .env.example.minimal .env
-# .env 값을 편집한 뒤 셸에 반영
-export $(grep -v '^#' .env | grep '=' | xargs)
+docker run -d --name anchormind-db -p 5432:5432 \
+  -e POSTGRES_PASSWORD=change-me -e POSTGRES_DB=memento \
+  -v anchormind-pgdata:/var/lib/postgresql/data pgvector/pgvector:pg15
+
+docker exec anchormind-db psql -U postgres -d memento \
+  -c "CREATE EXTENSION IF NOT EXISTS vector"
+```
+
+**2. 서버**
+
+```bash
+git clone https://github.com/JinHo-von-Choi/anchormind.git
+cd anchormind
 npm install
+
+cp .env.example.minimal .env
+```
+
+`.env`를 열고 두 가지만 한다.
+
+- `MEMENTO_ACCESS_KEY`를 `change-me`가 아닌 값으로 바꾼다. 이 값은 마스터 키이고, `Authorization: Bearer` 토큰으로 쓰인다.
+- 아래 세 줄을 추가한다. 외부 API 키 없이 자연어 검색을 쓰기 위한 로컬 임베딩 설정이다.
+
+```
+EMBEDDING_PROVIDER=transformers
+EMBEDDING_MODEL=Xenova/multilingual-e5-small
+EMBEDDING_DIMENSIONS=384
+```
+
+DB 설정은 위 `docker run` 값과 이미 맞아 있으므로 그대로 둔다. 그다음 실행한다.
+
+```bash
 npm run migrate
+node scripts/post-migrate-flexible-embedding-dims.js
 node server.js
 ```
 
-OpenAI API 없이 로컬 임베딩을 사용하려면 `.env`에 `EMBEDDING_PROVIDER=transformers`를 추가한다. 기동 시 `Xenova/multilingual-e5-small` 모델을 자동으로 다운로드한다. 단, OpenAI 임베딩으로 이미 저장된 데이터와 혼용하면 차원이 불일치하므로 새로 마이그레이션된 DB에서만 사용할 것.
+처음 켤 때 임베딩 모델을 내려받는다. 약 120MB다.
 
-서버가 뜬 뒤에는 [First Memory Flow](docs/getting-started/first-memory-flow.md)로 동작을 검증한다.
-
-다른 플랫폼 설정은 위 [호환 플랫폼](#호환-플랫폼) 테이블 참조.
-
-### 업데이트
+**3. 확인**
 
 ```bash
-cd ~/memento-mcp
-git pull origin main
-npm install
-npm run migrate
-# 서비스 재시작 (systemd / pm2 / docker 등 환경에 맞게)
+curl http://localhost:57332/health
 ```
 
-- `npm run migrate`는 `.env`의 DB 설정을 자동으로 사용한다. `DATABASE_URL` 수동 지정 불필요.
-- pgvector 스키마는 자동 감지된다. `PGVECTOR_SCHEMA` 설정은 대부분 불필요.
-- 마이그레이션이 포함된 업데이트는 `npm run migrate` 전에 `scripts/ops/backup.sh --label pre-migration`으로 백업한다. 행이 많은 운영 DB는 migration-050의 색인을 `npm run migrate`보다 먼저 `scripts/ops/online-index.mjs`로 만들고, 배포 뒤 `node scripts/ops/finish-dedup-scope.mjs --confirm`으로 중복 판정 범위 전환을 마친다([docs/operations/online-migration.md](docs/operations/online-migration.md#중복-판정-범위-전환)).
-- migration-053 ~ 060이 포함된 업데이트는 배포 전에 `scripts/grant-anchor-permission.js --apply`로 앵커를 쓰는 키에 `anchor` 권한을 주고, `case_events(source_fragment_id)` 색인은 마이그레이션 전에, `content_tokens` GIN 색인은 마이그레이션 뒤에 `scripts/ops/online-index.mjs`로 만들고, 이어서 `backfill-content-tokens.mjs`와 `scripts/ops/backfill-key-secrets.mjs --confirm`을 실행한다. 관리자 계정을 쓰려면 `MEMENTO_ADMIN_SEAL_KEY`를 먼저 설정한다. 순서와 되돌리기는 [docs/operations/online-migration.md](docs/operations/online-migration.md#migration-053--060-배포-순서)에 있다.
+`{"status":"healthy", ...}`가 나오면 정상이다. 저장과 조회까지 한 번 확인하려면 [First Memory Flow](docs/getting-started/first-memory-flow.md)를 따라 한다.
 
-### Claude Code 연동
+더 필요한 경우:
 
-`claude mcp add` CLI로 등록한다 (HTTP 타입 MCP 서버는 `settings.json`에 수동 기재해도 인식되지 않는다).
+- 질문에 답하면서 `.env` 만들기, 외부 임베딩 API 쓰기: [INSTALL.md](docs/INSTALL.md)
+- 설치를 AI 어시스턴트에게 맡기기: [INSTALL.md](docs/INSTALL.md#ai에게-맡기기)
+- Docker로 계속 운영하기: [Production Docker](docs/operations/production-docker.md)
+- Windows: [WSL2 가이드](docs/getting-started/windows-wsl2.md)
+- 막혔을 때: [문제 해결](docs/getting-started/troubleshooting.md)
+
+### 에이전트에 연결
+
+Claude Code:
 
 ```bash
-claude mcp add memento http://localhost:57332/mcp \
+claude mcp add anchormind http://localhost:57332/mcp \
   --transport http \
   --scope user \
   --header "Authorization: Bearer YOUR_ACCESS_KEY"
 ```
 
-등록은 `~/.claude.json`에 저장된다. 확인:
+`claude mcp list`에서 `Connected`가 보이면 연결된 것이다. Claude Code는 `settings.json`에 직접 적은 HTTP MCP 서버를 인식하지 않으므로, 이 명령이나 `.mcp.json`을 써야 한다.
 
-```bash
-claude mcp list
-# memento: http://localhost:57332/mcp (HTTP) - ✓ Connected
-```
+Cursor, Codex, Windsurf, Claude.ai Web, ChatGPT 등 다른 클라이언트는 [클라이언트별 연결](docs/getting-started/clients.md)에 정리되어 있다.
 
-프로젝트 단위로 공유하려면 저장소 루트의 `.mcp.json`에 기재한다. 상세 설정은 [Claude Code Configuration](docs/getting-started/claude-code.md) 참조.
+연결한 뒤 에이전트가 기억 도구를 알아서 쓰게 하는 방법은 [아래 FAQ](#에이전트가-기억-도구를-알아서-쓰게-하려면)에 있다.
 
-### Codex Desktop 연동
+## 자주 묻는 질문
 
-Codex Desktop 등 일부 MCP 클라이언트는 deferred/lazy tool discovery를 쓴다. tool_search가 검색어와 limit에 따라 일부 도구만 노출하므로, 항상 존재하는 recall이 저장 편향 쿼리+낮은 limit에서 빠질 수 있다. recall이 안 보이면 더 넓은 쿼리와 limit 20 이상으로 재검색한다. 권장: 에이전트 system prompt/instructions에 이 재검색 규칙을 미리 심어 초기 discovery 루프를 차단한다.
+### CLAUDE.md나 MEMORY.md 같은 파일 메모와 무엇이 다른가?
 
-- query: `memento context recall remember reflect batch_remember search_traces reconstruct_history`
-- limit: 20 이상
+파일 메모는 세션마다 전체를 읽혀야 한다. 내용이 늘수록 토큰이 늘고 오래된 내용과 새 내용이 충돌한다. AnchorMind는 필요한 파편만 `tokenBudget` 안에서 검색해 돌려주고, 중복 병합, 모순 탐지, 중요도 감쇠, TTL 만료로 기억을 정리한다. 여러 에이전트와 기기가 같은 서버를 공유할 수 있고, `workspace`로 프로젝트별 기억을 나눈다.
 
-### 지원 환경
+### 어떤 경우에 맞지 않나?
 
-| 환경 | 권장도 | 시작 문서 |
-|------|--------|-----------|
-| Linux / macOS | 권장 | [Quick Start](docs/getting-started/quickstart.md) |
-| Windows + WSL2 | 가장 권장 | [Windows WSL2 Setup](docs/getting-started/windows-wsl2.md) |
-| Windows + PowerShell | 제한 지원 | [Windows PowerShell Setup](docs/getting-started/windows-powershell.md) |
+- 기억할 내용이 `CLAUDE.md` 한 장에 들어갈 정도면 파일이 더 간단하다.
+- PostgreSQL(pgvector)을 운영해야 한다.
+- 검색은 사실 단위에 맞춰져 있다. 긴 추론을 합성하는 질문은 약하다([벤치마크](#벤치마크)).
 
-## 호환 플랫폼
+### 임베딩 모델이나 OpenAI 키가 꼭 필요한가?
 
-AnchorMind는 MCP(Model Context Protocol) 표준 서버다. Claude Code뿐 아니라, MCP를 지원하는 모든 AI 플랫폼에서 사용할 수 있다.
+필수는 아니다. PostgreSQL만 있으면 저장, 키워드 회상, 링크, 관리 기능이 동작한다.
 
-| 플랫폼 | 설정 위치 | 연결 방식 |
-|--------|----------|-----------|
-| Claude Code | `claude mcp add` CLI (`~/.claude.json`) 또는 `.mcp.json` | Streamable HTTP |
-| Claude Desktop | claude_desktop_config.json | Streamable HTTP |
-| Claude.ai Web | Settings > Integrations | OAuth (RFC 7591) |
-| Cursor | .cursor/mcp.json | Streamable HTTP |
-| Windsurf | ~/.codeium/windsurf/mcp_config.json | Streamable HTTP |
-| GitHub Copilot | VS Code MCP Marketplace | Streamable HTTP |
-| Codex CLI | ~/.codex/config.toml | Streamable HTTP |
-| ChatGPT Desktop | Developer Mode > Apps | OAuth (RFC 7591) |
-| Continue | config.json | Streamable HTTP |
+다만 임베딩이 없으면 자연어 질문(`text` 질의)은 결과가 0건이다. 그래서 위 설치 절차에 로컬 임베딩을 넣었다.
 
-공통 설정: 서버 URL `http://localhost:57332/mcp`, Authorization 헤더에 `Bearer YOUR_ACCESS_KEY`.
+- 로컬 모델: `.env`에 `EMBEDDING_PROVIDER=transformers`. API 키가 필요 없고 본문이 밖으로 나가지 않는다.
+- 외부 API: OpenAI 같은 임베딩 API 키.
 
-Claude.ai Web / ChatGPT 연동은 OAuth를 사용한다. 발급한 API 키(`mmcp_xxx`)를 `client_id`로 입력하면 Dynamic Client Registration(RFC 7591) 없이 바로 연결된다. 신뢰 도메인(claude.ai, chatgpt.com)의 redirect URI는 자동 승인된다.
+임베딩 방식은 한 DB 안에서 바꿔 섞을 수 없다. 벡터 차원이 달라지기 때문이다. 상세는 [로컬 임베딩 가이드](docs/embedding-local.md).
 
-`POST /register`에 API 키를 `Authorization: Bearer`로 보내 등록한 클라이언트(키에 묶인 클라이언트)는 인가 요청마다 동의 화면을 거치고, 토큰 교환에서 같은 키를 `client_secret`(또는 Basic 인증)으로 제시해야 한다. 제시하지 않으면 `POST /token`이 401 `invalid_client`를 돌려준다. `/register`는 프로세스당 시간당 `MEMENTO_DCR_MAX_PER_HOUR`(기본 100, 0은 상한 없음)건까지 받고 초과하면 429(`Retry-After`는 현재 창의 남은 초)를 돌려준다. 키에 묶인 등록은 따로 센다.
+### Redis가 필요한가?
 
-플랫폼별 상세 설정은 [연동 가이드](docs/getting-started/) 참조.
+선택이다. 붙이면 검색 캐시와 세션 활동 추적이 켜진다. Redis 없이 쓰면 새로 저장한 파편이 자연어 검색에 잡히기까지 최대 5분이 걸린다(서버가 5분 주기로 임베딩을 만든다).
 
-## 7가지 파편 유형
+### 내 기억은 어디에 저장되고 밖으로 나가나?
 
-| 유형 | 설명 | 용도 |
-|------|------|------|
-| `fact` | 사실 | 설정값, 경로, 버전 등 객관적 정보 |
-| `decision` | 의사결정 | 아키텍처 선택, 기술 스택 결정과 근거 |
-| `error` | 에러 | 발생한 에러와 원인, 해결 방법 |
-| `preference` | 선호 | 사용자 스타일, 코딩 규칙, 작업 방식 |
-| `procedure` | 절차 | 배포, 빌드, 테스트 등 반복 가능한 단계 |
-| `relation` | 관계 | 엔티티 간 연결, 의존성, 소유 관계 |
-| `episode` | 에피소드 | 전후관계를 포함하는 서사 기억 (1000자, 나머지는 300자) |
+내가 운영하는 PostgreSQL에 저장된다. 밖으로 나가는 경로는 설정한 것뿐이다. 외부 임베딩 API를 쓰면 저장하는 본문이 그 API로 전송된다. 막으려면 로컬 임베딩을 쓴다. 품질 평가와 자동 reflect에 외부 LLM을 연결했다면 키와 workspace별 `egress_policy`로 제공자를 제한하고 전송 본문을 마스킹한다([보안과 운영 점검](docs/operations/hardening.md)).
 
-## 핵심 기능
+### 비밀번호나 토큰을 기억시켜도 되나?
 
-| 기능 | 설명 |
+권하지 않는다. 저장할 때 민감 정보 패턴을 가려서 저장하지만 모든 형식을 잡지는 못한다. 비밀값은 환경 변수나 비밀 저장소에 두고, 기억에는 위치만 적는다.
+
+### 에이전트가 기억 도구를 알아서 쓰게 하려면?
+
+방법은 두 가지다. 같이 써도 된다.
+
+1. 훅 또는 플러그인: 세션 시작에 `context` 호출, 세션 종료에 회고를 자동으로 건다. `anchormind init --target claude --write`로 Claude Code 플러그인을 만든다([플러그인 설치](docs/getting-started/plugins.md), [훅 설정](docs/getting-started/hooks.md)).
+2. 지침: MCP 연결 뒤 에이전트에게 `get_skill_guide` 도구의 가이드를 읽고 기억 도구를 적극적으로 쓰도록 설정해 달라고 요청한다. 가이드는 서버가 내려준다.
+
+### 기억이 CLAUDE.md의 규칙과 충돌하면?
+
+주입된 기억은 시스템 프롬프트와 지침 파일보다 우선순위가 낮다. "PostgreSQL 15를 쓴다" 같은 사실은 잘 작동하지만, "테스트는 Given-When-Then으로 쓴다" 같은 행동 규칙은 충돌하면 무시될 수 있다. 행동 규칙은 `CLAUDE.md`, `AGENTS.md`, 훅, 스킬에 둔다.
+
+### 저장했는데 recall에 안 나온다
+
+- `pending_review: true`로 나오면 검토 대기 상태다([문제 해결 17번](docs/getting-started/troubleshooting.md#17-remember한-파편이-recall에-보이지-않거나-pending_review로-나옴)).
+- workspace가 다르면 보이지 않는다. 저장과 조회에 같은 `workspace`를 쓴다.
+- 자연어 질의만 비면 임베딩이 켜져 있는지 확인한다. Redis 없이 쓰면 저장 직후 최대 5분은 자연어 검색에 잡히지 않는다. 키워드 검색은 바로 된다.
+
+그 밖의 증상은 [문제 해결](docs/getting-started/troubleshooting.md)에 17개 항목이 있다.
+
+### 기억이 계속 쌓이면?
+
+중복 병합, 모순 탐지, 중요도 감쇠, TTL 만료가 주기적으로 돈다. 오래 쓰이지 않은 파편은 낮은 계층으로 내려가고 결국 사라진다. 남겨야 하는 파편은 앵커로 지정하면 감쇠와 만료에서 빠진다. 앵커 지정에는 `anchor` 권한이 필요하다.
+
+### 이름이 memento-mcp였던 것 같은데?
+
+같은 프로젝트다. 같거나 비슷한 이름의 프로젝트가 많아 AnchorMind로 바꿨다. 명령어는 `anchormind`와 `memento-mcp` 둘 다 쓸 수 있고, 일부 환경 변수는 `MEMENTO_` 접두사를 유지한다.
+
+## 기억의 단위
+
+기억은 한두 문장짜리 파편으로 저장된다. 파편은 7가지 유형 중 하나다.
+
+| 유형 | 내용 |
 |------|------|
-| `remember` | 중요한 정보를 원자적 파편으로 분해하여 저장. `MEMENTO_REMEMBER_ATOMIC=true` 시 quota check + INSERT를 단일 트랜잭션으로 원자화. |
-| `recall` | 키워드 + 시맨틱 3계층 검색으로 필요한 기억만 반환. `SearchScope`가 workspace/caseId/affect 등 scope를 L1~L3 전 레이어에 정합 적용. |
-| `context` | 세션 시작 시 핵심 맥락을 자동 복원. `agentId=X`는 `X + default`, 생략 시 `default` 공유 기억만 반환. |
-| 자동 정리 | 중복 병합, 모순 탐지, 중요도 감쇠, TTL 기반 망각 |
-| 저장소 접근 | 저장소 접근은 `lib/tools/db.js`의 `getPrimaryPool`, `queryWithAgentVector`가 맡는다. `MEMENTO_STORAGE`는 저장소 백엔드 이름이며 동작에 영향을 주지 않는다. |
-| 링크 재통합 | `tool_feedback` 피드백이 fragment_links의 weight/confidence에 실시간 반영 (ReconsolidationEngine). 모순 링크는 자동 격리(quarantine). |
-| 확산 활성화 | `recall` 시 `contextText`를 전달하면 관련 파편의 activation_score를 선제적으로 부스트하여 맥락 연관성 높은 결과 우선 반환 (SpreadingActivation). |
-| 에피소드 연속성 | `reflect` 후 생성된 episode 파편 간 `preceded_by` 엣지를 자동 생성하여 경험 흐름을 그래프로 보존 (EpisodeContinuityService). |
-| 관리 콘솔 | 기억 탐색, 지식 그래프, 통계 대시보드, API 키 그룹/상태 필터, daily-limit 인라인 편집 |
-| OAuth 연동 | RFC 7591 Dynamic Client Registration, Claude.ai / ChatGPT Web 통합 지원. 같은 토큰으로 재연결한 클라이언트는 새 세션 대신 기존 활성 세션을 이어 쓴다. |
-| Workspace 격리 | 같은 키 내에서도 프로젝트·직종·클라이언트 단위로 기억을 분리. 명시 workspace 또는 `api_keys.default_workspace`를 적용하고, 둘 다 없으면 전역(NULL)만 조회. 전체 조회는 master의 `allWorkspaces=true`만 허용. |
-| 배치 처리 | `batch_remember`는 multi-row 단일 INSERT(256KB 또는 500행 chunk) + 비동기 큐 워커(BatchRememberWorker)로 임베딩·후처리를 논블로킹 실행. `async: true` 시 ack·재시도(최대 3회)·dead-letter·기동 복구(RPOPLPUSH reliable queue)로 at-least-once 처리 보장. `batch_status(jobId)` 도구로 처리 상태(queued/processing/completed/dead) 조회 가능. 항상 표준 단일 JSON-RPC 응답 반환(`stream` deprecated). `reflect`는 5카테고리를 단일 배치 호출로 위임. EmbeddingWorker는 큐 묶음을 generateBatchEmbeddings + multi-row UPDATE로 처리. |
-| Consistency Gate | `fragments.morpheme_indexed` 컬럼으로 형태소 인덱스 완료 여부 추적. 미완료 파편은 L3 형태소 검색 경로에서 자동 제외. |
-| Mode preset | `recall-only` / `write-only` / `onboarding` / `audit` JSON preset. `X-Memento-Mode` 헤더 또는 `api_keys.default_mode`로 도구 노출 범위 제한. |
-| Affective tagging | `fragments.affect` 컬럼(neutral / frustration / confidence / surprise / doubt / satisfaction). remember / recall 시 감정 레이블로 필터링. |
-| Recall 제안 | `recall` 응답의 `_meta.suggestion`이 반복 질의, 맥락 없는 빈 결과, 예산 없는 과대 limit, 유형 미지정 잡음 질의를 표시한다. 클라이언트는 무시해도 된다. |
-| 로컬 임베딩 | `EMBEDDING_PROVIDER=transformers`로 외부 API 없이 `@huggingface/transformers` 파이프라인 기반 임베딩(`Xenova/multilingual-e5-small`, 384d 기본). |
-| 의미 쓰기 관문 | `remember`, `amend`, `batch_remember`, reflect 파생 쓰기, 가져오기, CLI `remember` 로컬 모드가 같은 관문(정규화, 민감 정보 마스킹, 유형별 길이 상한, PolicyRules, workspace 허가, 앵커 권한)을 거친다. 위반은 `validation_warnings`로 알리고 `symbolic_hard_gate=true` 키에서만 거부한다(`MEMENTO_WRITE_GATE`, `MEMENTO_SENSITIVE_SCAN`). |
-| 중복 판정 범위 | 같은 본문은 키와 workspace 단위로 하나로 본다. 같은 범위의 기존 파편에 적중하면 `remember` 응답의 `duplicate_of`에 그 id를 싣는다(`MEMENTO_DEDUP_SCOPE`). |
-| 작업 기억 대체 경로 | Redis가 준비되지 않았을 때 `remember(scope=session)`를 PostgreSQL 작업 기억 행으로 받고, 응답의 `working_memory`가 저장 경로를 알린다(`MEMENTO_WM_PG_FALLBACK`). |
-| recall 예산 선택 | 연결 파편을 포함한 후보에 최종 점수를 매긴 뒤 `tokenBudget` 안에서 고른다(`MEMENTO_RANK_BEFORE_BUDGET`). |
-| 내보내기와 가져오기 | 형식 버전 2 JSONL(파편 전체 열, 링크, 수정 이력)을 내보내고, 가져오기는 대상 키를 정해 같은 쓰기 관문으로 기록한다. 호환 규칙은 [docs/api-versioning.md](docs/api-versioning.md). |
-| 트랜잭션 outbox | 변경 트랜잭션 안에서 이벤트를 기록하고 작업자가 `SKIP LOCKED` 점유로 topic별 처리기에 전달한다. 재시도, dead-letter, 보존 정리 포함(`MEMENTO_OUTBOX`). |
-| 본문 어휘 채널 | 본문의 형태소 토큰(`fragments.content_tokens`)을 GIN 색인으로 전문 검색해 `recall`의 text 검색 후보에 더한다. 임베딩이 꺼진 경로에서도 text만으로 찾는다(`MEMENTO_LEXICAL_CHANNEL`). |
-| 답 꾸러미와 맥락 주석 | `recall`의 `format: "pack"`은 출처와 저장일이 붙은 인용 가능한 블록 묶음을 돌려주고, `context` 주입 줄은 저장일과 assertion 주석을 붙인다(`MEMENTO_CONTEXT_ANNOTATE`). |
-| 출처와 신뢰 등급 | `remember`의 `origin` 주장과 키 상한으로 파편의 `trust_tier`(0~3)를 정한다. 등급 1 이하는 ANCHOR와 CORE 주입에서 빠지고, `recall` 응답에 출처가 실린다(`MEMENTO_PROVENANCE`). |
-| 검토 대기열 | 에이전트 지시 덮어쓰기 문구, 낮은 등급의 앵커와 preference와 procedure, 무권한 앵커 요청은 거부하지 않고 검토 대기로 저장한다. 관리 API로 승인하거나 거절하며 30일 미결정은 자동 거절된다(`MEMENTO_REVIEW_QUEUE`). |
-| 연쇄 삭제 | `forget`이 대상 파편과 그 파편을 출처로 한 사례 요약, 모순 해소 기록의 본문 사본을 같은 트랜잭션에서 지운다(`MEMENTO_FORGET_CASCADE`). |
-| LLM 외부 전송 정책 | 키와 workspace별 `egress_policy`로 외부 LLM 호출의 제공자를 거르고, 외부로 나가는 본문을 마스킹하며 전송을 감사한다(`MEMENTO_EGRESS_POLICY`). |
-| 감사 해시 체인 | 관리 변경, 관리 인증, 기억 쓰기, 앵커, 관문 거부, 검토 결정, 외부 전송을 해시 체인 표로 남긴다. 관리 API, 관리 콘솔, `anchormind audit verify`로 조회하고 검증한다(`MEMENTO_AUDIT_DB`). |
-| 앵커 권한과 읽기 허가 | 앵커 지정은 `anchor` 권한과 키별 상한으로 제한하고(`MEMENTO_ANCHOR_PERMISSION`), 읽기 도구의 대상 workspace는 키의 `allowed_workspaces`로 판정한다(`MEMENTO_WORKSPACE_READ_AUTHZ`). |
-| 관리 권한과 관리자 계정 | 관리 API 라우트마다 요구 능력을 선언한 표와 역할 프리셋(owner, admin, reviewer, auditor, viewer, service)으로 판정하고, 비밀번호와 TOTP로 로그인하는 관리자 계정과 DB 세션을 둔다(`MEMENTO_ADMIN_USERS`). `GET /me`가 주체의 능력과 범위를 보여 준다. |
-| API 키 수명 | 키의 만료 시각, 허용 주소 대역, 소유자, 종류를 두고 겹침 기간이 있는 회전, 폐기, 접근 검토 서명을 관리 API와 콘솔로 한다. 키 비밀은 `api_key_secrets`에 따로 둔다. |
-| 하네스 훅과 플러그인 | `POST /hooks/{client}/{event}`와 `anchormind hook`이 Claude Code, Codex의 세션 시작 맥락 주입과 세션 종료 회고를 건다. `anchormind init --target claude\|codex`가 플러그인을 만든다(`MEMENTO_HOOK_ENDPOINTS`). 설치는 [docs/getting-started/plugins.md](docs/getting-started/plugins.md). |
-| 만료 GC 처리량 | 만료 파편 정리가 100건 청크를 주기당 상한과 시간 예산까지 반복한다(`MEMENTO_GC_THROUGHPUT`). |
-| 마이그레이션 lint | `npm run lint:migrations`로 신규 마이그레이션 파일의 번호 충돌·규약 위반을 커밋 전 자동 검사. |
+| `fact` | 설정값, 경로, 버전 같은 사실 |
+| `decision` | 기술 선택과 그 근거 |
+| `error` | 발생한 에러와 원인, 해결 방법 |
+| `preference` | 사용자의 스타일과 작업 방식 |
+| `procedure` | 배포, 빌드, 테스트 같은 반복 절차 |
+| `relation` | 엔티티 간 관계와 의존성 |
+| `episode` | 전후관계가 있는 서사(1000자, 나머지는 300자) |
 
-전체 MCP 도구 목록은 [SKILL.md](SKILL.md) 참조.
-
-### Agent 범위
-
-`agent_id='default'`는 같은 key/workspace의 공유 기억이고, 다른 값은 해당 agent 범위의 기억이다. `agentId` 생략은 공유 기억만 조회한다. 일반 클라이언트에는 `agentId` 생략 또는 `default`를 권장한다. API key에는 신뢰 가능한 agent identity 바인딩이 없으며, strict 모드에서는 specific agent를 master만 지정할 수 있다. `includePeerAgents=true`는 항상 master 전용이고 key/workspace 경계를 넓히지 않는다.
-
-기존 non-default anchor를 공유 범위로 옮기기 전에는 `memento-mcp anchor-scope --classifications <file>`로 dry-run inventory를 확인한다. 비앵커 일반 파편까지 이관 대상이면 `--include-non-anchors`를 추가한다. 실제 변경은 migration-047 적용 후 승인 JSON의 `shared` 목록과 `--execute --approve-shared`를 모두 명시해야 한다. `private`와 `unconfirmed` 항목은 변경하지 않는다.
-
-이번 전환 릴리즈의 `MEMENTO_ALLOW_LEGACY_UNBOUND_AGENT_SCOPE` 기본값은 `true`다. non-default `agentId`를 사용하던 클라이언트를 유예하며 실제 사용마다 경고 로그와 `mcp_legacy_unbound_agent_scope_total`을 기록한다. 이 모드는 같은 API key를 공유하는 agent 사이를 인증할 수 없다. 클라이언트를 이관하고 계수가 더 이상 증가하지 않는지 확인한 뒤 `false`를 명시해 strict 모드로 전환한다. 다음 부 버전의 기본 차단은 사용 계수 0을 확인한 뒤 판단한다.
-
-업그레이드는 migration-047(nullable 컬럼 추가) → 모든 인스턴스의 새 코드 롤링 배포 및 구 writer 종료 확인 → `memento-mcp anchor-scope --backfill-snapshots` 사전 집계 → `--backfill-snapshots --execute --approve-backfill` 순서로 진행한다. `fragment_versions`와 `case_events` 모두 수동 backfill이 필요하며 `migrate`는 잔량을 경고한다. 그 전에는 NULL snapshot이 조회에서 제외되어 기존 변경 이력이 비어 보일 수 있다. source가 없거나 삭제된 행은 peer에서도 제외되는 NULL 격리 상태로 남는다. 잔여·격리 행이 있으면 `SNAPSHOT_BACKFILL_INCOMPLETE`로 실패하고 `sourceMissing`/`sourceDeleted` 건수를 보고한다. 격리 행은 단순 재실행으로 복구되지 않으므로 관리자가 검토해야 한다.
-
-구 세션은 재연결하여 `initialize`를 다시 수행한다. bearer 없는 구 세션은 명시적 인증 범위를 복원하지 못해 `-32001`로 실패할 수 있다. 정규화는 파편과 version snapshot agent를 같은 트랜잭션에서 옮긴다. snapshot migration 롤백은 컬럼과 backfill 결과를 지우지만 정규화를 되돌리지 않으며, 재백필은 현재 agent 값을 사용한다. 원상 복구가 필요하면 실행 전 별도 백업을 보관한다.
-
-backfill은 실행당 최대 1,000배치이며 `--batch-size`는 1~10,000 정수만 허용한다(기본 500). 상한에 도달하면 커밋된 처리 건수를 포함한 오류로 종료한다. 기존 진행은 보존되므로 구 writer가 종료됐는지 확인한 뒤 같은 명령을 다시 실행해 남은 NULL snapshot을 처리한다.
-
-## CLI
-
-원격 MCP 서버를 로컬 노드 없이 직접 조작할 수 있다. `--remote URL --key KEY` 전역 플래그 또는 `MEMENTO_CLI_REMOTE` / `MEMENTO_CLI_KEY` 환경변수로 지정한다.
-
-```bash
-# 원격 서버에서 recall (환경변수 방식)
-MEMENTO_CLI_REMOTE=https://example.com/mcp MEMENTO_CLI_KEY=mmcp_xxx memento-mcp recall "query"
-
-# 원격 서버에서 recall (플래그 방식)
-memento-mcp recall "query" --remote https://example.com/mcp --key mmcp_xxx
-
-# 표 형식 출력, 결과 5건
-memento-mcp recall "query" --format table --limit 5
-
-# idempotency key로 중복 저장 방지
-memento-mcp remember "내용" --topic 프로젝트명 --idempotency-key k1
-```
-
-`--format table|json|csv` 출력 형식 선택, 20개 서브명령에 `--help`/`-h` 지원. 자세한 플래그는 [docs/cli.md](docs/cli.md).
-
-## API 응답 메타
-
-`recall` / `context` 응답은 `_meta: { searchEventId, hints, suggestion, serverTime }` 필드를 포함한다. `serverTime`은 LLM 클라이언트의 학습 시점 시간 고착을 방지하기 위해 매 응답마다 서버 현재 시각을 노출한다.
-
-```json
-{
-  "fragments": [...],
-  "_meta": {
-    "searchEventId": 1234,
-    "hints": [
-      { "signal": "consider_context", "suggestion": "...", "trigger": "recall" }
-    ],
-    "suggestion": { "code": "empty_result_no_context", "message": "..." },
-    "serverTime": {
-      "iso"        : "2026-05-15T06:32:11.000Z",
-      "epoch_ms"   : 1747291931000,
-      "display_kst": "2026년 5월 15일 (목) 15:32",
-      "timezone"   : "Asia/Seoul"
-    }
-  }
-}
-```
-
-`remember` / `amend` / `forget`의 성공 응답에는 일정 확률로 `_meta.hints`에 `feedback_sampled` 신호가 실린다. 힌트의 `args`를 그대로 `tool_feedback`에 전달해 결과를 평가하면 된다(`MEMENTO_FEEDBACK_SAMPLING=false`로 비활성화).
-
-`remember` / `link` / `forget` / `amend`는 `dryRun: true` 파라미터로 부작용 없이 예상 결과만 반환한다. API 키 세션의 `POST /mcp` 응답에는 `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Resource: fragments` 헤더가 붙는다(파편 할당량 기준). master key이거나 할당량이 null이면 생략한다. `recall`은 `fields` 배열로 반환 필드를 19개 화이트리스트 범위로 제한할 수 있다. `remember` / `batchRemember`는 `idempotencyKey` 파라미터로 같은 key_id 범위 내 중복 저장을 방지한다(최대 128자). `remember` / `batchRemember` 항목 / `amend`의 `content`는 4000자를 초과하면 JSON-RPC -32602 에러로 거부된다. 위 파편 유형별 저장 절삭(1000자/300자)과는 별개로 그보다 앞단에서 적용되는 수신 게이트이며, `batchRemember`는 초과 항목만 실패 처리하고 나머지 배치는 그대로 진행한다.
-
-## 보안
-
-- RBAC default-deny: `TOOL_PERMISSIONS` 맵에 없는 도구명은 권한과 무관하게 즉시 거부.
-- 테넌트 격리: forget / amend / link / fragment_history는 SQL 레벨 `key_id` 조건으로 타 테넌트 파편 접근 불가. "없음"과 "권한 없음"을 동일 메시지로 처리하여 존재 여부 노출 방지.
-- injectSessionContext: 클라이언트가 전송한 `_keyId` / `_permissions` 등 내부 필드를 서버 인증 결과로 재주입하여 세션 컨텍스트 위조 차단.
-- Admin rate limit: `/auth`, `/keys` POST, `/import` POST에 IP 기반 rate limit.
-- OpenAPI: `GET /openapi.json` 엔드포인트(`ENABLE_OPENAPI=true`). master key는 전체 경로, API key는 permissions 필터 스펙 반환.
-- 키 상태 재확인: API 키로 연 MCP 세션은 사용할 때 `MEMENTO_SESSION_KEY_RECHECK_MS`(기본 30000ms, 0이면 끔) 주기로 키 상태를 다시 읽는다. 비활성 또는 삭제된 키의 세션은 닫히고 404 `Session not found`를 받으며, 권한 변경은 열린 세션에 반영된다.
-- 도구 인자 점검: `MEMENTO_TOOL_ARGS_VALIDATION`(`off`, `warn`, `enforce`, 기본 `warn`)이 호출 인자를 `tools/list`의 inputSchema와 대조한다. `warn`은 경고 로그만 남기고 `enforce`는 위반 시 -32602로 거절한다.
-- 세션 ID: `MEMENTO_SESSION_ID_POLICY`(`warn`, `enforce`, 기본 `warn`)가 쿼리스트링 세션 ID와 서버 발급 형식(UUID)이 아닌 ID의 복구를 다룬다. `enforce`는 쿼리 ID에 400, UUID가 아닌 ID의 복구에 404를 돌려준다.
-- 예약 agentId: `MEMENTO_RESERVED_AGENT_IDS`(`warn`, `enforce`, 기본 `warn`)가 내부 작업 전용 agentId(`system`, `admin`)를 API 키 요청에서 쓸 때의 처리를 정한다. `enforce`는 FORBIDDEN(-32001)으로 거부하며 master 키는 허용한다.
-- 감사 기록: 도구 호출 감사 기록에 행위자(`key=`, `sid=` 앞 8자, `ip=`)가 붙고, 관리 API의 변경 요청(GET 제외)과 관리 인증의 성공과 실패가 `admin_auth`, `admin <METHOD> <path>` 기록으로 남는다. `MEMENTO_ADMIN_AUTH_BACKOFF=on`이면 관리 인증이 연속 5회 실패한 뒤 다음 시도를 최대 60초까지 늦추고, 지연 중에는 올바른 키도 429(`Retry-After`)를 받는다(기본 `off`).
-- 관리 권한: 관리 API는 요청마다 라우트 표의 요구 능력을 판정하고 표에 없는 경로는 owner만 쓴다. 관리자 계정은 비밀번호와 TOTP(owner, admin은 필수)로 로그인하며 세션 쿠키는 SameSite=Strict와 이중 제출 CSRF 확인을 쓴다. 마스터 키 로그인은 비상 경로로 남는다.
-- 앵커와 읽기 허가: 앵커 지정은 `anchor` 권한(`MEMENTO_ANCHOR_PERMISSION`), 읽기 도구의 workspace는 `allowed_workspaces`(`MEMENTO_WORKSPACE_READ_AUTHZ`)로 판정한다. 둘 다 기본 `warn`이며 `enforce`로 거부한다.
-- 출처와 검토: 파편의 `origin`과 `trust_tier`로 낮은 신뢰의 내용이 ANCHOR와 CORE 주입에 들어가지 않게 하고, 지시 덮어쓰기 문구는 검토 대기열로 보낸다.
-- 키 수명: 만료, 허용 주소 대역, 회전, 폐기를 지원하며 폐기한 키의 세션은 바로 닫힌다.
-- 응답 공통 헤더: 모든 응답에 `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`를 붙인다. `MEMENTO_FRAME_OPTIONS=deny`이면 `X-Frame-Options: DENY`도 붙인다. HSTS는 TLS를 종단하는 리버스 프록시에서 설정한다.
-
-## Symbolic Verification Layer
-
-선택적 설명 가능성, advisory 링크 무결성, 극성 충돌 탐지, 정책 규칙 soft gating. 8 core 모듈 + 2 규칙 파일. 모든 플래그 기본 비활성.
-
-## Smart Recall
-
-- ProactiveRecall: `remember()` 시 키워드 오버랩 기반 유사 파편 자동 링크.
-- CaseRewardBackprop: case verification 이벤트 시 증거 파편 importance 자동 역전파.
-- SearchParamAdaptor: 사용 패턴 기반 검색 임계값 자동 최적화.
-- CBR(Case-Based Reasoning): `recall(caseMode=true)` 로 유사 사례의 goal → events → outcome 흐름을 검색하여 과거 해결 패턴 재활용.
-- depth 필터: Planner/Executor 역할별 검색 깊이 제어(`"high-level"` / `"detail"` / `"tool-level"`).
-- recall 응답 `key_id`: 반환 파편에 소유 테넌트 식별자 포함.
-- Reconsolidation: `tool_feedback` 기반 `fragment_links` weight/confidence 실시간 갱신(`ENABLE_RECONSOLIDATION=true`).
-- Spreading Activation: `recall(contextText=...)` 전달 시 대화 맥락 기반 관련 파편 ema_activation 선제 활성화(`ENABLE_SPREADING_ACTIVATION=true`).
-
-`fragments.id`는 `frag-{16자 hex}` text 형식이다. UUID가 아니므로 외부에서 ID를 생성하거나 파싱할 때 주의한다.
-
-`/metrics` 엔드포인트가 Prometheus 호환 형식으로 메트릭을 노출한다(`MEMENTO_ACCESS_KEY` 설정 시 master 키 인증 필요). 수집·시각화는 사용자가 자유롭게 구성한다. 공유 Prometheus용 스크레이프 잡과 경보 규칙은 [docs/operations/monitoring.md](docs/operations/monitoring.md)에 있다.
-
-## 기억 vs 규칙
-
-AnchorMind가 주입하는 기억 파편은 시스템 프롬프트보다 우선순위가 낮다. "PostgreSQL 15를 쓴다"같은 사실 기억은 잘 작동하지만, "테스트 작성 시 반드시 Given-When-Then 패턴을 쓸 것"같은 행동 규칙은 시스템 프롬프트와 충돌하면 무시될 수 있다.
-
-행동 규칙은 CLAUDE.md, AGENTS.md, 훅(hooks), 스킬(skills) 등 우선순위가 높은 채널에 설정하는 것을 권장한다.
+주요 도구는 `context`(세션 시작 시 핵심 기억 복원), `recall`(검색), `remember`(저장), `reflect`(세션 종료 시 요약 저장)다. 전체 도구와 사용 규칙은 [SKILL.md](SKILL.md), 기능 전체 목록은 [기능 상세](docs/capabilities.md)에 있다.
 
 ## 벤치마크
 
-[LongMemEval-S](https://arxiv.org/abs/2410.10813) 500문항 기준 성능(2026-03-29 측정, 리더와 평가자 Gemini 2.5 Flash):
+[LongMemEval-S](https://arxiv.org/abs/2410.10813) 500문항 기준(2026-03-29 측정, 리더와 평가자 Gemini 2.5 Flash):
 
-| 지표 | 점수 | 조건 |
-|-|-|-|
-| 검색 recall_any@5 | 88.3% | text-embedding-3-small, 질의의 99%를 pgvector 계층이 처리 |
-| QA 정답률 | 44.9% | temporal metadata와 abstention 감지 적용 (기본 조건 40.4%) |
-| 데이터 적재 | 89,006개 / 27초 | DB bulk INSERT만. 임베딩 백필 약 15분, 검색 500문항 2분은 별도 |
+| 지표 | 점수 |
+|-|-|
+| 검색 recall_any@5 | 88.3% (text-embedding-3-small) |
+| QA 정답률 | 44.9% |
 
-검색은 6개 문항 유형 중 5개에서 80% 이상 recall을 달성한다. 다만 검색 recall(88.3%)과 QA 정답률(44.9%) 사이에 큰 차이가 있다. 이는 검색된 파편에서 정답을 합성하는 reader 단계의 한계로, multi-session 추론과 시간축 추론에서 특히 두드러진다. LongMemEval 논문의 검색 표는 질문당 약 500세션인 LongMemEval_M 기준이라 위 수치와 직접 비교하지 않는다.
+검색은 찾아 오지만, 찾은 파편에서 답을 합성하는 단계(여러 세션에 걸친 추론, 시간축 추론)에서 정답률이 떨어진다. 측정 조건과 분석은 [Benchmark Report](docs/benchmark.md).
 
-상세 분석은 [Benchmark Report](docs/benchmark.md) 참조.
+## 문서
 
-## 사용 패턴
-
-AnchorMind는 사실 기억(fact cache)에 최적화되어 있다. 전후관계가 중요한 경우:
-
-- `episode` 유형으로 서사를 저장하면 "왜 그런 결정을 했는지"까지 복원 가능
-- `contextSummary`를 함께 저장하면 recall 시 맥락이 함께 반환됨
-- 메인 메모리 시스템(MEMORY.md 등)과 병행하여 사실 검색은 AnchorMind, 맥락 복원은 메인 메모리로 역할 분담하는 이원화 구조도 효과적
-
-## 누가 쓰면 좋은가
-
-- Claude Code / Cursor / Windsurf 등 AI 에이전트를 매일 쓰는 개발자
-- 세션마다 같은 설명을 반복하는 게 짜증나는 사람
-- AI에게 내 프로젝트 맥락을 기억시키고 싶은 사람
-
-## 디렉토리 구조
-
-```
-lib/
-  memory/
-    read/        # FragmentSearch, SearchScope, SearchSideEffects, CaseRecall 등
-    write/       # MemoryRememberer, BatchRememberProcessor 등
-    link/        # MemoryLinker, ReconsolidationEngine 등
-    consolidate/ # MemoryConsolidator
-    embedding/   # EmbeddingWorker, EmbeddingCache, MorphemeIndex
-    signals/     # SpreadingActivation, CaseRewardBackprop 등
-    processors/  # facade — MemoryRecaller, MemoryReflector 등
-    transfer/    # 내보내기와 가져오기 (exportFormat, ImportRunner 등)
-  outbox/        # 트랜잭션 outbox 기록과 작업자
-  admin/         # 관리 API(키 수명, 검토 대기열, 감사, 관리자 계정, 관리 권한 표)
-  hooks/         # 하네스 훅 계약, 주입 본문, 회고 소비자
-  logging/       # 감사 파일 로그, 감사 해시 체인(AuditStore)
-  security/      # 민감 정보 규칙 표와 스캐너
-  llm/           # dispatchChain, provider 구현체
-  symbolic/      # 설명 가능성, 링크 무결성, 정책 규칙 (opt-in)
-integrations/       # Claude Code, Codex 플러그인 원본
-docs/
-  getting-started/   # 플랫폼별 설치 가이드
-  operations/        # 운영 가이드 (llm-providers, symbolic-hard-gate 등)
-  features.md        # 모듈 ledger
-  configuration.md   # 환경변수 전체 레퍼런스
-```
-
-## 더 알아보기
-
-| 문서 | 내용 |
-|------|------|
-| [Quick Start](docs/getting-started/quickstart.md) | 상세 설치 가이드 |
-| [Architecture](docs/architecture.md) | 시스템 구조, DB 스키마, 3계층 검색, TTL |
-| [Configuration](docs/configuration.md) | 환경 변수, MEMORY_CONFIG, 임베딩 Provider |
-| [API Reference](docs/api-reference.md) | HTTP 엔드포인트, 프롬프트, 리소스 |
-| [CLI](docs/cli.md) | 터미널 명령어 |
-| [관리자 콘솔 사용 안내](docs/admin-console-guide.md) | 콘솔 화면, 관리자 계정, 키 수명, 감사 로그 |
-| [훅과 플러그인](docs/getting-started/plugins.md) | Claude Code, Codex 플러그인과 훅 설정 |
-| [API와 export 버전 정책](docs/api-versioning.md) | 프로토콜, 도구 스키마, 관리 API, 스키마, export 형식의 호환 규칙 |
-| [Internals](docs/internals.md) | 평가기, 통합기, 모순 탐지 |
-| [Benchmark](docs/benchmark.md) | LongMemEval-S 벤치마크 상세 분석 |
-| [Features](docs/features.md) | 모듈 ledger, 실험 플래그, ENV 매핑 |
-| [SKILL.md](SKILL.md) | MCP 도구 전체 레퍼런스 |
-| [INSTALL.md](docs/INSTALL.md) | 마이그레이션, 훅 설정, 상세 설치 |
-| [CHANGELOG](CHANGELOG.md) | 버전별 변경사항 |
-
-## 운영
-
-- `/health`: DB, Redis, pgvector, 워커 상태를 종합 점검. 부분 장애 시 degraded 응답. 비인증 요청에는 상태만 돌려준다.
-- `/health/live`: 이벤트 루프 생존만 확인하며 항상 200. `/health/ready`: 주 DB가 `MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`(기본 2000) 안에 응답하면 200, 아니면 `db_timeout` 또는 `db_error` 사유의 503.
-- 와치독: `memento-watchdog.sh`는 `/health/live`가 응답하지 않을 때만 서비스를 재시작하고, 연속 재시작의 간격을 지수로 늘리며, 중복 실행을 잠금으로 막는다.
-- Rate Limiting: API 키당 100/분, IP당 30/분. 환경변수로 조정 가능. IP 한도는 `initialize`, `GET /sse`, `/token`, `/register`, `/authorize`가 같은 버킷을 쓰고 초과하면 429와 `Retry-After`를 돌려준다.
-- 워커 복구: 임베딩/평가 워커가 에러 시 지수 백오프(1s→60s)로 자동 재시도.
-- Graceful Shutdown: SIGTERM 시 진행 중 워커 완료 대기(30초) 후 세션 auto-reflect 실행. 종료 절차 전체는 `MEMENTO_SHUTDOWN_DEADLINE_MS`(기본 60000, 0은 상한 없음)로 제한하며 넘기면 종료 코드 1로 강제 종료한다.
-- OAuth 엔드포인트: 인증 실패 시 `WWW-Authenticate` 헤더를 반환하여 OAuth 클라이언트가 자동으로 인증 흐름을 시작할 수 있다. 세션 TTL 기본값은 43200분(30일)이며 `SESSION_TTL_MINUTES`로 조정한다.
-- 마이그레이션 lint: `npm run lint:migrations`로 번호 충돌 및 규약 위반을 커밋 전 검사.
-- 백업과 복구 훈련: `scripts/ops/backup.sh`(agent_memory 스키마 `pg_dump`, 기본 14일 보관)와 `scripts/ops/restore-verify.mjs`(일회용 시험 서버에 복원해 매니페스트와 대조). 절차는 [docs/operations/backup-restore.md](docs/operations/backup-restore.md).
-- 대형 표 색인: `scripts/ops/online-index.mjs`가 작업 목록의 색인을 쓰기를 막지 않고 만든다(`--dry-run`, `--confirm`). 절차는 [docs/operations/online-migration.md](docs/operations/online-migration.md).
-- 감사 검증: `anchormind audit verify`가 감사 해시 체인을 다시 계산한다(끊기면 종료 코드 1). 관리자 계정의 비상 복구는 `anchormind admin recover --confirm`이다.
-- 스위치 보고: `npm run switches`가 기능 스위치의 적용 값, 기본값, 상태를 표로 출력하고, `--strict`는 값이 잘못된 스위치가 있으면 종료 코드 1로 끝난다.
-- 운영 가이드: [docs/operations/](docs/operations/) — LLM provider 체인, symbolic hard gate, agent worktree, upstream porting 등.
-- 외부 노출 점검: `docs/operations/maintenance.md`의 "외부 노출 점검" 절차로 listen 주소, 인증 키, Origin allowlist 상태를 확인.
-
-## 알려진 제한사항
-
-- L1 Redis 인덱스는 API 키 단위지만, Hot Cache/Working Memory hydration에서 effective agent 범위를 재검증한다. agent metadata가 없는 구형 캐시 항목은 fail-closed로 제외된다.
-- 자동 품질 평가는 decision, preference, relation 유형만 대상이다. fact, procedure, error는 평가 큐에서 제외된다.
-- MEMENTO_ACCESS_KEY를 설정하지 않으면 서버가 기동하지 않는다. 인증 없이 운용하려면 MEMENTO_AUTH_DISABLED=true를 함께 명시해야 한다.
-- ALLOWED_ORIGINS: 브라우저 기반 MCP 클라이언트 화이트리스트. 미설정 시 모든 Origin의 요청을 받으며, 교차 출처 응답 헤더는 `MEMENTO_CORS_MODE`(기본 `observe`: 요청 Origin을 돌려주고 처음 본 Origin을 로그에 남김, `reflect`, `allowlist`: `OAUTH_TRUSTED_ORIGINS`만)에 따른다. 설정하면 목록 밖 Origin을 가진 요청은 403으로 끝난다.
-  외부 노출 환경에서는 실제 사용하는 브라우저 Origin만 등록하고, `/mcp`까지 신뢰 도메인으로 좁히려면 `MCP_STRICT_ORIGIN=true`를 함께 쓴다.
-  데스크탑/CLI/IDE 확장(Claude Code, Cursor, Windsurf, Continue, Cline, Zed, gemini CLI 등)은
-  Origin 헤더를 보내지 않으므로 화이트리스트 불필요.
-  브라우저 후보: claude.ai, claude.com, chatgpt.com, chat.openai.com, copilot.microsoft.com,
-  gemini.google.com, aistudio.google.com, www.perplexity.ai, cursor.com, codeium.com,
-  windsurf.com, sourcegraph.com, typingmind.com (실제 호출하는 것만 선별).
-- ADMIN_ALLOWED_ORIGINS — Admin UI 호출 origin 화이트리스트. 미설정 시 모든 Origin을 허용한다.
-  외부 노출 환경에서는 관리 콘솔 Origin을 명시하거나 리버스 프록시/방화벽에서 접근을 제한할 것.
-- TRUST_PROXY_HOPS — 신뢰 가능한 리버스 프록시 hop 수. 미설정 시 기존 동작 유지(XFF 첫 항목).
-  직접 노출 시 0, 단일 프록시 뒤에서는 1.
-- OAUTH_TRUSTED_ORIGINS — 동의 자동 승인 대상 origin 화이트리스트. 동일 origin에서 여러 앱을 호스팅하면
-  OAUTH_ALLOWED_REDIRECT_URIS의 전체 URI 매칭 사용을 권장.
-- MEMENTO_SSE_QUERY_KEY: Legacy SSE의 `?accessKey=` 쿼리 키 처리. 기본 `allow`는 master 키에 한해 받고, `deny`는 받지 않고 401로 `Authorization` 헤더 사용을 안내한다.
-- MEMENTO_OAUTH_REDIRECT_CHECK: `/authorize` 오류 응답의 리다이렉트 대상 확인. 기본 `warn`은 등록되지 않은 `redirect_uri`로도 이동시키고 경고를 남기며, `enforce`는 400 JSON으로 응답한다.
-- MEMENTO_FRAME_OPTIONS: `deny`일 때만 `X-Frame-Options: DENY`를 붙인다.
-- MEMENTO_WORKSPACE_READ_AUTHZ: API 키 `allowed_workspaces` 밖 읽기(recall, context 등과 resources/read)와 master가 아닌 세션의 master 전용 preset 요청 판정. 기본 `warn`은 처리하고 `memento_workspace_read_authz_total`과 경고 로그로 남기며, `enforce`는 `-32001`로 거부한다. `enforce` 전에 warn 기간의 키별 기록을 확인한다.
-
-## 기술 스택
-
-- Node.js 20+
-- PostgreSQL 14+ (pgvector 확장)
-- Redis 6+ (선택)
-- OpenAI Embedding API (선택) 또는 `EMBEDDING_PROVIDER=transformers` (로컬 저비용 모드)
-- garu-ko / natural PorterStemmer / @node-rs/jieba / kuromoji (로컬 형태소 분석, 언어별 CPU 라우팅; `MEMENTO_MORPHEME_TOKENIZER=local` 기본)
-- LLM provider 18종(CLI: gemini-cli, agy-cli, codex-cli, copilot-cli, qwen-cli, opencode-cli / HTTP: openai, anthropic, gemini, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai). 품질 평가, 자동 reflect 등에 선택 사용하며 LLM_PRIMARY / LLM_FALLBACKS로 체인을 구성한다(기본 `gemini-cli`).
-- @huggingface/transformers + ONNX Runtime (NLI 모순 분류 + 로컬 임베딩, CPU 전용)
-- MCP Protocol 2025-11-25
-
-PostgreSQL만 있으면 저장, keywords 배열 일치 회상, 링크, 관리 기능이 동작한다. 자연어 `text` 질의 회상은 임베딩이 있어야 결과를 낸다. Redis를 추가하면 L1 캐스케이드 검색과 SessionActivityTracker가 활성화되고, OpenAI API 또는 `EMBEDDING_PROVIDER=transformers`를 추가하면 L3 시맨틱 검색과 자동 링크가 활성화된다.
-
-## 만들게 된 계기
-
-<details>
-<summary>접기/펼치기</summary>
-
-실무에서 AI를 쓰면서 매일 같은 맥락을 반복 설명하는 비효율을 느꼈다. 시스템 프롬프트에 메모를 넣는 방법도 써봤지만 한계가 명확했다. 파편 수가 늘어나면 관리가 안 되고, 검색이 안 되고, 오래된 정보와 새 정보가 충돌했다.
-
-이미 설명한 것, 이미 세팅한 것을 무한히 반복하게 만드는 것이 가장 큰 문제였다. 인증 정보가 없다고 해서 보면 있고, 세팅 안 돼 있다고 해서 파일을 직접 열어보면 다 돼 있다. 철저하게 논파해서 말 잘 듣게 해 봐야 그때뿐이다. 세션을 다시 시작하면 같은 일이 또 반복된다. 명문대를 수석 졸업했지만 매일 뇌가 리셋되는 신입사원의 교육담당자가 된 기분이었다.
-
-"야 너 미정이 기억나냐" -- 단서 없이는 아무것도 떠오르지 않지만, "초등학교 1학년 때 짝궁" 한마디면 지우개 빌려줬던 일까지 줄줄이 떠오른다. AI도 마찬가지다. 어제 해결한 버그, 지난주 내린 결정, 선호하는 코딩 스타일. 매 세션 리셋 대신, AnchorMind가 기억해둔다.
-
-이 고충을 해소하기 위해 기억을 원자 단위로 분해하고, 계층적으로 검색하고, 시간에 따라 자연스럽게 망각하는 시스템을 설계했다. 인간이 망각의 동물인 것처럼, 이 시스템은 "적절한 망각"을 포함한 기억을 지향한다.
-
-그리고 거기서 멈추지 않는다. 피드백이 누적될수록 연결이 강해지고 약한 링크는 사라진다. 같은 경험이 반복될수록 패턴이 추상화된다. 세션 간 에피소드가 이어질수록 맥락이 이야기가 된다. 도서관을 짓는 게 아니다. 경험으로 성장하는 AI를 만들고 싶었다.
-
----
-
-기억은 지능의 전제가 아니다. 기억은 지능의 조건이다. 체스를 두는 방법을 알아도, 어제 진 게임을 기억하지 못하면 같은 수를 또 둔다. 모든 언어를 구사해도, 어제 나눈 대화를 기억하지 못하면 매번 처음 만나는 사람이 된다. 수십억 개의 파라미터로 세상 모든 지식을 담아도, 당신과 함께한 어제를 기억하지 못하면 낯선 박식가일 뿐이다.
-
-기억이 있어야 관계가 있다. 관계가 있어야 신뢰가 있다.
-
-기억은 사라지지 않는다. 다만 cold tier로 내려갈 뿐이다. 그리고 충분히 오래 방치된 cold 파편은 다음 consolidate 사이클에서 소멸한다. 이것은 설계이지 버그가 아니다. 쓸모없어진 기억은 자리를 비워야 한다. 아우구스티누스의 궁전에도 창고 정리는 필요하다.
-
-멍청한 걸로 유명한 금붕어새기도 몇 달을 기억한다.
-
-이제 당신의 AI도 그렇다.
-
-</details>
+| 할 일 | 문서 |
+|-------------|------|
+| 처음 설치하고 검증 | [시스템 요구사항](docs/Requirements.md), [Quick Start](docs/getting-started/quickstart.md), [First Memory Flow](docs/getting-started/first-memory-flow.md), [INSTALL.md](docs/INSTALL.md) |
+| 클라이언트 연결 | [클라이언트별 연결](docs/getting-started/clients.md), [Claude Code](docs/getting-started/claude-code.md), [플러그인](docs/getting-started/plugins.md), [훅](docs/getting-started/hooks.md) |
+| 문제 해결 | [Troubleshooting](docs/getting-started/troubleshooting.md) |
+| 업데이트 | [업그레이드 노트](docs/operations/upgrade-notes.md) |
+| 운영 | [보안과 운영 점검](docs/operations/hardening.md), [백업과 복구](docs/operations/backup-restore.md), [모니터링](docs/operations/monitoring.md), [관리자 콘솔](docs/admin-console-guide.md) |
+| 설정값 | [Configuration](docs/configuration.md) |
+| 전체 기능 | [기능 상세](docs/capabilities.md), [Features](docs/features.md) |
+| 인터페이스 | [API Reference](docs/api-reference.md), [CLI](docs/cli.md), [SKILL.md](SKILL.md) |
+| 내부 구조 | [Architecture](docs/architecture.md), [Internals](docs/internals.md) |
+| 변경 이력 | [CHANGELOG](CHANGELOG.md) |
 
 ## License
 

@@ -9,7 +9,7 @@
  * 호출 조건: 임베딩 제공자 전환 직후 또는 신규 설치 후 1회 실행. 멱등 실행 가능.
  * 빈도: 조건부 1회
  * 의존: DATABASE_URL
- * 관련 문서: docs/INSTALL.md#업그레이드-기존-설치, docs/operations/maintenance.md
+ * 관련 문서: docs/operations/upgrade-notes.md#버전별-업그레이드-절차, docs/operations/maintenance.md
  */
 
 import pg from "pg";

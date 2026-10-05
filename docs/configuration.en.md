@@ -206,7 +206,7 @@ The name, documented default, purpose and category of each feature switch are in
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| MEMENTO_CLI_REMOTE | (none) | Remote MCP server URL used when the CLI `--remote` flag is not specified. Example: `https://memento.anchormind.net/mcp` |
+| MEMENTO_CLI_REMOTE | (none) | Remote MCP server URL used when the CLI `--remote` flag is not specified. Example: `https://memento.example.com/mcp` |
 | MEMENTO_CLI_KEY | (none) | API key for remote server authentication, used when the CLI `--key` flag is not specified |
 
 #### Symbolic Memory (opt-in)

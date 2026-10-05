@@ -10,7 +10,7 @@
  * 호출 조건: EMBEDDING_PROVIDER 변경 후 기존 파편 재임베딩, 임베딩 API 장애 복구 후 누락 파편 처리
  * 빈도: 조건부 1회
  * 의존: DATABASE_URL, EMBEDDING_API_KEY(또는 OPENAI_API_KEY) 또는 EMBEDDING_PROVIDER=transformers
- * 관련 문서: docs/INSTALL.md#업그레이드-기존-설치, docs/operations/maintenance.md
+ * 관련 문서: docs/operations/upgrade-notes.md#버전별-업그레이드-절차, docs/operations/maintenance.md
  *
  * importance 무관하게 embedding IS NULL인 모든 파편을 대상으로 한다.
  * 배치 크기 10, API rate limit 고려 500ms 간격.

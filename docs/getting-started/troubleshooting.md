@@ -151,7 +151,7 @@ psql "$DATABASE_URL" -c "SELECT 1;"
 ## 9. `ReferenceError: Cannot access 'fragment' before initialization`
 
 문제:
-`remember` 호출 시 TDZ(Temporal Dead Zone) 에러 발생. 원격 서버(`memento.anchormind.net`)에서도 동일 증상이 보고됐다.
+`remember`를 호출하면 이 오류가 난다.
 
 원인:
 v2.10.0 이하에서 `remember()` 본문의 atomic 분기가 `fragment` 변수 선언보다 앞에 위치하는 TDZ 버그.

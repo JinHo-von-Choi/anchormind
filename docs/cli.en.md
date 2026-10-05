@@ -173,7 +173,7 @@ node bin/memento.js stats --format csv
 node bin/memento.js stats --json
 
 # Remote server query
-node bin/memento.js stats --remote https://memento.anchormind.net/mcp --key mmcp_xxx
+node bin/memento.js stats --remote https://memento.example.com/mcp --key mmcp_xxx
 ```
 
 `--format table` prints a key/value table (Fragments, Anchors, Active, Expired, Topics, Avg utility, Noise ratio) followed by a table of the top 5 topics.
@@ -230,10 +230,10 @@ node bin/memento.js recall "query" --format json
 node bin/memento.js recall "query" --format csv
 
 # Remote server
-node bin/memento.js recall "query" --remote https://memento.anchormind.net/mcp --key mmcp_xxx
+node bin/memento.js recall "query" --remote https://memento.example.com/mcp --key mmcp_xxx
 
 # Via environment variables
-MEMENTO_CLI_REMOTE=https://memento.anchormind.net/mcp MEMENTO_CLI_KEY=mmcp_xxx \
+MEMENTO_CLI_REMOTE=https://memento.example.com/mcp MEMENTO_CLI_KEY=mmcp_xxx \
   node bin/memento.js recall "query"
 ```
 
@@ -274,7 +274,7 @@ node bin/memento.js remember "nginx restart, port 443 healthy" --topic infra --t
 
 # Remote server
 node bin/memento.js remember "deployment complete" --topic deploy-2026 --type procedure \
-  --remote https://memento.anchormind.net/mcp --key mmcp_xxx
+  --remote https://memento.example.com/mcp --key mmcp_xxx
 ```
 
 Options:
@@ -315,7 +315,7 @@ node bin/memento.js inspect frag-00abc123 --format json
 node bin/memento.js inspect frag-00abc123 --format table
 
 # Remote server
-node bin/memento.js inspect frag-00abc123 --remote https://memento.anchormind.net/mcp --key mmcp_xxx
+node bin/memento.js inspect frag-00abc123 --remote https://memento.example.com/mcp --key mmcp_xxx
 ```
 
 Help:
@@ -557,11 +557,11 @@ Specify `--remote` and `--key` directly, or set environment variables.
 ```bash
 # Direct flags
 node bin/memento.js recall "deployment history" \
-  --remote https://memento.anchormind.net/mcp \
+  --remote https://memento.example.com/mcp \
   --key mmcp_xxx
 
 # Via environment variables
-export MEMENTO_CLI_REMOTE=https://memento.anchormind.net/mcp
+export MEMENTO_CLI_REMOTE=https://memento.example.com/mcp
 export MEMENTO_CLI_KEY=mmcp_xxx
 node bin/memento.js recall "deployment history"
 node bin/memento.js stats

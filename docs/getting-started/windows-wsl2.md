@@ -113,7 +113,7 @@ WSL 환경에서는 Bash 문법으로 환경변수를 설정한다.
 
 ```bash
 # 환경변수 설정 (현재 셸)
-export MEMENTO_CLI_REMOTE=https://memento.anchormind.net/mcp
+export MEMENTO_CLI_REMOTE=https://memento.example.com/mcp
 export MEMENTO_CLI_KEY=mmcp_xxx
 
 # 설정 후 CLI 사용
@@ -121,7 +121,7 @@ node bin/memento.js stats
 node bin/memento.js recall "검색어"
 
 # 일회성 실행
-MEMENTO_CLI_REMOTE=https://memento.anchormind.net/mcp MEMENTO_CLI_KEY=mmcp_xxx \
+MEMENTO_CLI_REMOTE=https://memento.example.com/mcp MEMENTO_CLI_KEY=mmcp_xxx \
   node bin/memento.js stats --format json
 ```
 

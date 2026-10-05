@@ -10,7 +10,7 @@
  * 호출 조건: 서버 업그레이드 또는 신규 설치 후 DB 스키마 적용 시
  * 빈도: 버전 업그레이드 시 1회
  * 의존: DATABASE_URL 환경변수 (또는 POSTGRES_* 개별 항목), PostgreSQL, pgvector
- * 관련 문서: docs/INSTALL.md#업그레이드-기존-설치, docs/operations/maintenance.md
+ * 관련 문서: docs/operations/upgrade-notes.md#버전별-업그레이드-절차, docs/operations/maintenance.md
  *
  * 트랜잭션 제약:
  *   각 migration 파일은 BEGIN/COMMIT 래퍼로 감싸 원자적으로 실행된다.

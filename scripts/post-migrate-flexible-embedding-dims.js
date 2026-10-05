@@ -14,7 +14,7 @@
  * 호출 조건: EMBEDDING_DIMENSIONS 변경 또는 EMBEDDING_PROVIDER 전환 시
  * 빈도: 조건부 1회
  * 의존: DATABASE_URL, EMBEDDING_DIMENSIONS
- * 관련 문서: docs/INSTALL.md#업그레이드-기존-설치, docs/operations/maintenance.md
+ * 관련 문서: docs/operations/upgrade-notes.md#버전별-업그레이드-절차, docs/operations/maintenance.md
  *
  * 사용:
  *   node scripts/post-migrate-flexible-embedding-dims.js --dry-run   # 판정만 출력

@@ -1542,3 +1542,14 @@ curl -si -X POST https://anchormind.example.com/mcp \
 - [Integration/E2E Tests](../tests/integration/README.md) -- Test environment setup and execution
 - [Architecture](architecture.en.md) -- Component dependencies and search pipeline
 - [Configuration Reference](configuration.en.md) -- Complete environment variable list and MEMORY_CONFIG
+
+## Protocol Version Negotiation
+
+The server advertises all four versions. Clients negotiate the highest mutually supported version during `initialize`.
+
+| Version | Notable Additions |
+|---------|------------------|
+| `2025-11-25` | Tasks abstraction, long-running operation support |
+| `2025-06-18` | Structured tool output, server-driven interaction |
+| `2025-03-26` | OAuth 2.1, Streamable HTTP transport |
+| `2024-11-05` | Initial release; Legacy SSE transport |

@@ -32,6 +32,10 @@ LLM_FALLBACKS='[
 Gemini CLI 실패 시 codex-cli → anthropic → openai 순차 시도.
 CLI provider(`gemini-cli`, `agy-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`, `opencode-cli`)도 `LLM_FALLBACKS`의 `model`, `timeoutMs`를 provider config로 전달받는다.
 
+## CLI provider 설치
+
+gemini, codex, copilot 같은 CLI provider는 해당 CLI를 먼저 설치하고 로그인해야 한다. 설치 명령은 [시스템 요구사항](../Requirements.md#선택적-cli-바이너리-llm-provider)에 있다. gemini-cli, copilot-cli, opencode-cli는 기본(`MEMENTO_LLM_CLI_TOOL_APPROVAL=none`)에서 제한된 도구 승인으로, 서버 작업 디렉터리가 아닌 빈 임시 디렉터리에서 실행된다.
+
 ## Provider별 필수 필드
 
 | Provider | apiKey | model | baseUrl | 기본 baseUrl |

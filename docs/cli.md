@@ -174,7 +174,7 @@ node bin/memento.js stats --format csv
 node bin/memento.js stats --json
 
 # 원격 서버 조회
-node bin/memento.js stats --remote https://memento.anchormind.net/mcp --key mmcp_xxx
+node bin/memento.js stats --remote https://memento.example.com/mcp --key mmcp_xxx
 ```
 
 `--format table`은 key/value 표(Fragments, Anchors, Active, Expired, Topics, Avg utility, Noise ratio)와 상위 5개 토픽 표를 출력한다.
@@ -231,10 +231,10 @@ node bin/memento.js recall "검색어" --format json
 node bin/memento.js recall "검색어" --format csv
 
 # 원격 서버 경유
-node bin/memento.js recall "검색어" --remote https://memento.anchormind.net/mcp --key mmcp_xxx
+node bin/memento.js recall "검색어" --remote https://memento.example.com/mcp --key mmcp_xxx
 
 # 환경변수로 원격 설정 후 사용
-MEMENTO_CLI_REMOTE=https://memento.anchormind.net/mcp MEMENTO_CLI_KEY=mmcp_xxx \
+MEMENTO_CLI_REMOTE=https://memento.example.com/mcp MEMENTO_CLI_KEY=mmcp_xxx \
   node bin/memento.js recall "검색어"
 ```
 
@@ -275,7 +275,7 @@ node bin/memento.js remember "nginx 재시작 후 443 포트 정상" --topic inf
 
 # 원격 서버에 저장
 node bin/memento.js remember "배포 완료" --topic deploy-2026 --type procedure \
-  --remote https://memento.anchormind.net/mcp --key mmcp_xxx
+  --remote https://memento.example.com/mcp --key mmcp_xxx
 ```
 
 옵션:
@@ -316,7 +316,7 @@ node bin/memento.js inspect frag-00abc123 --format json
 node bin/memento.js inspect frag-00abc123 --format table
 
 # 원격 서버 조회
-node bin/memento.js inspect frag-00abc123 --remote https://memento.anchormind.net/mcp --key mmcp_xxx
+node bin/memento.js inspect frag-00abc123 --remote https://memento.example.com/mcp --key mmcp_xxx
 ```
 
 도움말:
@@ -558,11 +558,11 @@ anchormind admin recover --url postgres://memento@db.internal:5432/memento --con
 ```bash
 # 직접 지정
 node bin/memento.js recall "배포 기록" \
-  --remote https://memento.anchormind.net/mcp \
+  --remote https://memento.example.com/mcp \
   --key mmcp_xxx
 
 # 환경변수로 설정 후 사용
-export MEMENTO_CLI_REMOTE=https://memento.anchormind.net/mcp
+export MEMENTO_CLI_REMOTE=https://memento.example.com/mcp
 export MEMENTO_CLI_KEY=mmcp_xxx
 node bin/memento.js recall "배포 기록"
 node bin/memento.js stats

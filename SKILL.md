@@ -202,13 +202,13 @@ recall 호출
 
 ```bash
 # 환경변수 방식 (영구 설정에 적합)
-export MEMENTO_CLI_REMOTE=https://memento.anchormind.net/mcp
+export MEMENTO_CLI_REMOTE=https://memento.example.com/mcp
 export MEMENTO_CLI_KEY=mmcp_xxx
 memento-mcp recall "query"
 memento-mcp stats
 
 # 플래그 방식 (일회성 호출)
-memento-mcp recall "query" --remote https://memento.anchormind.net/mcp --key mmcp_xxx
+memento-mcp recall "query" --remote https://memento.example.com/mcp --key mmcp_xxx
 ```
 
 원격 모드는 recall, remember, stats, inspect, session만 지원한다. local-only 명령(serve, migrate, cleanup, backfill, health, update, export, import, benchmark, anchor-scope)을 원격 모드에서 호출하면 에러가 반환된다.
