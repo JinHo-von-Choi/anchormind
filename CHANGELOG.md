@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [6.2.0] - 2026-10-05
+
 ### 업그레이드 주의
 
 - Node.js 최소 버전을 20에서 22로 올렸다. 런타임 의존성 `openai`(7.x)가 Node 22 이상을 요구해서 Node 20에서는 `npm ci --engine-strict`가 `EBADENGINE`으로 실패했다. Node 20을 쓰고 있다면 22 이상으로 올린 뒤 `npm ci`를 다시 실행한다. Docker 이미지(Node 24)와 CI는 이미 22 이상이다.
