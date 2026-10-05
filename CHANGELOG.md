@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+### 업그레이드 주의
+
+- Node.js 최소 버전을 20에서 22로 올렸다. 런타임 의존성 `openai`(7.x)가 Node 22 이상을 요구해서 Node 20에서는 `npm ci --engine-strict`가 `EBADENGINE`으로 실패했다. Node 20을 쓰고 있다면 22 이상으로 올린 뒤 `npm ci`를 다시 실행한다. Docker 이미지(Node 24)와 CI는 이미 22 이상이다.
+- 데이터베이스 마이그레이션은 없다. `git pull`, `npm install`, 서비스 재시작이면 된다.
+
+### Added
+
+- `config/env-access.js`와 `npm run env-access`. 중앙 모듈(`lib/config.js`, `config/`) 밖에서 `process.env`를 읽는 지점을 구문 분석으로 찾아 startup, runtime, cli로 분류하고 대장과 대조한다. 등록되지 않은 접근, 코드에 없는 등록, 분류가 어긋난 등록은 `tests/structure/env-access.test.js`가 실패시킨다. 새 환경 변수는 중앙 모듈에서 읽고, 예외는 사유와 함께 대장에 등록한다.
+- 오철칙(iron-laws) 점검 워크플로 `.github/workflows/iron-laws.yml`. 기준선(`.iron-laws-baseline.json`)에 없던 새 지적만 판정하며 병합을 막지 않는다. 도구는 점검에 쓴 커밋으로 고정했고 범위와 제외 목록은 `.iron-laws.yml`에 있다.
+- `acorn`을 개발 의존성으로 명시했다. 환경 변수 접근 점검이 쓴다.
+
+### Changed
+
+- README를 이게 뭔데, 어떻게 돌아가는데, 어떻게 설치하는데, 자주 묻는 질문 순으로 다시 썼다. FAQ는 질문 하나에 답 하나로 나눴고 동작 흐름 다이어그램을 넣었다. 설치 절차는 pgvector 컨테이너와 로컬 임베딩 기준으로 바꿨다.
+- 기능 상세, 보안과 운영 점검, 업그레이드 노트, 클라이언트별 연결을 `docs/` 아래 문서로 나눴다. 업그레이드 노트는 공통 절차와 상황별 추가 작업으로 다시 썼다. `INSTALL.md`는 설치 안내 허브로 줄였다.
+- `recordSearchEvent`의 열 단계별 대체 경로를 함수로 나눠 복잡도를 낮췄다. 동작은 바뀌지 않는다.
+- 린트 래칫 기준선을 갱신했다. `admin-memory.js`의 복잡도와 줄 수가 기록되고, 무처리 `catch`가 줄어든 `oauth.js`와 `ConflictResolver` 값은 낮아졌다.
+
+### Fixed
+
+- OAuth 키 조회가 실패해 키에 묶이지 않은 클라이언트로 격하될 때 아무것도 남지 않던 것을 경고로 남긴다. 권한은 늘지 않는다.
+- 인접 링크 격리가 실패해도 기록이 없던 것과 자동 링크의 주제 조회 실패를 경고로 남긴다. 반환값은 그대로다.
+- 관리 인증 거부 경고가 `console.warn`으로 쿼리 문자열까지 기록하고 로거의 민감 정보 마스킹을 우회하던 것을 고쳤다. 경로만 로거로 기록한다.
+- 충돌 해소 트랜잭션의 `ROLLBACK` 실패를 기록한다.
+- 건너뛰던 lifecycle 누수 검출 시험을 닫지 않은 `net.Server`로 확인하는 결정적 시험으로 바꿨다. 타이머는 `process._getActiveHandles()`에 나타나지 않아 이전 시험은 검출할 수 없었다.
+
+### Removed
+
+- 호출처가 없던 `logRequest`.
+
 ## [6.1.0] - 2026-10-04
 
 ### Added
