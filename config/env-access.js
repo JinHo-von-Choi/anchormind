@@ -175,8 +175,8 @@ export const ENV_ACCESS = Object.freeze([
   {
     file  : "lib/memory/signals/SearchParamAdaptor.js",
     kind  : "runtime",
-    vars  : ["MEMENTO_RECALL_MIN_SIM_FLOOR"],
-    reason: "검색 유사도 하한을 조정할 때마다 읽는다."
+    vars  : ["MEMENTO_RECALL_MIN_SIM_FLOOR", "MEMENTO_RECALL_MIN_SIM_CEIL"],
+    reason: "검색 유사도 하한과 상한을 조정할 때마다 읽는다."
   },
   {
     file  : "lib/memory/write/BatchRememberProcessor.js",
