@@ -146,6 +146,8 @@ The kind is determined automatically from the code and must match the registry.
 | MEMENTO_RERANKER_ENABLED | false | Enables the in-process cross-encoder reranker. It is off by default: the default model is English-only, and on a Korean corpus an ablation showed turning it off improves Recall@1 from 74% to 85%, MRR from 0.827 to 0.890, and p50 latency from 561ms to 126ms. External rerankers configured through `RERANKER_URL` work regardless of this switch |
 | RERANKER_MODEL | minilm | ONNX model used when the in-process reranker is enabled. `minilm` (default, ~80MB, English-only) or `bge-m3` (~280MB, multilingual). bge-m3 ranks non-English text far better but takes several seconds to rerank 30 candidates on CPU, so use it only behind a GPU-backed external service |
 | RERANKER_EXTERNAL_FALLBACK | skip | Policy applied after 3 consecutive external reranker failures. `skip` (default): no switch to in-process — external calls are simply skipped for `RERANKER_EXTERNAL_COOLDOWN_MS`, and original scores (RRF order) are returned as-is. `inprocess`: switches to the ONNX in-process model (opt-in, the previous behavior) |
+| RERANKER_WINDOW | 30 | Number of top RRF candidates the reranker re-scores (1-100). Rerank time grows with it; on CPU the bge-reranker-v2-m3 cross-encoder takes about 5 s for 30. Smaller values trade recall of late candidates for latency |
+| RERANKER_TOP_K | 15 | Number of fragments kept after reranking (1-100) |
 | RERANKER_TIMEOUT_MS | 5000 | External reranker call timeout (ms) |
 | NLI_SERVICE_URL | (none) | External NLI service URL. When unset, the in-process ONNX model is used |
 | NLI_TIMEOUT_MS | 5000 | External NLI call timeout (ms) |
