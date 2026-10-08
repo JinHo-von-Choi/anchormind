@@ -146,6 +146,8 @@
 | MEMENTO_RERANKER_ENABLED | false | in-process 교차 인코더 리랭커 활성화. 기본은 비활성이다. 기본 모델이 영어 전용이라 한국어 코퍼스에서는 끄는 쪽이 낫다. 절제 실험 기준 Recall@1 74%에서 85%, MRR 0.827에서 0.890, p50 561ms에서 126ms로 개선된다. `RERANKER_URL`로 지정한 외부 리랭커는 이 스위치와 무관하게 동작한다 |
 | RERANKER_MODEL | minilm | in-process 리랭커가 활성일 때 쓰는 ONNX 모델. `minilm` (기본값, ~80MB, 영어 전용) 또는 `bge-m3` (~280MB, 다국어). bge-m3는 비영어 판정이 훨씬 낫지만 CPU에서 30건 재정렬에 수 초가 걸리므로 GPU 기반 외부 서비스 뒤에서만 쓴다 |
 | RERANKER_EXTERNAL_FALLBACK | skip | external 리랭커 3회 연속 실패 시 정책. `skip`(기본): in-process 전환 없이 `RERANKER_EXTERNAL_COOLDOWN_MS` 동안 external 호출 자체를 생략하고 원점수(RRF 순서)를 그대로 반환. `inprocess`: ONNX in-process 모드로 전환(opt-in, 이전 동작) |
+| RERANKER_WINDOW | 30 | 리랭커가 다시 줄 세우는 RRF 상위 후보 수(1~100). 재정렬 시간은 이 값에 비례한다(CPU에서 bge-reranker-v2-m3 30건 약 5초). 줄이면 지연은 줄고 뒤쪽 후보 회수가 약해진다 |
+| RERANKER_TOP_K | 15 | 재정렬 뒤 남기는 파편 수(1~100) |
 | RERANKER_TIMEOUT_MS | 5000 | 외부 리랭커 호출 타임아웃(ms) |
 | NLI_SERVICE_URL | (없음) | 외부 NLI 서비스 URL. 미설정 시 in-process ONNX |
 | NLI_TIMEOUT_MS | 5000 | 외부 NLI 호출 타임아웃(ms) |

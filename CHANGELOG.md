@@ -4,6 +4,10 @@
 
 ### Added
 
+- `RERANKER_WINDOW`(기본 30)와 `RERANKER_TOP_K`(기본 15) 환경변수. 리랭커가 재정렬하는 RRF 상위 후보 수와 재정렬 뒤 남기는 개수를 설정으로 뺐다. 기본값은 기존 동작과 같다.
+
+### Added
+
 - `MEMENTO_RECALL_MIN_SIM_CEIL` 환경변수. `SearchParamAdaptor.getMinSimilarity`가 반환하는 적응형 임계값에 옵트인 상한을 강제한다. 학습 규칙이 병합 결과 건수(평균 8 초과면 상승)를 기준으로 해서 값이 `CLAMP_MAX`(0.60)에 고착될 수 있는 배포를 위한 것이다. 하한과 함께 설정하면 하한이 우선한다. 미설정 시 기존 동작 그대로.
 
 ## [6.2.0] - 2026-10-05
