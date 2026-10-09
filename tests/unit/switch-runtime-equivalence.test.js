@@ -77,6 +77,8 @@ const RUNTIME = {
   MEMENTO_SYNTHETIC_QUERY_ENABLED:          "mem.syntheticQuery.enabled",
   MEMENTO_SYNTHETIC_QUERY_SEARCH:           "mem.syntheticQuery.searchEnabled",
   MEMENTO_DERIVED_FRESHNESS_ENFORCE:         "mem.syntheticQuery.freshnessEnforce",
+  MEMENTO_SEGMENT_EMBEDDING_ENABLED:        "mem.segmentEmbedding.enabled",
+  MEMENTO_SEGMENT_SEARCH:                   "mem.segmentEmbedding.searchEnabled",
   MEMENTO_KEYWORD_SEMANTIC_FALLBACK:        "mem.semanticSearch.keywordFallback",
   MEMENTO_CONSOLIDATE_SPLIT_LONG:           "mem.consolidate.enableRiskyStages.splitLongFragments",
   MEMENTO_CONSOLIDATE_DETECT_CONTRADICT:    "mem.consolidate.enableRiskyStages.detectContradictions",

@@ -47,6 +47,7 @@ const ALLOWED = {
   "memory/consolidate/UtilityBaseline.js": 1,
   "memory/consolidate/idOrderedUpdate.js": 3, // id 순 묶음 갱신은 잠금 CTE와 갱신 문장을, 재개형 백필의 후보 id 조회는 같은 조건식을 함께 쓴다
   "memory/embedding/EmbeddingWorker.js": 5, // 배치 저장은 id 순 잠금 CTE와 갱신 문장을 함께 쓴다
+  "memory/embedding/SegmentEmbeddingWorker.js": 3, // 구간 생성 대상 한 건 조회, 저장 트랜잭션의 부모 행 잠금과 content_hash 재확인(FOR KEY SHARE, 낡은 작업이 쓰지 못하게), 최근 생성분 중 구간이 없는 파편 복구 스캔
   "memory/embedding/SyntheticQueryWorker.js": 4, // 생성 결과 INSERT도 원문 content_hash를 같은 문장에서 대조해 오래된 파생 자료 저장을 막는다
   "memory/link/ContradictionDetector.js": 12,
   "memory/link/GraphLinker.js": 11,

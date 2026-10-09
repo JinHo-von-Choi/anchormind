@@ -21,6 +21,7 @@
     "lib/memory/admin/AgentScopeBackfill.js": 24,
     "lib/memory/consolidate/ConsolidatorGC.js": 39,
     "lib/memory/consolidate/MemoryConsolidator.js": 30,
+    "lib/memory/embedding/segmenter.js": 21,
     "lib/memory/link/ContradictionDetector.js": 35,
     "lib/memory/link/SessionLinker.js": 28,
     "lib/memory/processors/EpisodeContinuityService.js": 25,
@@ -30,8 +31,8 @@
     "lib/memory/processors/SessionActivityTracker.js": 23,
     "lib/memory/read/CaseRecall.js": 38,
     "lib/memory/read/ContextBuilder.js": 34,
-    "lib/memory/read/FragmentReader.js": 25,
-    "lib/memory/read/FragmentSearch.js": 144,
+    "lib/memory/read/FragmentReader.js": 48,
+    "lib/memory/read/FragmentSearch.js": 145,
     "lib/memory/read/GraphNeighborSearch.js": 27,
     "lib/memory/read/HistoryReconstructor.js": 22,
     "lib/memory/write/ConflictResolver.js": 23,
@@ -57,13 +58,13 @@
     "lib/memory/link/ContradictionDetector.js": 130,
     "lib/memory/read/CaseRecall.js": 126,
     "lib/oauth.js": 151,
-    "lib/scheduler.js": 133,
+    "lib/scheduler.js": 136,
     "server.js": 134
   },
   "max-lines": {
     "lib/admin/admin-memory.js": 1022,
     "lib/memory/consolidate/MemoryConsolidator.js": 833,
-    "lib/memory/read/FragmentSearch.js": 842,
+    "lib/memory/read/FragmentSearch.js": 847,
     "lib/tools/memory-schemas.js": 1303
   },
   "max-depth": {

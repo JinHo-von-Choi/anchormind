@@ -25,7 +25,7 @@ import fs   from "node:fs";
 import path from "node:path";
 import pg   from "pg";
 import dotenv from "dotenv";
-import { alignSyntheticQueryEmbedding } from "./align-synthetic-query-embedding.js";
+import { alignSyntheticQueryEmbedding, alignSegmentEmbedding } from "./align-synthetic-query-embedding.js";
 
 dotenv.config();
 
@@ -166,6 +166,10 @@ async function migrate() {
         );
       } else if (result.reason !== "already_aligned") {
         console.log(`Synthetic-query embedding alignment skipped: ${result.reason}`);
+      }
+      const seg = await alignSegmentEmbedding(client);
+      if (seg.action === "converted") {
+        console.log(`Segment embedding aligned: ${seg.targetType} -> ${seg.sourceType}; derived rows were deleted; SegmentEmbeddingWorker regenerates them.`);
       }
     };
 
