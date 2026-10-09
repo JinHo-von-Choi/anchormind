@@ -977,6 +977,7 @@ recall은 자체 힌트 경로를 이미 갖고 있어 `rates`에서 제외된�
 | `searchTimeoutMs` | `MEMENTO_SEGMENT_SEARCH_TIMEOUT_MS` | `1500` | 구간 프로브 시간 예산. 초과하면 본 검색 결과만 쓴다 |
 | `maxSegmentsPerMinute` | `MEMENTO_SEGMENT_RPM` | `600` | 분당 구간 임베딩 상한 |
 | `intervalMs` / `batchSize` | `MEMENTO_SEGMENT_INTERVAL_MS` / `MEMENTO_SEGMENT_BATCH` | `3000` / `10` | 워커 폴링 간격과 회차당 처리 파편 수 |
+| `concurrency` | `MEMENTO_SEGMENT_CONCURRENCY` | `4` | 한 회차 안에서 동시에 임베딩하는 파편 수(1~32) |
 | `recoveryIntervalMs` | `MEMENTO_SEGMENT_RECOVERY_MS` | `600000` | 큐 유실과 정지 구간을 회수하는 복구 스캔 주기(최근 48시간 생성분만 본다) |
 
 구간 표에는 키/에이전트/워크스페이스 열이 없다. 격리는 JOIN한 부모 `fragments`의 열로만 판정한다. 롤백은 두 스위치를 끄는 것이고, 표는 파생 자료라 `DROP TABLE agent_memory.fragment_segment`로 지울 수 있다. 임베딩 차원을 바꾸면 `scripts/post-migrate-flexible-embedding-dims.js`가 이 표도 함께 다룬다.

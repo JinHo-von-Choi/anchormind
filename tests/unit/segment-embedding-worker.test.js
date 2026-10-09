@@ -189,3 +189,43 @@ describe("SegmentEmbeddingWorker 큐와 복구", () => {
     assert.equal(q.params[2], w.version);
   });
 });
+
+describe("SegmentEmbeddingWorker — 동시 처리", () => {
+  const row = { id: "f1", content: longText(900), content_hash: "h1", valid_to: null };
+
+  it("concurrency만큼 임베딩 호출이 겹치고 모든 파편을 처리한다", async () => {
+    const { deps } = makeDeps({ row });
+    let live = 0, peak = 0;
+    const inner = deps.embed;
+    deps.embed = async texts => { live++; peak = Math.max(peak, live); await new Promise(r => setTimeout(r, 20)); live--; return inner(texts); };
+    const ids = ["a", "b", "c", "d", "e", "f"];
+    let i = 0;
+    deps.pop = async () => (i < ids.length ? { fragmentId: ids[i++] } : null);
+    const w = new SegmentEmbeddingWorker({ ...deps, cfg: { ...CFG, batchSize: 6, concurrency: 3 } });
+    assert.equal(await w._processBatch(), 6);
+    assert.equal(peak, 3);
+  });
+
+  it("concurrency가 없으면 직렬이다", async () => {
+    const { deps } = makeDeps({ row });
+    let live = 0, peak = 0;
+    const inner = deps.embed;
+    deps.embed = async texts => { live++; peak = Math.max(peak, live); await new Promise(r => setTimeout(r, 5)); live--; return inner(texts); };
+    let i = 0;
+    deps.pop = async () => (i < 4 ? { fragmentId: `x${i++}` } : null);
+    const w = new SegmentEmbeddingWorker({ ...deps, cfg: { ...CFG, batchSize: 4 } });
+    assert.equal(await w._processBatch(), 4);
+    assert.equal(peak, 1);
+  });
+
+  it("한 파편의 실패가 같은 회차의 다른 파편을 막지 않는다", async () => {
+    const { deps } = makeDeps({ row });
+    const inner = deps.embed; let n = 0;
+    deps.embed = async texts => { if (n++ === 1) throw new Error("boom"); return inner(texts); };
+    let i = 0;
+    deps.pop = async () => (i < 3 ? { fragmentId: `y${i++}` } : null);
+    const w = new SegmentEmbeddingWorker({ ...deps, cfg: { ...CFG, batchSize: 3, concurrency: 3 } });
+    assert.equal(await w._processBatch(), 2);
+    assert.equal(w.stats.failed, 1);
+  });
+});

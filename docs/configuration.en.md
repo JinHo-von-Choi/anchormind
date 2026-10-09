@@ -1449,6 +1449,7 @@ Embedding a fragment of up to 1000 characters as one vector dilutes a side remar
 | `searchTimeoutMs` | `MEMENTO_SEGMENT_SEARCH_TIMEOUT_MS` | `1500` | Time budget of the segment probe; on timeout only the body search is used |
 | `maxSegmentsPerMinute` | `MEMENTO_SEGMENT_RPM` | `600` | Segment embeddings per minute |
 | `intervalMs` / `batchSize` | `MEMENTO_SEGMENT_INTERVAL_MS` / `MEMENTO_SEGMENT_BATCH` | `3000` / `10` | Worker polling interval and fragments per round |
+| `concurrency` | `MEMENTO_SEGMENT_CONCURRENCY` | `4` | Fragments embedded in parallel within a round (1-32) |
 | `recoveryIntervalMs` | `MEMENTO_SEGMENT_RECOVERY_MS` | `600000` | Recovery scan period for lost queue entries and downtime (only looks at the last 48 hours) |
 
 The segment table has no key, agent or workspace columns; isolation is decided only by the joined parent `fragments` row. Roll back by turning both switches off; the table is derived data and can be dropped with `DROP TABLE agent_memory.fragment_segment`. When the embedding dimension changes, `scripts/post-migrate-flexible-embedding-dims.js` handles this table as well.

@@ -221,6 +221,8 @@ export const MEMORY_CONFIG = {
     queueKey         : "memento:segment_embedding_queue",
     intervalMs       : Number(process.env.MEMENTO_SEGMENT_INTERVAL_MS || 3000),
     batchSize        : Number(process.env.MEMENTO_SEGMENT_BATCH || 10),
+    /** 한 배치 안에서 동시에 임베딩하는 파편 수 */
+    concurrency      : Math.max(1, Math.min(32, Number(process.env.MEMENTO_SEGMENT_CONCURRENCY || 4))),
     maxSegmentsPerMinute: Number(process.env.MEMENTO_SEGMENT_RPM || 600),
     /** 큐 누락과 정지 구간을 회수하는 복구 스캔 주기와 한 번에 보는 파편 수 */
     recoveryIntervalMs: Number(process.env.MEMENTO_SEGMENT_RECOVERY_MS || 600000),
