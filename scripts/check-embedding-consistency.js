@@ -20,7 +20,7 @@ import { NOT_WM_ROW } from "../lib/memory/WorkingMemorySql.js";
 import { resolveEmbeddingColumnSpec, embeddingColumnMismatch, fetchEmbeddingColumn }
   from "../lib/memory/embedding/column-spec.js";
 
-const TABLES           = ["fragments", "morpheme_dict", "fragment_synthetic_query"];
+const TABLES           = ["fragments", "morpheme_dict", "fragment_synthetic_query", "fragment_segment"];
 const SCHEMA_FOR_CHECK = "agent_memory";
 
 export async function checkEmbeddingConsistency() {

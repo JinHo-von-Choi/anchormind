@@ -7,7 +7,7 @@
  * 수정일: 2026-08-12 ((타입, 차원) 쌍 판정·dry-run·테이블별 트랜잭션 도입)
  *
  * 목적: EMBEDDING_DIMENSIONS 환경변수에 따라 fragments + morpheme_dict +
- *       fragment_synthetic_query 테이블의
+ *       fragment_synthetic_query + fragment_segment 테이블의
  *       embedding 컬럼 타입을 동시에 조정한다.
  *       - ≤2000차원: vector(N)  + HNSW 인덱스
  *       - >2000차원: halfvec(N) + HNSW 인덱스 (pgvector ≥0.7.0 필요)
@@ -43,7 +43,8 @@ const DRY_RUN = process.argv.includes("--dry-run");
 const TABLES = [
   { table: "fragments",                 indexName: "idx_frag_embedding",          whereClause: "WHERE embedding IS NOT NULL" },
   { table: "morpheme_dict",             indexName: "idx_morpheme_dict_embedding", whereClause: ""                            },
-  { table: "fragment_synthetic_query",  indexName: "idx_fsq_embedding_hnsw",      whereClause: "WHERE embedding IS NOT NULL" }
+  { table: "fragment_synthetic_query",  indexName: "idx_fsq_embedding_hnsw",      whereClause: "WHERE embedding IS NOT NULL" },
+  { table: "fragment_segment",          indexName: "idx_fseg_embedding_hnsw",     whereClause: "WHERE embedding IS NOT NULL" }
 ];
 const HNSW_M = 16;
 const HNSW_EF_CONSTRUCTION = 128;

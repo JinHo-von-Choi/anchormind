@@ -963,6 +963,24 @@ recall은 자체 힌트 경로를 이미 갖고 있어 `rates`에서 제외된�
 
 `fragment_synthetic_query`는 `fragments`와 분리된 표다. `QuotaChecker`가 `fragments` 행 수로 `fragment_limit`을 판정하므로 같은 표에 넣으면 사용자 할당량을 잠식한다. 파생 자료이므로 유실 시 백필로 재생성한다.
 
+### segmentEmbedding (구간 임베딩)
+
+최대 1000자인 파편 본문 하나를 벡터 하나로 만들면 곁다리 언급("그런데 방금 smoker를 샀어")이 본문의 주된 화제에 희석되어 질문과 멀어진다. 400자를 넘는 파편을 300자 창(150자 간격)으로 나눠 구간별 벡터를 `fragment_segment` 표에 두고, 시맨틱 검색(L3)에서 조각별 최대 유사도를 본문 후보에 합친다. 구간 유사도에는 감쇠 계수를 곱하고, 구간이 순위에 영향을 주는 조각 수에 상한을 둔다. 기본은 꺼짐이다. 켜기 전에 `npm run migrate`로 표를 만들고, 기존 파편은 `scripts/backfill-fragment-segments.js`로 채운다.
+
+| 키 | 환경변수 | 기본값 | 설명 |
+|-|-|-|-|
+| `enabled` | `MEMENTO_SEGMENT_EMBEDDING_ENABLED` | `false` | 구간 생성. `true`면 워커를 시작하고 임베딩 완료 이벤트마다 큐에 올린다 |
+| `searchEnabled` | `MEMENTO_SEGMENT_SEARCH` | `false` | 검색 반영. 생성 스위치와 독립이며 효과를 보려면 둘 다 `true`로 켠다 |
+| `minChars` | `MEMENTO_SEGMENT_MIN_CHARS` | `400` | 구간 생성 대상의 최소 길이(코드 포인트). 이하는 본문 벡터로 충분하다 |
+| `similarityDecay` | `MEMENTO_SEGMENT_DECAY` | `0.95` | 구간 유사도 감쇠. 짧은 구간 벡터는 코사인이 높게 나오는 경향이 있다 |
+| `adoptLimit` | `MEMENTO_SEGMENT_ADOPT` | `10` | 구간이 순위에 영향을 줄 수 있는 조각(상승 + 신규)의 최대 수 |
+| `searchTimeoutMs` | `MEMENTO_SEGMENT_SEARCH_TIMEOUT_MS` | `1500` | 구간 프로브 시간 예산. 초과하면 본 검색 결과만 쓴다 |
+| `maxSegmentsPerMinute` | `MEMENTO_SEGMENT_RPM` | `600` | 분당 구간 임베딩 상한 |
+| `intervalMs` / `batchSize` | `MEMENTO_SEGMENT_INTERVAL_MS` / `MEMENTO_SEGMENT_BATCH` | `3000` / `10` | 워커 폴링 간격과 회차당 처리 파편 수 |
+| `recoveryIntervalMs` | `MEMENTO_SEGMENT_RECOVERY_MS` | `600000` | 큐 유실과 정지 구간을 회수하는 복구 스캔 주기(최근 48시간 생성분만 본다) |
+
+구간 표에는 키/에이전트/워크스페이스 열이 없다. 격리는 JOIN한 부모 `fragments`의 열로만 판정한다. 롤백은 두 스위치를 끄는 것이고, 표는 파생 자료라 `DROP TABLE agent_memory.fragment_segment`로 지울 수 있다. 임베딩 차원을 바꾸면 `scripts/post-migrate-flexible-embedding-dims.js`가 이 표도 함께 다룬다.
+
 ### consolidate.gate (정리 안전 게이트)
 
 시맨틱 중복 제거가 병합을 수행하기 전에 판정한다. 코사인 유사도는 수치나 식별자만 다른 문장을 구분하지 못하므로(`max_connections 200`과 `500`은 0.99 이상), 제거 대상이 가진 변별 토큰(수치·식별자·경로·버전)이 승계자에 남는지 확인한 뒤에만 병합을 허용한다.

@@ -4,6 +4,7 @@
 
 ### Added
 
+- 구간(세그먼트) 임베딩(옵트인, 기본 꺼짐). 400자를 넘는 파편을 300자 창으로 나눠 구간별 벡터를 `fragment_segment`(migration-064)에 두고, L3 시맨틱 검색에서 조각별 최대 유사도(감쇠 0.95, 영향 조각 상한 10)를 본문 후보에 합친다. 최대 1000자 본문 속 곁다리 언급이 본문 벡터에 희석되어 놓치던 근거를 회수한다. 환경변수 `MEMENTO_SEGMENT_EMBEDDING_ENABLED`, `MEMENTO_SEGMENT_SEARCH`, `MEMENTO_SEGMENT_MIN_CHARS`, `MEMENTO_SEGMENT_DECAY`, `MEMENTO_SEGMENT_ADOPT`, `MEMENTO_SEGMENT_SEARCH_TIMEOUT_MS`, `MEMENTO_SEGMENT_RPM`. 키/에이전트/워크스페이스 열 없이 부모 `fragments`로 격리한다. 기존 파편은 `scripts/backfill-fragment-segments.js`로 채운다.
 - `RERANKER_WINDOW`(기본 30)와 `RERANKER_TOP_K`(기본 15) 환경변수. 리랭커가 재정렬하는 RRF 상위 후보 수와 재정렬 뒤 남기는 개수를 설정으로 뺐다. 기본값은 기존 동작과 같다.
 
 ### Added

@@ -110,6 +110,8 @@ export const SWITCHES = Object.freeze([
   boolOff("MEMENTO_SYNTHETIC_QUERY_ENABLED", "검색", "파편 저장 시 LLM으로 합성 역질의를 만들어 색인한다"),
   boolOn("MEMENTO_SYNTHETIC_QUERY_SEARCH", "검색", "합성 역질의 벡터를 검색에 반영한다"),
   boolOn("MEMENTO_DERIVED_FRESHNESS_ENFORCE", "검색", "현재 본문 버전에서 생성된 합성 역질의만 검색한다"),
+  boolOff("MEMENTO_SEGMENT_EMBEDDING_ENABLED", "검색", "긴 파편 본문을 구간으로 나눠 구간별 임베딩을 만든다"),
+  boolOff("MEMENTO_SEGMENT_SEARCH", "검색", "구간 임베딩을 L3 시맨틱 검색에 반영한다(생성 스위치와 별개이며 둘 다 켜야 효과가 있다)"),
 
   /* 기억 처리 */
   boolOff("ENABLE_RECONSOLIDATION", "기억 처리", "재공고화 엔진으로 링크 가중치와 대체를 갱신한다"),

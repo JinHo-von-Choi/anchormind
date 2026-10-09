@@ -195,6 +195,38 @@ export const MEMORY_CONFIG = {
     /** 백필 수집기가 한 번에 처리할 미생성 파편 수 */
     backfillBatch    : Number(process.env.MEMENTO_SYNTHETIC_QUERY_BACKFILL || 20),
   },
+  /**
+   * 구간(세그먼트) 임베딩. 최대 1000자 파편 본문의 곁다리 언급이 본문 벡터에 희석되어 질문과 멀어지는 경우를
+   * 구간별 벡터로 회수한다. 생성(enabled)과 검색(searchEnabled)을 분리한다. 기본은 둘 다 꺼짐이다.
+   * 효과를 보려면 둘 다 켠다. 표가 없는 설치(마이그레이션 전)에서 검색 질의가 매번 실패하지 않도록 검색도 명시 옵트인이다.
+   */
+  segmentEmbedding: {
+    enabled          : process.env.MEMENTO_SEGMENT_EMBEDDING_ENABLED === "true",
+    searchEnabled    : process.env.MEMENTO_SEGMENT_SEARCH === "true",
+    /** 분할 규칙(코드 포인트 단위). 바꾸면 seg_version이 달라져 기존 구간이 재생성 대상이 된다. */
+    windowChars      : 300,
+    strideChars      : 150,
+    minChars         : Number(process.env.MEMENTO_SEGMENT_MIN_CHARS || 400),
+    maxSegments      : 12,
+    /** 구간 유사도 감쇠. 짧은 구간 벡터는 본문 벡터보다 코사인이 높게 나오는 경향이 있다. */
+    similarityDecay  : Number(process.env.MEMENTO_SEGMENT_DECAY || 0.95),
+    /** 구간이 순위에 영향을 줄 수 있는 조각(상승 + 신규)의 최대 수 */
+    adoptLimit       : Number(process.env.MEMENTO_SEGMENT_ADOPT || 10),
+    /** 구간 이웃 조회 수와 조각 반환 수 */
+    rowLimit         : 120,
+    searchLimit      : 30,
+    /** 구간 검색 프로브의 시간 예산(ms). 초과하면 빈 결과로 본 검색만 쓴다. */
+    searchTimeoutMs  : Number(process.env.MEMENTO_SEGMENT_SEARCH_TIMEOUT_MS || 1500),
+    /** 생성 워커 */
+    queueKey         : "memento:segment_embedding_queue",
+    intervalMs       : Number(process.env.MEMENTO_SEGMENT_INTERVAL_MS || 3000),
+    batchSize        : Number(process.env.MEMENTO_SEGMENT_BATCH || 10),
+    maxSegmentsPerMinute: Number(process.env.MEMENTO_SEGMENT_RPM || 600),
+    /** 큐 누락과 정지 구간을 회수하는 복구 스캔 주기와 한 번에 보는 파편 수 */
+    recoveryIntervalMs: Number(process.env.MEMENTO_SEGMENT_RECOVERY_MS || 600000),
+    recoveryBatch    : 50,
+    maxAttempts      : 3
+  },
   /** 임베딩 비동기 워커 설정 */
   embeddingWorker: {
     batchSize   : 10,
