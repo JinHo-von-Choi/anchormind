@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [6.3.1] - 2026-10-10
+
+### 업그레이드 주의
+
+- 데이터베이스 마이그레이션은 없다. `git pull`, `npm install`, 서비스 재시작이면 된다.
+- 절차–오류 연결 제안(`_meta.link_suggestions`)의 `fromId`와 `toId`가 절차→오류에서 오류→절차로 뒤집힌다. 제안을 그대로 `link`에 넘기던 호출은 이제 규약에 맞는 방향으로 연결된다.
+- `resolved_by`로 해결된 에러의 중요도를 0.5로 내리는 처리가 시작점이 error인 호출에서 동작한다. 이전에는 이 방향에서 발동하지 않았다.
+- 해결책 → 에러 방향으로 저장된 기존 `resolved_by`는 바꾸지 않는다. `graph_explore`(절차)와 `reconstruct_history`의 미해결 판정이 두 방향을 모두 읽는다.
+
 ### Added
 
 - reflect 연결 제안의 `meta.relationHint`. 오류–결정 후보(`caused_by`)에 `link` 규약에 맞는 오류→결정 `resolved_by` 연결(`fromId`, `toId`, `relationType`)을 함께 싣는다. 후보의 기존 키는 바뀌지 않는다.
