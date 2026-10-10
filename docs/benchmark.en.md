@@ -15,7 +15,7 @@ Evaluator: Jinho Choi
 | Retrieval | memento-mcp recall API (L1 keyword, L2 GIN, L2.5 graph, L3 semantic, segment search, RRF merge, lexical weighting) |
 | Top-K | 10, token budget 20000 |
 | Reader | deepseek-flash (direct method, no chain-of-thought) |
-| Judges | MiniMax-M3.1-Flash-Preview and claude-sonnet-5-5, both with the LongMemEval official prompts verbatim |
+| Judges | gpt-4o-2024-08-06 (LongMemEval official judge setting: temperature 0, max_tokens 10), MiniMax-M3.1-Flash-Preview and claude-sonnet-5-5, all with the LongMemEval official prompts verbatim |
 | Segment search | on (`MEMENTO_SEGMENT_EMBEDDING_ENABLED=true`, `MEMENTO_SEGMENT_SEARCH=true`) |
 | Rank-before-budget | off (`MEMENTO_RANK_BEFORE_BUDGET=off`) |
 
@@ -51,26 +51,26 @@ Every question ran L1, L2, L3, segment search, RRF merge and lexical weighting; 
 
 ## QA Accuracy
 
-| Metric | MiniMax | Claude |
-|--------|---------|--------|
-| Overall accuracy (ITT) | 0.840 (420/500, 95% CI 0.805-0.870) | 0.780 (390/500, 95% CI 0.742-0.814) |
-| Task-averaged accuracy | 0.866 | 0.769 |
-| Abstention accuracy | 0.767 (23/30) | 0.667 (20/30) |
+| Metric | GPT-4o (official) | MiniMax | Claude |
+|--------|-------------------|---------|--------|
+| Overall accuracy (ITT) | 0.840 (420/500, 95% CI 0.805-0.870) | 0.840 (420/500, 95% CI 0.805-0.870) | 0.780 (390/500, 95% CI 0.742-0.814) |
+| Task-averaged accuracy | 0.868 | 0.866 | 0.769 |
+| Abstention accuracy | 0.767 (23/30) | 0.767 (23/30) | 0.667 (20/30) |
 
-The two judges agree on 470 of 500 questions (kappa 0.806). All 30 disagreements are questions only MiniMax marked correct. Absolute scores are more conservative with Claude.
+The official judge (GPT-4o) and MiniMax agree on 492 of 500 questions (kappa 0.940). The 8 disagreements split 4 and 4, so the totals are equal. Claude agrees with GPT-4o on 468 questions (kappa 0.793); 31 of its 32 disagreements are questions only GPT-4o marked correct, which makes Claude the strictest judge, especially on single-session-preference.
 
 ### Per-Type QA Accuracy
 
-| Question type | n | MiniMax | Claude | All evidence in top-10 | Gap (MiniMax) |
-|---------------|---|---------|--------|------------------------|---------------|
-| single-session-assistant | 56 | 1.000 | 0.911 | 1.000 | 0.000 |
-| single-session-user | 70 | 0.971 | 0.943 | 0.886 | -0.085 |
-| knowledge-update | 78 | 0.859 | 0.833 | 0.885 | 0.026 |
-| single-session-preference | 30 | 0.833 | 0.467 | 0.733 | -0.100 |
-| temporal-reasoning | 133 | 0.820 | 0.789 | 0.940 | 0.120 |
-| multi-session | 133 | 0.714 | 0.669 | 0.917 | 0.203 |
+| Question type | n | GPT-4o (official) | MiniMax | Claude | All evidence in top-10 | Gap (GPT-4o) |
+|---------------|---|-------------------|---------|--------|------------------------|--------------|
+| single-session-assistant | 56 | 1.000 | 1.000 | 0.911 | 1.000 | 0.000 |
+| single-session-user | 70 | 0.971 | 0.971 | 0.943 | 0.886 | -0.085 |
+| knowledge-update | 78 | 0.885 | 0.859 | 0.833 | 0.885 | 0.000 |
+| single-session-preference | 30 | 0.833 | 0.833 | 0.467 | 0.733 | -0.100 |
+| temporal-reasoning | 133 | 0.812 | 0.820 | 0.789 | 0.940 | 0.128 |
+| multi-session | 133 | 0.707 | 0.714 | 0.669 | 0.917 | 0.210 |
 
-Gap = share of questions with all evidence in top-10 minus MiniMax accuracy. A larger gap means the evidence was retrieved but the reader failed to produce the answer. A negative gap means some questions were answered correctly without all evidence.
+Gap = share of questions with all evidence in top-10 minus GPT-4o accuracy. A larger gap means the evidence was retrieved but the reader failed to produce the answer. A negative gap means some questions were answered correctly without all evidence.
 
 ### Segment Search On vs Off
 
@@ -78,15 +78,16 @@ Paired comparison on the same 499 questions.
 
 | Metric | Segment search off | Segment search on |
 |--------|--------------------|-------------------|
+| Accuracy (GPT-4o, official) | 391/499 (0.784) | 420/499 (0.842) |
 | Accuracy (MiniMax) | 387/499 (0.776) | 420/499 (0.842) |
 | Accuracy (Claude) | 363/499 (0.727) | 390/499 (0.782) |
 | All evidence in top-5 | 408/499 | 439/499 |
 | All evidence in top-10 | 442/499 | 455/499 |
 | recall latency (median / p95) | 0.63 s / 2.7 s | 0.5 s / 1.1 s |
 
-With MiniMax, 43 questions are correct only with segment search on and 10 only with it off (sign test p = 5.6e-6). With Claude the counts are 47 and 20 (p = 0.0013). The two runs differ in more than segment search: the embedding path and the wait for segment embeddings also differ. The accuracy gain is larger than the gain in evidence retrieval, so part of it may come from ordering changes inside the top-10 or from reader and judge variance.
+With the official judge (GPT-4o), 39 questions are correct only with segment search on and 10 only with it off (sign test p = 3.8e-5). With MiniMax, 43 questions are correct only with segment search on and 10 only with it off (sign test p = 5.6e-6). With Claude the counts are 47 and 20 (p = 0.0013). The two runs differ in more than segment search: the embedding path and the wait for segment embeddings also differ. The accuracy gain is larger than the gain in evidence retrieval, so part of it may come from ordering changes inside the top-10 or from reader and judge variance.
 
-By type, correct answers rose from 94 to 109 on temporal-reasoning and from 84 to 95 on multi-session (MiniMax). single-session-assistant stays at 56 with MiniMax and drops from 54 to 51 with Claude.
+By type, correct answers rose from 94 to 108 on temporal-reasoning, from 84 to 94 on multi-session and from 21 to 25 on single-session-preference (GPT-4o). single-session-assistant stays at 56 with GPT-4o and drops from 54 to 51 with Claude.
 
 ## Analysis
 
@@ -100,11 +101,11 @@ single-session-preference has the lowest share of questions with all evidence in
 
 ### QA Gap Analysis
 
-The largest gaps are multi-session (0.203) and temporal-reasoning (0.120). Most evidence arrives, but the reader mostly fails when it has to sum values across fragments or compute dates. Better retrieval alone does not shrink this part.
+The largest gaps are multi-session (0.210) and temporal-reasoning (0.128). Most evidence arrives, but the reader mostly fails when it has to sum values across fragments or compute dates. Better retrieval alone does not shrink this part.
 
 ### Abstention
 
-Abstention accuracy is 0.767 (23/30) with MiniMax and 0.667 (20/30) with Claude. With 30 questions the confidence interval is wide.
+Abstention accuracy is 0.767 (23/30) with GPT-4o and MiniMax and 0.667 (20/30) with Claude. With 30 questions the confidence interval is wide.
 
 ## Ablation Study
 

@@ -321,12 +321,13 @@ RAG는 이미 있는 문서를 색인해 찾아 준다. AnchorMind는 에이전�
 
 ## 벤치마크
 
-[LongMemEval-S](https://arxiv.org/abs/2410.10813) 500문항 기준(2026-10-10 측정, 리더 deepseek-flash, 평가자 MiniMax와 Claude 소넷 5.5):
+[LongMemEval-S](https://arxiv.org/abs/2410.10813) 500문항 기준(2026-10-10 측정, 리더 deepseek-flash, 평가자 GPT-4o 공식 설정, MiniMax, Claude 소넷 5.5):
 
 | 지표 | 점수 | 조건 |
 |-|-|-|
 | 근거 턴 전체가 top-10에 든 비율 | 91.2% | bge-m3, 구간 검색 켬 |
 | 검색 recall_any@5 | 98.4% | 세션 단위 |
+| QA 정답률 (GPT-4o 공식 평가자) | 84.0% | 95% CI 80.5–87.0% |
 | QA 정답률 (MiniMax 평가) | 84.0% | 95% CI 80.5–87.0% |
 | QA 정답률 (Claude 평가) | 78.0% | 95% CI 74.2–81.4% |
 

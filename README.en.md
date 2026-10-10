@@ -321,12 +321,13 @@ The main tools are `context` for restoring core memory at session start, `recall
 
 ## Benchmark
 
-[LongMemEval-S](https://arxiv.org/abs/2410.10813), 500 questions (measured 2026-10-10, reader deepseek-flash, judges MiniMax and Claude Sonnet 5.5):
+[LongMemEval-S](https://arxiv.org/abs/2410.10813), 500 questions (measured 2026-10-10, reader deepseek-flash, judges GPT-4o official setting, MiniMax and Claude Sonnet 5.5):
 
 | Metric | Score | Condition |
 |-|-|-|
 | All evidence turns within top-10 | 91.2% | bge-m3, segment search on |
 | Retrieval recall_any@5 | 98.4% | session level |
+| QA accuracy (GPT-4o official judge) | 84.0% | 95% CI 80.5-87.0% |
 | QA accuracy (MiniMax judge) | 84.0% | 95% CI 80.5-87.0% |
 | QA accuracy (Claude judge) | 78.0% | 95% CI 74.2-81.4% |
 
