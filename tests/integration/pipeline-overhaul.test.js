@@ -171,7 +171,7 @@ describe("Pipeline Overhaul Integration", () => {
     it("MEMORY_CONFIG has embeddingWorker settings", async () => {
       const { MEMORY_CONFIG } = await import("../../config/memory.js");
       assert.ok(MEMORY_CONFIG.embeddingWorker, "embeddingWorker section missing");
-      assert.equal(MEMORY_CONFIG.embeddingWorker.batchSize, 10);
+      assert.equal(MEMORY_CONFIG.embeddingWorker.batchSize, 32);
       assert.equal(MEMORY_CONFIG.embeddingWorker.retryLimit, 3);
       assert.ok(MEMORY_CONFIG.embeddingWorker.queueKey, "queueKey missing");
     });
