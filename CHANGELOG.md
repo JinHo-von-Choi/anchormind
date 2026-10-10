@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [6.3.0] - 2026-10-10
+
+### 업그레이드 주의
+
+- 마이그레이션 `migration-064`(`fragment_segment` 표)가 포함된다. 운영 반영 직전에 `scripts/ops/backup.sh --label pre-migration`으로 백업을 만든다. 구간 임베딩은 기본 꺼짐이라 `MEMENTO_SEGMENT_EMBEDDING_ENABLED`와 `MEMENTO_SEGMENT_SEARCH`를 켜기 전에는 검색 결과가 달라지지 않는다.
+- `reflect`의 `_meta.link_suggestions`가 기본으로 줄어든다. 키워드 겹침 0.4 미만 후보는 만들지 않고 그룹당 3개까지만 싣는다. 이전 동작은 `MEMENTO_LINK_SUGGEST_MIN_OVERLAP=0`과 `MEMENTO_LINK_SUGGEST_MAX=0`으로 되돌린다.
+- 의존성 `sharp` override가 0.35.5로 올라간다. `git pull` 뒤 `npm install`을 실행하고 서비스를 재시작한다.
+
 ### Added
 
 - reflect 연결 제안(`_meta.link_suggestions`)에 최소 키워드 겹침 기준(`MEMENTO_LINK_SUGGEST_MIN_OVERLAP`, 기본 0.4), 1위와 2위 후보의 최소 점수 차이(`MEMENTO_LINK_SUGGEST_MIN_MARGIN`, 기본 0), 그룹당 상한(`MEMENTO_LINK_SUGGEST_MAX`, 기본 3)을 추가했다. 제안 항목에 `meta`(`score`, `margin`, `signals`, `scoreVersion`)가 붙고, 상한으로 빠진 개수는 `_meta.link_suggestions_omitted`로 알린다. 후보는 같은 그룹(workspace, case_id, topic)의 파편끼리만 짝짓고 점수 동률은 id 순으로 정한다. 키워드 겹침은 소문자·중복 제거한 집합으로 센다. 기준을 0으로 두면 이전처럼 겹침이 없어도 가장 높은 후보를 제안한다.
@@ -19,6 +27,7 @@
 
 ### Fixed
 
+- `sharp` override를 0.35.5로 올려 권고 GHSA-wq5f-xc86-pv6w(librsvg 취약점)를 해소했다.
 - 본문에 특수 토큰 문자열(`<|endoftext|>` 등)이 있으면 토큰 수 계산이 예외를 던져 `batch_remember`가 그 항목을 거부하던 문제. 특수 토큰도 일반 텍스트로 센다.
 - 리랭커가 재정렬한 파편이 재정렬되지 않은 파편(연결 파편, 재정렬 창 밖) 아래로 밀리던 문제. 재정렬 점수와 복합 점수의 척도 차이를 보정해 재정렬된 파편이 항상 위에 온다.
 
