@@ -6,10 +6,20 @@
 
 - 구간(세그먼트) 임베딩(옵트인, 기본 꺼짐). 400자를 넘는 파편을 300자 창으로 나눠 구간별 벡터를 `fragment_segment`(migration-064)에 두고, L3 시맨틱 검색에서 조각별 최대 유사도(감쇠 0.95, 영향 조각 상한 10)를 본문 후보에 합친다. 최대 1000자 본문 속 곁다리 언급이 본문 벡터에 희석되어 놓치던 근거를 회수한다. 환경변수 `MEMENTO_SEGMENT_EMBEDDING_ENABLED`, `MEMENTO_SEGMENT_SEARCH`, `MEMENTO_SEGMENT_MIN_CHARS`, `MEMENTO_SEGMENT_DECAY`, `MEMENTO_SEGMENT_ADOPT`, `MEMENTO_SEGMENT_SEARCH_TIMEOUT_MS`, `MEMENTO_SEGMENT_RPM`. 키/에이전트/워크스페이스 열 없이 부모 `fragments`로 격리한다. 기존 파편은 `scripts/backfill-fragment-segments.js`로 채운다.
 - `RERANKER_WINDOW`(기본 30)와 `RERANKER_TOP_K`(기본 15) 환경변수. 리랭커가 재정렬하는 RRF 상위 후보 수와 재정렬 뒤 남기는 개수를 설정으로 뺐다. 기본값은 기존 동작과 같다.
-
-### Added
-
 - `MEMENTO_RECALL_MIN_SIM_CEIL` 환경변수. `SearchParamAdaptor.getMinSimilarity`가 반환하는 적응형 임계값에 옵트인 상한을 강제한다. 학습 규칙이 병합 결과 건수(평균 8 초과면 상승)를 기준으로 해서 값이 `CLAMP_MAX`(0.60)에 고착될 수 있는 배포를 위한 것이다. 하한과 함께 설정하면 하한이 우선한다. 미설정 시 기존 동작 그대로.
+- 구간 임베딩 워커가 한 회차 안의 파편을 `MEMENTO_SEGMENT_CONCURRENCY`(기본 4, 1~32)개씩 동시에 임베딩한다. 직렬 처리는 임베딩 백엔드가 놀아도 처리량이 막혔다. 임베딩 호출은 `EMBEDDING_CONCURRENCY`와 `EMBEDDING_SEM_WAIT_MS`를 함께 쓰므로 동시성을 올리면 두 값도 맞춰 올린다.
+- 본문 절삭 가시화. 300자(episode 1000자)를 넘어 잘린 본문은 응답의 `content_truncated`(`original_length`, `stored_length`)와 `validation_warnings`의 `contentTruncated`로 알린다. `batch_remember`는 항목별 `results[].content_truncated`와 최상위 `truncated_count`(1건 이상일 때만)를 돌려주고, `remember`의 dryRun 응답에도 같은 필드가 붙는다. 절삭이 없으면 응답은 달라지지 않는다. `contentTruncated`는 `symbolic_hard_gate`의 차단 대상이 아니다.
+- 서버 instructions 상단에 저장 계약(본문 상한 300/1000자, 초과분 폐기, 입력 상한 4000자) 블록. 수치는 `lib/memory/contentGuard.js`의 상수에서 만든다.
+
+### Changed
+
+- 벤치마크 리포트(`docs/benchmark.md`)와 README의 LongMemEval-S 수치를 bge-m3, 구간 검색 켬 기준 최신 측정값으로 바꿨다.
+- 도구 스키마와 API 문서의 content 설명을 "300자 이내 권장"에서 "초과분 폐기"로 바꿨다. 절삭 동작은 변하지 않는다. 4000자는 episode 전용이 아니라 content 필드의 공통 입력 상한이다.
+
+### Fixed
+
+- 본문에 특수 토큰 문자열(`<|endoftext|>` 등)이 있으면 토큰 수 계산이 예외를 던져 `batch_remember`가 그 항목을 거부하던 문제. 특수 토큰도 일반 텍스트로 센다.
+- 리랭커가 재정렬한 파편이 재정렬되지 않은 파편(연결 파편, 재정렬 창 밖) 아래로 밀리던 문제. 재정렬 점수와 복합 점수의 척도 차이를 보정해 재정렬된 파편이 항상 위에 온다.
 
 ## [6.2.0] - 2026-10-05
 

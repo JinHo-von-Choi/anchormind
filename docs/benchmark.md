@@ -2,7 +2,7 @@
 
 [LongMemEval-S](https://arxiv.org/abs/2410.10813) 벤치마크 기반. 전체 평가 코드: [longmemeval-memento](https://github.com/JinHo-von-Choi/longmemeval-memento)
 
-일자: 2026-03-29
+일자: 2026-10-10
 평가자: 최진호
 
 ## 구성
@@ -10,85 +10,101 @@
 | 항목 | 값 |
 |------|-----|
 | 데이터셋 | LongMemEval_S (500개 질문, 6개 유형 + abstention) |
-| 수집 방식 | round_direct (턴 쌍 원문 그대로, 300자 절단) |
-| 저장소 | PostgreSQL bulk INSERT, OpenAI text-embedding-3-small을 통한 pgvector 임베딩 |
-| 검색 | memento-mcp recall API (3계층 캐스케이드: L1 Redis, L2 PostgreSQL GIN, L3 pgvector HNSW) |
-| Top-K | 5 |
-| 리더 | Gemini 2.5 Flash (direct 방식, chain-of-thought 미사용) |
-| 평가자 | Gemini 2.5 Flash (LongMemEval 공식 프롬프트 그대로 이식) |
-| 총 파편 수 | 89,006 (전체 임베딩 완료) |
+| 수집 방식 | round_direct (턴 쌍 원문 그대로, 300자 절단). 질문마다 독립 토픽에 약 620개 파편을 넣고 질의 뒤 삭제 |
+| 임베딩 | bge-m3 (CLS 풀링, fp32, 1024차원) |
+| 검색 | memento-mcp recall API (L1 키워드, L2 GIN, L2.5 그래프, L3 시맨틱, 구간 검색, RRF 병합, 어휘 가중) |
+| Top-K | 10, 토큰 예산 20000 |
+| 리더 | deepseek-flash (direct 방식, chain-of-thought 미사용) |
+| 평가자 | MiniMax-M3.1-Flash-Preview와 claude-sonnet-5-5. 둘 다 LongMemEval 공식 프롬프트 그대로 |
+| 구간 검색 | 켬 (`MEMENTO_SEGMENT_EMBEDDING_ENABLED=true`, `MEMENTO_SEGMENT_SEARCH=true`) |
+| 순위 후 예산 선택 | 끔 (`MEMENTO_RANK_BEFORE_BUDGET=off`) |
+
+질문 직전에 해당 질문 파편의 본문 임베딩과 구간 임베딩이 모두 만들어질 때까지 기다린다. 정확도는 최종 실패 없이 500문항 전체를 분모로 센다(ITT).
 
 ## 검색 성능
 
 | 지표 | 점수 |
 |------|------|
-| recall_any@5 | 0.883 |
-| recall_all@5 | 0.649 |
+| recall_any@5 (세션) | 0.984 |
+| recall_all@5 (세션) | 0.816 |
+| 근거 턴 전체가 top-5에 듦 | 0.878 |
+| 근거 턴 전체가 top-10에 듦 | 0.912 |
+| 근거 턴 전체가 top-20에 듦 | 0.944 |
+| recall 지연 (중앙값 / p95) | 0.5초 / 1.1초 |
 
-### 유형별 검색 성능 (recall_any@5)
+세션 단위 recall은 정답 세션 하나만 맞아도 적중으로 세므로 높게 나온다. 답을 만들 근거 턴이 모두 들어왔는지는 "근거 턴 전체" 지표가 더 정확히 보여 준다.
 
-| 질문 유형 | n | recall_any@5 |
-|-----------|---|-------------|
-| multi-session | 121 | 0.983 |
-| knowledge-update | 72 | 0.972 |
-| single-session-user | 64 | 0.953 |
-| temporal-reasoning | 127 | 0.874 |
-| single-session-preference | 30 | 0.800 |
-| single-session-assistant | 56 | 0.536 |
+### 유형별 검색 성능
 
-### 검색 경로 분포
+| 질문 유형 | n | recall_any@5 | recall_all@5 | 근거 전체 top-10 |
+|-----------|---|-------------|--------------|-----------------|
+| single-session-assistant | 56 | 1.000 | 1.000 | 1.000 |
+| temporal-reasoning | 133 | 0.985 | 0.722 | 0.940 |
+| multi-session | 133 | 1.000 | 0.662 | 0.917 |
+| single-session-user | 70 | 0.986 | 0.986 | 0.886 |
+| knowledge-update | 78 | 0.987 | 0.936 | 0.885 |
+| single-session-preference | 30 | 0.867 | 0.867 | 0.733 |
 
-| 계층 | 적중률 |
-|------|--------|
-| L1 (Redis keyword) | 0.0% |
-| L2 (PostgreSQL GIN) | 0.0% |
-| L3 (pgvector semantic) | 99.0% |
-| RRF fusion | 100.0% |
+### 검색 경로
 
-L1과 L2가 0%인 이유는 round_direct 수집 방식이 세션 ID와 날짜를 키워드로 저장하며 콘텐츠 용어는 저장하지 않기 때문이다. 3계층 캐스케이드는 올바르게 L3 시맨틱 검색으로 폴스루되며, L3가 질의의 99%를 처리한다.
+모든 질문에서 L1, L2, L3, 구간 검색, RRF 병합, 어휘 가중이 실행됐고 L2.5 그래프는 498개 질문에서 실행됐다. 검색 경로 기록의 예: `L1:621 → L2:621 → L2.5Graph:10 → L3:30 → Seg → RRF → Lexical:170`.
 
 ## QA 정확도
 
-| 지표 | 점수 |
-|------|------|
-| 전체 정확도 | 0.404 |
-| 태스크 평균 정확도 | 0.434 |
-| Abstention 정확도 | 0.467 |
+| 지표 | MiniMax | Claude |
+|------|---------|--------|
+| 전체 정확도 (ITT) | 0.840 (420/500, 95% CI 0.805–0.870) | 0.780 (390/500, 95% CI 0.742–0.814) |
+| 태스크 평균 정확도 | 0.866 | 0.769 |
+| Abstention 정확도 | 0.767 (23/30) | 0.667 (20/30) |
+
+두 평가자는 500문항 중 470문항에서 일치하며 kappa는 0.806이다. 불일치 30건은 모두 MiniMax만 정답으로 본 경우다. 절대 점수는 Claude 쪽이 보수적이다.
 
 ### 유형별 QA 정확도
 
-| 질문 유형 | n | 정확도 | 검색 | 갭 |
-|-----------|---|--------|------|-----|
-| single-session-user | 64 | 0.797 | 0.953 | 0.156 |
-| knowledge-update | 72 | 0.583 | 0.972 | 0.389 |
-| single-session-preference | 30 | 0.467 | 0.800 | 0.333 |
-| multi-session | 121 | 0.347 | 0.983 | 0.636 |
-| temporal-reasoning | 127 | 0.252 | 0.874 | 0.622 |
-| single-session-assistant | 56 | 0.161 | 0.536 | 0.375 |
+| 질문 유형 | n | MiniMax | Claude | 근거 전체 top-10 | 갭(MiniMax) |
+|-----------|---|---------|--------|-----------------|-------------|
+| single-session-assistant | 56 | 1.000 | 0.911 | 1.000 | 0.000 |
+| single-session-user | 70 | 0.971 | 0.943 | 0.886 | -0.085 |
+| knowledge-update | 78 | 0.859 | 0.833 | 0.885 | 0.026 |
+| single-session-preference | 30 | 0.833 | 0.467 | 0.733 | -0.100 |
+| temporal-reasoning | 133 | 0.820 | 0.789 | 0.940 | 0.120 |
+| multi-session | 133 | 0.714 | 0.669 | 0.917 | 0.203 |
 
-갭 = 검색 recall - QA 정확도. 갭이 클수록 올바른 세션을 검색했음에도 리더가 답변 추출에 실패한 것을 의미한다.
+갭 = 근거 전체 top-10 비율 - MiniMax 정확도. 갭이 클수록 근거를 검색했는데도 리더가 답을 만들지 못한 것이다. 음수는 근거를 모두 찾지 못해도 답이 맞은 질문이 있다는 뜻이다.
+
+### 구간 검색 켬/끔 비교
+
+같은 499문항을 짝지어 비교했다(MiniMax 평가자 기준).
+
+| 지표 | 구간 검색 끔 | 구간 검색 켬 |
+|------|-------------|-------------|
+| 정확도 (MiniMax) | 387/499 (0.776) | 420/499 (0.842) |
+| 정확도 (Claude) | 363/499 (0.727) | 390/499 (0.782) |
+| 근거 전체 top-5 | 408/499 | 439/499 |
+| 근거 전체 top-10 | 442/499 | 455/499 |
+| recall 지연 (중앙값 / p95) | 0.63초 / 2.7초 | 0.5초 / 1.1초 |
+
+MiniMax 기준으로 켠 쪽만 정답인 질문이 43개, 끈 쪽만 정답인 질문이 10개다(부호 검정 p = 5.6e-6). Claude 기준은 47개 대 20개다(p = 0.0013). 두 설정은 구간 검색만 다르지 않고 임베딩 처리 경로와 구간 임베딩 대기 방식도 다르다. 정답 증가폭이 근거 회수 증가폭보다 커서, 개선의 일부는 top-10 안의 순서 변화나 리더·평가자 편차일 수 있다.
+
+유형별 정답 수는 temporal-reasoning이 94에서 109로, multi-session이 84에서 95로 늘었다(MiniMax). single-session-assistant는 MiniMax 기준 56으로 같고 Claude 기준 54에서 51로 줄었다.
 
 ## 분석
 
 ### 검색 강점
 
-AnchorMind의 pgvector 시맨틱 검색은 전체 질문 유형에 걸쳐 88.3%의 recall_any@5를 기록했다. LongMemEval 논문의 검색 표(Table 3)는 질문당 약 500세션인 LongMemEval_M 기준(Stella V5 1.5B 기본 설계 session R@5 0.706, round R@5 0.582)이므로 이 LongMemEval_S 결과와 직접 비교하지 않는다. 검색은 OpenAI 임베딩을 사용한 파편 단위 저장과 pgvector가 맡았다.
-
-multi-session(98.3%)과 knowledge-update(97.2%) 검색은 거의 완벽하며, AnchorMind가 검색 수준에서 세션 간 정보 분산과 시간적 업데이트를 잘 처리함을 보여준다.
+세션 단위 recall_any@5가 0.984이고 근거 턴 전체가 top-10에 든 비율이 0.912다. single-session-assistant는 근거 전체가 항상 top-10에 들고, temporal-reasoning과 multi-session도 0.92~0.94다. 본문이 길어 근거 문장이 묻히는 경우는 구간 검색이 보완한다(아래 켬/끔 비교).
 
 ### 검색 약점
 
-single-session-assistant(53.6%)가 가장 약한 검색 카테고리이다. round_direct 전략은 "User: X / Assistant: Y" 쌍으로 저장하지만, 어시스턴트 발화에 대한 질의는 저장된 형식과 질의 시맨틱이 다르기 때문에 매칭이 잘 되지 않을 수 있다.
+single-session-preference는 근거 전체 top-10 비율이 0.733으로 가장 낮다. multi-session은 recall_all@5가 0.662여서 여러 세션에 흩어진 근거를 상위 5개 안에 모두 모으지 못한다. 근거 턴이 top-10 밖에 있는 질문은 500개 중 44개다.
 
 ### QA 갭 분석
 
-검색 대비 QA 갭이 가장 큰 유형은 multi-session(63.6pp)과 temporal-reasoning(62.2pp)이다. 이 유형들은 다수의 검색된 파편에서 정보를 종합하거나 시간에 대한 추론이 필요하며, 이는 검색 품질이 아닌 리더 LLM의 역량에 의존하는 부분이다.
-
-single-session-user의 갭이 가장 작으며(15.6pp), 단일 검색 파편에 직접적인 사실 답변이 존재할 때 리더가 성공적으로 추출함을 확인해준다.
+갭이 큰 유형은 multi-session(0.203)과 temporal-reasoning(0.120)이다. 근거가 대부분 들어와도 여러 파편의 값을 합산하거나 날짜를 계산하는 단계에서 리더가 주로 틀린다. 검색 개선만으로는 이 구간이 줄지 않는다.
 
 ### Abstention
 
-46.7%의 abstention 정확도는 보통 수준이다. 시스템이 "히스토리에 정보가 없음"과 "정보를 검색하지 못함"을 구분하는 데 어려움을 겪으며, 이는 검색 증강 시스템의 근본적 과제이다.
+Abstention 정확도는 MiniMax 0.767(23/30), Claude 0.667(20/30)이다. 표본이 30개라 신뢰구간이 넓다.
 
 ## 오프라인 골드셋 계측 (2026-08-28)
 

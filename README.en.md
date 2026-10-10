@@ -321,14 +321,16 @@ The main tools are `context` for restoring core memory at session start, `recall
 
 ## Benchmark
 
-[LongMemEval-S](https://arxiv.org/abs/2410.10813), 500 questions (measured 2026-03-29, reader and judge Gemini 2.5 Flash):
+[LongMemEval-S](https://arxiv.org/abs/2410.10813), 500 questions (measured 2026-10-10, reader deepseek-flash, judges MiniMax and Claude Sonnet 5.5):
 
 | Metric | Score | Condition |
 |-|-|-|
-| Retrieval recall_any@5 | 88.3% | text-embedding-3-small |
-| QA accuracy | 44.9% | temporal metadata and abstention detection |
+| All evidence turns within top-10 | 91.2% | bge-m3, segment search on |
+| Retrieval recall_any@5 | 98.4% | session level |
+| QA accuracy (MiniMax judge) | 84.0% | 95% CI 80.5-87.0% |
+| QA accuracy (Claude judge) | 78.0% | 95% CI 74.2-81.4% |
 
-Retrieval finds the fragments. Accuracy drops later, when the system has to synthesize an answer from them, especially with multi-session and temporal reasoning. Conditions and analysis: [Benchmark Report](docs/benchmark.en.md).
+Retrieval finds most of the evidence. The remaining errors concentrate in questions that need summing values across sessions or computing dates (multi-session, temporal-reasoning). Conditions and analysis: [Benchmark Report](docs/benchmark.en.md).
 
 ## Documentation
 

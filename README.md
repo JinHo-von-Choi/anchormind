@@ -321,14 +321,16 @@ RAG는 이미 있는 문서를 색인해 찾아 준다. AnchorMind는 에이전�
 
 ## 벤치마크
 
-[LongMemEval-S](https://arxiv.org/abs/2410.10813) 500문항 기준(2026-03-29 측정, 리더와 평가자 Gemini 2.5 Flash):
+[LongMemEval-S](https://arxiv.org/abs/2410.10813) 500문항 기준(2026-10-10 측정, 리더 deepseek-flash, 평가자 MiniMax와 Claude 소넷 5.5):
 
 | 지표 | 점수 | 조건 |
 |-|-|-|
-| 검색 recall_any@5 | 88.3% | text-embedding-3-small |
-| QA 정답률 | 44.9% | 시간 메타데이터와 답변 거부 감지 적용 |
+| 근거 턴 전체가 top-10에 든 비율 | 91.2% | bge-m3, 구간 검색 켬 |
+| 검색 recall_any@5 | 98.4% | 세션 단위 |
+| QA 정답률 (MiniMax 평가) | 84.0% | 95% CI 80.5–87.0% |
+| QA 정답률 (Claude 평가) | 78.0% | 95% CI 74.2–81.4% |
 
-검색은 찾아 오지만, 찾은 파편에서 답을 합성하는 단계(여러 세션에 걸친 추론, 시간축 추론)에서 정답률이 떨어진다. 측정 조건과 분석은 [Benchmark Report](docs/benchmark.md).
+검색은 근거를 대부분 찾아 온다. 남은 오답은 여러 세션의 값을 합산하거나 날짜를 계산하는 질문(multi-session, temporal-reasoning)에 몰려 있다. 측정 조건과 분석은 [Benchmark Report](docs/benchmark.md).
 
 ## 문서
 

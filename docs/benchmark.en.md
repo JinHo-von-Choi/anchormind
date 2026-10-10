@@ -2,7 +2,7 @@
 
 Based on [LongMemEval-S](https://arxiv.org/abs/2410.10813) benchmark. Full evaluation code: [longmemeval-memento](https://github.com/JinHo-von-Choi/longmemeval-memento)
 
-Date: 2026-03-29
+Date: 2026-10-10
 Evaluator: Jinho Choi
 
 ## Configuration
@@ -10,85 +10,101 @@ Evaluator: Jinho Choi
 | Parameter | Value |
 |-----------|-------|
 | Dataset | LongMemEval_S (500 questions, 6 types + abstention) |
-| Ingestion | round_direct (turn-pair verbatim, 300 char truncation) |
-| Storage | PostgreSQL bulk INSERT, pgvector embeddings via OpenAI text-embedding-3-small |
-| Retrieval | memento-mcp recall API (3-layer cascade: L1 Redis, L2 PostgreSQL GIN, L3 pgvector HNSW) |
-| Top-K | 5 |
-| Reader | Gemini 2.5 Flash (direct method, no chain-of-thought) |
-| Judge | Gemini 2.5 Flash (LongMemEval official prompts ported verbatim) |
-| Total fragments | 89,006 (all with embeddings) |
+| Ingestion | round_direct (turn-pair verbatim, 300 char truncation). Each question gets its own topic with about 620 fragments, deleted after the query |
+| Embedding | bge-m3 (CLS pooling, fp32, 1024 dimensions) |
+| Retrieval | memento-mcp recall API (L1 keyword, L2 GIN, L2.5 graph, L3 semantic, segment search, RRF merge, lexical weighting) |
+| Top-K | 10, token budget 20000 |
+| Reader | deepseek-flash (direct method, no chain-of-thought) |
+| Judges | MiniMax-M3.1-Flash-Preview and claude-sonnet-5-5, both with the LongMemEval official prompts verbatim |
+| Segment search | on (`MEMENTO_SEGMENT_EMBEDDING_ENABLED=true`, `MEMENTO_SEGMENT_SEARCH=true`) |
+| Rank-before-budget | off (`MEMENTO_RANK_BEFORE_BUDGET=off`) |
+
+Before each query the run waits until both body embeddings and segment embeddings of that question's fragments exist. Accuracy is counted over all 500 questions with no final failures (ITT).
 
 ## Retrieval Performance
 
 | Metric | Score |
 |--------|-------|
-| recall_any@5 | 0.883 |
-| recall_all@5 | 0.649 |
+| recall_any@5 (session) | 0.984 |
+| recall_all@5 (session) | 0.816 |
+| All evidence turns within top-5 | 0.878 |
+| All evidence turns within top-10 | 0.912 |
+| All evidence turns within top-20 | 0.944 |
+| recall latency (median / p95) | 0.5 s / 1.1 s |
 
-### Per-Type Retrieval (recall_any@5)
+Session-level recall counts a hit when any gold session is found, so it reads high. The "all evidence turns" metrics show whether everything needed to build the answer arrived.
 
-| Question Type | n | recall_any@5 |
-|--------------|---|-------------|
-| multi-session | 121 | 0.983 |
-| knowledge-update | 72 | 0.972 |
-| single-session-user | 64 | 0.953 |
-| temporal-reasoning | 127 | 0.874 |
-| single-session-preference | 30 | 0.800 |
-| single-session-assistant | 56 | 0.536 |
+### Per-Type Retrieval
 
-### Search Path Distribution
+| Question type | n | recall_any@5 | recall_all@5 | All evidence in top-10 |
+|---------------|---|--------------|--------------|------------------------|
+| single-session-assistant | 56 | 1.000 | 1.000 | 1.000 |
+| temporal-reasoning | 133 | 0.985 | 0.722 | 0.940 |
+| multi-session | 133 | 1.000 | 0.662 | 0.917 |
+| single-session-user | 70 | 0.986 | 0.986 | 0.886 |
+| knowledge-update | 78 | 0.987 | 0.936 | 0.885 |
+| single-session-preference | 30 | 0.867 | 0.867 | 0.733 |
 
-| Layer | Hit Rate |
-|-------|----------|
-| L1 (Redis keyword) | 0.0% |
-| L2 (PostgreSQL GIN) | 0.0% |
-| L3 (pgvector semantic) | 99.0% |
-| RRF fusion | 100.0% |
+### Search Path
 
-L1 and L2 show 0% because round_direct ingestion stores session IDs and dates as keywords, not content terms. The 3-layer cascade correctly falls through to L3 semantic search, which handles 99% of queries.
+Every question ran L1, L2, L3, segment search, RRF merge and lexical weighting; L2.5 graph ran on 498 questions. Example search path record: `L1:621 → L2:621 → L2.5Graph:10 → L3:30 → Seg → RRF → Lexical:170`.
 
 ## QA Accuracy
 
-| Metric | Score |
-|--------|-------|
-| Overall accuracy | 0.404 |
-| Task-averaged accuracy | 0.434 |
-| Abstention accuracy | 0.467 |
+| Metric | MiniMax | Claude |
+|--------|---------|--------|
+| Overall accuracy (ITT) | 0.840 (420/500, 95% CI 0.805-0.870) | 0.780 (390/500, 95% CI 0.742-0.814) |
+| Task-averaged accuracy | 0.866 | 0.769 |
+| Abstention accuracy | 0.767 (23/30) | 0.667 (20/30) |
+
+The two judges agree on 470 of 500 questions (kappa 0.806). All 30 disagreements are questions only MiniMax marked correct. Absolute scores are more conservative with Claude.
 
 ### Per-Type QA Accuracy
 
-| Question Type | n | Accuracy | Retrieval | Gap |
-|--------------|---|----------|-----------|-----|
-| single-session-user | 64 | 0.797 | 0.953 | 0.156 |
-| knowledge-update | 72 | 0.583 | 0.972 | 0.389 |
-| single-session-preference | 30 | 0.467 | 0.800 | 0.333 |
-| multi-session | 121 | 0.347 | 0.983 | 0.636 |
-| temporal-reasoning | 127 | 0.252 | 0.874 | 0.622 |
-| single-session-assistant | 56 | 0.161 | 0.536 | 0.375 |
+| Question type | n | MiniMax | Claude | All evidence in top-10 | Gap (MiniMax) |
+|---------------|---|---------|--------|------------------------|---------------|
+| single-session-assistant | 56 | 1.000 | 0.911 | 1.000 | 0.000 |
+| single-session-user | 70 | 0.971 | 0.943 | 0.886 | -0.085 |
+| knowledge-update | 78 | 0.859 | 0.833 | 0.885 | 0.026 |
+| single-session-preference | 30 | 0.833 | 0.467 | 0.733 | -0.100 |
+| temporal-reasoning | 133 | 0.820 | 0.789 | 0.940 | 0.120 |
+| multi-session | 133 | 0.714 | 0.669 | 0.917 | 0.203 |
 
-Gap = retrieval recall - QA accuracy. Large gaps indicate the reader fails to extract the answer even when the correct session is retrieved.
+Gap = share of questions with all evidence in top-10 minus MiniMax accuracy. A larger gap means the evidence was retrieved but the reader failed to produce the answer. A negative gap means some questions were answered correctly without all evidence.
+
+### Segment Search On vs Off
+
+Paired comparison on the same 499 questions.
+
+| Metric | Segment search off | Segment search on |
+|--------|--------------------|-------------------|
+| Accuracy (MiniMax) | 387/499 (0.776) | 420/499 (0.842) |
+| Accuracy (Claude) | 363/499 (0.727) | 390/499 (0.782) |
+| All evidence in top-5 | 408/499 | 439/499 |
+| All evidence in top-10 | 442/499 | 455/499 |
+| recall latency (median / p95) | 0.63 s / 2.7 s | 0.5 s / 1.1 s |
+
+With MiniMax, 43 questions are correct only with segment search on and 10 only with it off (sign test p = 5.6e-6). With Claude the counts are 47 and 20 (p = 0.0013). The two runs differ in more than segment search: the embedding path and the wait for segment embeddings also differ. The accuracy gain is larger than the gain in evidence retrieval, so part of it may come from ordering changes inside the top-10 or from reader and judge variance.
+
+By type, correct answers rose from 94 to 109 on temporal-reasoning and from 84 to 95 on multi-session (MiniMax). single-session-assistant stays at 56 with MiniMax and drops from 54 to 51 with Claude.
 
 ## Analysis
 
 ### Retrieval Strengths
 
-AnchorMind's pgvector semantic search recorded 88.3% recall_any@5 across all question types. The retrieval table in the LongMemEval paper (Table 3) uses LongMemEval_M with about 500 sessions per question (Stella V5 1.5B base design: session R@5 0.706, round R@5 0.582), so it is not directly comparable with this LongMemEval_S result. Retrieval here is served by fragment-level storage with OpenAI embeddings and pgvector.
-
-Multi-session (98.3%) and knowledge-update (97.2%) retrieval is near-perfect, indicating that AnchorMind handles cross-session information distribution and temporal updates well at the retrieval level.
+Session-level recall_any@5 is 0.984 and all evidence turns land in the top-10 for 0.912 of the questions. single-session-assistant always has all evidence in the top-10, and temporal-reasoning and multi-session reach 0.92-0.94. Segment search covers cases where the evidence sentence is buried in a long body (see the on/off comparison below).
 
 ### Retrieval Weaknesses
 
-single-session-assistant (53.6%) is the weakest retrieval category. The round_direct strategy stores "User: X / Assistant: Y" pairs, but queries about assistant utterances may not match well against this format since the query semantics differ from the stored format.
+single-session-preference has the lowest share of questions with all evidence in the top-10 (0.733). multi-session has recall_all@5 of 0.662, so evidence spread over several sessions is not fully collected in the top 5. Evidence turns fall outside the top-10 in 44 of 500 questions.
 
 ### QA Gap Analysis
 
-The largest retrieval-to-QA gaps are in multi-session (63.6pp) and temporal-reasoning (62.2pp). These require synthesizing information across multiple retrieved fragments or reasoning about time -- capabilities that depend on the reader LLM rather than retrieval quality.
-
-single-session-user has the smallest gap (15.6pp), confirming that when a direct factual answer exists in a single retrieved fragment, the reader successfully extracts it.
+The largest gaps are multi-session (0.203) and temporal-reasoning (0.120). Most evidence arrives, but the reader mostly fails when it has to sum values across fragments or compute dates. Better retrieval alone does not shrink this part.
 
 ### Abstention
 
-46.7% abstention accuracy is moderate. The system struggles to distinguish between "information not in history" and "information not retrieved" -- a fundamental challenge for retrieval-augmented systems.
+Abstention accuracy is 0.767 (23/30) with MiniMax and 0.667 (20/30) with Claude. With 30 questions the confidence interval is wide.
 
 ## Ablation Study
 
