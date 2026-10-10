@@ -83,7 +83,8 @@ describe("auto-link gate — 곱집합 차단 및 1:1 매칭", () => {
       frag("d3", "decision", { caseId: "case-D", sessionId: "sess-4", keywords: ["redis"],        content: "redis decision" }),
     ];
 
-    const { linkedCount, linkSuggestions } = await linker.autoLinkSessionFragments(fragments, "agent", null);
+    /** 이 시험은 schema-fit 관문을 본다. 제안 품질 필터(minOverlap)는 끄고 확인한다. */
+    const { linkedCount, linkSuggestions } = await linker.autoLinkSessionFragments(fragments, "agent", null, { minOverlap: 0 });
 
     // e1→d1 만 통과 기대
     assert.equal(linkedCount, 1, "schema-fit 통과 1건만 생성");
@@ -101,7 +102,7 @@ describe("auto-link gate — 곱집합 차단 및 1:1 매칭", () => {
       frag("d1", "decision", { caseId: "case-Y", sessionId: "s2", keywords: ["db"],    content: "db decision" }),
     ];
 
-    const { linkedCount, linkSuggestions } = await linker.autoLinkSessionFragments(fragments, "agent", null);
+    const { linkedCount, linkSuggestions } = await linker.autoLinkSessionFragments(fragments, "agent", null, { minOverlap: 0 });
 
     assert.equal(linkedCount, 0, "autoLinks 0건");
     assert.equal(linkSuggestions.length, 1, "linkSuggestions 1건");
@@ -159,13 +160,13 @@ describe("auto-link gate — 키워드 오버랩 60% 미만 차단", () => {
     const store  = makeStore();
     const linker = makeLinker(store);
 
-    // 동일 caseId + sessionId이지만 키워드 오버랩 1/4 = 25%
+    // 동일 caseId + sessionId이지만 키워드가 겹치지 않아 관문 (b)에서 막힌다
     const fragments = [
       frag("e1", "error",    { caseId: "c1", sessionId: "s1", keywords: ["nginx", "ssl", "cert", "chain"], content: "nginx ssl cert chain error" }),
       frag("d1", "decision", { caseId: "c1", sessionId: "s1", keywords: ["java"],                          content: "java decision" }),
     ];
 
-    const { linkedCount, linkSuggestions } = await linker.autoLinkSessionFragments(fragments, "agent", null);
+    const { linkedCount, linkSuggestions } = await linker.autoLinkSessionFragments(fragments, "agent", null, { minOverlap: 0 });
 
     assert.equal(linkedCount, 0, "키워드 오버랩 부족으로 미통과");
     assert.equal(linkSuggestions.length, 1);

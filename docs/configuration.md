@@ -184,6 +184,9 @@
 | MEMENTO_RECALL_MIN_SIM_FLOOR | (없음) | `SearchParamAdaptor.getMinSimilarity`가 반환하는 적응형 임계값에 옵트인 하한을 강제. 예: `0.45` 설정 시 학습값이 0.45 미만이어도 0.45 반환. 미설정 시 기존 동작 그대로 |
 | MEMENTO_RECALL_MIN_SIM_CEIL | (없음) | `SearchParamAdaptor.getMinSimilarity`가 반환하는 적응형 임계값에 옵트인 상한을 강제. 병합 결과 건수(L1/L2/L3/lexical) 평균이 8을 넘으면 학습값이 오르기만 해서 0.60 상한에 고착될 수 있고, 이때 시맨틱 계층에서 정답이 잘린다. 예: `0.40` 설정 시 반환값은 최대 0.40. 하한도 설정되어 있으면 하한이 우선. 미설정 시 기존 동작 그대로 |
 | MIGRATION_LINT_FROM | (없음) | `npm run lint:migrations` 검사 cutoff override. 지정 마이그레이션 번호 이후분만 검사. 미설정 시 전체 검사 |
+| MEMENTO_LINK_SUGGEST_MIN_OVERLAP | 0.4 | reflect 연결 제안의 최소 키워드 겹침(0~1). 미만이면 제안하지 않는다. 0이면 겹침이 없어도 가장 높은 후보를 제안한다 |
+| MEMENTO_LINK_SUGGEST_MIN_MARGIN | 0 | 1위와 2위 후보의 최소 점수 차이(0~1). 차이가 이보다 작으면 모호해서 제안하지 않는다. 0이면 확인하지 않는다 |
+| MEMENTO_LINK_SUGGEST_MAX | 3 | reflect 연결 제안의 그룹당 최대 개수. 0이면 제한하지 않는다 |
 | MEMENTO_MORPHEME_TOKENIZER | local | 형태소 토크나이저 경로 선택. `local`: garu-ko(한글)·natural PorterStemmer(영어)·@node-rs/jieba(중국어)·kuromoji(일본어) 로컬 CPU 분석기 사용(기본). `llm`: LLM 서브프로세스 경로(`MorphemeIndex._tokenizeViaLLM()`)로 전환. |
 | MEMENTO_ENABLE_KUROMOJI | true | `false` 설정 시 kuromoji 일본어 분석기 로딩 생략. 일본어 파편이 없는 환경에서 상주 메모리 약 269MB 절감. `config/memory.js` `morphemeIndex.enableKuromoji`와 동기화됨. |
 | MEMENTO_FEEDBACK_SAMPLING | true | remember·amend·forget 성공 응답에 `feedback_sampled` 힌트를 확률적으로 동봉(`config/memory.js` `feedback.sampling.enabled`). `false` 시 힌트 부착 자체를 생략한다 |

@@ -4,6 +4,7 @@
 
 ### Added
 
+- reflect 연결 제안(`_meta.link_suggestions`)에 최소 키워드 겹침 기준(`MEMENTO_LINK_SUGGEST_MIN_OVERLAP`, 기본 0.4), 1위와 2위 후보의 최소 점수 차이(`MEMENTO_LINK_SUGGEST_MIN_MARGIN`, 기본 0), 그룹당 상한(`MEMENTO_LINK_SUGGEST_MAX`, 기본 3)을 추가했다. 제안 항목에 `meta`(`score`, `margin`, `signals`, `scoreVersion`)가 붙고, 상한으로 빠진 개수는 `_meta.link_suggestions_omitted`로 알린다. 후보는 같은 그룹(workspace, case_id, topic)의 파편끼리만 짝짓고 점수 동률은 id 순으로 정한다. 키워드 겹침은 소문자·중복 제거한 집합으로 센다. 기준을 0으로 두면 이전처럼 겹침이 없어도 가장 높은 후보를 제안한다.
 - 구간(세그먼트) 임베딩(옵트인, 기본 꺼짐). 400자를 넘는 파편을 300자 창으로 나눠 구간별 벡터를 `fragment_segment`(migration-064)에 두고, L3 시맨틱 검색에서 조각별 최대 유사도(감쇠 0.95, 영향 조각 상한 10)를 본문 후보에 합친다. 최대 1000자 본문 속 곁다리 언급이 본문 벡터에 희석되어 놓치던 근거를 회수한다. 환경변수 `MEMENTO_SEGMENT_EMBEDDING_ENABLED`, `MEMENTO_SEGMENT_SEARCH`, `MEMENTO_SEGMENT_MIN_CHARS`, `MEMENTO_SEGMENT_DECAY`, `MEMENTO_SEGMENT_ADOPT`, `MEMENTO_SEGMENT_SEARCH_TIMEOUT_MS`, `MEMENTO_SEGMENT_RPM`. 키/에이전트/워크스페이스 열 없이 부모 `fragments`로 격리한다. 기존 파편은 `scripts/backfill-fragment-segments.js`로 채운다.
 - `RERANKER_WINDOW`(기본 30)와 `RERANKER_TOP_K`(기본 15) 환경변수. 리랭커가 재정렬하는 RRF 상위 후보 수와 재정렬 뒤 남기는 개수를 설정으로 뺐다. 기본값은 기존 동작과 같다.
 - `MEMENTO_RECALL_MIN_SIM_CEIL` 환경변수. `SearchParamAdaptor.getMinSimilarity`가 반환하는 적응형 임계값에 옵트인 상한을 강제한다. 학습 규칙이 병합 결과 건수(평균 8 초과면 상승)를 기준으로 해서 값이 `CLAMP_MAX`(0.60)에 고착될 수 있는 배포를 위한 것이다. 하한과 함께 설정하면 하한이 우선한다. 미설정 시 기존 동작 그대로.

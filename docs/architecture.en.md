@@ -1499,7 +1499,7 @@ Three LLM rewriting stages in MemoryConsolidator (`split_long_fragments`, `detec
 
 The ProactiveRecall caseIdPolicy operates as `"strict-or-adjacent"` by default. Only fragment pairs sharing the same case_id or within an adjacent case within 24h are eligible for automatic linking.
 
-autoLinkSessionFragments returns a `linkSuggestions[]` array; ReflectProcessor propagates it via the `_meta.link_suggestions` path.
+autoLinkSessionFragments returns a `linkSuggestions[]` array; ReflectProcessor propagates it via the `_meta.link_suggestions` path. Candidates are picked within the same group by keyword overlap (ties by id), dropped below `MEMENTO_LINK_SUGGEST_MIN_OVERLAP`, and capped at `MEMENTO_LINK_SUGGEST_MAX` per group. The fragment objects ReflectProcessor passes carry no caseId or sessionId, so automatic link gate (a) does not pass on the reflect path.
 
 ---
 

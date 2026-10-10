@@ -1208,6 +1208,8 @@ violations 있는 경우 (soft gate — 저장됨):
 
 `sessionId`가 지정되면 세션 파편을 workspace → case_id → topic 경계로 그룹핑해 그룹마다 별도로 종합·영속화한다. `groups` 필드는 그룹별 결과(`workspace`, `topic`, `caseId`, 해당 그룹에서 생성된 파편 id 목록 `fragmentIds` — narrative_summary가 있으면 episode 파편 id 포함)를 배열로 반환하며, 그룹이 서로 다른 workspace를 가져도 각 파편에는 소속 그룹의 workspace가 개별 기록된다. `sessionId`가 없으면 `params`(summary/decisions/...) 자체가 단일 그룹으로 취급되는 레거시 경로로 동작한다.
 
+`_meta.link_suggestions[]`는 reflect가 저장한 오류–결정, 절차–오류 쌍 가운데 자동 연결 관문을 통과하지 못한 연결 후보다. 항목은 `fromId`, `toId`, `relationType`(`caused_by` 또는 `resolved_by`), `reason`(`schema_fit_failed`)과 `meta`(`score` 키워드 겹침 0~1, `margin` 2위 후보와의 점수 차이 또는 후보가 하나면 `null`, `signals`, `scoreVersion`)를 가진다. `score`는 확률이 아니다. 키워드 겹침이 `MEMENTO_LINK_SUGGEST_MIN_OVERLAP`(기본 0.4) 미만인 후보는 만들지 않으므로 후보가 없으면 빈 배열이다. 짝은 같은 그룹(workspace, case_id, topic)의 파편끼리만 찾고, 그룹당 `MEMENTO_LINK_SUGGEST_MAX`(기본 3)개까지 점수 높은 순으로 싣는다. 상한 때문에 빠진 후보가 있으면 `_meta.link_suggestions_omitted`에 개수가 들어간다. 호출자는 두 파편의 내용을 읽고 맞는 후보만 `link`로 건다.
+
 ### AutoReflect 타임아웃
 
 세션 종료 시 자동 실행되는 AutoReflect는 LLM 호출에 30000ms 타임아웃을 적용한다. 외부 게이트웨이(예: claude.ai MCP 프록시) 60s 컷오프 대비 30s 마진을 확보하기 위한 값이며, 40000ms 이상으로 변경하지 않는다.

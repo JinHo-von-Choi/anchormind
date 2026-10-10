@@ -1484,7 +1484,7 @@ MemoryConsolidator의 LLM 재작성 stage 3종(`split_long_fragments`, `detect_c
 
 ProactiveRecall의 caseIdPolicy는 `"strict-or-adjacent"`(기본)로 동작한다. 동일 case_id이거나 24h 이내 인접 케이스인 파편 쌍만 자동 링크 대상이 된다.
 
-autoLinkSessionFragments는 errors×decisions 곱집합 방식이 아닌 1:1 schema-fit 매칭을 사용한다. `linkSuggestions[]` 배열을 반환하며 ReflectProcessor가 `_meta.link_suggestions` 경로로 전파한다.
+autoLinkSessionFragments는 errors×decisions 곱집합 방식이 아닌 1:1 schema-fit 매칭을 사용한다. `linkSuggestions[]` 배열을 반환하며 ReflectProcessor가 `_meta.link_suggestions` 경로로 전파한다. 후보는 같은 그룹 안에서 키워드 겹침이 높은 순서(동점은 id 순)로 고르고, 겹침이 `MEMENTO_LINK_SUGGEST_MIN_OVERLAP` 미만이면 제안하지 않으며, 그룹당 `MEMENTO_LINK_SUGGEST_MAX`개로 자른다. ReflectProcessor가 넘기는 파편 객체에는 caseId와 sessionId가 없어 자동 연결 관문 (a)는 reflect 경로에서 통과하지 않는다.
 
 ---
 
