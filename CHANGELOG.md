@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- reflect 연결 제안의 `meta.relationHint`. 오류–결정 후보(`caused_by`)에 `link` 규약에 맞는 오류→결정 `resolved_by` 연결(`fromId`, `toId`, `relationType`)을 함께 싣는다. 후보의 기존 키는 바뀌지 않는다.
+
+### Changed
+
+- `resolved_by`의 방향을 "에러(fromId) → 해결책(toId)"로 통일했다. 절차–오류 연결 제안과 자동 연결의 `fromId`와 `toId`가 절차→오류에서 오류→절차로 바뀐다. 해결책 → 에러 방향으로 저장된 이전 연결은 그대로 두고 `getRCAChain`(절차)과 미해결 판정이 계속 읽는다.
+
+### Fixed
+
+- `link`가 `resolved_by`를 걸 때 해결된 에러의 중요도를 0.5로 내리는 처리가 도착점이 error일 때만 동작하던 문제. 규약 방향(시작점이 error)에서는 발동하지 않았다. 시작점이 error이면 시작점을, 이전 방향이면 도착점의 error를 내린다.
+- 케이스 이벤트의 `resolved_by` 간선이 해결 이벤트에서 에러 이벤트 방향으로 기록되어, `reconstruct_history`의 미해결 브랜치 판정이 에러를 해결된 것으로 보지 못하던 문제. 간선을 에러에서 해결 이벤트 방향으로 기록하고, 판정은 어느 방향의 간선이든 해결로 본다.
+- `graph_explore`(`getRCAChain`)가 해결책 → 에러 방향으로 저장된 절차 `resolved_by`를 에러에서 시작할 때 찾지 못하던 문제.
+
 ## [6.3.0] - 2026-10-10
 
 ### 업그레이드 주의

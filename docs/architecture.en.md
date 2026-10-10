@@ -1499,7 +1499,7 @@ Three LLM rewriting stages in MemoryConsolidator (`split_long_fragments`, `detec
 
 The ProactiveRecall caseIdPolicy operates as `"strict-or-adjacent"` by default. Only fragment pairs sharing the same case_id or within an adjacent case within 24h are eligible for automatic linking.
 
-autoLinkSessionFragments returns a `linkSuggestions[]` array; ReflectProcessor propagates it via the `_meta.link_suggestions` path. Candidates are picked within the same group by keyword overlap (ties by id), dropped below `MEMENTO_LINK_SUGGEST_MIN_OVERLAP`, and capped at `MEMENTO_LINK_SUGGEST_MAX` per group. The fragment objects ReflectProcessor passes carry no caseId or sessionId, so automatic link gate (a) does not pass on the reflect path.
+autoLinkSessionFragments returns a `linkSuggestions[]` array; ReflectProcessor propagates it via the `_meta.link_suggestions` path. Candidates are picked within the same group by keyword overlap (ties by id), dropped below `MEMENTO_LINK_SUGGEST_MIN_OVERLAP`, and capped at `MEMENTO_LINK_SUGGEST_MAX` per group. The direction of `resolved_by` is uniform: error (`fromId`) to solution (`toId`). The `link` tool, link suggestions and automatic links (procedure–error pairs), case event edges, the resolved-error demotion in `MemoryLinker` (the start point is demoted when it is an error) and `getRCAChain` all use it. Earlier `resolved_by` rows stored from solution to error are still read by `getRCAChain` (procedures only) and by unresolved-branch detection. For error–decision candidates (`caused_by`), `meta.relationHint` points at a `resolved_by` link from the error to the decision. The fragment objects ReflectProcessor passes carry no caseId or sessionId, so automatic link gate (a) does not pass on the reflect path.
 
 ---
 

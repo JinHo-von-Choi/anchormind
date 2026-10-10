@@ -1484,7 +1484,7 @@ MemoryConsolidator의 LLM 재작성 stage 3종(`split_long_fragments`, `detect_c
 
 ProactiveRecall의 caseIdPolicy는 `"strict-or-adjacent"`(기본)로 동작한다. 동일 case_id이거나 24h 이내 인접 케이스인 파편 쌍만 자동 링크 대상이 된다.
 
-autoLinkSessionFragments는 errors×decisions 곱집합 방식이 아닌 1:1 schema-fit 매칭을 사용한다. `linkSuggestions[]` 배열을 반환하며 ReflectProcessor가 `_meta.link_suggestions` 경로로 전파한다. 후보는 같은 그룹 안에서 키워드 겹침이 높은 순서(동점은 id 순)로 고르고, 겹침이 `MEMENTO_LINK_SUGGEST_MIN_OVERLAP` 미만이면 제안하지 않으며, 그룹당 `MEMENTO_LINK_SUGGEST_MAX`개로 자른다. ReflectProcessor가 넘기는 파편 객체에는 caseId와 sessionId가 없어 자동 연결 관문 (a)는 reflect 경로에서 통과하지 않는다.
+autoLinkSessionFragments는 errors×decisions 곱집합 방식이 아닌 1:1 schema-fit 매칭을 사용한다. `linkSuggestions[]` 배열을 반환하며 ReflectProcessor가 `_meta.link_suggestions` 경로로 전파한다. 후보는 같은 그룹 안에서 키워드 겹침이 높은 순서(동점은 id 순)로 고르고, 겹침이 `MEMENTO_LINK_SUGGEST_MIN_OVERLAP` 미만이면 제안하지 않으며, 그룹당 `MEMENTO_LINK_SUGGEST_MAX`개로 자른다. `resolved_by`의 방향은 "에러(fromId) → 해결책(toId)"로 통일돼 있다. `link` 도구, 연결 제안과 자동 연결(절차–오류 쌍), 케이스 이벤트 간선, `MemoryLinker`의 해결된 에러 강등(시작점이 error이면 시작점을 내림), `getRCAChain`이 모두 이 방향을 쓴다. 해결책 → 에러 방향으로 저장된 이전 `resolved_by`는 `getRCAChain`(절차만)과 미해결 판정에서 계속 읽는다. 오류–결정 후보(`caused_by`)의 `meta.relationHint`는 오류에서 결정으로 가는 `resolved_by`를 가리킨다. ReflectProcessor가 넘기는 파편 객체에는 caseId와 sessionId가 없어 자동 연결 관문 (a)는 reflect 경로에서 통과하지 않는다.
 
 ---
 

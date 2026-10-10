@@ -7,7 +7,7 @@
 import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
-import { SessionLinker, overlapScore } from "../../lib/memory/link/SessionLinker.js";
+import { SessionLinker, overlapScore, resolutionHint, relationHintFor } from "../../lib/memory/link/SessionLinker.js";
 
 const store = { async createLinks() { return []; }, async createLink() {}, async isReachable() { return false; } };
 const linker = () => { const l = new SessionLinker(store, null); l.wouldCreateCycle = async () => false; return l; };
@@ -50,7 +50,8 @@ describe("연결 제안 최소 겹침", () => {
     assert.equal(r.linkSuggestions.length, 1);
     const s = r.linkSuggestions[0];
     assert.deepEqual([s.fromId, s.toId, s.relationType, s.reason], ["e1", "d1", "caused_by", "schema_fit_failed"]);
-    assert.deepEqual(s.meta, { score: 1, margin: null, signals: ["keyword_overlap"], scoreVersion: "overlap-v2" });
+    assert.deepEqual(s.meta, { score: 1, margin: null, signals: ["keyword_overlap"], scoreVersion: "overlap-v2",
+      relationHint: { fromId: "e1", toId: "d1", relationType: "resolved_by" } });
   });
 
   it("경계: 겹침 0.4는 기준 0.4를 통과하고 기준 0.41은 통과하지 못한다", async () => {
@@ -72,7 +73,7 @@ describe("연결 제안 최소 겹침", () => {
   it("절차–오류 쌍은 resolved_by로 제안한다", async () => {
     const p = frag("p1", "procedure", ["nginx", "ssl"]);
     const r = await linker().autoLinkSessionFragments([e, p], "a", null, { minOverlap: 0.4 });
-    assert.deepEqual([r.linkSuggestions[0].fromId, r.linkSuggestions[0].toId, r.linkSuggestions[0].relationType], ["p1", "e1", "resolved_by"]);
+    assert.deepEqual([r.linkSuggestions[0].fromId, r.linkSuggestions[0].toId, r.linkSuggestions[0].relationType], ["e1", "p1", "resolved_by"]);
   });
 
   it("reflect 모양의 파편(caseId, sessionId 없음)은 자동 연결되지 않는다", async () => {
@@ -142,5 +143,61 @@ describe("그룹 범위와 상한", () => {
     const r = await linker().autoLinkSessionFragments(frs, "a", null, { minOverlap: 0.4, maxSuggestions: 0 });
     assert.equal(r.linkSuggestions.length, 5);
     assert.equal(r.linkSuggestionsOmitted, 0);
+  });
+});
+
+describe("relationHint", () => {
+  const err = frag("e1", "error", ["nginx", "ssl"]);
+  const run = (frs) => linker().autoLinkSessionFragments(frs, "a", null, { minOverlap: 0.4 });
+
+  it("오류–결정 제안의 meta에 오류→결정 resolved_by 힌트가 붙는다", async () => {
+    const r = await run([err, frag("d1", "decision", ["nginx", "ssl"])]);
+    assert.deepEqual(r.linkSuggestions[0].meta.relationHint, { fromId: "e1", toId: "d1", relationType: "resolved_by" });
+  });
+
+  it("절차–오류 제안은 오류→절차 방향이고 힌트가 따로 없다", async () => {
+    const r = await run([err, frag("p1", "procedure", ["nginx", "ssl"])]);
+    const s = r.linkSuggestions[0];
+    assert.deepEqual([s.fromId, s.toId, s.relationType], ["e1", "p1", "resolved_by"]);
+    assert.equal("relationHint" in s.meta, false);
+  });
+
+  it("힌트를 붙여도 기존 키 값과 키 집합은 변하지 않는다", async () => {
+    const r = await run([err, frag("d1", "decision", ["nginx", "ssl"])]);
+    const s = r.linkSuggestions[0];
+    assert.deepEqual([s.fromId, s.toId, s.relationType, s.reason], ["e1", "d1", "caused_by", "schema_fit_failed"]);
+    assert.deepEqual(Object.keys(s).sort(), ["fromId", "meta", "reason", "relationType", "toId"]);
+  });
+
+  it("기준 미달이면 제안도 힌트도 없다", async () => {
+    assert.deepEqual((await run([err, frag("d1", "decision", ["java", "heap"])])).linkSuggestions, []);
+  });
+
+  it("JSON 직렬화 뒤에도 힌트가 유지된다", async () => {
+    const r = await run([err, frag("d1", "decision", ["nginx", "ssl"])]);
+    assert.equal(JSON.parse(JSON.stringify(r.linkSuggestions))[0].meta.relationHint.relationType, "resolved_by");
+  });
+
+  it("relationHintFor는 허용된 유형 쌍에만 힌트를 만든다", () => {
+    const E = { id: "e", type: "error" }, D = { id: "d", type: "decision" }, P = { id: "p", type: "procedure" };
+    assert.deepEqual(relationHintFor("caused_by", E, D), { fromId: "e", toId: "d", relationType: "resolved_by" });
+    assert.equal(relationHintFor("resolved_by", P, E), null);
+    assert.equal(relationHintFor("caused_by", D, E), null);
+    assert.equal(relationHintFor("caused_by", E, P), null);
+    assert.equal(relationHintFor("related", E, D), null);
+    assert.deepEqual(resolutionHint("e", "x"), { fromId: "e", toId: "x", relationType: "resolved_by" });
+  });
+});
+
+describe("절차–오류 자동 연결 방향", () => {
+  it("자동 연결도 오류에서 절차로 거는 resolved_by다", async () => {
+    const calls = [];
+    const store = { async createLinks(pairs) { calls.push(...pairs); return []; }, async createLink() {}, async isReachable() { return false; } };
+    const l = new SessionLinker(store, null); l.wouldCreateCycle = async () => false;
+    const e = { id: "e1", type: "error", keywords: ["a", "b"], content: "x", caseId: "c", sessionId: "s" };
+    const p = { id: "p1", type: "procedure", keywords: ["a", "b"], content: "y", caseId: "c", sessionId: "s" };
+    const r = await l.autoLinkSessionFragments([e, p], "a", null, { minOverlap: 0.4 });
+    assert.equal(r.linkedCount, 1);
+    assert.deepEqual(calls.map(c => [c.fromId, c.toId, c.relationType]), [["e1", "p1", "resolved_by"]]);
   });
 });
