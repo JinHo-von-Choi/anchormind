@@ -206,6 +206,49 @@ Standalone measurement of the tokenization step in `lib/memory/embedding/Morphem
 - `results/evaluation_round_direct_k5_conv2.jsonl` -- CoN v2 evaluation
 - `results/judge_calibration.jsonl` -- Gemini vs GPT-4o calibration data
 
+## LoCoMo
+
+[LoCoMo](https://github.com/snap-research/locomo) (ACL 2024): 10 conversations, 1,986 questions. Each dialog turn is stored as one fragment (`<date>: <speaker> said, "<utterance>"`), the top-k fragments are retrieved per question, and the answer comes from the official LoCoMo QA prompts. The reader is deepseek-flash and segment search is on. Answers were regenerated from the same retrieval results with only the number of context fragments (k) changed.
+
+### Official metrics
+
+Token F1 from the official evaluation code, and evidence recall (share of evidence turns present in the context). Adversarial questions ask the reader to choose a "not mentioned" option, so they are scored by the official rule only.
+
+| Category | n | F1 k=10 / 20 / 50 | Evidence recall k=10 / 20 / 50 |
+|----------|---|-------------------|--------------------------------|
+| multi-hop | 282 | 0.312 / 0.376 / 0.389 | 0.499 / 0.614 / 0.683 |
+| temporal | 321 | 0.549 / 0.563 / 0.563 | 0.791 / 0.856 / 0.894 |
+| open-domain | 96 | 0.260 / 0.302 / 0.291 | 0.432 / 0.559 / 0.641 |
+| single-hop | 841 | 0.592 / 0.628 / 0.649 | 0.775 / 0.844 / 0.890 |
+| adversarial | 446 | 0.928 / 0.913 / 0.881 | 0.407 / 0.485 / 0.552 |
+| **Overall** | 1,986 | **0.605 / 0.630 / 0.633** | **0.639 / 0.719 / 0.773** |
+
+### Model-graded accuracy
+
+The 1,540 non-adversarial questions were graded correct or wrong by MiniMax-M3.1-Flash-Preview and claude-sonnet-5-5. The grading prompt is the LoCoMo prompt from [Mem0 memory-benchmarks](https://github.com/mem0ai/memory-benchmarks), used verbatim.
+
+| Category | k=10 MiniMax / Claude | k=20 MiniMax / Claude | k=50 MiniMax / Claude |
+|----------|-----------------------|-----------------------|-----------------------|
+| multi-hop | 0.727 / 0.713 | 0.819 / 0.805 | 0.826 / 0.791 |
+| temporal | 0.835 / 0.832 | 0.857 / 0.866 | 0.882 / 0.879 |
+| open-domain | 0.615 / 0.521 | 0.667 / 0.594 | 0.667 / 0.583 |
+| single-hop | 0.841 / 0.817 | 0.860 / 0.842 | 0.891 / 0.870 |
+| **Overall** | **0.805 / 0.782** | **0.840 / 0.825** | **0.863 / 0.840** |
+
+The 95% confidence intervals of the overall MiniMax accuracy at k=10 and k=50 do not overlap (0.784-0.824 and 0.845-0.879).
+
+### Interpretation
+
+- Evidence recall keeps rising with more context (0.639 to 0.773), while F1 barely moves after k=20. Some evidence reaches the context and the reader still does not use it.
+- multi-hop gains the most from a larger k. Questions whose evidence is spread over several turns benefit most.
+- adversarial falls as k grows. Irrelevant fragments make the reader less likely to choose "not mentioned".
+- Evidence recall is still 0.773 at k=50, so about 23% of the evidence does not reach the context. Short turns are retrieved less often than long, specific ones.
+
+### Comparison caveats
+
+- These results cannot be compared directly with evaluations that use a different reader or grading model. Scores published by other systems differ in reader, grading model and number of retrieved memories.
+- Grading is a single run and the grading models are not gpt-5. Read token F1, the official metric, alongside.
+
 ## Offline goldset measurement (2026-08-28)
 
 Unlike LongMemEval-S, which requires an external dataset and a separate harness, this measurement ships with the repository so a change can be compared before and after immediately. Measurement conditions differ, so these numbers are not directly comparable to the LongMemEval figures above.
