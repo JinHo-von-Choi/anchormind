@@ -91,6 +91,29 @@ describe("dryRun: remember", () => {
     assert.equal(deps.postProcessor.run.mock.calls.length, 0, "postProcessor.run 호출 금지");
   });
 
+  it("dryRun 응답도 300자 초과 본문의 절삭 길이를 알려준다", async () => {
+    const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
+    const rememberer = new MemoryRememberer(makeRememberer());
+
+    const result = await rememberer.remember({
+      content: "가".repeat(900), topic: "test", type: "fact", dryRun: true, _keyId: "key-123"
+    });
+
+    assert.deepEqual(result.simulated.content_truncated, { original_length: 900, stored_length: 303 });
+    assert.ok(result.simulated.validation_warnings.includes("contentTruncated"));
+  });
+
+  it("300자 이하 본문의 dryRun 응답에는 절삭 필드가 없다", async () => {
+    const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
+    const rememberer = new MemoryRememberer(makeRememberer());
+
+    const result = await rememberer.remember({
+      content: "짧지 않은 정상 길이의 기억 내용입니다", topic: "test", type: "fact", dryRun: true, _keyId: "key-123"
+    });
+
+    assert.equal("content_truncated" in result.simulated, false);
+  });
+
   it("dryRun=false(기본값)이면 정상 경로 실행 — store.insert 호출", async () => {
     const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
     const deps = makeRememberer();

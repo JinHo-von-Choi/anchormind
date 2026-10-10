@@ -650,7 +650,7 @@ Admin accounts (local accounts with password and TOTP, database sessions) work w
 | CF_API_TOKEN | (none) | Cloudflare API token. Required when `EMBEDDING_PROVIDER=cloudflare`. Falls back to `CLOUDFLARE_API_TOKEN` when unset |
 | EMBEDDING_TIMEOUT_MS | 8000 | Absolute per-call timeout (ms) for embedding API requests. Applied via `AbortSignal.timeout()` and acts as the overall deadline |
 | EMBEDDING_MAX_RETRIES | 0 | Retry count for the OpenAI-compatible client's own retry logic. Defaults to 0 because the per-call timeout already acts as the absolute deadline; stacking retries on top would let semaphore hold time accumulate as timeout × retries |
-| EMBEDDING_CONCURRENCY | 6 | Process-wide concurrency cap for embedding calls. The semaphore slot count that prevents embedding service latency from propagating into the overall request queue |
+| EMBEDDING_CONCURRENCY | 6 | Process-wide concurrency cap for embedding calls. The semaphore slot count that prevents embedding service latency from propagating into the overall request queue. The segment worker and query embeddings share these slots, so keep it comfortably above `MEMENTO_SEGMENT_CONCURRENCY` |
 | EMBEDDING_SEM_WAIT_MS | 3000 | Wait timeout (ms) for an embedding semaphore slot. Calls that exceed this are rejected and increment the `mcp_embedding_semaphore_wait_exceeded_total` counter |
 
 ### Watchdog

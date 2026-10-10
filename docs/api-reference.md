@@ -842,9 +842,9 @@ reason code 목록 (최대 3개):
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| content | string | O | 기억할 내용 (1~3문장, 300자 이내 권장). 입력 자체는 최대 4000자까지 허용되며 초과 시 `-32602` 오류로 거부된다 |
+| content | string | O | 기억할 내용 (1~3문장, 300자 이내, episode는 1000자). 초과분은 폐기되고 끝에 `...`이 붙으며 응답의 `content_truncated`로 알려준다. 입력 자체(content 필드)는 모든 유형에서 최대 4000자까지 허용되며 초과 시 `-32602` 오류로 거부된다 |
 | topic | string | O | 주제 (예: database, email, deployment, security) |
-| type | string | O | 파편 유형. fact, decision, error, preference, procedure, relation, episode. episode 외 타입은 300자 초과 시 절삭. |
+| type | string | O | 파편 유형. fact, decision, error, preference, procedure, relation, episode. episode 외 타입은 300자, episode는 1000자를 넘는 분량을 폐기한다. |
 | keywords | string[] | - | 검색용 키워드. 지정해도 본문에서 추출한 키워드가 뒤에 병합되며(중복 제거, 최대 10개) 지정 키워드가 우선한다. 미입력 시 본문 추출만 사용 |
 | importance | number | - | 중요도 0~1 (미입력 시 type별 기본값) |
 | source | string | - | 출처 (세션 ID, 도구명 등) |
@@ -918,6 +918,8 @@ violations 있는 경우 (soft gate — 저장됨):
 ```
 
 `validation_warnings`: PolicyRules soft gating violations rule 이름 string[]. violations 없으면 필드 자체 생략. `MEMENTO_SYMBOLIC_POLICY_RULES=false` (기본값) 시 항상 생략. atomic 경로(`MEMENTO_REMEMBER_ATOMIC=true`)와 non-atomic 경로 모두 같은 의미 쓰기 관문(`WriteGate.check`)을 거치므로 포맷이 동일하다. 활성화 시 다음 6가지 predicate 중 실패한 것이 누적된다:
+
+`content_truncated`: 본문이 저장 상한(300자, episode 1000자)에서 잘렸을 때만 응답에 붙는다. `{ original_length, stored_length }`이며 `original_length`는 마스킹 뒤 절삭 직전 길이, `stored_length`는 끝의 `...`을 포함한 저장 길이다. 같은 경우 `validation_warnings`에 `contentTruncated`가 들어간다. 이 경고는 `MEMENTO_SYMBOLIC_POLICY_RULES` 설정과 상관없이 나오고, `symbolic_hard_gate`의 차단 대상이 아니다. `batch_remember`는 항목별 `results[].content_truncated`와 최상위 `truncated_count`(1건 이상일 때만)를 돌려준다. `amend`는 본문을 절삭하지 않는다.
 
 - `decisionHasRationale` — decision 타입이 linked_to 2건 이상 또는 근거 키워드 미포함
 - `errorHasResolutionPath` — error 타입이 cause/fix 키워드 또는 resolution_status 미포함

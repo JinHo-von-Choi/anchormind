@@ -825,9 +825,9 @@ Fragment-based memory storage. Store exactly one atomic fact in 1-2 sentences. I
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| content | string | Y | Content to remember (1-3 sentences, 300 characters recommended). The raw input itself is capped at 4000 characters; exceeding it is rejected with `-32602`. |
+| content | string | Y | Content to remember (1-3 sentences, 300 characters; 1000 for episode). Anything beyond that is discarded, `...` is appended, and the response reports it in `content_truncated`. The raw input (the content field) is capped at 4000 characters for every type; exceeding it is rejected with `-32602`. |
 | topic | string | Y | Topic (e.g., database, email, deployment, security) |
-| type | string | Y | Fragment type. fact, decision, error, preference, procedure, relation, episode. Types other than episode are truncated beyond 300 characters. |
+| type | string | Y | Fragment type. fact, decision, error, preference, procedure, relation, episode. Content beyond 300 characters (1000 for episode) is discarded. |
 | keywords | string[] | - | Search keywords. Even when supplied, keywords extracted from the content are merged after them (deduplicated, max 10) with supplied keywords first. Without input only extraction is used |
 | importance | number | - | Importance 0-1 (type-specific default if not provided) |
 | source | string | - | Source (session ID, tool name, etc.) |
@@ -901,6 +901,8 @@ With violations (soft gate, stored):
 ```
 
 `validation_warnings`: Array of PolicyRules soft gating violation rule names (string[]). The field is omitted when there are no violations. When `MEMENTO_SYMBOLIC_POLICY_RULES=false` (default), always omitted. Both the atomic path (`MEMENTO_REMEMBER_ATOMIC=true`) and the non-atomic path pass the same semantic write gate (`WriteGate.check`), so the format is identical on both paths. When enabled, failed predicates accumulate from the following 5:
+
+`content_truncated`: present only when the content was cut at the stored limit (300 characters, 1000 for episode). It is `{ original_length, stored_length }`: `original_length` is the length after masking just before the cut, `stored_length` includes the trailing `...`. The same case adds `contentTruncated` to `validation_warnings`, regardless of `MEMENTO_SYMBOLIC_POLICY_RULES`, and it is never a `symbolic_hard_gate` blocker. `batch_remember` returns per-item `results[].content_truncated` and a top-level `truncated_count` (only when at least one item was cut). `amend` does not truncate content.
 
 - `decisionHasRationale` — decision type lacks 2+ linked_to references or rationale keywords
 - `errorHasResolutionPath` — error type lacks cause/fix keywords or resolution_status

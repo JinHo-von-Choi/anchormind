@@ -180,6 +180,22 @@ describe("BatchRememberProcessor", () => {
     }
   });
 
+  it("300자를 넘는 항목은 항목별 절삭 정보와 truncated_count를 돌려준다", async () => {
+    const long   = validItem(1, { content: `${"긴 본문 ".repeat(200)}끝` });
+    const result = await processor.process({ fragments: [validItem(0), long] });
+
+    assert.equal(result.truncated_count, 1);
+    assert.equal(result.results[0].content_truncated, undefined);
+    assert.equal(result.results[1].content_truncated.original_length, long.content.length);
+    assert.equal(result.results[1].content_truncated.stored_length, 303);
+    assert.ok(result.results[1].validation_warnings.includes("contentTruncated"));
+  });
+
+  it("절삭이 없으면 truncated_count 필드가 없다", async () => {
+    const result = await processor.process({ fragments: [validItem(0), validItem(1)] });
+    assert.equal("truncated_count" in result, false);
+  });
+
   it("Phase A 유효성 검증: content가 너무 짧으면 skip", async () => {
     const fragments = [
       { content: "ab", topic: "t", type: "fact" },
