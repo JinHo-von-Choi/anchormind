@@ -183,13 +183,13 @@ class Workspace {
    * @param {object}   [opts]
    * @param {string}   [opts.root]     - 대상 저장소 최상위
    * @param {object}   [opts.env]      - 하위 프로세스 환경
-   * @param {string}   [opts.notesDir] - Release 본문 파일을 둘 디렉터리
+   * @param {string}   [opts.notesDir] - Release 본문 파일을 둘 디렉터리. 없으면 실행마다 새 임시 디렉터리를 만든다
    * @param {boolean}  [opts.quiet]    - true 면 npm 출력을 가린다
    * @param {object}   [opts.fsImpl]   - 파일 입출력 구현(시험에서 쓰기 실패를 주입한다)
    * @param {Function} [opts.log]
    * @param {Function} [opts.warn]
    */
-  constructor({ root = ROOT, env = process.env, notesDir = os.tmpdir(), quiet = false, fsImpl = fs, log = console.log, warn = console.warn } = {}) {
+  constructor({ root = ROOT, env = process.env, notesDir = null, quiet = false, fsImpl = fs, log = console.log, warn = console.warn } = {}) {
     this.fsImpl   = fsImpl;
     this.root     = root;
     this.env      = env;
@@ -426,7 +426,8 @@ export async function main(argv, options = {}) {
     ws.run("git", ["commit", "-m", `release: ${version}`]);
   });
 
-  const notesPath = path.join(ws.notesDir, `anchormind-v${version}-notes.md`);
+  const notesDir  = ws.notesDir ?? ws.fsImpl.mkdtempSync(path.join(os.tmpdir(), "anchormind-release-"));
+  const notesPath = path.join(notesDir, `anchormind-v${version}-notes.md`);
   withHint(`커밋과 태그 되돌리기: git tag -d v${version}; git reset --hard HEAD~1`, () => {
     ws.run("git", ["tag", "-a", `v${version}`, "-m", `release: ${version}`]);
     ws.fsImpl.writeFileSync(notesPath, extractReleaseNotes(changelog, version));

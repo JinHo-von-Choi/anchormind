@@ -47,11 +47,10 @@ registerView("metrics",  renderMetrics);
 /* ── Bootstrap ── */
 function init() {
   setSidebarRenderer(renderSidebar);
+  /** 마스터 키는 메모리에만 둔다. sessionStorage에 남아 있는 키는 지운다. */
+  sessionStorage.removeItem("adminKey");
   const urlKey = new URLSearchParams(window.location.search).get("key");
-  if (urlKey && !state.masterKey) {
-    state.masterKey = urlKey;
-    sessionStorage.setItem("adminKey", urlKey);
-  }
+  if (urlKey && !state.masterKey) state.masterKey = urlKey;
 
   if (state.masterKey) {
     api("/auth", { method: "POST", body: { key: state.masterKey } })
@@ -72,7 +71,6 @@ function init() {
           });
         } else {
           state.masterKey = "";
-          sessionStorage.removeItem("adminKey");
           renderLogin();
         }
       });

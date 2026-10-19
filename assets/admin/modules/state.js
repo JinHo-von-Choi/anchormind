@@ -10,7 +10,7 @@
  */
 
 export const state = {
-  masterKey:   sessionStorage.getItem("adminKey") || "",
+  masterKey:   "",
   userSession: false,
   currentUser: null,
   adminUsers:  [],

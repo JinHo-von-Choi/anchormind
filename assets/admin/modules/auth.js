@@ -178,7 +178,6 @@ export function renderLogin() {
 
     const res = await api("/auth", { method: "POST", body: { key } });
     if (res.ok) {
-      sessionStorage.setItem("adminKey", key);
       root.classList.add("hidden");
       const appEl = document.getElementById("app");
       if (appEl) appEl.classList.add("visible");
@@ -186,7 +185,6 @@ export function renderLogin() {
     } else {
       errEl.classList.add("visible");
       state.masterKey = "";
-      sessionStorage.removeItem("adminKey");
       btn.disabled = false;
     }
   }
@@ -205,6 +203,5 @@ export async function logout() {
     state.currentUser = null;
   }
   state.masterKey = "";
-  sessionStorage.removeItem("adminKey");
   renderLogin();
 }

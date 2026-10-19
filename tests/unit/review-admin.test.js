@@ -207,7 +207,7 @@ describe("결정 적용", () => {
     for (const opts of [{ state: "approved" }, { state: null }, { validTo: new Date() }]) {
       const { statements, pool } = fakePool(pendingResponder(opts));
       await assert.rejects(decideReview({ fragmentId: "f1", decision: "approve", reviewer: "r" }, pool), ReviewStateError);
-      assert.ok(!statements.some(s => /^UPDATE|INSERT/.test(s.sql.trim())));
+      assert.ok(!statements.some(s => /^(UPDATE|INSERT)/.test(s.sql.trim())));
       assert.equal(statements.at(-1).sql, "ROLLBACK");
     }
     const { pool } = fakePool(pendingResponder({ missing: true }));
@@ -306,7 +306,7 @@ describe("목록과 자동 거절", () => {
   it("대상이 없으면 갱신하지 않는다", async () => {
     const { statements, pool } = fakePool(() => []);
     assert.deepEqual(await expireStaleReviews({}, pool), { rejected: 0, fragmentIds: [] });
-    assert.ok(!statements.some(s => /^UPDATE|INSERT/.test(s.sql.trim())));
+    assert.ok(!statements.some(s => /^(UPDATE|INSERT)/.test(s.sql.trim())));
   });
 
   describe("주기 작업", () => {
