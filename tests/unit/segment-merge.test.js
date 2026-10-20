@@ -87,4 +87,18 @@ describe("mergeSegmentHits", () => {
     assert.equal(JSON.stringify(base), copy);
     for (let i = 1; i < out.length; i++) assert.ok(out[i - 1].similarity >= out[i].similarity);
   });
+
+  it("mark를 주면 구간 표지 대신 그 필드를 붙인다(역질의 병합: 감쇠 1, 본문 후보를 자르지 않는 limit)", () => {
+    const base = [frag("a", 0.9), frag("b", 0.45), frag("c", 0.4)];
+    const hits = [frag("b", 0.6), frag("n", 0.5), frag("a", 0.5)];
+    const out  = mergeSegmentHits(base, hits, {
+      limit: base.length + 5, adoptLimit: 5, decay: 1, mark: () => ({ _syntheticMatch: true })
+    });
+    assert.deepEqual(out.map(f => f.id), ["a", "b", "n", "c"]);
+    const b = out.find(f => f.id === "b");
+    assert.equal(b.similarity, 0.6);
+    assert.equal(b._syntheticMatch, true);
+    assert.equal(b._segmentMatch, undefined);
+    assert.equal(out.find(f => f.id === "a")._syntheticMatch, undefined, "본문 유사도가 더 높은 조각은 그대로");
+  });
 });
