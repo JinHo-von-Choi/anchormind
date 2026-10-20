@@ -109,17 +109,17 @@ const POSITIVE = {
   ],
   email: ["ops-team@example.com", "a.b+c@sub.example.co.kr"],
   password_field: ["password: hunter2", "비밀번호=abc123!", "PWD : s3cret"],
-  phone_kr: ["010-1234-5678", "01012345678", "011 123 4567"]
+  phone_kr: ["010-1234-5678", "01012345678", "011 123 4567", "전화01012345678로", "tel:010-1234-5678"]
 };
 
 /** 규칙이 일치하면 안 되는 음성 표본 */
 const NEGATIVE = {
-  anthropic_key: ["sk-ant-short", "sk-ant-abc123def456", "ask-ant"],
-  openai_project_key: ["sk-proj-abc", "sk-proj-"],
+  anthropic_key: ["sk-ant-short", "sk-ant-abc123def456", "ask-ant", `mask-ant-${rep("a1", 12)}`],
+  openai_project_key: ["sk-proj-abc", "sk-proj-", `task-proj-${rep("a1", 12)}`],
   api_key_generic: ["task-queue-processor-worker-name-long-label", "disk-usage-monitor-dashboard-widget-component", "sk-learn"],
-  github_token: ["ghp_short", `ghp_${rep("a", 20)}`, "github_pat_short", "gh_token"],
+  github_token: ["ghp_short", `ghp_${rep("a", 20)}`, "github_pat_short", "gh_token", `laughp_${rep("a1", 20)}`],
   aws_access_key: [`AKIA${rep("A", 15)}`, `AKIAIOSFODNN7EXAMPLE1`, `MAKIAIOSFODNN7EXAMPLE`, "ASIA_PACIFIC_REGION_CONFIG"],
-  slack_token: ["xoxb-1", "xoxo xoxo", "xoxp-short"],
+  slack_token: ["xoxb-1", "xoxo xoxo", "xoxp-short", "boxoxb-1234567890-abc"],
   jwt: ["eyJabc", "eyJhbGciOiJIUzI1NiJ9.payload", `xeyJ${rep("a", 10)}.${rep("b", 10)}.${rep("c", 10)}`, "eyJ.eyJ.eyJ"],
   private_key: [
     `-----BEGIN PUBLIC KEY-----\n${rep("MIIB", 20)}\n-----END PUBLIC KEY-----`,
@@ -144,11 +144,13 @@ const NEGATIVE = {
     `${rrnDigits("850315223456")}0`,
     "20230101-1234567",
     "900101-9234567",
-    "991341-1234567"
+    "991341-1234567",
+    `hash${rep("e", 10)}9001011234568${rep("f", 10)}`
   ],
   card_number: [
     "4111111111111112", "1700000000000", "0000000000000000", rep("4", 20), "1234 5678 9012 3456", "9999999999999995",
-    "4111111111111111", "주문번호 4111111111111111 접수", `결제 ${luhnAndEan13()}`, "카드 8801234567890", `${rep("a", 40)} 4111111111111111`
+    "4111111111111111", "주문번호 4111111111111111 접수", `결제 ${luhnAndEan13()}`, "카드 8801234567890", `${rep("a", 40)} 4111111111111111`,
+    `card hash ${rep("e", 10)}4111111111111111${rep("f", 10)}`
   ],
   url_credentials: ["http://localhost:57332/mcp", "https://user@example.com/path", "ssh://git@host.example.com:22/repo", "postgres://db.example.com/app"],
   stripe_key: ["sk_learn_pipeline_model", "pk_live_" + rep("a1", 12), "sk_live_short"],
@@ -159,7 +161,11 @@ const NEGATIVE = {
     "SECRET_KEY=<your-secret>", "access_token=[REDACTED_TOKEN]"],
   email: ["user@localhost", "@example.com", "name@", "no-at-sign.example.com"],
   password_field: ["password", "passwords are rotated", "비밀번호 정책"],
-  phone_kr: ["02-1234-5678", "0101234", "1010-12"]
+  phone_kr: [
+    "02-1234-5678", "0101234", "1010-12", `sha256=${rep("a", 20)}01012345678${rep("b", 33)}`,
+    `digest:${rep("c", 10)}010-1234-5678${rep("d", 10)}`, "epoch_ms 1701012345678", "order 9010123456789"
+  ],
+  api_key_legacy: [`task-${rep("0a1b2c3d", 4)}`, `xAIza${rep("Ab1", 12)}`]
 };
 
 describe("규칙 표 구조", () => {
