@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [6.6.3] - 2026-10-20
+
 ### Fixed
 
 - 민감정보 규칙 `phone_kr`, `card_number`, `rrn_kr`, `api_key_legacy`, `anthropic_key`, `openai_project_key`, `github_token`, `slack_token`이 영문자나 숫자에 붙은 부분 문자열에는 일치하지 않는다 (#97). 해시·다이제스트·base64·타임스탬프 안의 숫자열이 `[REDACTED_PHONE]`, `[REDACTED_CARD]` 등으로 바뀌지 않는다. 영문자나 숫자에 붙여 쓴 전화번호는 가리지 않는다.
