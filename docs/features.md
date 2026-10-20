@@ -15,7 +15,11 @@ AnchorMind의 주요 모듈을 한 페이지로 정리한 ledger. 새 모듈 추
 |`MemoryConsolidator` (`lib/memory/consolidate/MemoryConsolidator.js`)|cycle trigger|22개 stage의 결과 + stage별 소요 시간|stage별 query error는 stage 결과에 잡힘, 다음 stage 진행|`CONSOLIDATE_INTERVAL_MS`, `MEMENTO_CONSOLIDATE_*`(COMPRESS_OLD, DETECT_CONTRADICT, GATE_MODE, SPLIT_LONG), `MEMENTO_AUTO_PROMOTE_ANCHORS`, `MEMENTO_SCORE_UPDATE_BATCH`, `MEMENTO_DECAY_MIN_DELTA`, `MEMENTO_UTILITY_MIN_DELTA`|`memento_consolidate_gate_allowed_total`, `memento_consolidate_gate_blocked_total`, `memento_consolidate_split_skipped_total`, `memento_consolidate_split_step_failed_total`, `mcp_anchor_auto_promotion_enabled`|해당 없음 (로직 전용)|
 |`ReconsolidationEngine` (`lib/memory/link/ReconsolidationEngine.js`)|tool_feedback 누적|link weight 갱신|fragment_links 부재, search_event_id 무효|`ENABLE_RECONSOLIDATION`|-|migration-027|
 |`SpreadingActivation` (`lib/memory/signals/SpreadingActivation.js`)|contextText + 시드 파편|ema_activation boost|graph 부재 시 noop|`ENABLE_SPREADING_ACTIVATION`|-|migration-027|
-|`CaseRewardBackprop` (`lib/memory/signals/CaseRewardBackprop.js`)|case_event outcome|case_events DAG 보상|case_id 없는 fragment는 skip|`MEMENTO_CASE_BACKPROP_ENABLED`|-|migration-027|
+|`CaseRewardBackprop` (`lib/memory/signals/CaseRewardBackprop.js`)|verification 이벤트 id와 종류|그 이벤트 근거(`supports`, `produced_by`) 파편의 importance ±delta x confidence, confidence 0.5 초과 근거만 `quality_verified`|case_id 없는 fragment는 skip, 실패는 경고만|`MEMENTO_CASE_BACKPROP_ENABLED`|-|migration-027|
+|`LessonCue` (`lib/memory/write/LessonCue.js`)|reflect `lessons`|교훈 procedure 파편과 `fragment_synthetic_query`의 `origin='cue'` 행|빈 칸 항목은 거절(`lessons_rejected`), 임베딩 꺼짐이면 cue 행 없음|`MEMENTO_SYNTHETIC_QUERY_SEARCH`|-|migration-068|
+|`anchorBudget`, `AnchorBudgetLoader` (`lib/memory/`)|주입 앵커 목록, 새 앵커 후보|`budget.anchor`, `anchorContextBudgetExceeded` 경고 또는 지정 회수|예산 0이면 판정 안 함|`MEMENTO_CONTEXT_ANCHOR_TOKEN_BUDGET`, `MEMENTO_ANCHOR_TOKEN_BUDGET_MODE`|-|-|
+|`WorkspaceBoundary` (`lib/memory/read/WorkspaceBoundary.js`)|파편과 조회 인자|다른 workspace fact의 `workspace_warning`|allWorkspaces 조회에서만 동작|-|-|-|
+|`ContextIndexView` (`lib/memory/read/ContextIndexView.js`)|context `view: "index"`|첫 문장 60자 목록 줄, 목록 길이 기준 토큰 수|목록으로만 본 파편은 seen 표시 안 함|-|-|-|
 |`EmbeddingWorker` (`lib/memory/embedding/EmbeddingWorker.js`)|orphan fragment 배치|embedding INSERT, morpheme INSERT|external embedding provider 장애 시 row 단위 dead-letter|`EMBEDDING_PROVIDER`, `EMBEDDING_DIMENSIONS`, `BATCH_DATABASE_URL`|`mcp_embedding_semaphore_wait_exceeded_total`, `mcp_batch_pool_*`|`scripts/post-migrate-flexible-embedding-dims.js`|
 |`EmbeddingCache` (`lib/memory/embedding/EmbeddingCache.js`)|텍스트 hash|cache hit/miss|Redis 장애 시 noop|`CACHE_ENABLED`, `CACHE_DB_TTL`|-|-|
 |`MorphemeIndex` (`lib/memory/embedding/MorphemeIndex.js`)|fragment 텍스트|morpheme 토큰 + 임베딩|형태소 분석 실패 시 fragment의 `morpheme_indexed=false` 유지|`MEMENTO_MORPHEME_TOKENIZER`|-|migration-035|
@@ -68,7 +72,7 @@ AnchorMind의 주요 모듈을 한 페이지로 정리한 ledger. 새 모듈 추
 |기능|ENV|기본|분기 위치|비고|
 |-|-|-|-|-|
 |SpreadingActivation|`ENABLE_SPREADING_ACTIVATION=true`|off|`lib/memory/processors/MemoryRecaller.js`|recall 시 contextText 기반 graph 부스트. recall precision 개선치 확보 후 기본 on 승급 검토|
-|CaseRewardBackprop|`MEMENTO_CASE_BACKPROP_ENABLED=true`|off|`lib/memory/signals/CaseRewardBackprop.js` (호출 시점 매번 평가, 런타임 토글 가능)|case verification 결과를 증거 파편 importance에 역전파. 비활성 시 호출 자체가 no-op (DB·메트릭 영향 0). DAG 일관성 베이스라인 확보 후 승급 검토|
+|CaseRewardBackprop|`MEMENTO_CASE_BACKPROP_ENABLED=true`|off|`lib/memory/signals/CaseRewardBackprop.js` (호출 시점 매번 평가, 런타임 토글 가능)|검증 이벤트마다 그 이벤트의 근거 파편 importance를 confidence만큼 조정. 사례의 다른 근거에는 누적되지 않는다. 비활성 시 호출 자체가 no-op (DB·메트릭 영향 0). DAG 일관성 베이스라인 확보 후 승급 검토|
 |ReconsolidationEngine|`ENABLE_RECONSOLIDATION=true`|off|`lib/tools/memory.js` tool_feedback, `lib/memory/write/ConflictResolver.js`|tool_feedback의 fragment_ids 기반 링크 weight 갱신과 supersede 강등 시 재통합. 미설정 시 호출하지 않는다|
 
 ## 실험 플래그 아닌 dual-mode·항상 활성 기능

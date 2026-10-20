@@ -29,7 +29,7 @@
 | 앵커 권한, 관리자 계정, 본문 어휘 검색이 들어간 업데이트 (migration-053 ~ 060) | [아래 1번](#1-앵커-권한-관리자-계정-본문-어휘-검색-migration-053--060) |
 | 같은 내용을 중복으로 보는 기준이 바뀌는 업데이트 (migration-050) | [아래 2번](#2-중복-판정-범위-전환-migration-050) |
 | agent 범위 구분이 들어간 업데이트 (migration-047) | [아래 3번](#3-agent-범위-전환-migration-047) |
-| 임베딩 제공자나 차원을 바꿨다 | [아래 4번](#4-임베딩-제공자나-차원을-바꿨을-때) |
+| 임베딩 제공자, 모델, 차원을 바꿨다 | [아래 4번](#4-임베딩-제공자-모델-차원을-바꿨을-때) |
 | 행이 수백만 건인 운영 DB | [아래 5번](#5-행이-매우-많은-운영-db) |
 
 ## 1. 앵커 권한, 관리자 계정, 본문 어휘 검색 (migration-053 ~ 060)
@@ -145,13 +145,19 @@ SELECT c.relname, i.indisvalid, i.indisready
 - 옛 세션은 다시 연결해 `initialize`부터 해야 한다. 인증 헤더가 없던 옛 세션은 `-32001`로 실패할 수 있다.
 - 정규화는 파편과 버전 기록의 agent 값을 같은 트랜잭션에서 옮긴다. 마이그레이션을 롤백해도 정규화는 되돌아가지 않는다. 되돌릴 가능성이 있으면 실행 전에 별도로 백업한다.
 
-## 4. 임베딩 제공자나 차원을 바꿨을 때
+## 4. 임베딩 제공자, 모델, 차원을 바꿨을 때
 
 `.env`에서 `EMBEDDING_PROVIDER`나 `EMBEDDING_DIMENSIONS`를 바꾸면 벡터 컬럼 차원을 새 설정에 맞춰야 한다. 기존 파편의 임베딩도 다시 만든다.
 
 ```bash
 EMBEDDING_DIMENSIONS=<새 차원> node scripts/post-migrate-flexible-embedding-dims.js
 node scripts/backfill-embeddings.js
+```
+
+재임베딩을 마쳤으면 현재 설정을 임베딩 프로파일로 기록한다. 차원이 같은 다른 모델로만 바꾼 경우에도 위 `backfill-embeddings.js`로 전체를 다시 만든 뒤 기록한다. 기록하지 않으면 기동할 때마다 재임베딩이 필요하다는 경고가 남는다.
+
+```bash
+node scripts/check-embedding-consistency.js --record
 ```
 
 2000차원을 넘는 모델도 같은 스크립트로 맞출 수 있다. 예를 들어 Gemini `gemini-embedding-001`은 3072차원이다. 로컬 모델로 바꾸는 전체 절차는 [로컬 임베딩 가이드](../embedding-local.md)에 정리돼 있다.

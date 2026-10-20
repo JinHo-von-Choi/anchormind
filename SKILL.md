@@ -418,6 +418,8 @@ Symbolic Verification Layer는 확률론적 검색 파이프라인 위에 추가
 | `ENABLE_OPENAPI` | boolean | `false` | `true` 설정 시 `/openapi.json` 엔드포인트 활성화. |
 | `SESSION_TTL_MINUTES` | number | `43200` | 세션 TTL(분). OAuth access token 유효 시간도 이 값 × 60초로 산출된다(기본 30일). refresh token 유효 시간은 그 두 배(기본 60일)다. |
 | `MEMENTO_REMEMBER_ATOMIC` | boolean | `false` | `true` 시 remember()의 quota check + INSERT를 단일 트랜잭션으로 원자화(TOCTOU 완전 차단). 동시 요청이 드문 환경에서는 기본값 유지. |
+| `MEMENTO_CONTEXT_ANCHOR_TOKEN_BUDGET` | number | `1000` | context가 한 번에 주입하는 앵커 본문의 토큰 예산. 넘으면 응답 `budget.anchor.exceeded=true`와 내릴 후보를 싣는다. `0`이면 판정하지 않는다. |
+| `MEMENTO_ANCHOR_TOKEN_BUDGET_MODE` | string | `warn` | 예산을 넘기는 새 앵커 지정의 처리. `warn`은 `anchorContextBudgetExceeded` 경고와 내릴 후보를 싣고, `reject`는 앵커 지정을 거둬 일반 파편으로 저장하며, `off`는 판정하지 않는다. |
 | `MEMENTO_CASE_BACKPROP_ENABLED` | boolean | `false` | `true` 시 case verification 이벤트마다 증거 파편 importance를 자동 역전파(CaseRewardBackprop). 비활성 시 no-op. |
 | `MEMENTO_STORAGE` | string | `pgvector` | 저장소 백엔드 이름. 현재 `pgvector` 하나이며 이 값은 동작에 영향을 주지 않는다. |
 | `MIGRATION_LINT_FROM` | string | (없음) | `npm run lint:migrations` cutoff override. 지정 마이그레이션 번호 이후만 검사. |
@@ -678,6 +680,7 @@ recall은 연결 파편을 포함한 후보에 최종 점수를 매긴 뒤 token
 - similarity 0.7 이상: 높은 관련성
 - similarity 0.4~0.7: 참고 수준
 - stale_warning: 파편이 오래되었거나 접근 빈도가 낮음. 내용을 재확인하고 필요시 amend나 supersedes로 갱신.
+- workspace_warning: master의 allWorkspaces 조회에서 다른 workspace에 저장된 fact에만 붙는다. 그 workspace에서 확인한 값이므로 지금 작업에 쓰기 전에 다시 확인한다. `fields`를 지정하면 빠진다.
 - searchPath: 어떤 검색 경로가 사용되었는지 확인. L1만 사용됐으면 키워드가 정확히 매칭된 것.
 
 ## 에피소드 기억 활용
@@ -1025,7 +1028,7 @@ fromId 또는 toId가 타 테넌트 소유 파편인 경우 `"Fragment not found
 | errors_resolved | string[] | - | 해결 에러 ('원인: X -> 해결: Y') |
 | new_procedures | string[] | - | 확립된 절차 |
 | open_questions | string[] | - | 미해결 질문 |
-| lessons | object[] | - | 옮겨 쓸 교훈 {cue, lesson, evidence, confidence?}. 셋 중 하나라도 비면 저장하지 않는다. cue는 상황을 묻는 recall text 질의가 교훈을 찾게 하는 보조 검색어가 된다. 근거가 없으면 "NO_ENTRY" |
+| lessons | (object\|"NO_ENTRY")[] | - | 옮겨 쓸 교훈. 항목은 `{cue, lesson, evidence, confidence?}`. cue(적용 상황), lesson(할 조작), evidence(근거 관찰) 중 하나라도 비면 저장하지 않는다. confidence는 문자열 `high`, `medium`(기본), `low`이며 숫자를 넣으면 인자 오류다. 근거가 없으면 객체 대신 항목 자체를 문자열 `"NO_ENTRY"`로 넣는다. cue는 상황을 묻는 recall text 질의가 교훈을 찾게 하는 보조 검색어가 된다. 응답 `breakdown.lessons`, `lessons_no_entry`, `lessons_rejected`로 건수를 알린다. 최대 20개 |
 | narrative_summary | string | - | 3~5문장 서사 요약. episode 파편으로 저장되어 세션 연속성에 기여. |
 | task_effectiveness | object | - | {outcome, evaluator, evidence, unmet_requirements[], overall_success, tool_highlights[], tool_pain_points[]} |
 | workspace | string | - | 호출자가 넘긴 항목에 적용할 워크스페이스. 세션 종합 그룹은 원래 workspace를 유지한다. 미지정 시 키의 default_workspace, 그것도 없으면 전역(NULL). |
@@ -1060,6 +1063,8 @@ task_effectiveness 세부 필드:
 | agentId | string | - | 에이전트 ID |
 | workspace | string | - | 지정 workspace + 전역(NULL). 미지정 시 key default를 적용하고, 둘 다 없으면 전역(NULL)만 포함. |
 | allWorkspaces | boolean | - | master 전용 전체 workspace context 조회. |
+
+응답 `budget.anchor`(`used`, `limit`, `exceeded`, `demote_candidates`)는 주입한 앵커만의 토큰 사용량이다. 앵커는 tokenBudget 절삭을 받지 않고 매번 주입되므로, `exceeded`가 true면 `demote_candidates`의 앵커 지정을 푸는 것을 검토한다.
 
 `MEMENTO_CONTEXT_ANNOTATE=on`(기본)이면 주입 줄 끝에 저장일(UTC)과 assertion 주석 ` (YYYY-MM-DD, assertion)`이 붙는다. `MEMENTO_PROVENANCE=on`(기본)이면 신뢰 등급 1 이하 파편은 ANCHOR와 CORE 주입에서 빠진다. `MEMENTO_ANCHOR_PERMISSION`이 `off`가 아니면 앵커 주입 줄에 비식별 주체 표지(`[k:xxxx]`, master 앵커는 `[master]`)가 붙는다.
 
@@ -1257,10 +1262,11 @@ git 설치본에서 `UPDATE_REQUIRE_SIGNED_TAG=true`(기본 `false`)이면 `inst
 - **제어**: search 의존성이 없으면 비활성 (기본값: 활성)
 
 ### CaseRewardBackprop
-- **트리거**: case_events에 `verification_passed` 또는 `verification_failed` 이벤트가 추가될 때
-- **동작**: 해당 케이스의 증거(fragment_evidence) 파편 importance를 역전파
-  - verification_passed: importance +0.15, quality_verified = true
-  - verification_failed: importance -0.10
+- **트리거**: case_events에 `verification_passed` 또는 `verification_failed` 이벤트가 추가될 때(caseId가 있는 파편을 `amend(assertionStatus="verified"|"rejected")`하면 생긴다)
+- **동작**: 그 검증 이벤트에 연결된 근거 파편만 보상한다. 사례의 다른 근거는 건드리지 않으므로 검증을 거듭해도 누적되지 않는다.
+  - verification_passed: importance +0.15 x 근거 confidence. confidence가 0.5를 넘는 근거만 quality_verified = true
+  - verification_failed: importance -0.10 x 근거 confidence
+  - `contradicts` 근거는 보상하지 않는다
 - **영향**: 검증된 파편의 recall 우선순위가 자동 조정됨
 - **범위**: importance [0.0, 1.0] clamp
 - **제어**: `MEMENTO_CASE_BACKPROP_ENABLED=true`일 때만 동작한다(기본 `false`, 비활성 시 no-op).

@@ -42,6 +42,9 @@ server.js  (HTTP server)
             |   +-- FragmentSearch.js     3-layer search orchestration (structural: L1->L2, semantic: L1->L2||L3 RRF merge). `_executeSearch` decomposes into `_buildTextRRF` (L2+L3 parallel RRF when text parameter present) / `_buildFallbackCombined` (L1+L2 only when no text)
             |   +-- FragmentReader.js     Fragment reads. `getById(id, agentId, keyId, groupKeyIds)` -- groupKeyIds parameter enables single-call lookup of fragments belonging to same-group keys. `getByIds`, `getHistory`, `searchByKeywords`, `searchBySemantic`, `findCaseIdBySessionTopic`, `findErrorFragmentsBySessionTopic`
             |   +-- ContextBuilder.js     Dedicated context() logic. Reserves effective-workspace anchor slots first, deduplicates candidates by ID in anchor > core > learning > working order, guarantees anchors plus minimum non-anchor slots, and uses one token-selected set for flat/structured/injectionText outputs
+            |   +-- ContextIndexView.js   List lines (first sentence, 60 characters) and their token count for context `view: "index"`
+            |   +-- AnchorBudgetLoader.js Reads the currently injected anchors (top anchors of the same key and workspace) for the budget check on a new anchor mark
+            |   +-- WorkspaceBoundary.js  Pure function adding workspace_warning to facts from another workspace on allWorkspaces reads
             |   +-- ContextLines.js       context injection line renderer (pure functions). Headers and the `- ` line prefix are fixed; with `MEMENTO_CONTEXT_ANNOTATE=on` memory lines end with ` (YYYY-MM-DD, assertion)`
             |   +-- AnswerPack.js         recall `format:"pack"` answer pack v0 renderer (pure functions). Fixed policy paragraph, `<<<MEMORY ...>>>` delimiter blocks, content escaping and 1000 character cap, UTC dates, caseId/topic groups
             |   +-- AnswerPackLoader.js   Answer pack source and supersession chain (superseded_by links) lookup with the same agent, key and workspace predicates as recall. Adds `origin` and `trust_tier` to default recall responses (`MEMENTO_PROVENANCE`)
@@ -67,6 +70,7 @@ server.js  (HTTP server)
             |   +-- SearchSideEffects.js  Search side-effect isolation module. commitSearchSideEffects() synchronously returns searchEventId; fire-and-forgets SearchParamAdaptor.recordOutcome()
             +-- write/                    Write layer modules
             |   +-- WriteGate.js          Single semantic write gate. Applies the normalize, sensitive, length, policy, workspace and anchor steps in order and records violations as warnings or rejects them on hard-gate keys. The anchor step judges anchor designation by remember and amend against the key's anchor permission and anchor limit. `MEMENTO_WRITE_GATE`, `MEMENTO_ANCHOR_PERMISSION`
+            |   +-- LessonCue.js          Normalizes reflect lessons and registers cue rows (`fragment_synthetic_query`, origin='cue')
             |   +-- ReviewQueue.js        Synchronous review queue decisions (pure functions). Collects instruction override phrases, anchors, preferences and procedures with trust tier 1 or lower and unauthorized anchor warnings as reasons, and stores review_state='pending' according to the key's review mode (off, flagged, all). Holds anchor requests until approval. INSERT column fragment and update SET fragment. `MEMENTO_REVIEW_QUEUE`
             |   +-- reviewRules.js        Instruction override phrase rule table (Korean, English). The table of ordinary procedural sentences that must not match is in the tests
             |   +-- write-gate-metrics.js Gate verdict metric `memento_write_gate_total{entry,outcome}`, anchor decision metric `memento_anchor_decision_total{outcome,reason}`
@@ -107,6 +111,7 @@ server.js  (HTTP server)
             |   +-- contradictionAudit.js    Contradiction resolution record content (fragment ids only with `MEMENTO_FORGET_CASCADE=on`) and topic
             +-- consolidate/              Consolidation/GC layer modules
             |   +-- MemoryConsolidator.js 22-stage declarative maintenance pipeline (stageDefs array, TOTAL_STAGES = stageDefs.length). NLI + Gemini hybrid
+            |   +-- statsSummaries.js     memory_stats summaries: workspace distribution (with anchor count and anchor tokens), per-key fill rate, fragments per session
             |   +-- ConsolidatorGC.js     Feedback reports, stale fragment collection/cleanup, long fragment splitting, feedback-based correction
             |   +-- FragmentGC.js         Fragment expiration/deletion, exponential decay, TTL tier transitions (permanent parole + EMA batch decay)
             |   +-- idOrderedUpdate.js    Locks and updates decay and utility score changes in id-ascending batches (`MEMENTO_SCORE_UPDATE_BATCH`). Rows below the minimum change (`MEMENTO_DECAY_MIN_DELTA`, `MEMENTO_UTILITY_MIN_DELTA`) are not rewritten
@@ -149,6 +154,7 @@ server.js  (HTTP server)
             +-- LexicalCoverage.js        content_tokens fill metrics `memento_lexical_tokens_coverage_ratio`, `memento_lexical_tokens_missing` (no labels)
             +-- keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` shared helper. Generates key_id-scoped WHERE clauses. Used by FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js
             +-- anchorPolicy.js           Pure anchor decision functions: change kind (set, clear), permission and per-key limit decision, non-identifying principal label of context lines (`k:` + first 4 characters of the key id sha256)
+            +-- anchorBudget.js           Pure context anchor token budget functions (budget.anchor report, over-budget check and demote candidates for a new anchor mark)
             +-- CaseEventStore.js         Semantic milestone log (case_events CRUD, DAG edges, evidence join)
             +-- memory-schema.sql         PostgreSQL schema definition
             +-- migrations/               59 DB migration SQL files (migration-001 through migration-060; 046 is unused), applied sequentially against the schema_migrations table. Used by `scripts/migrate.js` and `scripts/lint-migrations.js`
@@ -303,6 +309,7 @@ lib/tools/
 +-- memory-audit.js File audit records and audit event values of the memory tools (remember, amend, forget, link, anchor)
 +-- reconstruct.js  reconstruct_history, search_traces tool handlers (Narrative Reconstruction)
 +-- memory-schemas.js  Tool schema definitions (inputSchema)
++-- reflect-params.js  Schemas of reflect `lessons` and context `view`
 +-- tool-head.js  name, title and MCP hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) of every tool
 +-- recall-response-params.js recall response shape parameters (`fields`, `format`) schema fragments
 +-- origin-param.js `origin` parameter schema fragment of remember and batch_remember items
@@ -808,7 +815,7 @@ Evidence join table linking fragments to case_events. Connects fragments that su
 
 ### fragment_synthetic_query
 
-Auxiliary vector table holding synthetic queries generated when a fragment is stored, together with their embeddings (migration-043). It is separate from `fragments`, so it is not counted by the `QuotaChecker` `fragment_limit` check, and since it is derived data it is regenerated by backfill when lost. The embedding dimension follows `fragments.embedding` (migration-049 and the alignment step of `npm run migrate`).
+Auxiliary vector table holding search phrases that lead back to a fragment, together with their embeddings (migration-043). Rows are of two kinds: reverse queries an LLM generated from the content (`origin='generated'`) and situation cues of reflect lessons (`origin='cue'`). It is separate from `fragments`, so it is not counted by the `QuotaChecker` `fragment_limit` check, and since it is derived data it is regenerated by backfill when lost. The embedding dimension follows `fragments.embedding` (migration-049 and the alignment step of `npm run migrate`).
 
 | Column | Type | Description |
 |-|-|-|
@@ -820,8 +827,22 @@ Auxiliary vector table holding synthetic queries generated when a fragment is st
 | agent_id | TEXT | Agent identifier (default `default`) |
 | workspace | TEXT | Workspace isolation |
 | created_at | TIMESTAMPTZ | Creation time |
+| source_content_hash | TEXT | Source `content_hash` when the row was made. Only rows matching the current content are searched (migration-061) |
+| origin | TEXT | `generated` (rebuilt after a content change) or `cue` (kept after a content change). Default `generated` (migration-068) |
 
 A UNIQUE index on `(fragment_id, md5(query_text))` prevents the same query from being stored twice.
+
+### embedding_profile
+
+One-row table recording the settings that produced the stored embeddings (migration-069). The startup check compares it with the current settings and warns that re-embedding is needed when the dimensions match but the provider or model differs. The first startup fills an empty table; after re-embedding, update it with `node scripts/check-embedding-consistency.js --record`.
+
+| Column | Type | Description |
+|-|-|-|
+| id | SMALLINT PK | Always 1 |
+| provider | TEXT | Embedding provider |
+| model | TEXT | Embedding model |
+| dimensions | INTEGER | Vector dimensions |
+| recorded_at | TIMESTAMPTZ | Recording time |
 
 ### idempotency_records
 
@@ -1442,9 +1463,9 @@ Files under `lib/memory/` are split into subdirectories by functional domain.
 
 ```
 lib/memory/
-+-- read/          FragmentSearch, FragmentReader, ContextBuilder, GraphNeighborSearch, HistoryReconstructor, Reranker, CaseRecall, LinkedFragmentLoader, RecallSuggestionEngine, SearchScope, SearchSideEffects
++-- read/          FragmentSearch, FragmentReader, ContextBuilder, GraphNeighborSearch, HistoryReconstructor, Reranker, CaseRecall, LinkedFragmentLoader, RecallSuggestionEngine, SearchScope, SearchSideEffects, ContextIndexView, AnchorBudgetLoader, WorkspaceBoundary
 +-- transfer/      exportFormat, FragmentExporter, ImportRunner, ImportReport, importRecords, importErrors, importRuntime
-+-- write/         WriteGate, DedupScope, FragmentImporter, FragmentWriter, FragmentFactory, FragmentStore, RememberPostProcessor, ConflictResolver, BatchRememberProcessor, BatchRememberWorker
++-- write/         WriteGate, DedupScope, FragmentImporter, FragmentWriter, FragmentFactory, FragmentStore, RememberPostProcessor, ConflictResolver, BatchRememberProcessor, BatchRememberWorker, LessonCue
 +-- link/          ReconsolidationEngine, GraphLinker, LinkStore, SessionLinker, TemporalLinker, ContradictionDetector
 +-- consolidate/   MemoryConsolidator, ConsolidatorGC, FragmentGC, decay, UtilityBaseline
 +-- embedding/     EmbeddingWorker, EmbeddingCache, MorphemeIndex, MorphemeTokenizer, LexicalTokens

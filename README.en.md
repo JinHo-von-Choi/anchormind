@@ -327,7 +327,7 @@ Memory is stored in short fragments, usually one or two sentences. Each one has 
 | `relation` | Relations and dependencies between entities |
 | `episode` | Narrative with before and after (1000 chars; the rest 300) |
 
-The main tools are `context` for restoring core memory at session start, `recall` for search, `remember` for saving fragments, and `reflect` for saving a session-end summary. Short version: these four cover the normal flow. All tools and usage rules: [SKILL.md](SKILL.md). Full feature list: [Capabilities](docs/capabilities.en.md).
+The main tools are `context` for restoring core memory at session start, `recall` for search, `remember` for saving fragments, and `reflect` for saving a session-end summary and lessons that carry over to other work. Short version: these four cover the normal flow. All tools and usage rules: [SKILL.md](SKILL.md). Full feature list: [Capabilities](docs/capabilities.en.md).
 
 ## Benchmark
 

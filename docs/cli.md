@@ -627,7 +627,12 @@ DATABASE_URL=$DATABASE_URL EMBEDDING_DIMENSIONS=1536 \
   node scripts/check-embedding-consistency.js
 ```
 
-`fragments`와 `morpheme_dict` 두 테이블의 실제 벡터 차원이 `EMBEDDING_DIMENSIONS` 설정과 일치하는지 확인한다. 불일치 시 `FAIL`을 출력하고 `migration-007` 재실행 가이드를 제공한다.
+`fragments`와 `morpheme_dict` 두 테이블의 실제 벡터 차원이 `EMBEDDING_DIMENSIONS` 설정과 일치하는지 확인한다. 불일치 시 `FAIL`을 출력하고 `migration-007` 재실행 가이드를 제공한다. 저장된 임베딩의 제공자와 모델(`embedding_profile`)이 현재 설정과 다르면 재임베딩이 필요하다고 경고한다.
+
+```bash
+# 재임베딩을 마친 뒤 현재 설정을 임베딩 프로파일로 기록
+node scripts/check-embedding-consistency.js --record
+```
 
 ### 벡터 차원 변경 (migration-007 재실행)
 

@@ -654,6 +654,8 @@ Agent 조회는 생략 시 `default`, 지정 시 해당 agent와 `default`를 �
 
 `affect` 필드: 해당 파편에 태그된 정서 상태. 저장 시 지정한 값과 동일하게 반환된다.
 
+`workspace_warning` 필드: master의 `allWorkspaces=true` 조회에서, 적용 대상 workspace(요청의 `workspace`, 없으면 키 기본값)와 다른 workspace에 저장된 fact에만 붙는다. 그 workspace에서 확인한 값이니 지금 작업에 쓰기 전에 다시 확인하라는 표시다. procedure, decision 같은 다른 유형과 전역(NULL) fact에는 붙지 않는다. `fields`를 지정하면 이 필드는 빠진다.
+
 `stitched_context` 필드: `includeContext=true`일 때 전후 시간 맥락과 인과 링크를 하나의 서사 구조로 묶어 반환한다. 조합할 재료가 실제로 있는 상위 3건에만 실리며, 응답 토큰 예산의 40%를 넘으면 전후 각 1건으로 축약된다.
 
 ```json
@@ -1218,6 +1220,9 @@ violations 있는 경우 (soft gate — 저장됨):
     "errors": 0,
     "procedures": 1,
     "questions": 1,
+    "lessons": 1,
+    "lessons_no_entry": 0,
+    "lessons_rejected": 0,
     "episode": 1
   },
   "groups": [
@@ -1226,7 +1231,7 @@ violations 있는 경우 (soft gate — 저장됨):
 }
 ```
 
-`breakdown` 필드는 카테고리별 저장된 파편 수를 나타낸다. `episode`는 narrative_summary가 있을 때만 포함된다. 내부적으로 5개 카테고리는 단일 `batchRememberProcessor` 호출로 처리되지만 결과는 `_category` 메타를 기반으로 카테고리별 재집계되므로 breakdown shape이 보존된다.
+`breakdown` 필드는 카테고리별 저장된 파편 수를 나타낸다. `episode`는 narrative_summary가 있을 때만 포함된다. `lessons`는 저장된 교훈 수, `lessons_no_entry`는 `NO_ENTRY` 항목 수, `lessons_rejected`는 cue, lesson, evidence 중 하나가 비어 저장하지 않은 항목 수이며, `lessons`를 보냈을 때만 실린다. 내부적으로 5개 카테고리는 단일 `batchRememberProcessor` 호출로 처리되지만 결과는 `_category` 메타를 기반으로 카테고리별 재집계되므로 breakdown shape이 보존된다.
 
 `sessionId`가 지정되면 세션 파편을 workspace → case_id → topic 경계로 그룹핑해 그룹마다 별도로 종합·영속화한다. `groups` 필드는 그룹별 결과(`workspace`, `topic`, `caseId`, 해당 그룹에서 생성된 파편 id 목록 `fragmentIds` — narrative_summary가 있으면 episode 파편 id 포함)를 배열로 반환하며, 그룹이 서로 다른 workspace를 가져도 각 파편에는 소속 그룹의 workspace가 개별 기록된다. `sessionId`가 없으면 `params`(summary/decisions/...) 자체가 단일 그룹으로 취급되는 레거시 경로로 동작한다.
 
@@ -1262,6 +1267,17 @@ Anchor + Core + Learning + Working Memory와 session_reflect를 분리 로드한
 | includeKeyName | boolean | - | true 시 fragments 각 항목에 key_id와 key_name(액세스 키 라벨)을 포함한다. 같은 키 그룹 스코프의 정보만 노출되며, structured=true 트리 응답에는 적용되지 않는다. 기본 false. |
 
 응답의 `budget`은 `requested`, 정확한 본문 토큰 수인 `used`, 보장 슬롯 때문에 넘긴 `exceededByGuaranteed`를 제공한다. 기존 `totalTokens`는 `budget.used`와 같다.
+
+`budget.anchor`는 이번 응답에 주입한 앵커만의 토큰 사용량이다. 앵커는 `tokenBudget` 절삭을 받지 않고 매번 주입되므로 따로 센다.
+
+| 필드 | 설명 |
+|-|-|
+| `used` | 주입한 앵커 본문의 토큰 합 |
+| `limit` | `MEMENTO_CONTEXT_ANCHOR_TOKEN_BUDGET`(기본 1000) |
+| `exceeded` | `used > limit` |
+| `demote_candidates` | 넘쳤을 때 순위가 낮은 쪽부터 고른 앵커 id(최대 5개). 이 앵커들의 지정을 풀면 예산 안에 들어온다 |
+
+예산이 0이면 `budget.anchor`를 싣지 않는다. 예산을 넘기는 새 앵커 지정에 대한 처리는 [configuration](configuration.md)의 `MEMENTO_ANCHOR_TOKEN_BUDGET_MODE`를 따른다.
 
 ### Anchor 선택 메타
 
@@ -1333,7 +1349,9 @@ workspace 기입 현황과 세션당 파편 분포를 반환한다.
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | distribution.top | array | 상위 workspace별 파편 수 `{workspace, count}` 목록 (내림차순) |
+| distribution.top[].anchors, anchor_tokens | number | 그 workspace의 살아 있는 앵커 수와 앵커 본문 토큰 합 |
 | distribution.null_count | number | workspace 미기입(NULL, 전역) 파편 수 |
+| distribution.null_anchors, null_anchor_tokens | number | 전역(NULL) 앵커 수와 토큰 합 |
 | distribution.distinct_count | number | 값이 있는 workspace의 고유 개수 |
 | key_fill_rate | array | API 키별 workspace 기입률 `{key_id, key_name, total, with_workspace, fill_rate}`. `fill_rate`는 `with_workspace / total` |
 | session_fragment_distribution | object | 최근 30일 세션당 파편 수 분포 `{p50, p90, max, sample_sessions}`. 표본이 없으면 `p50`·`p90`·`max`는 `null` |
@@ -1588,7 +1606,7 @@ curl -si -X POST https://anchormind.example.com/mcp \
 | `MEMENTO_WRITE_GATE` | `on` | 의미 쓰기 관문 스위치. `on`이면 remember, amend, batch_remember, reflect 파생 쓰기, AutoReflect, 가져오기, CLI remember 로컬 모드가 같은 관문을 거친다. `off`이면 진입점별 기본 단계만 적용한다(remember는 전체, amend는 수신 상한과 키워드 정규화, batch_remember와 reflect와 CLI remember는 정규화, 마스킹, 절삭, 가져오기는 없음). |
 | `MEMENTO_ANCHOR_PERMISSION` | `warn` | 앵커 지정 권한 집행(`off`, `warn`, `enforce`). remember, batch_remember 항목, amend의 `isAnchor`가 대상이다. master 키와 `anchor`(또는 `admin`) 권한 키만 앵커를 지정하고 키별 살아 있는 앵커 수는 `MEMENTO_ANCHOR_LIMIT_PER_KEY`(기본 1000)까지다. `warn`은 그 밖의 요청을 일반 파편으로 저장하고 `validation_warnings`에 `anchorPermissionRequired` 등을 남기며, `enforce`는 거부한다. context 앵커 줄에 비식별 주체 표지(`[k:xxxx]`, `[master]`)를 붙인다. |
 | `MEMENTO_SENSITIVE_SCAN` | `mask` | 쓰기 값의 비밀과 개인정보 탐지 방식(`mask`, `reject`, `off`). `mask`는 일치한 값을 표식으로 바꿔 저장하고, 이메일과 전화번호를 뺀 탐지는 `validation_warnings`에 `sensitive.<규칙>` 이름만 남긴다(알림이며 재시도 불필요). hard gate 키는 고신뢰 규칙(비밀번호 필드, API 키 패턴, 토큰, 개인 키, 주민등록번호, 카드 번호) 탐지에서 `-32003`으로 거부하고, `reject`는 모든 키가 거부한다. `off`는 레거시 규칙만 content에 적용한다. |
-| `MEMENTO_CASE_BACKPROP_ENABLED` | `false` | `true` 시 case_id를 가진 파편의 amend(resolutionStatus 변경) 시점에 동일 caseId 파편들의 importance를 역전파 조정. `lib/config.js`의 `CASE_BACKPROP_ENABLED` 상수로 export. case 해결 완료 시 관련 파편의 활성화 점수가 상향되어 이후 recall 정밀도를 높인다. |
+| `MEMENTO_CASE_BACKPROP_ENABLED` | `false` | `true` 시 caseId가 있는 파편을 `amend(assertionStatus="verified"\|"rejected")`할 때 생기는 검증 이벤트마다, 그 이벤트의 근거 파편 importance를 +0.15 또는 -0.10에 근거 confidence를 곱해 조정한다. 사례의 다른 근거는 건드리지 않는다. `lib/config.js`의 `CASE_BACKPROP_ENABLED` 상수로 export. |
 | `MEMENTO_STORAGE` | `pgvector` | 저장소 백엔드 이름. 현재 `pgvector` 하나이며 이 값은 동작에 영향을 주지 않는다. |
 | `MEMENTO_SYMBOLIC_POLICY_RULES` | `false` | `true` 시 의미 쓰기 관문의 policy 단계가 PolicyRules soft gate를 평가하여 위반 rule 이름을 `validation_warnings`에 누적. |
 | `MEMENTO_TOOL_ARGS_VALIDATION` | `warn` | 도구 호출 인자의 `inputSchema` 점검 모드(`off`, `warn`, `enforce`). |

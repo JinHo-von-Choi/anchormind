@@ -327,7 +327,7 @@ RAG는 이미 있는 문서를 색인해 찾아 준다. AnchorMind는 에이전�
 | `relation` | 엔티티 간 관계와 의존성 |
 | `episode` | 전후관계가 있는 서사(1000자, 나머지는 300자) |
 
-주요 도구는 `context`(세션 시작 시 핵심 기억 복원), `recall`(검색), `remember`(저장), `reflect`(세션 종료 시 요약 저장)다. 전체 도구와 사용 규칙은 [SKILL.md](SKILL.md), 기능 전체 목록은 [기능 상세](docs/capabilities.md)에 있다.
+주요 도구는 `context`(세션 시작 시 핵심 기억 복원), `recall`(검색), `remember`(저장), `reflect`(세션 종료 시 요약과 다른 작업에 옮겨 쓸 교훈 저장)다. 전체 도구와 사용 규칙은 [SKILL.md](SKILL.md), 기능 전체 목록은 [기능 상세](docs/capabilities.md)에 있다.
 
 ## 벤치마크
 

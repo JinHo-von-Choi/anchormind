@@ -29,7 +29,7 @@ Most upgrades stop here. Only the cases below need extra work.
 | Update adds anchor permission, admin accounts, and body lexical search (migration-053 to 060) | [Section 1](#1-anchor-permission-admin-accounts-body-lexical-search-migration-053-to-060) |
 | Update changes how duplicates are judged (migration-050) | [Section 2](#2-duplicate-scope-switch-migration-050) |
 | Update introduces agent scope (migration-047) | [Section 3](#3-agent-scope-switch-migration-047) |
-| You changed the embedding provider or dimension | [Section 4](#4-after-changing-the-embedding-provider-or-dimension) |
+| You changed the embedding provider, model or dimension | [Section 4](#4-after-changing-the-embedding-provider-model-or-dimension) |
 | Production DB has millions of rows | [Section 5](#5-very-large-production-databases) |
 
 ## 1. Anchor permission, admin accounts, body lexical search (migration-053 to 060)
@@ -145,13 +145,19 @@ Rows whose source is missing or deleted stay quarantined. If any exist the run f
 - Old sessions must reconnect and run `initialize` again. Old sessions without an authorization header may fail with `-32001`.
 - Normalization moves the agent value of fragments and version records in one transaction. Rolling back the migration does not undo normalization. Keep a separate backup if you may need to revert.
 
-## 4. After changing the embedding provider or dimension
+## 4. After changing the embedding provider, model or dimension
 
 If you change `EMBEDDING_PROVIDER` or `EMBEDDING_DIMENSIONS` in `.env`, make the vector column dimension match and regenerate embeddings for existing fragments. Keep them in sync.
 
 ```bash
 EMBEDDING_DIMENSIONS=<new dimension> node scripts/post-migrate-flexible-embedding-dims.js
 node scripts/backfill-embeddings.js
+```
+
+After re-embedding, record the current settings as the embedding profile. Do the same after switching to a different model of the same dimension: rebuild everything with `backfill-embeddings.js` above, then record. Without it, every startup warns that re-embedding is needed.
+
+```bash
+node scripts/check-embedding-consistency.js --record
 ```
 
 Use the same script for models above 2000 dimensions, including Gemini `gemini-embedding-001` at 3072; for switching to a local model, follow the [local embedding guide](../embedding-local.md). No separate path is needed.

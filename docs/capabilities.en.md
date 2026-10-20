@@ -11,16 +11,19 @@ Names in parentheses are the environment variables that turn each feature on or 
 - `remember`: splits important material into one- or two-sentence fragments and stores them. With `MEMENTO_REMEMBER_ATOMIC=true`, the quota check and insert run in a single transaction.
 - `batch_remember`: stores many fragments at once. With `async: true`, the server handles them in the background and retries failures up to 3 times. Check progress with `batch_status(jobId)`.
 - `recall`: searches in three steps (keyword, morpheme, meaning) and returns only what is needed. Scopes such as workspace, caseId and affect apply the same way to all three steps.
-- `context`: restores core memory in one call at session start. With `agentId=X`, it returns X's memory plus shared memory; without it, it returns shared memory only.
+- `context`: restores core memory in one call at session start. With `agentId=X`, it returns X's memory plus shared memory; without it, it returns shared memory only. `view: "index"` is a list showing only the first sentence of each fragment, so more fit in the same budget; open a body with `recall` by id.
 - `reflect`: saves a summary at session end. Episodes from consecutive sessions are linked automatically with `preceded_by`, preserving the flow of experience.
+- Lessons: pass `{cue, lesson, evidence}` items in `reflect` `lessons`. The lesson is stored as a procedure and the cue (the situation it applies to) is registered as an extra search phrase, so a later `recall` describing a similar situation finds the lesson. Items with an empty field are not stored.
 
 ### Making search accurate
 
 - Spreading activation: pass `contextText` to `recall` to describe what you are working on. Related fragments come first (`ENABLE_SPREADING_ACTIVATION`).
 - Body lexical search: finds fragments by words in the text. It works with embeddings off, but it needs the GIN index (`MEMENTO_LEXICAL_CHANNEL`).
 - Selecting within the budget: candidates, including linked fragments, are scored before selection within `tokenBudget`.
+- Anchor token budget: anchors are injected on every call, so their total is measured separately. The `context` response `budget.anchor` reports the use and anchors to unmark, and a new anchor mark that would exceed the budget is warned about or withdrawn (`MEMENTO_CONTEXT_ANCHOR_TOKEN_BUDGET`, `MEMENTO_ANCHOR_TOKEN_BUDGET_MODE`).
 - Answer pack: `recall(format: "pack")` returns quotable blocks with source and saved date. Lines injected by `context` also include saved date and verification status (`MEMENTO_CONTEXT_ANNOTATE`).
 - Local embeddings: `EMBEDDING_PROVIDER=transformers` creates embeddings without an external API. The default model is `Xenova/multilingual-e5-small` (384 dimensions).
+- Embedding model check: at startup the provider and model of the stored embeddings (`embedding_profile`) are compared with the current settings, with a warning that re-embedding is needed when a different model of the same dimension is configured.
 - Affect tags: tag fragments with `affect` (neutral, frustration, confidence, surprise, doubt, satisfaction) and filter searches by that tag.
 - Search hints: `_meta.suggestion` in the `recall` response flags inefficient queries: repeated queries, empty results without context, a large `limit` without a budget, and noisy queries without a type. You can ignore it.
 - Time awareness: when something was said (`mentionTime`) and when it happened (`eventTime`) are stored separately; without them, dates are read from the content. `recall` filters by event time (`timeRange.basis: "event"`) and sorts by the order of events (`order: "chronological"`) (`MEMENTO_EVENT_TIME_EXTRACT`).
@@ -29,6 +32,7 @@ Names in parentheses are the environment variables that turn each feature on or 
 
 ### Keeping memory tidy by itself
 
+- Verification reward: verifying a fragment with a caseId through `amend(assertionStatus="verified")` raises the importance of that verification's evidence fragments (`rejected` lowers it). The change is scaled by evidence confidence, and verifying a case again does not pile up on other evidence (`MEMENTO_CASE_BACKPROP_ENABLED`).
 - Automatic cleanup: duplicate merging, contradiction detection, importance decay and TTL expiry run periodically. Expiry cleanup runs in chunks of 100 per cycle (`MEMENTO_GC_THROUGHPUT`).
 - Link adjustment: as `tool_feedback` accumulates, link weights between fragments change. Contradicting links are quarantined automatically (`ENABLE_RECONSOLIDATION`).
 - Duplicate judgment: identical text counts as one within a key and workspace. If it already exists, the `remember` response includes the existing fragment id in `duplicate_of` (`MEMENTO_DEDUP_SCOPE`).
@@ -38,7 +42,7 @@ Names in parentheses are the environment variables that turn each feature on or 
 
 ### Deciding who can see what
 
-- Workspace isolation: keeps separate memory per project or client under one key. If no workspace is given, the key's `default_workspace` applies; if neither exists, only global memory is read. Reading everything (`allWorkspaces=true`) requires a master key.
+- Workspace isolation: keeps separate memory per project or client under one key. If no workspace is given, the key's `default_workspace` applies; if neither exists, only global memory is read. Reading everything (`allWorkspaces=true`) requires a master key; facts confirmed in another workspace then carry a `workspace_warning` to check them again.
 - Mode presets: restrict the tools a key can use to `recall-only`, `write-only`, `onboarding` or `audit`. Set the mode with the `X-Memento-Mode` header or the key's `default_mode`.
 - Anchor permission and read authorization: setting an anchor is limited by the `anchor` permission and a per-key cap (`MEMENTO_ANCHOR_PERMISSION`). The workspace targeted by a read is checked against the key's `allowed_workspaces` (`MEMENTO_WORKSPACE_READ_AUTHZ`).
 - Admin permissions and admin accounts: every admin API route declares the capability it needs, based on role (owner, admin, reviewer, auditor, viewer, service). Admins sign in with a password and TOTP (`MEMENTO_ADMIN_USERS`). `GET /me` shows your own capabilities and scope.

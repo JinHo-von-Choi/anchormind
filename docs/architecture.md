@@ -45,6 +45,9 @@ server.js  (HTTP 서버)
             │   ├── FragmentSearch.js     3계층 검색 조율 (구조적: L1→L2, 시맨틱: L1→L2‖L3 RRF 병합). `_executeSearch`는 `_buildTextRRF` (text 파라미터 있을 때 L2+L3 병렬 RRF) / `_buildFallbackCombined` (text 없을 때 L1+L2, keywords 존재 시 합성 텍스트 L3 시맨틱 보조를 병렬 결합해 `L3kw:N` 세그먼트로 병합) 두 내부 메서드로 분해
             │   ├── FragmentReader.js     파편 읽기. `getById(id, agentId, keyId, groupKeyIds)` — groupKeyIds 파라미터로 그룹 소속 키의 파편도 단일 호출로 조회. `getByIds`, `getHistory`, `searchByKeywords`, `searchBySemantic`, `findCaseIdBySessionTopic`, `findErrorFragmentsBySessionTopic`
             │   ├── ContextBuilder.js     context() 로직 전담. effective workspace의 Anchor 예약분을 우선 선택한 뒤 후보를 anchor > core > learning > working 순으로 ID 중복 제거하고, 앵커와 비앵커 최소 슬롯을 보장한 공통 토큰 선택 결과로 flat/structured/injectionText를 조립
+            │   ├── ContextIndexView.js   context `view: "index"`의 목록 줄(첫 문장 60자)과 그 토큰 수
+            │   ├── AnchorBudgetLoader.js 새 앵커 지정의 예산 판정에 쓸 현재 주입 앵커(같은 키, 같은 workspace 상위 앵커)를 읽는다
+            │   ├── WorkspaceBoundary.js  allWorkspaces 조회에서 다른 workspace fact에 workspace_warning을 다는 순수 함수
             │   ├── ContextLines.js       context 주입 줄 렌더러(순수 함수). 헤더와 줄 머리 `- `는 고정이고 `MEMENTO_CONTEXT_ANNOTATE=on`이면 기억 줄 끝에 ` (YYYY-MM-DD, assertion)`을 붙인다
             │   ├── AnswerPack.js         recall `format:"pack"` 답 꾸러미 v0 렌더러(순수 함수). 고정 정책 문단, `<<<MEMORY ...>>>` 구분자 블록, 본문 이스케이프와 1000자 상한, UTC 날짜, caseId/topic 묶음
             │   ├── AnswerPackLoader.js   답 꾸러미 출처(source)와 대체 체인(superseded_by 링크) 조회. recall과 같은 agent, 키, workspace 술어. 기본 형식 recall 응답에 `origin`, `trust_tier`를 싣는다(`MEMENTO_PROVENANCE`)
@@ -70,6 +73,7 @@ server.js  (HTTP 서버)
             │   └── SearchSideEffects.js  검색 부작용 격리 모듈. commitSearchSideEffects()가 searchEventId를 동기 반환하고 SearchParamAdaptor.recordOutcome()을 fire-and-forget으로 호출. FragmentSearch는 검색 파이프라인에만 집중
             ├── write/                    쓰기 레이어 모듈
             │   ├── WriteGate.js          의미 쓰기 단일 관문. normalize, sensitive, length, policy, workspace, anchor 단계를 순서대로 적용하고 위반을 경고로 남기거나 hard gate 키에서 거부한다. anchor 단계는 remember와 amend의 앵커 지정을 키의 anchor 권한과 앵커 상한으로 판정한다. `MEMENTO_WRITE_GATE`, `MEMENTO_ANCHOR_PERMISSION`
+            │   ├── LessonCue.js          reflect lessons 정규화와 cue 행(`fragment_synthetic_query`, origin='cue') 등록
             │   ├── ReviewQueue.js        검토 대기열 동기 판정(순수 함수). 지시 덮어쓰기 문구, 신뢰 등급 1 이하의 앵커와 preference와 procedure, 무권한 앵커 경고를 사유로 모으고 키의 검토 방식(off, flagged, all)으로 review_state='pending'을 싣는다. 앵커 요청은 승인까지 보류한다. INSERT 열 조각과 갱신 SET 조각. `MEMENTO_REVIEW_QUEUE`
             │   ├── reviewRules.js        지시 덮어쓰기 문구 규칙 표(한국어, 영어). 걸리지 않아야 하는 일반 절차문 표는 시험에 있다
             │   ├── write-gate-metrics.js 관문 판정 지표 `memento_write_gate_total{entry,outcome}`, 앵커 판정 지표 `memento_anchor_decision_total{outcome,reason}`
@@ -111,6 +115,7 @@ server.js  (HTTP 서버)
             │   └── contradictionAudit.js 모순 해소 기록의 본문(`MEMENTO_FORGET_CASCADE=on`이면 파편 id만)과 topic
             ├── consolidate/              통합/GC 레이어 모듈
             │   ├── MemoryConsolidator.js 22단계 선언형 유지보수 파이프라인 (stageDefs 배열, TOTAL_STAGES = stageDefs.length). NLI + Gemini 하이브리드
+            │   ├── statsSummaries.js     memory_stats의 workspace 분포(앵커 수, 앵커 토큰 포함), 키별 기입률, 세션당 파편 분포 요약
             │   ├── ConsolidatorGC.js     피드백 리포트, stale 파편 수집/정리, 긴 파편 분할, 피드백 기반 보정
             │   ├── FragmentGC.js         파편 만료 삭제, 지수 감쇠, TTL 계층 전환 (permanent parole + EMA 배치 감쇠 포함)
             │   ├── idOrderedUpdate.js    감쇠와 utility 점수 갱신을 id 오름차순 묶음(`MEMENTO_SCORE_UPDATE_BATCH`)으로 잠그고 갱신. 최소 변화량(`MEMENTO_DECAY_MIN_DELTA`, `MEMENTO_UTILITY_MIN_DELTA`) 미만 행은 다시 쓰지 않음
@@ -153,6 +158,7 @@ server.js  (HTTP 서버)
             ├── LexicalCoverage.js        content_tokens 채움 지표 `memento_lexical_tokens_coverage_ratio`, `memento_lexical_tokens_missing`(라벨 없음)
             ├── keyScope.js               `keyScopeClause(params, column, { keyId, groupKeyIds })` 공유 헬퍼. key_id 범위 WHERE 절 생성. FragmentReader.getById / findCaseIdBySessionTopic / findErrorFragmentsBySessionTopic / GraphLinker / LinkStore / HistoryReconstructor / reconstruct.js에서 공유 사용
             ├── anchorPolicy.js           앵커 판정 순수 함수. 앵커 변경 종류(set, clear), 권한과 키별 상한 판정, context 주입 줄의 비식별 주체 표지(`k:` + 키 id sha256 앞 4자)
+            ├── anchorBudget.js           context 앵커 토큰 예산 판정 순수 함수(budget.anchor 보고, 새 앵커 지정의 초과 판정과 내릴 후보)
             ├── CaseEventStore.js         semantic milestone 로그 (case_events CRUD, DAG 엣지, 증거 조인)
             ├── memory-schema.sql         PostgreSQL 스키마 정의
             └── migrations/               DB 마이그레이션 SQL 59개 (migration-001 ~ migration-060, 046 결번, schema_migrations 테이블 기준 순차 적용). `scripts/migrate.js`·`scripts/lint-migrations.js`가 이 경로를 사용
@@ -307,6 +313,7 @@ lib/tools/
 ├── memory-audit.js 기억 도구의 파일 감사 기록과 감사 이벤트 값(remember, amend, forget, link, 앵커)
 ├── reconstruct.js  reconstruct_history, search_traces 도구 핸들러 (Narrative Reconstruction)
 ├── memory-schemas.js  도구 스키마 정의 (inputSchema)
+├── reflect-params.js  reflect `lessons`와 context `view` 인자 스키마
 ├── tool-head.js  모든 도구의 name, title, MCP 힌트(`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)
 ├── recall-response-params.js recall 응답 형태 파라미터(`fields`, `format`) 스키마 조각
 ├── origin-param.js remember와 batch_remember 항목의 `origin` 파라미터 스키마 조각
@@ -812,7 +819,7 @@ fragment_links의 weight/confidence 변경 이력을 기록하는 감사 테이�
 
 ### fragment_synthetic_query
 
-파편 저장 시 생성한 합성 역질의와 그 임베딩을 담는 보조 벡터 표(migration-043). `fragments`와 분리해 두어 `QuotaChecker`의 `fragment_limit` 판정에 포함되지 않으며, 파생 자료이므로 유실 시 백필로 재생성한다. 임베딩 차원은 `fragments.embedding`을 따른다(migration-049와 `npm run migrate`의 정합화 단계).
+파편으로 되돌아가는 보조 검색어와 그 임베딩을 담는 보조 벡터 표(migration-043). 행은 두 종류다: LLM이 본문에서 만든 역질의(`origin='generated'`)와 reflect 교훈의 상황 단서(`origin='cue'`). `fragments`와 분리해 두어 `QuotaChecker`의 `fragment_limit` 판정에 포함되지 않으며, 파생 자료이므로 유실 시 백필로 재생성한다. 임베딩 차원은 `fragments.embedding`을 따른다(migration-049와 `npm run migrate`의 정합화 단계).
 
 | 컬럼 | 타입 | 설명 |
 |-|-|-|
@@ -824,8 +831,22 @@ fragment_links의 weight/confidence 변경 이력을 기록하는 감사 테이�
 | agent_id | TEXT | 에이전트 구분 (기본 `default`) |
 | workspace | TEXT | 워크스페이스 격리 |
 | created_at | TIMESTAMPTZ | 생성 시각 |
+| source_content_hash | TEXT | 행을 만들 때의 원본 `content_hash`. 현재 본문과 같은 행만 검색한다(migration-061) |
+| origin | TEXT | `generated`(본문이 바뀌면 다시 만든다) 또는 `cue`(본문이 바뀌어도 남는다). 기본 `generated`(migration-068) |
 
 `(fragment_id, md5(query_text))`에 UNIQUE 인덱스가 있어 같은 질의는 중복 적재되지 않는다.
+
+### embedding_profile
+
+저장된 임베딩을 만든 설정을 한 행으로 남기는 표(migration-069). 기동 검사가 현재 설정과 비교해, 차원은 같은데 제공자나 모델이 다르면 재임베딩이 필요하다고 경고한다. 비어 있으면 첫 기동이 채우고, 재임베딩 뒤에는 `node scripts/check-embedding-consistency.js --record`로 갱신한다.
+
+| 컬럼 | 타입 | 설명 |
+|-|-|-|
+| id | SMALLINT PK | 항상 1 |
+| provider | TEXT | 임베딩 제공자 |
+| model | TEXT | 임베딩 모델 |
+| dimensions | INTEGER | 벡터 차원 |
+| recorded_at | TIMESTAMPTZ | 기록 시각 |
 
 ### idempotency_records
 
@@ -1537,9 +1558,9 @@ migration-035(`lib/memory/migrations/migration-035-morpheme-indexed.sql`): `frag
 
 ```
 lib/memory/
-├── read/          FragmentSearch, FragmentReader, ContextBuilder, GraphNeighborSearch, HistoryReconstructor, Reranker, CaseRecall, LinkedFragmentLoader, RecallSuggestionEngine, SearchScope, SearchSideEffects
+├── read/          FragmentSearch, FragmentReader, ContextBuilder, GraphNeighborSearch, HistoryReconstructor, Reranker, CaseRecall, LinkedFragmentLoader, RecallSuggestionEngine, SearchScope, SearchSideEffects, ContextIndexView, AnchorBudgetLoader, WorkspaceBoundary
 ├── transfer/      exportFormat, FragmentExporter, ImportRunner, ImportReport, importRecords, importErrors, importRuntime
-├── write/         WriteGate, DedupScope, FragmentImporter, FragmentWriter, FragmentFactory, FragmentStore, RememberPostProcessor, ConflictResolver, BatchRememberProcessor, BatchRememberWorker
+├── write/         WriteGate, DedupScope, FragmentImporter, FragmentWriter, FragmentFactory, FragmentStore, RememberPostProcessor, ConflictResolver, BatchRememberProcessor, BatchRememberWorker, LessonCue
 ├── link/          ReconsolidationEngine, GraphLinker, LinkStore, SessionLinker, TemporalLinker, ContradictionDetector
 ├── consolidate/   MemoryConsolidator, ConsolidatorGC, FragmentGC, decay, UtilityBaseline
 ├── embedding/     EmbeddingWorker, EmbeddingCache, MorphemeIndex, MorphemeTokenizer, LexicalTokens

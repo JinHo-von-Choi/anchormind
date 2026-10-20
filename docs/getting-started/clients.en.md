@@ -40,7 +40,7 @@ Codex (CLI and Desktop) does not show MCP tools to the model directly; the model
    - At the start of a task, call `context` to load past memory.
    - Before working on past work, settings or errors, use `recall` to find related memory.
    - When a decision, the cause and fix of an error, or a user preference is settled, save it with `remember`.
-   - When the task is done, leave a summary with `reflect`.
+   - When the task is done, leave a summary with `reflect`. Put lessons worth reusing elsewhere in `lessons` as situation (cue), action (lesson) and evidence.
    ```
 
 2. Hooks: inject memory at session start and leave a reflection at the end. Follow [Hook Setup](hooks.en.md#codex) or [Plugin Install](plugins.en.md).

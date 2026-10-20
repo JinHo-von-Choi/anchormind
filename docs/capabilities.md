@@ -11,16 +11,19 @@ AnchorMind가 제공하는 기능, 응답 메타, 선택 모듈, 기술 스택�
 - `remember`: 중요한 내용을 한두 문장짜리 파편으로 나눠 저장한다. `MEMENTO_REMEMBER_ATOMIC=true`이면 할당량 확인과 저장을 한 트랜잭션으로 묶는다.
 - `batch_remember`: 여러 파편을 한 번에 저장한다. `async: true`로 부르면 서버가 뒤에서 처리하고 실패하면 최대 3회 다시 시도한다. 처리 상태는 `batch_status(jobId)`로 본다.
 - `recall`: 키워드, 형태소, 의미 세 단계로 검색해 필요한 기억만 돌려준다. workspace, caseId, affect 같은 범위가 세 단계 모두에 똑같이 적용된다.
-- `context`: 세션을 시작할 때 핵심 기억을 한 번에 복원한다. `agentId=X`로 부르면 X의 기억과 공유 기억을 함께, 생략하면 공유 기억만 돌려준다.
+- `context`: 세션을 시작할 때 핵심 기억을 한 번에 복원한다. `agentId=X`로 부르면 X의 기억과 공유 기억을 함께, 생략하면 공유 기억만 돌려준다. `view: "index"`는 파편마다 첫 문장만 보여 주는 목록이라 같은 예산에 더 많이 담고, 본문은 id로 `recall`해 연다.
 - `reflect`: 세션을 마칠 때 요약을 저장한다. 이어지는 세션의 에피소드끼리는 `preceded_by` 관계가 자동으로 걸려 경험의 흐름이 남는다.
+- 교훈: `reflect`의 `lessons`에 `{cue, lesson, evidence}`를 넣으면 교훈을 procedure로 저장하고, cue(어떤 상황에 쓰는지)를 보조 검색어로 등록한다. 나중에 비슷한 상황을 묻는 `recall`이 그 교훈을 찾는다. 셋 중 하나라도 비면 저장하지 않는다.
 
 ### 검색이 정확해지게 한다
 
 - 확산 활성화: `recall`에 `contextText`로 지금 하는 일을 알려 주면 관련 파편이 먼저 나온다 (`ENABLE_SPREADING_ACTIVATION`).
 - 본문 어휘 검색: 본문 단어로도 찾는다. 임베딩이 꺼져 있어도 동작하지만 GIN 색인이 있어야 한다 (`MEMENTO_LEXICAL_CHANNEL`).
 - 예산 안에서 고르기: 연결된 파편까지 후보로 점수를 매긴 뒤 `tokenBudget` 안에서 고른다.
+- 앵커 토큰 예산: 앵커는 매번 주입되므로 그 합을 따로 잰다. `context` 응답 `budget.anchor`가 사용량과 내릴 후보를 알려 주고, 예산을 넘기는 새 앵커 지정은 경고하거나 거둔다 (`MEMENTO_CONTEXT_ANCHOR_TOKEN_BUDGET`, `MEMENTO_ANCHOR_TOKEN_BUDGET_MODE`).
 - 답 꾸러미: `recall(format: "pack")`은 출처와 저장일이 붙은 인용용 블록을 돌려준다. `context`가 주입하는 줄에도 저장일과 확인 상태가 붙는다 (`MEMENTO_CONTEXT_ANNOTATE`).
 - 로컬 임베딩: `EMBEDDING_PROVIDER=transformers`로 외부 API 없이 임베딩을 만든다. 기본 모델은 `Xenova/multilingual-e5-small`(384차원)이다.
+- 임베딩 모델 확인: 기동할 때 저장된 임베딩의 제공자와 모델(`embedding_profile`)을 현재 설정과 비교해, 차원이 같은 다른 모델로 바뀌었으면 재임베딩이 필요하다고 경고한다.
 - 정서 태그: 파편에 `affect`(neutral, frustration, confidence, surprise, doubt, satisfaction)를 붙이고 이 값으로 걸러 검색한다.
 - 검색 제안: `recall` 응답의 `_meta.suggestion`이 비효율적인 질의를 알려 준다. 반복 질의, 맥락 없는 빈 결과, 예산 없는 큰 `limit`, 유형을 지정하지 않은 잡음 질의가 대상이며 무시해도 된다.
 - 시각 구분: 그 말을 한 때(`mentionTime`)와 그 일이 일어난 때(`eventTime`)를 따로 저장한다. 주지 않으면 본문의 날짜 표현에서 읽는다. `recall`은 사건 시각으로 기간을 거르고(`timeRange.basis: "event"`) 일어난 순서로 줄 세운다(`order: "chronological"`) (`MEMENTO_EVENT_TIME_EXTRACT`).
@@ -30,6 +33,7 @@ AnchorMind가 제공하는 기능, 응답 메타, 선택 모듈, 기술 스택�
 ### 기억을 스스로 정리한다
 
 - 자동 정리: 중복 병합, 모순 탐지, 중요도 감쇠, 오래된 기억의 TTL 만료가 주기적으로 돈다. 만료 정리는 한 주기에 100건 단위로 반복한다 (`MEMENTO_GC_THROUGHPUT`).
+- 검증 보상: caseId가 있는 파편을 `amend(assertionStatus="verified")`로 검증하면 그 검증의 근거 파편 중요도가 오른다(`rejected`면 내려간다). 근거의 확신도만큼 반영하고, 같은 사례를 여러 번 검증해도 다른 근거에 누적되지 않는다 (`MEMENTO_CASE_BACKPROP_ENABLED`).
 - 링크 재조정: `tool_feedback`이 쌓이면 파편 사이 연결의 가중치가 바뀌고, 서로 모순되는 연결은 자동으로 격리된다 (`ENABLE_RECONSOLIDATION`).
 - 중복 판정: 같은 본문은 키와 workspace 안에서 하나로 본다. 이미 있으면 `remember` 응답의 `duplicate_of`에 기존 파편 id가 실린다 (`MEMENTO_DEDUP_SCOPE`).
 - 연쇄 삭제: `forget`은 그 파편에서 만들어진 사례 요약과 모순 해소 기록의 본문 사본도 같은 트랜잭션에서 지운다 (`MEMENTO_FORGET_CASCADE`).
@@ -38,7 +42,7 @@ AnchorMind가 제공하는 기능, 응답 메타, 선택 모듈, 기술 스택�
 
 ### 누가 무엇을 볼 수 있는지 정한다
 
-- workspace 격리: 같은 키 안에서도 프로젝트나 고객 단위로 기억을 나눈다. workspace를 지정하지 않으면 키의 `default_workspace`를, 그것도 없으면 전역 기억만 조회한다. 전체 조회(`allWorkspaces=true`)는 마스터 키만 할 수 있다.
+- workspace 격리: 같은 키 안에서도 프로젝트나 고객 단위로 기억을 나눈다. workspace를 지정하지 않으면 키의 `default_workspace`를, 그것도 없으면 전역 기억만 조회한다. 전체 조회(`allWorkspaces=true`)는 마스터 키만 할 수 있고, 그때 다른 workspace에서 확인된 fact에는 다시 확인하라는 `workspace_warning`이 붙는다.
 - 모드 프리셋: `recall-only`, `write-only`, `onboarding`, `audit` 중 하나로 키가 쓸 수 있는 도구를 줄인다. `X-Memento-Mode` 헤더나 키의 `default_mode`로 지정한다.
 - 앵커 권한과 읽기 허가: 앵커 지정은 `anchor` 권한과 키별 상한으로 제한하고 (`MEMENTO_ANCHOR_PERMISSION`), 읽기 대상 workspace는 키의 `allowed_workspaces`로 판정한다 (`MEMENTO_WORKSPACE_READ_AUTHZ`).
 - 관리 권한과 관리자 계정: 관리 API는 라우트마다 필요한 능력을 정해 두고 역할(owner, admin, reviewer, auditor, viewer, service)로 판정한다. 관리자는 비밀번호와 TOTP로 로그인한다 (`MEMENTO_ADMIN_USERS`). `GET /me`가 자기 능력과 범위를 보여 준다.

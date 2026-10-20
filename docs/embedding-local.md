@@ -37,6 +37,7 @@ pgvector의 `vector(N)` 타입은 컬럼 레벨에서 차원이 고정된다. �
 
 - `EMBEDDING_PROVIDER=transformers`와 `OPENAI_API_KEY`, `GEMINI_API_KEY`, `EMBEDDING_API_KEY`를 동시에 설정하지 않는다. config 로딩 단계에서 자동으로 차단된다.
 - 차원 불일치가 감지되면 `server.js` 기동 시 `check-embedding-consistency` 검사에서 실패하고 서버가 시작을 거부한다.
+- 차원이 같은 다른 모델로 바꾸면 기동은 되지만 의미 공간이 달라 검색이 틀어진다. 기동 검사가 `embedding_profile`(저장된 임베딩의 제공자, 모델)과 비교해 경고하므로, 전체를 재임베딩한 뒤 `node scripts/check-embedding-consistency.js --record`로 프로파일을 갱신한다.
 - 기존 데이터가 있는 상태에서 provider를 변경하려면 반드시 아래 전환 절차(시나리오 B)를 따른다.
 
 ---

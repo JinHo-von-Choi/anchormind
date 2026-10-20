@@ -657,6 +657,8 @@ Each returned fragment includes a `key_id` field. When called with a master key,
 
 `affect` field: The emotional state tag attached to the fragment at storage time, returned as stored.
 
+`workspace_warning` field: Set only on a master `allWorkspaces=true` read, on facts stored in a workspace other than the target workspace (the request `workspace`, otherwise the key default). It means the value was confirmed in that other workspace and should be checked again before use. Other types such as procedure and decision, and global (NULL) facts, never carry it. The field is dropped when `fields` is given.
+
 `_meta`: A metadata wrapper at the top level of recall/context responses.
 
 ```json
@@ -1201,6 +1203,9 @@ Persist session learnings as atomic fragments at session end. Each array item is
     "errors": 0,
     "procedures": 1,
     "questions": 1,
+    "lessons": 1,
+    "lessons_no_entry": 0,
+    "lessons_rejected": 0,
     "episode": 1
   },
   "groups": [
@@ -1209,7 +1214,7 @@ Persist session learnings as atomic fragments at session end. Each array item is
 }
 ```
 
-`breakdown` reports the number of fragments stored per category; `episode` is present only when a narrative_summary was produced. Internally all five categories go through a single `batchRememberProcessor` call, but the result is re-tallied per category via `_category` metadata, preserving the breakdown shape.
+`breakdown` reports the number of fragments stored per category; `episode` is present only when a narrative_summary was produced. `lessons` counts stored lessons, `lessons_no_entry` counts `NO_ENTRY` items and `lessons_rejected` counts items left unstored because cue, lesson or evidence was empty; they appear only when `lessons` was sent. Internally all five categories go through a single `batchRememberProcessor` call, but the result is re-tallied per category via `_category` metadata, preserving the breakdown shape.
 
 When `sessionId` is provided, session fragments are synthesized separately per workspace → case_id → topic group. The `groups` field returns one entry per group (`workspace`, `topic`, `caseId`, and `fragmentIds` — the fragments created for that group, including the episode fragment id when a narrative_summary was produced). Groups with different workspaces each stamp their own workspace on their fragments. Without `sessionId`, `params` (summary/decisions/...) itself is treated as a single group (legacy path).
 
@@ -1245,6 +1250,17 @@ Loads Anchor, Core, Learning, and Working Memory plus session_reflect separately
 | includeKeyName | boolean | - | When true, each fragment carries key_id and key_name (the access key label). Only information within the same key group scope is exposed, and it does not apply to the structured=true tree response. Default false. |
 
 The response `budget` object contains `requested`, the exact content-token count in `used`, and `exceededByGuaranteed` when guaranteed slots exceed the target. The existing `totalTokens` equals `budget.used`.
+
+`budget.anchor` is the token use of the anchors injected in this response alone. Anchors skip `tokenBudget` trimming and are injected on every call, so they are counted separately.
+
+| Field | Meaning |
+|-|-|
+| `used` | Token sum of the injected anchor contents |
+| `limit` | `MEMENTO_CONTEXT_ANCHOR_TOKEN_BUDGET` (default 1000) |
+| `exceeded` | `used > limit` |
+| `demote_candidates` | When over budget, anchor ids picked from the lowest rank up (at most 5). Unmarking them brings the set within budget |
+
+`budget.anchor` is omitted when the budget is 0. How a new anchor mark that would exceed the budget is handled follows `MEMENTO_ANCHOR_TOKEN_BUDGET_MODE` in [configuration](configuration.en.md).
 
 ### Anchor selection metadata
 
@@ -1316,7 +1332,9 @@ Returns workspace fill status and per-session fragment distribution.
 | Field | Type | Description |
 |-------|------|-------------|
 | distribution.top | array | Top workspaces by fragment count, `{workspace, count}` (descending) |
+| distribution.top[].anchors, anchor_tokens | number | Live anchors in that workspace and the token sum of their contents |
 | distribution.null_count | number | Fragments with no workspace (NULL, global) |
+| distribution.null_anchors, null_anchor_tokens | number | Global (NULL) anchors and their token sum |
 | distribution.distinct_count | number | Distinct count of non-null workspace values |
 | key_fill_rate | array | Per-API-key workspace fill rate, `{key_id, key_name, total, with_workspace, fill_rate}`. `fill_rate` is `with_workspace / total` |
 | session_fragment_distribution | object | Fragment-count-per-session distribution over the last 30 days, `{p50, p90, max, sample_sessions}`. `p50`/`p90`/`max` are `null` when there is no sample |
@@ -1554,7 +1572,7 @@ curl -si -X POST https://anchormind.example.com/mcp \
 | `MEMENTO_WRITE_GATE` | `on` | Semantic write gate switch. With `on`, remember, amend, batch_remember, reflect-derived writes, AutoReflect, imports and the CLI remember local mode pass the same gate. With `off`, each entry point applies only its base steps (remember: all, amend: input size limit and keyword normalization, batch_remember, reflect and CLI remember: normalization, masking and truncation, imports: none). |
 | `MEMENTO_ANCHOR_PERMISSION` | `warn` | Anchor designation permission enforcement (`off`, `warn`, `enforce`). It covers `isAnchor` of remember, batch_remember items and amend. Only the master key and keys with the `anchor` (or `admin`) permission designate anchors, and a key's live anchor count is capped by `MEMENTO_ANCHOR_LIMIT_PER_KEY` (default 1000). `warn` stores other requests as regular fragments with `anchorPermissionRequired` and similar names in `validation_warnings`; `enforce` rejects them. Context anchor lines carry a non-identifying principal label (`[k:xxxx]`, `[master]`). |
 | `MEMENTO_SENSITIVE_SCAN` | `mask` | Detection mode for secrets and personal data in written values (`mask`, `reject`, `off`). `mask` replaces matches with markers before storage; detections other than email addresses and phone numbers keep only `sensitive.<rule>` names in `validation_warnings` (informational, no retry needed). Hard gate keys reject high-confidence detections (password fields, API key patterns, tokens, private keys, resident registration numbers, card numbers) with `-32003`, and `reject` rejects for every key. `off` applies only the legacy rules to content. |
-| `MEMENTO_CASE_BACKPROP_ENABLED` | `false` | When `true`, amending a fragment with a case_id (specifically changing resolutionStatus) triggers importance backpropagation to all fragments sharing the same caseId. Exported as the `CASE_BACKPROP_ENABLED` constant in `lib/config.js`. Boosts activation scores of related fragments after case resolution, improving subsequent recall precision. |
+| `MEMENTO_CASE_BACKPROP_ENABLED` | `false` | When `true`, each verification event created by `amend(assertionStatus="verified"\|"rejected")` on a fragment with a caseId adjusts the importance of that event's evidence fragments by +0.15 or -0.10 times the evidence confidence. Other evidence of the case is left alone. Exported as the `CASE_BACKPROP_ENABLED` constant in `lib/config.js`. |
 | `MEMENTO_STORAGE` | `pgvector` | Storage backend name. Currently `pgvector` only; this value does not affect behavior. |
 | `MEMENTO_SYMBOLIC_POLICY_RULES` | `false` | When `true`, the policy step of the semantic write gate evaluates PolicyRules soft gates and accumulates failed rule names into `validation_warnings`. |
 | `MEMENTO_TOOL_ARGS_VALIDATION` | `warn` | Check mode of tool call arguments against `inputSchema` (`off`, `warn`, `enforce`). |

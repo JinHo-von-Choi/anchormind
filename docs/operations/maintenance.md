@@ -267,7 +267,7 @@ MCP `memory_consolidate` 도구는 master 키 세션 전용이다. 일반 키 �
 | `scripts/measure/protocol-era-probe.mjs` | `handleMcpPost`를 같은 프로세스의 임시 서버(127.0.0.1, 기본 포트 18913, 57332 거부)에 물리고 MCP 2026-07-28 방식 요청, 규격의 era 판정, initialize 폴백, `memento_modern_protocol_attempts_total` 값을 JSON으로 출력. `DOTENV_CONFIG_PATH`가 없는 파일이거나 임시 디렉터리 아래 파일이 아니면 설정을 읽기 전에 종료 코드 2로 멈추며(`.env`, `.env.test` 거부), 임시 서버의 마스터 키는 실행마다 만든 무작위 값이다. `REDIS_ENABLED=false`로 실행 | 프로토콜 처리 경로 변경 전후 | 조건부 |
 | `scripts/backfill-embeddings.js` | embedding IS NULL 파편에 임베딩 일괄 생성 | EMBEDDING_PROVIDER 변경 후, 임베딩 API 장애 복구 후 | 조건부 1회 |
 | `scripts/backfill-morpheme-dict.js` | morpheme_dict의 embedding NULL 행 일괄 재임베딩 (`--dry-run`·`--batch`·`--sleep-ms`·`--max`) | 형태소 사전 NULL 행 누적 확인 시 (backfill-embeddings는 fragments 전용이라 이 테이블을 다루지 않음) | 조건부 1회 |
-| `scripts/check-embedding-consistency.js` | 설정 차원과 DB 실제 벡터 차원 일치 검증 | 서버 기동 시 자동 실행 (server.js 내부 호출) | 기동마다 자동 |
+| `scripts/check-embedding-consistency.js` | 설정 차원과 DB 실제 벡터 차원 일치 검증, 임베딩 모델이 `embedding_profile`과 다르면 경고(`--record`로 프로파일 갱신) | 서버 기동 시 자동 실행 (server.js 내부 호출) | 기동마다 자동 |
 | `scripts/normalize-vectors.js` | 기존 임베딩 벡터 L2 정규화 | 임베딩 제공자 전환 직후 1회 | 조건부 1회 |
 | `scripts/cleanup-noise.js` | 초단문·빈 세션 요약·NLI 재귀 쓰레기 파편 탐지·삭제 | recall 품질 저하 또는 context 토큰 예산 오염 시 | 조건부, 필요 시 월 1회 |
 | `scripts/purge-oauth-clients.js` | 한 번도 쓰이지 않은 오래된 OAuth DCR 클라이언트 정리 (기본 미리보기, `--execute`로 삭제, `--older-than-days`, 키 묶음 클라이언트 제외) | `oauth_clients`에 미사용 행이 누적됐을 때. 삭제 전 `pg_dump -t agent_memory.oauth_clients` 보관 | 조건부 |
@@ -307,7 +307,7 @@ HNSW 인덱스를 삭제하고, `fragment_synthetic_query`의 파생 행 전체�
 
 `agent_memory.fragments` 테이블에서 `embedding IS NULL`인 파편에 임베딩 벡터를 일괄 생성한다. `EMBEDDING_PROVIDER` 변경 후 기존 임베딩과의 차원 불일치를 해소하거나, 임베딩 API 장애 중 저장된 파편을 사후 처리할 때 사용한다.
 
-중요: OpenAI 계열 임베딩과 로컬 transformers 임베딩은 차원이 다르므로 혼합할 수 없다. provider를 전환한 경우에는 기존 파편 전체를 재생성해야 한다. 서버 기동 시 `scripts/check-embedding-consistency.js`가 차원 불일치를 감지하면 기동을 거부하므로 반드시 backfill 완료 후 재시작한다.
+중요: OpenAI 계열 임베딩과 로컬 transformers 임베딩은 차원이 다르므로 혼합할 수 없다. provider를 전환한 경우에는 기존 파편 전체를 재생성해야 한다. 서버 기동 시 `scripts/check-embedding-consistency.js`가 차원 불일치를 감지하면 기동을 거부하므로 반드시 backfill 완료 후 재시작한다. 차원이 같은 다른 모델로 바꾼 경우에도 전체를 재생성하고, 마친 뒤 `node scripts/check-embedding-consistency.js --record`로 임베딩 프로파일을 갱신한다.
 
 ### 선행 조건
 

@@ -502,6 +502,7 @@ Temporal axis (valid_from/valid_to, superseded_by) preserves existing data
 ```
 
 - **Cost efficiency**: 99% of candidates handled by NLI; LLM calls occur only for numerical/domain contradictions
+- **Presentation order**: the A/B order of the two fragments sent to the LLM is set by a hash of the id pair. A pair always gets the same order, and neither the new fragment nor the smaller id always goes first
 - **Zero data loss**: Temporal columns manage versioning instead of deleting fragments
 - **Implementation files**: `lib/memory/signals/NLIClassifier.js`, `lib/memory/consolidate/MemoryConsolidator.js`
 - **Environment variable**: When `NLI_SERVICE_URL` is unset, ONNX in-process is used automatically (~280MB, downloaded on first run)
@@ -523,11 +524,11 @@ The final stage of the remember() post-processing pipeline. Performs L1/L3 searc
 
 ### CaseRewardBackprop (CaseEventStore -> CaseRewardBackprop)
 
-When a verification event is added to case_events, atomically adjusts the importance of evidence fragments (via fragment_evidence JOIN) for that case.
+When a verification event is added to case_events, atomically adjusts the importance of the evidence fragments linked to that event (fragment_evidence `supports`, `produced_by`). The reward is `delta x confidence`, and `contradicts` evidence is excluded.
 
-- SQL: `UPDATE fragments SET importance = LEAST(1.0, GREATEST(0.0, importance + $delta)) FROM fragment_evidence, case_events WHERE ...`
+- SQL: `UPDATE fragments f SET importance = LEAST(1.0, GREATEST(0.0, f.importance + $delta * w.confidence)) FROM (SELECT fragment_id, MAX(confidence) ... FROM fragment_evidence WHERE event_id = $1 AND kind IN ('supports','produced_by') GROUP BY fragment_id) w WHERE ...`. A fragment with several evidence rows is adjusted once, with its highest confidence
 - Concurrency: UPDATE FROM is atomic via row locking. No read-modify-write race condition.
-- Trigger: fire-and-forget after `CaseEventStore.append()` COMMIT
+- Trigger: fire-and-forget after `CaseEventStore.append()` writes the event and its evidence in one transaction and commits, so the reward never runs before the evidence exists
 - Singleton: `getBackprop()` (shared for server lifetime)
 - Environment variable: `MEMENTO_CASE_BACKPROP_ENABLED=true` is required to activate (default: false). Also exported as the `CASE_BACKPROP_ENABLED` constant from `lib/config.js`. When disabled, the backprop call after append() is treated as a no-op.
 

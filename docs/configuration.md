@@ -681,7 +681,14 @@ EMBEDDING_DIMENSIONS=384 DATABASE_URL=$DATABASE_URL \
 DATABASE_URL=$DATABASE_URL node scripts/backfill-embeddings.js
 ```
 
-서버 시작 시 `check-embedding-consistency.js`가 DB 벡터 차원과 `EMBEDDING_DIMENSIONS`의 일치 여부를 자동 검증한다. 불일치 시 프로세스를 중단하여 무결성을 보장한다.
+서버 시작 시 `check-embedding-consistency.js`가 두 가지를 검사한다.
+
+| 검사 | 기준 | 어긋나면 |
+|-|-|-|
+| 차원 | DB 벡터 차원 = `EMBEDDING_DIMENSIONS` | 기동 중단 |
+| 모델 | `embedding_profile` 표의 제공자와 모델 = 현재 `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL` | 경고만 한다. 차원이 같아도 의미 공간이 달라 검색 품질이 떨어지므로 재임베딩이 필요하다 |
+
+`embedding_profile`이 비어 있으면 첫 기동이 현재 설정을 기록한다. 모델을 바꾸고 재임베딩을 마쳤으면 `node scripts/check-embedding-consistency.js --record`로 프로파일을 갱신한다.
 
 상세 내용: [docs/embedding-local.md](embedding-local.md)
 
@@ -954,7 +961,7 @@ recall은 자체 힌트 경로를 이미 갖고 있어 `rates`에서 제외된�
 | `maxCallsPerMinute` | `MEMENTO_SYNTHETIC_QUERY_RPM` | `20` | 분당 LLM 호출 상한. `0`이면 무제한 |
 | `batchSize` | `MEMENTO_SYNTHETIC_QUERY_BATCH` | `5` | 큐에서 한 번에 꺼내는 수 |
 | `backfillBatch` | `MEMENTO_SYNTHETIC_QUERY_BACKFILL` | `20` | 큐가 비었을 때 회수할 미생성 파편 수 |
-| `adoptLimit` | `MEMENTO_SYNTHETIC_QUERY_ADOPT` | `5` | 한 검색에서 보조 경로로 합류시킬 최대 파편 수 |
+| `adoptLimit` | `MEMENTO_SYNTHETIC_QUERY_ADOPT` | `5` | 한 검색에서 보조 히트가 순위를 바꿀 수 있는 최대 파편 수(새로 합류 + 순위 상승) |
 | `similarityDecay` | - | `0.85` | 보조 히트 유사도 감쇠 계수 |
 | `llmTimeoutMs` | `MEMENTO_SYNTHETIC_QUERY_TIMEOUT_MS` | `20000` | 생성 호출 타임아웃 |
 
@@ -967,7 +974,8 @@ recall은 자체 힌트 경로를 이미 갖고 있어 `rates`에서 제외된�
 - 생성 실패는 파편 저장에 영향을 주지 않는다. 큐 적재 실패도 삼키며, 누락분은 워커의 백필 수집기가 회수한다.
 - 생성된 질의는 원문의 고유명사·식별자·수치를 최소 하나 보존해야 채택된다. 원문에 없던 한자·가나가 섞이면 생성 언어가 흔들린 것으로 보고 버린다.
 - 검색 시 보조 벡터 조회는 본문 벡터 조회와 병렬로 실행된다. 순차로 붙이면 매 검색에 벡터 조회가 하나 더 얹혀 p95 지연이 배가 된다.
-- 보조 히트는 감쇠 계수를 적용한 유사도로 합류하며, 이미 본문 경로가 찾은 파편은 건너뛴다.
+- 보조 히트의 유사도에는 감쇠 계수를 곱한다. 본문 경로가 놓친 파편은 이 유사도로 합류하고, 본문 경로가 이미 찾은 파편은 보조 유사도가 더 높을 때만 그 값으로 순위가 오른다. 본문 후보는 밀려나지 않는다.
+- reflect `lessons`의 상황 단서(cue)도 이 표에 `origin='cue'` 행으로 들어가 같은 경로로 검색된다. cue 행은 생성 스위치(`enabled`)와 관계없이 reflect가 넣고, 본문을 고쳐도 지우지 않는다. 생성 역질의(`origin='generated'`)만 본문이 바뀌면 다시 만든다.
 
 `fragment_synthetic_query`는 `fragments`와 분리된 표다. `QuotaChecker`가 `fragments` 행 수로 `fragment_limit`을 판정하므로 같은 표에 넣으면 사용자 할당량을 잠식한다. 파생 자료이므로 유실 시 백필로 재생성한다.
 
@@ -1420,6 +1428,8 @@ EMBEDDING_DIMENSIONS=768
 | 065 | migration-065-fragment-world-time.sql | `fragments`에 nullable 열 `mention_time`, `event_time`, `event_time_end`(timestamptz)와 `event_time_precision`(text)을 더한다. 기존 행은 백필하지 않는다. 색인 `idx_fragments_world_time`(`COALESCE(event_time, mention_time, created_at)`, `valid_to IS NULL` 부분 색인)도 만든다. 쓰기 정지 없이 만들려면 열 추가 문을 먼저 실행하고 `scripts/ops/online-index.mjs`로 색인을 만든 뒤 마이그레이션을 실행한다 |
 | 066 | migration-066-fragment-digest.sql | 묶음 요약 표 `fragment_digest`(key_id, workspace, agent_id, kind, subject, content, source_ids, source_hash, item_count). 범위별 유일 색인, source_ids GIN 색인, fragments와 같은 에이전트·키 격리 RLS 정책 |
 | 067 | migration-067-api-key-tool-calls.sql | `api_key_usage`에 `tool_call_count`(그날 도구 호출 수)와 `tool_calls`(도구별 호출 수, JSONB)를 더한다. 일일 한도 판정에 쓰는 `call_count`는 그대로다 |
+| 068 | migration-068-synthetic-query-origin.sql | `fragment_synthetic_query.origin`(`generated` 기본, `cue`)을 더한다. reflect 교훈의 cue 행은 본문이 바뀌어도 남고, 역질의 백필은 `generated` 행만 보고 대상을 고른다 |
+| 069 | migration-069-embedding-profile.sql | 한 행짜리 표 `embedding_profile`(provider, model, dimensions, recorded_at). 첫 기동이 현재 설정을 기록하고, 이후 기동 검사가 모델 변경을 경고한다 |
 
 ---
 

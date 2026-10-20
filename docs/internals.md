@@ -522,6 +522,7 @@ mDeBERTa NLI (in-process ONNX / 외부 HTTP 서비스)
 ```
 
 - **비용 효율**: 99% 후보를 NLI로 처리, LLM 호출은 수치·도메인 모순에만 발생
+- **제시 순서**: LLM에 넘기는 두 파편의 A, B 순서는 id 쌍의 해시로 정한다. 같은 쌍은 늘 같은 순서이고, 새 파편이나 id가 작은 쪽이 늘 A로 가지 않는다
 - **데이터 무손실**: 파편 삭제 대신 temporal 컬럼으로 버전 관리
 - **구현 파일**: `lib/memory/signals/NLIClassifier.js`, `lib/memory/consolidate/MemoryConsolidator.js`
 - **환경변수**: `NLI_SERVICE_URL` 미설정 시 ONNX in-process 자동 사용 (~280MB, 최초 실행 시 다운로드)
@@ -543,11 +544,11 @@ remember() 후처리 파이프라인의 마지막 단계. 저장된 파편의 �
 
 ### CaseRewardBackprop (CaseEventStore -> CaseRewardBackprop)
 
-case_events에 verification 이벤트가 추가되면, 해당 케이스의 증거 파편(fragment_evidence JOIN) importance를 원자적으로 조정한다.
+case_events에 verification 이벤트가 추가되면, 그 이벤트에 연결된 근거 파편(fragment_evidence의 `supports`, `produced_by`)의 importance를 원자적으로 조정한다. 보상량은 `delta x confidence`이고 `contradicts` 근거는 제외한다.
 
-- SQL: `UPDATE fragments SET importance = LEAST(1.0, GREATEST(0.0, importance + $delta)) FROM fragment_evidence, case_events WHERE ...`
+- SQL: `UPDATE fragments f SET importance = LEAST(1.0, GREATEST(0.0, f.importance + $delta * w.confidence)) FROM (SELECT fragment_id, MAX(confidence) ... FROM fragment_evidence WHERE event_id = $1 AND kind IN ('supports','produced_by') GROUP BY fragment_id) w WHERE ...`. 한 파편에 근거 행이 여럿이면 가장 높은 confidence 하나로 한 번만 반영한다
 - 동시성: UPDATE FROM은 행 잠금으로 원자적. read-modify-write race condition 없음.
-- 트리거: `CaseEventStore.append()` COMMIT 후 fire-and-forget
+- 트리거: `CaseEventStore.append()`가 이벤트와 근거를 한 트랜잭션에 기록하고 COMMIT한 뒤 fire-and-forget. 보상이 근거 기록보다 먼저 돌지 않는다
 - 싱글톤: `getBackprop()` (서버 수명 동안 공유)
 - 환경변수: `MEMENTO_CASE_BACKPROP_ENABLED=true`이어야 활성화된다(기본값: false). `lib/config.js`의 `CASE_BACKPROP_ENABLED` 상수로도 참조. 비활성 시 append() 후 backprop 호출이 no-op으로 처리된다.
 

@@ -626,7 +626,12 @@ DATABASE_URL=$DATABASE_URL EMBEDDING_DIMENSIONS=1536 \
   node scripts/check-embedding-consistency.js
 ```
 
-Verifies that the actual vector dimensions stored in `fragments` and `morpheme_dict` match the `EMBEDDING_DIMENSIONS` setting. Prints `PASS` on success or `FAIL` with remediation guidance on mismatch.
+Verifies that the actual vector dimensions stored in `fragments` and `morpheme_dict` match the `EMBEDDING_DIMENSIONS` setting. Prints `PASS` on success or `FAIL` with remediation guidance on mismatch. It also warns that re-embedding is needed when the provider and model of the stored embeddings (`embedding_profile`) differ from the current settings.
+
+```bash
+# After re-embedding, record the current settings as the embedding profile
+node scripts/check-embedding-consistency.js --record
+```
 
 ### Vector Dimension Migration (re-run migration-007)
 
