@@ -462,11 +462,16 @@ describe("ContextBuilder.build()", () => {
     assert.equal(result.rankedInjection.totalTokens, result.totalTokens);
     assert.equal(result.count, 13);
     assert.ok(result.totalTokens > 500);
-    assert.deepEqual(result.budget, {
+    const { anchor: anchorBudget, ...budget } = result.budget;
+    assert.deepEqual(budget, {
       requested: 500,
       used: result.totalTokens,
       exceededByGuaranteed: result.totalTokens - 500
     });
+    /** 앵커 10개(1130 토큰)가 앵커 예산(기본 1000)을 넘어 순위가 가장 낮은 앵커부터 내릴 후보로 나온다. */
+    assert.equal(anchorBudget.used, result.anchorTokens);
+    assert.equal(anchorBudget.exceeded, anchorBudget.used > anchorBudget.limit);
+    assert.deepEqual(anchorBudget.demote_candidates, ["anchor-9", "anchor-8"]);
     assert.ok(result.coreTokens > 0);
     assert.ok(result.learningTokens > 0);
     assert.ok(result.wmTokens > 0);
@@ -518,6 +523,28 @@ describe("ContextBuilder.build()", () => {
     assert.doesNotMatch(result.injectionText, /x{100}/);
     assert.equal(result.totalTokens, countContentTokens("g".repeat(400)));
     assert.equal(result.budget.used, result.totalTokens);
+  });
+
+  it("view=index는 목록 줄 길이로 골라 같은 예산에 더 많이 담고 seenIds를 남기지 않는다", async () => {
+    recallMock = mock.fn(async (params) => {
+      if (params.topic === "session_reflect") return { fragments: [] };
+      return {
+        fragments: [
+          frag("core-guaranteed", params.type, "g".repeat(400), { importance: 0.9 }),
+          frag("core-extra", params.type, "x".repeat(400), { importance: 0.8 })
+        ]
+      };
+    });
+    builder = new ContextBuilder({ recall: recallMock, store: storeMock, index: indexMock, getPool: () => null });
+
+    const full  = await builder.build({ types: ["fact"], tokenBudget: 100 });
+    const index = await builder.build({ types: ["fact"], tokenBudget: 100, view: "index", sessionId: "sess-ix" });
+
+    assert.deepEqual(full.fragments.map(item => item.id), ["core-guaranteed"]);
+    assert.deepEqual(index.fragments.map(item => item.id), ["core-guaranteed", "core-extra"]);
+    assert.ok(index.fragments.every(f => f.index === true && f.content.length <= 61));
+    assert.doesNotMatch(index.injectionText, /g{100}/);
+    assert.equal(indexMock.setSeenIds.mock.callCount(), 0, "목록으로만 본 파편은 이미 본 파편으로 표시하지 않는다");
   });
 
   it("ID 없는 추가 후보도 ranked 선택에서 빠지면 flat/structured 출력에서 제외한다", async () => {
@@ -576,5 +603,14 @@ describe("ContextBuilder.build()", () => {
     const result = await builder.build({});
     assert.ok(result._memento_hint);
     assert.equal(result._memento_hint.signal, "active_errors");
+  });
+});
+
+describe("ContextBuilder index view", () => {
+  it("indexLine은 첫 문장을 60자로 자른다", async () => {
+    const { indexLine } = await import("../../lib/memory/read/ContextIndexView.js");
+    assert.equal(indexLine("짧은 문장. 두 번째 문장"), "짧은 문장.");
+    assert.equal(indexLine("x".repeat(80)), `${"x".repeat(60)}…`);
+    assert.equal(indexLine("첫 줄\n둘째 줄"), "첫 줄");
   });
 });

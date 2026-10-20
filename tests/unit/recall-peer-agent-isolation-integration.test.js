@@ -161,7 +161,8 @@ mock.module("../../lib/memory/write/FragmentFactory.js", {
     FragmentFactory: class {
       extractKeywords() { return []; }
     },
-    countTokens: text => Math.max(1, Math.ceil(String(text ?? "").length / 4))
+    countTokens: text => Math.max(1, Math.ceil(String(text ?? "").length / 4)),
+    fragmentTokens: f => f.estimated_tokens || Math.max(1, Math.ceil(String(f.content ?? "").length / 4))
   }
 });
 

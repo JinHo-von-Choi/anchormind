@@ -1112,7 +1112,7 @@ A narrative reconstruction engine that groups fragments by case_id, performs str
 | `decision_committed` | Architecture/technology decision committed |
 | `error_observed` | Error observation recorded |
 | `fix_attempted` | Fix attempt made |
-| `verification_passed` | Verification passed (-> CaseRewardBackprop backpropagation +0.15) |
+| `verification_passed` | Verification passed (-> CaseRewardBackprop adds +0.15 x confidence to this event's evidence) |
 | `verification_failed` | Verification failed (-> CaseRewardBackprop backpropagation -0.10) |
 | `case_closed` | Closing event recorded when `amend` changes `resolutionStatus` of a fragment with a case_id to resolved (and it was not resolved before) |
 
@@ -1149,8 +1149,9 @@ Passing `caseMode: true` to the recall tool activates the CaseRecall path. It re
 
 `lib/memory/signals/CaseRewardBackprop.js`. When `verification_passed` or `verification_failed` events are inserted into case_events, atomically backpropagates importance to evidence fragments via fragment_evidence. Returns immediately when `MEMENTO_CASE_BACKPROP_ENABLED` is not set to `"true"`.
 
-- `verification_passed` -> evidence fragment `importance += 0.15` (clamped to 1.0 upper bound)
-- `verification_failed` -> evidence fragment `importance -= 0.10` (clamped to 0.0 lower bound)
+- Only the `supports` and `produced_by` evidence linked to that verification event is changed. Evidence of other events in the same case and `contradicts` evidence is left alone. Evidence is recorded with the event in one transaction through the `evidence` field of `CaseEventStore.append`, and the reward runs after commit
+- `verification_passed` -> evidence fragment `importance += 0.15 x confidence` (clamped to 1.0 upper bound). Only evidence with confidence above 0.5 gets `quality_verified=TRUE`
+- `verification_failed` -> evidence fragment `importance -= 0.10 x confidence` (clamped to 0.0 lower bound)
 - Atomic single-query update via PostgreSQL UPDATE ... RETURNING
 
 ---

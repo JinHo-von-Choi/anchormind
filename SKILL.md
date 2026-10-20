@@ -544,6 +544,7 @@ reflect(
   errors_resolved=["원인: X -> 해결: Y"],
   new_procedures=["절차1"],
   open_questions=["미해결1"],
+  lessons=[{cue: "적용 상황의 모양", lesson: "할 조작과 대상", evidence: "근거가 된 관찰", confidence: "medium"}],
   workspace="프로젝트명"
 )
 ```
@@ -552,6 +553,7 @@ reflect 규칙:
 - 배열의 각 항목은 독립적으로 이해 가능한 원자적 사실 1건 (1~2문장)
 - 여러 사실을 한 항목에 뭉치지 않는다
 - 관련 파편들이 맥락상 연결되어 있다면 episode 유형 파편을 추가 생성
+- lessons의 cue는 이번 작업의 사실이 아니라 다른 작업에서도 알아볼 상황의 모양으로 쓴다. 근거가 섞여 어느 조치가 효과였는지 가릴 수 없으면 교훈 대신 "NO_ENTRY"를 넣는다
 - contextSummary로 전후관계 요약을 첨부
 - reflect가 새 episode나 파편을 저장하면 같은 workspace(없으면 topic)의 직전 milestone과 preceded_by 엣지가 생성됨 (경험 흐름 그래프 보존). 새로 저장할 내용이 없으면 milestone도 생기지 않음
 - reflect 한 번에 파편 수십 건을 쏟아붓지 않는다. 세션 진행 중 중요한 사실·결정·에러·절차가 확정되는 시점마다 remember로 즉시 개별 저장하고, 세션 종료 시 reflect는 그 세션의 narrative_summary와 open_questions 정리 및 누락분 최종 집계 용도로만 사용한다. 이 분할 저장 패턴이 중요도 가중, 키워드 정밀도, 링크 품질 모두에서 한 번에 몰아 넣는 reflect보다 유의미하게 우수하다.
@@ -1023,6 +1025,7 @@ fromId 또는 toId가 타 테넌트 소유 파편인 경우 `"Fragment not found
 | errors_resolved | string[] | - | 해결 에러 ('원인: X -> 해결: Y') |
 | new_procedures | string[] | - | 확립된 절차 |
 | open_questions | string[] | - | 미해결 질문 |
+| lessons | object[] | - | 옮겨 쓸 교훈 {cue, lesson, evidence, confidence?}. 셋 중 하나라도 비면 저장하지 않는다. cue는 상황을 묻는 recall text 질의가 교훈을 찾게 하는 보조 검색어가 된다. 근거가 없으면 "NO_ENTRY" |
 | narrative_summary | string | - | 3~5문장 서사 요약. episode 파편으로 저장되어 세션 연속성에 기여. |
 | task_effectiveness | object | - | {outcome, evaluator, evidence, unmet_requirements[], overall_success, tool_highlights[], tool_pain_points[]} |
 | workspace | string | - | 호출자가 넘긴 항목에 적용할 워크스페이스. 세션 종합 그룹은 원래 workspace를 유지한다. 미지정 시 키의 default_workspace, 그것도 없으면 전역(NULL). |
@@ -1052,6 +1055,7 @@ task_effectiveness 세부 필드:
 | types | string[] | - | 기본: preference, error, procedure, decision |
 | sessionId | string | - | 워킹 메모리 로드용 |
 | structured | boolean | - | 계층 구조 반환. 기본 false. |
+| view | string | - | index는 파편마다 첫 문장 60자 목록으로 주입해 같은 예산에 더 많이 담는다. 본문은 id로 recall해서 연다. 기본 full. |
 | includeKeyName | boolean | X | true 시 fragments 각 항목에 key_id·key_name(액세스 키 라벨) 포함. structured=true 트리 응답에는 적용되지 않음. 기본 false |
 | agentId | string | - | 에이전트 ID |
 | workspace | string | - | 지정 workspace + 전역(NULL). 미지정 시 key default를 적용하고, 둘 다 없으면 전역(NULL)만 포함. |

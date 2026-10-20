@@ -5,6 +5,7 @@
  * 작성일: 2026-04-07
  * 수정일: 2026-05-13
  * 수정일: 2026-10-03 (증거 파편 잠금 문장과 갱신 문장 분리 반영)
+ * 수정일: 2026-10-20 (검증 이벤트 자신의 근거만, 근거 종류와 confidence 반영)
  */
 
 import { test, describe, beforeEach, mock } from "node:test";
@@ -25,7 +26,7 @@ mock.module("../../lib/logger.js", {
   namedExports: { logWarn: mock.fn() }
 });
 
-const { CaseRewardBackprop } = await import("../../lib/memory/signals/CaseRewardBackprop.js");
+const { CaseRewardBackprop, CONFOUNDED_MAX } = await import("../../lib/memory/signals/CaseRewardBackprop.js");
 
 describe("CaseRewardBackprop", () => {
   beforeEach(() => {
@@ -34,10 +35,10 @@ describe("CaseRewardBackprop", () => {
     process.env.MEMENTO_CASE_BACKPROP_ENABLED = "true";
   });
 
-  test("verification_passed: atomic UPDATE delta=+0.15, quality_verified=true", async () => {
+  test("verification_passed: 그 이벤트의 supports/produced_by 근거만 delta x confidence로 갱신", async () => {
     mockQuery.mock.mockImplementationOnce(() => Promise.resolve({ rowCount: 2 }));
 
-    await new CaseRewardBackprop().backprop("case-abc", "verification_passed", null);
+    await new CaseRewardBackprop().backprop("evt-abc", "verification_passed", null);
 
     assert.strictEqual(mockQuery.mock.callCount(), 1);
     const [agentId, sql, params, { lock }] = mockQuery.mock.calls[0].arguments;
@@ -45,28 +46,28 @@ describe("CaseRewardBackprop", () => {
     assert.equal(agentId, "system");
     assert.match(sql, /UPDATE.*fragments/i);
     assert.match(sql, /WHERE f\.id = ANY\(\$1::text\[\]\)/);
-    assert.match(sql, /importance\s*\+\s*\$2/i);
+    assert.match(sql, /importance \+ \$3 \* w\.confidence/);
+    assert.match(sql, /\$4::boolean AND w\.confidence > \$5/);
+    assert.match(sql, /fe\.event_id = \$2::uuid/);
     assert.equal(lock.operation, "case_reward");
     assert.match(lock.sql, /FROM.*fragment_evidence/i);
-    assert.match(lock.sql, /ce\.case_id = \$1/);
+    assert.match(lock.sql, /fe\.event_id = \$1/);
+    assert.doesNotMatch(lock.sql, /case_id/, "사례 전체 근거를 대상으로 삼지 않는다");
+    assert.match(lock.sql, /fe\.kind IN \('supports', 'produced_by'\)/, "contradicts 근거는 보상하지 않는다");
     assert.match(lock.sql, /ORDER BY id FOR NO KEY UPDATE$/);
-    /**
-     * keyId=null(마스터 키) 경로는 keyFilter를 생략하고 전체 파편을 대상으로 잠근다.
-     * 따라서 잠금 파라미터는 [caseId] 하나이고 갱신 파라미터는 [delta, isPass]다($1은 잠근 id).
-     * keyId가 지정된 경우만 잠금 문장의 $2로 포함되며, 해당 경로는 다음 테스트 케이스에서 검증한다.
-     */
-    assert.deepStrictEqual(lock.params, ["case-abc"]);
-    assert.deepStrictEqual(params, [0.15, true]);
+    /** keyId=null(마스터 키) 경로는 keyFilter를 생략한다. 갱신 파라미터는 $1(잠근 id) 뒤에 [eventId, delta, isPass, CONFOUNDED_MAX]다. */
+    assert.deepStrictEqual(lock.params, ["evt-abc"]);
+    assert.deepStrictEqual(params, ["evt-abc", 0.15, true, CONFOUNDED_MAX]);
   });
 
-  test("verification_failed: atomic UPDATE delta=-0.10, quality_verified unchanged", async () => {
+  test("verification_failed: delta=-0.10, quality_verified unchanged, key 범위 적용", async () => {
     mockQuery.mock.mockImplementationOnce(() => Promise.resolve({ rowCount: 1 }));
 
-    await new CaseRewardBackprop().backprop("case-xyz", "verification_failed", 42);
+    await new CaseRewardBackprop().backprop("evt-xyz", "verification_failed", 42);
 
     const [, , params, { lock }] = mockQuery.mock.calls[0].arguments;
-    assert.deepStrictEqual(params, [-0.10, false]);
-    assert.deepStrictEqual(lock.params, ["case-xyz", 42]);
+    assert.deepStrictEqual(params, ["evt-xyz", -0.10, false, CONFOUNDED_MAX]);
+    assert.deepStrictEqual(lock.params, ["evt-xyz", 42]);
     assert.match(lock.sql, /key_id = \$2/);
   });
 

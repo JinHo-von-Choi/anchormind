@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+### 업그레이드 주의
+
+- migration-068(`fragment_synthetic_query.origin`), migration-069(`embedding_profile`)을 적용한다. 첫 기동이 현재 임베딩 설정을 `embedding_profile`에 기록한다.
+- `MEMENTO_CASE_BACKPROP_ENABLED=true`인 설치는 검증 보상 대상이 바뀐다. 사례 전체 근거가 아니라 그 검증 이벤트의 근거만 보상받는다.
+
+### Added
+
+- **reflect `lessons`.** 교훈을 `{cue, lesson, evidence, confidence}`로 받는다. 셋 중 하나라도 비면 저장하지 않고, 근거가 없으면 `NO_ENTRY`를 넣는다. 교훈은 procedure 파편으로, cue는 역질의 표의 `origin='cue'` 행으로 저장되어 상황을 묻는 recall `text` 질의가 교훈을 찾는다. cue 행은 본문을 고쳐도 남고, 역질의 백필은 cue 행만 있는 파편도 역질의 생성 대상으로 고른다.
+- **context `view: "index"`.** 파편마다 첫 문장 60자만 담은 목록으로 고르고 주입한다. 토큰 예산을 목록 줄 길이로 세고, 목록으로만 본 파편은 이미 본 파편으로 표시하지 않는다.
+- **context 앵커 토큰 예산.** `MEMENTO_CONTEXT_ANCHOR_TOKEN_BUDGET`(기본 1000). context 응답 `budget.anchor`에 앵커 사용량과 내릴 후보를 싣고, 예산을 넘기는 앵커 지정은 `MEMENTO_ANCHOR_TOKEN_BUDGET_MODE`(warn 기본, reject, off)에 따라 `anchorContextBudgetExceeded` 경고를 싣거나 앵커 지정을 거둔다. memory_stats의 workspace 분포에 앵커 수와 앵커 토큰 합을 싣는다.
+- **다른 작업 공간 fact 표시.** master의 allWorkspaces 조회에서 적용 대상 workspace와 다른 workspace의 fact에 `workspace_warning`을 단다(recall, pack, context).
+- **임베딩 프로파일.** 기동 검사가 저장된 임베딩의 제공자와 모델을 현재 설정과 비교해, 차원이 같은 다른 모델로 바뀌었으면 재임베딩이 필요하다고 경고한다. `node scripts/check-embedding-consistency.js --record`로 프로파일을 갱신한다.
+
+### Fixed
+
+- 검증 보상이 사례의 모든 근거 파편을 검증할 때마다 다시 올려 누적되던 문제. 보상은 그 검증 이벤트에 연결된 `supports`, `produced_by` 근거에만 delta x confidence로 가고, `contradicts` 근거는 보상하지 않는다. confidence 0.5 이하 근거(검증 전 추론 파편이 낸 근거)는 `quality_verified`를 받지 않는다.
+- 사례 이벤트의 근거를 이벤트와 같은 트랜잭션에 기록한다. 검증 보상이 근거 기록보다 먼저 돌 수 있던 경합이 없어진다.
+- 모순과 대체 관계 판정에서 LLM에 넘기는 두 파편의 순서를 쌍 해시로 정한다. id가 작은 쪽이나 새 파편이 늘 A로 가던 순서 편향이 없어진다.
+- reflect 일괄 저장 경로가 파편의 `context_summary`를 저장 관문에 넘긴다.
+- 파편 쓰기 경로의 토큰 수 대체 계산이 `chars/4` 대신 저장과 같은 토크나이저를 쓴다.
+
 ## [6.6.3] - 2026-10-20
 
 ### Fixed

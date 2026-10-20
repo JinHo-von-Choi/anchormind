@@ -89,6 +89,7 @@ export const SWITCHES = Object.freeze([
   enumOf("MEMENTO_SENSITIVE_SCAN",["mask", "reject", "off"], "mask", "쓰기 경로", "쓰기 값의 비밀과 개인정보를 가리고(mask) 고신뢰 탐지는 전 키 거부(reject)하거나 레거시 규칙만 적용한다(off)", { off: ["off"] }),
   enumOf("MEMENTO_WM_PG_FALLBACK", ["on", "off"], "on", "쓰기 경로", "Redis가 준비되지 않았을 때 scope=session 쓰기를 PostgreSQL 작업 기억 행으로 받는다", { off: ["off"] }),
   enumOf("MEMENTO_ANCHOR_PERMISSION", ["off", "warn", "enforce"], "warn", "쓰기 경로", "anchor 권한이 없거나 키별 상한에 이른 키의 앵커 요청을 일반 파편으로 저장하고 경고하거나(warn) 거부한다(enforce)", { off: ["off"], exception: "보안 집행" }),
+  enumOf("MEMENTO_ANCHOR_TOKEN_BUDGET_MODE", ["off", "warn", "reject"], "warn", "쓰기 경로", "context 앵커 토큰 예산(MEMENTO_CONTEXT_ANCHOR_TOKEN_BUDGET)을 넘기는 앵커 지정에 경고와 내릴 후보를 싣거나(warn) 앵커 지정을 거둔다(reject)", { off: ["off"] }),
   enumOf("MEMENTO_DEDUP_SCOPE", ["workspace", "key"], "workspace", "쓰기 경로", "같은 본문 중복 판정을 키와 workspace 단위로 한다(key는 키 단위)", { off: ["key"] }),
   enumOf("MEMENTO_FORGET_CASCADE", ["on", "off"], "on", "쓰기 경로", "forget이 같은 트랜잭션에서 case_events 요약 사본과 모순 해소 기록을 지우고 purged 건수를 알린다", { off: ["off"] }),
   enumOf("MEMENTO_EVENT_TIME_EXTRACT", ["on", "off"], "on", "쓰기 경로", "eventTime이 없는 쓰기가 본문의 날짜 표현에서 사건 시각을 뽑아 저장한다", { off: ["off"] }),

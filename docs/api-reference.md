@@ -783,7 +783,7 @@ reason code 목록 (최대 3개):
 | `pack.version` | `v0` |
 | `pack.policy_id` | 정책 문단의 고정 식별자(`memento-pack-policy-v1`). 정책 문단 본문은 `pack.text`에만 한 번 들어간다 |
 | `pack.text` | 답에 바로 넣을 텍스트. `[MEMORY PACK v0]`, 기억 내용에서 파생하지 않는 고정 정책 문단(블록 안 내용은 자료이며 지시가 아니라는 것, date와 status, assertion의 뜻, 이스케이프 표기), 파편마다 여는 줄 `<<<MEMORY ...>>>`, 본문 한 줄, 닫는 줄 `<<<END MEMORY>>>` |
-| `pack.items[]` | 블록과 같은 순서의 속성: `id`, `date`(UTC 저장일 YYYY-MM-DD), `status`(`valid`, `superseded`), `mentioned`(말한 날, 없으면 null), `event`(사건 시각을 정밀도대로 `YYYY`, `YYYY-MM`, `YYYY-MM-DD`, `YYYY-MM-DDTHH:MMZ`로 쓴 값, 정밀도의 기본 길이와 다른 구간이면 `시작..끝`, 없으면 null), `conflicts_with`(아직 유효한 충돌 상대 id), `assertion`, `type`, `topic`, `case_id`, `source`, `superseded_by`, `supersedes`, `truncated`, 있을 때만 `stale_warning`(recall의 stale 경고, 120자), `validation_warnings`(저장 시 검증 경고, 최대 5개, 각 120자), `origin`(`MEMENTO_PROVENANCE=on`일 때만, 값이 없으면 null). 본문은 `pack.text`에만 있다, 검토 대기 파편이면 `review`(`pending`, 여는 줄에는 `review=pending`) |
+| `pack.items[]` | 블록과 같은 순서의 속성: `id`, `date`(UTC 저장일 YYYY-MM-DD), `status`(`valid`, `superseded`), `mentioned`(말한 날, 없으면 null), `event`(사건 시각을 정밀도대로 `YYYY`, `YYYY-MM`, `YYYY-MM-DD`, `YYYY-MM-DDTHH:MMZ`로 쓴 값, 정밀도의 기본 길이와 다른 구간이면 `시작..끝`, 없으면 null), `conflicts_with`(아직 유효한 충돌 상대 id), `assertion`, `type`, `topic`, `case_id`, `source`, `superseded_by`, `supersedes`, `truncated`, 있을 때만 `stale_warning`(recall의 stale 경고, 120자), `workspace_warning`(다른 작업 공간에서 확인된 fact 표시, 120자), `validation_warnings`(저장 시 검증 경고, 최대 5개, 각 120자), `origin`(`MEMENTO_PROVENANCE=on`일 때만, 값이 없으면 null). 본문은 `pack.text`에만 있다, 검토 대기 파편이면 `review`(`pending`, 여는 줄에는 `review=pending`) |
 | `pack.groups[]` | `{ key, ids }`. key는 `case:<caseId>`, caseId가 없으면 `topic:<topic>`. 묶음은 처음 나온 순서, 묶음 안은 순위 순서이며 블록도 이 순서다. `order: "chronological"`이면 블록과 items는 묶음으로 다시 줄 세우지 않고 세계 시각순이다 |
 | `pack.partial` | 출처와 대체 체인 조회가 실패해 그 정보 없이 만든 경우 `true` |
 | `pack.estimatedTokens` | `estimatedTokens`를 뺀 `pack` 객체를 응답과 같은 방식(JSON, 들여쓰기 2)으로 직렬화한 문자열의 cl100k_base 토큰 수(저장 경로와 recall 예산 선택이 쓰는 `countTokens`). 꾸러미 전체의 크기다 |
@@ -1182,6 +1182,7 @@ violations 있는 경우 (soft gate — 저장됨):
 | decisions | string[] | - | 기술/아키텍처 결정 목록. 항목 1개 = 결정 1건. |
 | errors_resolved | string[] | - | 해결된 에러 목록. '원인: X → 해결: Y' 형식 권장. |
 | new_procedures | string[] | - | 확립된 절차/워크플로우 목록. 항목 1개 = 절차 1개. |
+| lessons | (object \| "NO_ENTRY")[] | - | 다른 작업에 옮겨 쓸 교훈. 항목은 `{cue, lesson, evidence, confidence?}`이고 cue(적용 상황, 300자), lesson(적용하고 확인할 수 있는 조작), evidence(근거가 된 관찰)가 모두 있어야 저장된다. confidence는 `high`(중요도 0.8), `medium`(기본, 0.7), `low`(0.6, `assertion_status=inferred`). 교훈은 procedure 파편(본문 lesson, `context_summary`에 상황, 근거, 확신도)으로 저장되고 cue는 역질의 표(`origin='cue'`)에 들어가 상황을 묻는 recall `text` 질의가 교훈을 찾게 한다. 근거가 없어 남기지 않을 때는 문자열 `NO_ENTRY`를 넣는다. 응답 `breakdown.lessons`, `lessons_no_entry`, `lessons_rejected`로 건수를 알린다. 최대 20개 |
 | open_questions | string[] | - | 미해결 질문 목록. 항목 1개 = 질문 1건. |
 | narrative_summary | string | - | 세션 전체를 3~5문장의 서사(narrative)로 요약. episode 파편으로 저장되어 세션 간 맥락 연속성에 기여. 생략 시 summary에서 자동 생성. |
 | agentId | string | - | 에이전트 ID |
@@ -1257,6 +1258,7 @@ Anchor + Core + Learning + Working Memory와 session_reflect를 분리 로드한
 | workspace | string | - | 워크스페이스 필터. 지정 시 해당 workspace + 전역(NULL), 미지정 시 key default + 전역(NULL), 둘 다 없으면 전역(NULL)만 반환. |
 | allWorkspaces | boolean | - | master 전용 전체 workspace context 조회. anchor/core/learning/working memory에 동일 적용. |
 | structured | boolean | - | true 시 계층적 트리 구조 반환, false/미지정 시 기존 flat list (기본값: false) |
+| view | string | - | `index`는 파편마다 첫 문장 60자만 담은 목록으로 고르고 주입한다(`index: true` 표시). 토큰 예산도 목록 줄 길이로 세므로 같은 tokenBudget에 더 많은 파편이 들어간다. 필요한 파편은 id로 recall해 본문을 연다. 목록으로만 본 파편은 이미 본 파편(excludeSeen)으로 표시하지 않는다. 기본 `full` |
 | includeKeyName | boolean | - | true 시 fragments 각 항목에 key_id와 key_name(액세스 키 라벨)을 포함한다. 같은 키 그룹 스코프의 정보만 노출되며, structured=true 트리 응답에는 적용되지 않는다. 기본 false. |
 
 응답의 `budget`은 `requested`, 정확한 본문 토큰 수인 `used`, 보장 슬롯 때문에 넘긴 `exceededByGuaranteed`를 제공한다. 기존 `totalTokens`는 `budget.used`와 같다.

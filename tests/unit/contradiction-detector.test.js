@@ -313,3 +313,22 @@ describe("ContradictionDetector.detectContradictions 진행 위치", () => {
     assert.equal(hits.length, 2);
   });
 });
+
+describe("judgeOrder", () => {
+  it("같은 쌍은 인자 순서와 무관하게 같은 제시 순서를 낸다", async () => {
+    const { judgeOrder } = await import("../../lib/memory/link/ContradictionDetector.js");
+    const a = { id: "frag-a", content: "A 본문" };
+    const b = { id: "frag-b", content: "B 본문" };
+    assert.deepEqual(judgeOrder(a, b), judgeOrder(b, a));
+  });
+
+  it("쌍에 따라 id가 작은 쪽이 뒤로 가는 경우가 있다", async () => {
+    const { judgeOrder } = await import("../../lib/memory/link/ContradictionDetector.js");
+    let loFirst = 0;
+    for (let i = 0; i < 64; i++) {
+      const [first] = judgeOrder({ id: `p${i}-a`, content: "lo" }, { id: `p${i}-b`, content: "hi" });
+      if (first === "lo") loFirst++;
+    }
+    assert.ok(loFirst > 16 && loFirst < 48, `id가 작은 쪽이 앞인 쌍 ${loFirst}/64`);
+  });
+});

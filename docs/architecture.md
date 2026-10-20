@@ -1116,7 +1116,7 @@ case_id로 파편을 묶어 과거 유사 사례를 구조화 검색하고 인�
 | `decision_committed` | 아키텍처/기술 결정 확정 |
 | `error_observed` | 에러 관측 기록 |
 | `fix_attempted` | 수정 시도 |
-| `verification_passed` | 검증 통과 (→ CaseRewardBackprop 역전파 +0.15) |
+| `verification_passed` | 검증 통과 (→ CaseRewardBackprop가 이 이벤트의 근거에 +0.15 x confidence) |
 | `verification_failed` | 검증 실패 (→ CaseRewardBackprop 역전파 -0.10) |
 | `case_closed` | `amend`가 case_id가 있는 파편의 `resolutionStatus`를 resolved로 바꿀 때(이전 상태가 resolved가 아닐 때) 기록하는 종결 이벤트 |
 
@@ -1153,8 +1153,9 @@ recall 도구에 `caseMode: true`를 전달하면 CaseRecall 경로가 활성화
 
 `lib/memory/signals/CaseRewardBackprop.js`. case_events에 `verification_passed` 또는 `verification_failed` 이벤트가 삽입될 때 fragment_evidence를 통해 증거 파편의 importance를 원자적으로 역전파한다. `MEMENTO_CASE_BACKPROP_ENABLED` 환경변수가 `"true"`가 아니면 호출 즉시 반환된다.
 
-- `verification_passed` → 증거 파편 `importance += 0.15` (상한 1.0 클램프)
-- `verification_failed` → 증거 파편 `importance -= 0.10` (하한 0.0 클램프)
+- 대상은 그 검증 이벤트에 연결된 `supports`, `produced_by` 근거뿐이다. 같은 사례의 다른 이벤트 근거와 `contradicts` 근거는 바꾸지 않는다. 근거는 `CaseEventStore.append`의 `evidence`로 이벤트와 같은 트랜잭션에 기록되고, 보상은 커밋 뒤에 돈다
+- `verification_passed` → 근거 파편 `importance += 0.15 x confidence` (상한 1.0 클램프). confidence가 0.5를 넘는 근거만 `quality_verified=TRUE`
+- `verification_failed` → 근거 파편 `importance -= 0.10 x confidence` (하한 0.0 클램프)
 - PostgreSQL UPDATE … RETURNING으로 단일 쿼리 원자 갱신
 
 ---

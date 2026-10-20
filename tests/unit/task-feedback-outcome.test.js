@@ -23,6 +23,7 @@ mock.module("../../lib/memory/embedding/MorphemeIndex.js", {
 
 mock.module("../../lib/tools/db.js", {
     namedExports: {
+        queryWithAgentVector: async () => ({ rows: [], rowCount: 0 }),
         getPrimaryPool: () => ({
             query: async (sql, params) => {
                 capturedQueries.push({ sql, params });

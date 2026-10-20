@@ -28,6 +28,7 @@ const { exportRecords }                = await import("../../lib/memory/transfer
 const { ImportReport }                 = await import("../../lib/memory/transfer/ImportReport.js");
 const { runImport }                    = await import("../../lib/memory/transfer/ImportRunner.js");
 const { recordsFromLines }             = await import("../../lib/memory/transfer/importRecords.js");
+const { countTokens }                  = await import("../../lib/memory/write/FragmentFactory.js");
 const { loadImportRuntime }            = await import("../../lib/memory/transfer/importRuntime.js");
 const { handleExport, handleImport }   = await import("../../lib/admin/admin-export.js");
 const { requireCapability, masterPrincipal } = await import("../../lib/admin/AdminAuthz.js");
@@ -85,7 +86,7 @@ async function seedSource(client, rows, { keyId = null } = {}) {
        r.resolution_status ?? null, r.assertion_status ?? "observed", r.context_summary ?? null, r.workspace ?? null,
        r.workspace_source ?? "unscoped", r.affect ?? "neutral", keyId,
        r.session_id ?? null, r.quality_verified ?? null, r.quality_rationale ?? null, r.access_count ?? 0,
-       r.utility_score ?? 1.0, Math.ceil(r.content.length / 4), r.idempotency_key ?? null]
+       r.utility_score ?? 1.0, countTokens(r.content), r.idempotency_key ?? null]
     );
   }
 }

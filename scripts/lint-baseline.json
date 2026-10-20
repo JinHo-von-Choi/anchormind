@@ -25,7 +25,7 @@
     "lib/memory/link/ContradictionDetector.js": 35,
     "lib/memory/link/SessionLinker.js": 28,
     "lib/memory/processors/EpisodeContinuityService.js": 25,
-    "lib/memory/processors/MemoryRecaller.js": 37,
+    "lib/memory/processors/MemoryRecaller.js": 35,
     "lib/memory/processors/MemoryRememberer.js": 21,
     "lib/memory/processors/ReflectProcessor.js": 23,
     "lib/memory/processors/SessionActivityTracker.js": 23,
@@ -37,12 +37,12 @@
     "lib/memory/read/HistoryReconstructor.js": 22,
     "lib/memory/write/ConflictResolver.js": 23,
     "lib/memory/write/FragmentFactory.js": 26,
-    "lib/memory/write/FragmentWriter.js": 66,
+    "lib/memory/write/FragmentWriter.js": 64,
     "lib/memory/write/RememberPostProcessor.js": 24,
     "lib/oauth.js": 66,
     "lib/sessions.js": 31,
     "lib/symbolic/rules/v1/proactive-gate.js": 47,
-    "lib/tools/memory.js": 66,
+    "lib/tools/memory.js": 64,
     "lib/updater/update-executor.js": 28,
     "server.js": 53
   },
@@ -63,9 +63,8 @@
   },
   "max-lines": {
     "lib/admin/admin-memory.js": 1022,
-    "lib/memory/consolidate/MemoryConsolidator.js": 835,
     "lib/memory/read/FragmentSearch.js": 844,
-    "lib/tools/memory-schemas.js": 1311
+    "lib/tools/memory-schemas.js": 1267
   },
   "max-depth": {
     "lib/llm/util/retry-hints.js": 6,
@@ -100,7 +99,7 @@
     "lib/memory/link/ContradictionDetector.js": 1,
     "lib/memory/link/GraphLinker.js": 2,
     "lib/memory/processors/MemoryRecaller.js": 2,
-    "lib/memory/processors/MemoryRememberer.js": 7,
+    "lib/memory/processors/MemoryRememberer.js": 4,
     "lib/memory/processors/ReflectProcessor.js": 2,
     "lib/memory/processors/SessionActivityTracker.js": 2,
     "lib/memory/read/ContextBuilder.js": 1,

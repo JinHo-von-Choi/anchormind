@@ -4,6 +4,7 @@
  * 작성자: 최진호
  * 작성일: 2026-04-18
  * 수정일: 2026-04-29 (v3.2.0: morpheme_indexed=false Consistency Gate 카운트 추가)
+ * 수정일: 2026-10-20 (임베딩 프로파일: 차원이 같은 다른 모델로 바뀐 것을 경고)
  *
  * 목적: EMBEDDING_DIMENSIONS 설정값과 DB의 실제 벡터 차원이 일치하는지 확인한다.
  *       불일치 시 server.js 기동 전에 명확한 가이드를 출력하고 false를 반환한다.
@@ -13,6 +14,7 @@
  * 관련 문서: docs/INSTALL.md#기동-후-검증-체크리스트, docs/operations/maintenance.md
  */
 
+import { pathToFileURL }                                      from "node:url";
 import { getPrimaryPool }                                     from "../lib/tools/db.js";
 import { EMBEDDING_DIMENSIONS, EMBEDDING_PROVIDER, EMBEDDING_MODEL } from "../lib/config.js";
 import { getSchedulerRegistry } from "../lib/scheduler-registry.js";
@@ -76,6 +78,8 @@ export async function checkEmbeddingConsistency() {
     return false;
   }
 
+  await checkEmbeddingProfile(pool);
+
   try {
     const { rows } = await pool.query(`
       SELECT count(*)::int AS cnt
@@ -98,4 +102,74 @@ export async function checkEmbeddingConsistency() {
   }
 
   return true;
+}
+
+/** 현재 임베딩 설정 */
+export function currentEmbeddingProfile() {
+  return { provider: String(EMBEDDING_PROVIDER ?? ""), model: String(EMBEDDING_MODEL ?? ""), dimensions: EMBEDDING_DIMENSIONS };
+}
+
+/**
+ * 저장된 프로파일과 현재 설정의 차이. 차원 차이는 위 검사가 기동을 막으므로 여기서는 제공자와 모델만 본다.
+ *
+ * @param {{provider: string, model: string, dimensions: number}|null} stored
+ * @param {{provider: string, model: string, dimensions: number}} current
+ * @returns {"record"|"same"|"model_changed"}
+ */
+export function compareEmbeddingProfile(stored, current) {
+  if (!stored) return "record";
+  if (stored.provider === current.provider && stored.model === current.model) return "same";
+  return "model_changed";
+}
+
+/**
+ * 임베딩 프로파일을 확인한다. 행이 없으면 현재 설정으로 채우고, 제공자나 모델이 바뀌었으면 경고만 한다.
+ * 기동을 막지 않는다. 표가 없으면(마이그레이션 전) 건너뛴다.
+ *
+ * @param {import("pg").Pool} pool
+ * @param {{record?: boolean}} [opts] record=true이면 현재 설정으로 덮어쓴다(재임베딩을 마친 뒤)
+ * @returns {Promise<"record"|"same"|"model_changed"|"skipped">}
+ */
+export async function checkEmbeddingProfile(pool, { record = false } = {}) {
+  const current = currentEmbeddingProfile();
+  try {
+    const { rows } = await pool.query(
+      "SELECT provider, model, dimensions FROM agent_memory.embedding_profile WHERE id = 1");
+    const verdict = record ? "record" : compareEmbeddingProfile(rows[0] ?? null, current);
+    if (verdict === "record") {
+      await pool.query(
+        `INSERT INTO agent_memory.embedding_profile (id, provider, model, dimensions, recorded_at)
+         VALUES (1, $1, $2, $3, NOW())
+         ON CONFLICT (id) DO UPDATE
+           SET provider = EXCLUDED.provider, model = EXCLUDED.model,
+               dimensions = EXCLUDED.dimensions, recorded_at = NOW()`,
+        [current.provider, current.model, current.dimensions]);
+    } else if (verdict === "model_changed") {
+      const stored = rows[0];
+      console.warn(`[embedding-consistency] 저장된 임베딩은 ${stored.provider}/${stored.model}(${stored.dimensions}d)로 만들어졌고 ` +
+        `현재 설정은 ${current.provider}/${current.model}(${current.dimensions}d)이다. 차원이 같아도 의미 공간이 달라 검색 품질이 떨어진다.`);
+      console.warn("[embedding-consistency] 재임베딩이 필요하다: 기존 벡터를 비우고 node scripts/backfill-embeddings.js로 다시 채운 뒤 " +
+        "node scripts/check-embedding-consistency.js --record로 프로파일을 갱신한다.");
+    }
+    return verdict;
+  } catch (err) {
+    if (err?.code === "42P01") return "skipped";
+    console.warn(`[embedding-consistency] 임베딩 프로파일 확인 실패: ${err.message}`);
+    return "skipped";
+  }
+}
+
+/** 직접 실행: --record이면 현재 설정을 프로파일로 기록하고, 아니면 전체 검사를 돌린다. */
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const pool = getPrimaryPool();
+  try {
+    if (process.argv.includes("--record")) {
+      const verdict = await checkEmbeddingProfile(pool, { record: true });
+      console.log(`[embedding-consistency] embedding_profile: ${verdict}`);
+    } else {
+      process.exitCode = (await checkEmbeddingConsistency()) ? 0 : 1;
+    }
+  } finally {
+    await pool.end();
+  }
 }

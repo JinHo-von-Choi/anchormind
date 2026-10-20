@@ -57,6 +57,7 @@ const ALLOWED = {
   "memory/processors/EpisodeContinuityService.js": 1,
   "memory/processors/MemoryRecaller.js": 1,
   "memory/read/CaseRecall.js": 2,
+  "memory/read/AnchorBudgetLoader.js": 1, // 앵커 지정 판정(WriteGate anchor 단계)이 쓰는 같은 키, 같은 workspace의 주입 상위 앵커 조회. WriteGate는 DB를 가져오지 않으므로 서버 의존성(serverAnchorDeps)으로 주입되는 한 문장이다
   "memory/CaseEventStore.js": 1,
   "memory/read/ContextBuilder.js": 1,
   "memory/read/FragmentReader.js": 18, // recall 예산 선택 토큰, 모순 감사 등급, Hot Cache 본문·검토 버전 재검증

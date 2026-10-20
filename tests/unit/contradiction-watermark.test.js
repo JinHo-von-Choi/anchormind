@@ -92,7 +92,9 @@ const { ContradictionDetector, MAX_FRAG_FAILURES } = await import("../../lib/mem
 function makeDetector(failIds = new Set()) {
   const checked  = [];
   const detector = new ContradictionDetector({ createLink: async () => {} });
-  detector.askGeminiContradiction = async (content) => {
+  detector.askGeminiContradiction = async (contentA, contentB) => {
+    /** 판정 쌍의 제시 순서는 쌍 해시로 정해지므로 검사 대상 표지(#id)가 든 쪽을 찾는다. */
+    const content = [contentA, contentB].find((c) => String(c).includes("#"));
     const id = content.split("#")[1];
     checked.push(id);
     if (failIds.has(id)) throw new Error(`probe failure ${id}`);

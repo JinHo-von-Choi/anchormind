@@ -3462,12 +3462,12 @@
       "severity": "MEDIUM"
     },
     {
-      "fingerprint": "a37d6ef4407489661d8d",
-      "loose": "849e5a31f0c052702ceb",
+      "fingerprint": "2f31ef9e1a0b3071db14",
+      "loose": "9cb75a2cfba01799667e",
       "rule_id": "IL-102",
       "rule_version": 1,
       "path": "lib/memory/embedding/SyntheticQueryWorker.js",
-      "line": 175,
+      "line": 95,
       "severity": "MEDIUM"
     },
     {
