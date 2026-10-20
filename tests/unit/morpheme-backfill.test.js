@@ -50,3 +50,20 @@ test("대상 파편이 없으면 0을 반환하고 부작용이 없다", async (
   assert.equal(count, 0);
   assert.equal(pool.updated.length, 0);
 });
+
+test("풀이 닫히는 중이면 남은 파편을 처리하지 않고 멈춘다", async () => {
+  const pool = makeMockPool([
+    { id: "frag-1", content: "nginx 재시작" },
+    { id: "frag-2", content: "포트 변경" },
+    { id: "frag-3", content: "배포 절차" }
+  ]);
+  let tokenized = 0;
+  const closing = {
+    async tokenize(text) { tokenized++; pool.ending = true; return text.split(/\s+/); },
+    async getOrRegisterEmbeddings() { throw new Error("Cannot use a pool after calling end on the pool"); }
+  };
+  const count = await processMorphemeBackfill({ pool, morphemeIndex: closing, batchSize: 500 });
+  assert.equal(count, 0);
+  assert.equal(tokenized, 1, "첫 파편에서 풀 종료를 본 뒤 나머지는 건드리지 않는다");
+  assert.equal(pool.updated.length, 0);
+});

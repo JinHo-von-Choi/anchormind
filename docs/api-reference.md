@@ -654,7 +654,7 @@ Agent 조회는 생략 시 `default`, 지정 시 해당 agent와 `default`를 �
 
 `affect` 필드: 해당 파편에 태그된 정서 상태. 저장 시 지정한 값과 동일하게 반환된다.
 
-`workspace_warning` 필드: master의 `allWorkspaces=true` 조회에서, 적용 대상 workspace(요청의 `workspace`, 없으면 키 기본값)와 다른 workspace에 저장된 fact에만 붙는다. 그 workspace에서 확인한 값이니 지금 작업에 쓰기 전에 다시 확인하라는 표시다. procedure, decision 같은 다른 유형과 전역(NULL) fact에는 붙지 않는다. `fields`를 지정하면 이 필드는 빠진다.
+`workspace_warning` 필드: master의 `allWorkspaces=true` 조회에서, 적용 대상 workspace(요청의 `workspace`, 없으면 키 기본값)와 다른 workspace에 저장된 fact에만 붙는다. 그 workspace에서 확인한 값이니 지금 작업에 쓰기 전에 다시 확인하라는 표시다. procedure, decision 같은 다른 유형과 전역(NULL) fact에는 붙지 않는다. `stale_warning`과 함께 `fields` 지정과 관계없이 실린다.
 
 `stitched_context` 필드: `includeContext=true`일 때 전후 시간 맥락과 인과 링크를 하나의 서사 구조로 묶어 반환한다. 조합할 재료가 실제로 있는 상위 3건에만 실리며, 응답 토큰 예산의 40%를 넘으면 전후 각 1건으로 축약된다.
 

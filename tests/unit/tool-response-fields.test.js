@@ -142,6 +142,23 @@ describe("recall 응답", () => {
       restoreManager();
     }
   });
+
+  test("stale_warning과 workspace_warning은 fields 지정과 관계없이 담는다", async () => {
+    const warned = {
+      ...FRAGMENT,
+      metadata: { stale: true, warning: "[STALE_WARNING] 오래됨", workspace_warning: "[WORKSPACE_SCOPE] 다른 작업 공간" }
+    };
+    manager.recall = async () => ({ fragments: [warned], total: 1, _searchEventId: "se-1" });
+    try {
+      for (const args of [{ keywords: ["a"] }, { keywords: ["a"], fields: ["id", "content"] }]) {
+        const res = await memory.tool_recall(args);
+        assert.equal(res.fragments[0].stale_warning, "[STALE_WARNING] 오래됨");
+        assert.equal(res.fragments[0].workspace_warning, "[WORKSPACE_SCOPE] 다른 작업 공간");
+      }
+    } finally {
+      restoreManager();
+    }
+  });
 });
 
 describe("context 응답", () => {

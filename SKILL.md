@@ -680,7 +680,7 @@ recall은 연결 파편을 포함한 후보에 최종 점수를 매긴 뒤 token
 - similarity 0.7 이상: 높은 관련성
 - similarity 0.4~0.7: 참고 수준
 - stale_warning: 파편이 오래되었거나 접근 빈도가 낮음. 내용을 재확인하고 필요시 amend나 supersedes로 갱신.
-- workspace_warning: master의 allWorkspaces 조회에서 다른 workspace에 저장된 fact에만 붙는다. 그 workspace에서 확인한 값이므로 지금 작업에 쓰기 전에 다시 확인한다. `fields`를 지정하면 빠진다.
+- workspace_warning: master의 allWorkspaces 조회에서 다른 workspace에 저장된 fact에만 붙는다. 그 workspace에서 확인한 값이므로 지금 작업에 쓰기 전에 다시 확인한다. stale_warning과 함께 `fields` 지정과 관계없이 실린다.
 - searchPath: 어떤 검색 경로가 사용되었는지 확인. L1만 사용됐으면 키워드가 정확히 매칭된 것.
 
 ## 에피소드 기억 활용

@@ -657,7 +657,7 @@ Each returned fragment includes a `key_id` field. When called with a master key,
 
 `affect` field: The emotional state tag attached to the fragment at storage time, returned as stored.
 
-`workspace_warning` field: Set only on a master `allWorkspaces=true` read, on facts stored in a workspace other than the target workspace (the request `workspace`, otherwise the key default). It means the value was confirmed in that other workspace and should be checked again before use. Other types such as procedure and decision, and global (NULL) facts, never carry it. The field is dropped when `fields` is given.
+`workspace_warning` field: Set only on a master `allWorkspaces=true` read, on facts stored in a workspace other than the target workspace (the request `workspace`, otherwise the key default). It means the value was confirmed in that other workspace and should be checked again before use. Other types such as procedure and decision, and global (NULL) facts, never carry it. Like `stale_warning`, it is returned whether or not `fields` is given.
 
 `_meta`: A metadata wrapper at the top level of recall/context responses.
 
