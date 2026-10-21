@@ -24,7 +24,7 @@ mock.module("../../lib/memory/processors/EpisodeContinuityService.js", {
 });
 
 const { ReflectProcessor } = await import("../../lib/memory/processors/ReflectProcessor.js");
-const { normalizeLessons, lessonContextSummary, registerLessonCues, NO_ENTRY } =
+const { normalizeLessons, lessonContextSummary, registerLessonCues, NO_ENTRY, CUE_RETRY_DELAYS_MS } =
   await import("../../lib/memory/write/LessonCue.js");
 const { __setRedisClientForTest } = await import("../../lib/redis.js");
 __setRedisClientForTest({
@@ -177,8 +177,28 @@ describe("registerLessonCues", () => {
     const closed = await registerLessonCues([{ fragmentId: "f", cue: "c" }],
       { embed: async () => [1], load: async () => null, store: async () => true });
     assert.equal(closed, 0);
+    const store  = mock.fn(async () => { throw new Error("db down"); });
+    const waits  = [];
     const failed = await registerLessonCues([{ fragmentId: "f", cue: "c" }],
-      { embed: async () => [1], load: async () => ({ id: "f" }), store: async () => { throw new Error("db down"); } });
+      { embed: async () => [1], load: async () => ({ id: "f" }), store, sleep: async (ms) => { waits.push(ms); } });
     assert.equal(failed, 0);
+    assert.equal(store.mock.callCount(), CUE_RETRY_DELAYS_MS.length + 1, "예외로 끝난 시도는 정해진 횟수만큼 다시 한다");
+    assert.deepEqual(waits, [...CUE_RETRY_DELAYS_MS]);
+  });
+
+  it("일시적 실패 뒤 재시도로 등록된다", async () => {
+    let calls = 0;
+    const n = await registerLessonCues([{ fragmentId: "f", cue: "c" }], {
+      embed: async () => [1], load: async () => ({ id: "f" }), sleep: async () => {},
+      store: async () => { calls++; if (calls === 1) throw new Error("canceling statement due to statement timeout"); return true; }
+    });
+    assert.equal(n, 1);
+    assert.equal(calls, 2);
+  });
+
+  it("파편이 없으면 다시 하지 않는다", async () => {
+    const load = mock.fn(async () => null);
+    await registerLessonCues([{ fragmentId: "f", cue: "c" }], { embed: async () => [1], load, store: async () => true, sleep: async () => {} });
+    assert.equal(load.mock.callCount(), 1);
   });
 });

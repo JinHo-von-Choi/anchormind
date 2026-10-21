@@ -63,11 +63,10 @@ describe("ContradictionDetector 외부 전송 문맥", () => {
   beforeEach(() => { llmCalls.length = 0; });
 
   it("대체 관계 판정은 쌍의 키와 두 workspace를 싣는다", async () => {
-    dbImpl  = async () => ({ rows: [{
-      id_a: "a", content_a: "x", created_a: "2026-01-01",
-      id_b: "b", content_b: "y", created_b: "2026-01-02",
-      key_id: "k9", workspace_a: "wa", workspace_b: "wb", similarity: 0.8
-    }] });
+    dbImpl  = async (_agent, sql) => /watermark_at/.test(sql)
+      ? { rows: [{ id: "a", content: "x", topic: "t", type: "fact", key_id: "k9", workspace: "wa", embedding: "[1]",
+                   stated_at: "2026-01-01", created_at: new Date("2026-01-01"), watermark_at: "2026-01-01T00:00:00.000000Z" }] }
+      : { rows: [{ id: "b", content: "y", stated_at: "2026-01-02", workspace: "wb", similarity: "0.8" }] };
     llmImpl = async () => ({ supersedes: false, reasoning: "r" });
     await new ContradictionDetector({ createLink: async () => {} }).detectSupersessions();
     assert.equal(llmCalls.length, 1);
