@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [6.7.0] - 2026-10-22
+
 ### 업그레이드 주의
 
 - migration-068(`fragment_synthetic_query.origin`), migration-069(`embedding_profile`)을 적용한다. 첫 기동이 현재 임베딩 설정을 `embedding_profile`에 기록한다.
