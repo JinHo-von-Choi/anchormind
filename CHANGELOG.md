@@ -30,6 +30,7 @@
 
 - `oneOf` 인자 검증 오류가 값과 타입이 맞는 형식의 위반 사유를 함께 싣는다. 예: `lessons[0]: matches none of the allowed forms (got object): lessons[0].confidence: must be one of high|medium|low`. 판정은 바뀌지 않는다.
 - 종료 시 reflect가 응답 뒤에 남긴 형태소·cue 등록도 기다린다. 세션 auto-reflect가 끝난 뒤 한 번 더 기다린 다음 연결을 닫는다.
+- 교훈 cue 등록이 파편을 찾지 못하거나, 임베딩을 얻지 못하거나, 저장 직전에 본문이 바뀌어 건너뛰면 경고를 남긴다.
 - 검증 보상이 사례의 모든 근거 파편을 검증할 때마다 다시 올려 누적되던 문제. 보상은 그 검증 이벤트에 연결된 `supports`, `produced_by` 근거에만 delta x confidence로 가고, `contradicts` 근거는 보상하지 않는다. confidence 0.5 이하 근거(검증 전 추론 파편이 낸 근거)는 `quality_verified`를 받지 않는다.
 - 사례 이벤트의 근거를 이벤트와 같은 트랜잭션에 기록한다. 검증 보상이 근거 기록보다 먼저 돌 수 있던 경합이 없어진다.
 - 모순과 대체 관계 판정에서 LLM에 넘기는 두 파편의 순서를 쌍 해시로 정한다. id가 작은 쪽이나 새 파편이 늘 A로 가던 순서 편향이 없어진다.
