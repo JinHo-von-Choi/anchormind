@@ -42,7 +42,6 @@ const { ContradictionDetector, CONTRADICTION_AUDIT_TOPIC } =
   await import("../../lib/memory/link/ContradictionDetector.js");
 const { linkEpisodeMilestone, _lastEventCacheForTest } =
   await import("../../lib/memory/processors/EpisodeContinuityService.js");
-const { MemoryConsolidator }   = await import("../../lib/memory/consolidate/MemoryConsolidator.js");
 
 let links  = [];
 let writes = [];
@@ -198,17 +197,17 @@ describe("ContradictionDetector 모순 해소", () => {
 });
 
 describe("semantic_dedup 후보는 같은 key·workspace로 제한된다", () => {
-  it("KNN 조회에 key_id와 workspace 조건이 있고 폐기 시 superseded_by를 남긴다", () => {
-    const src = MemoryConsolidator.prototype._semanticDedup.toString();
-    assert.match(src, /keyScopeNullable\(knnParams, "key_id", frag\.key_id/);
-    assert.match(src, /workspace IS NOT DISTINCT FROM \$4/);
+  it("묶음 조회에 key_id와 workspace 조건이 있고 폐기 시 superseded_by를 남긴다", () => {
+    const src = readFileSync(join(process.cwd(), "lib/memory/consolidate/SemanticDedup.js"), "utf8");
+    assert.match(src, /keyScopeNullable\(params, "key_id", keyId\)/);
+    assert.match(src, /workspace IS NOT DISTINCT FROM \$2/);
     assert.match(src, /VALUES \(\$1, \$2, 'superseded_by', 1\)[\s\S]{0,200}\[oldId, keepId\]/);
   });
 });
 
 describe("링크 이전 SQL", () => {
   it("semantic_dedup 링크 이전은 NOT EXISTS로 충돌을 거른다", () => {
-    const src = MemoryConsolidator.prototype._semanticDedup.toString();
+    const src = readFileSync(join(process.cwd(), "lib/memory/consolidate/SemanticDedup.js"), "utf8");
     assert.match(src, /SET from_id = \$1[\s\S]*?NOT EXISTS/);
     assert.match(src, /SET to_id = \$1[\s\S]*?NOT EXISTS/);
   });

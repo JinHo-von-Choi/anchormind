@@ -286,7 +286,9 @@ export const MEMORY_CONFIG = {
     maxAgeDays       : 30,
     maxImportance    : 0.55,
     keepPerType      : 5,
-    maxDeletePerCycle: 30
+    maxDeletePerCycle: 30,
+    /** reflect 처리 시간이 이 값(ms) 이상이거나 예외로 끝나면 단계별 소요 시간을 로그에 남긴다. 0이면 끈다. */
+    slowLogMs        : envInt("MEMENTO_REFLECT_SLOW_LOG_MS", 5000, 0, 600000)
   },
   /** 시맨틱 검색 설정. minSimilarity는 SearchParamAdaptor가 적응형으로 조정한다.
    *  0.40: 12쿼리 골드셋 실측에서 상위5 유용건 최대(0.5는 자유 회상 질의 침묵, 0.35는 노이즈가 이득 상쇄). */
@@ -321,6 +323,8 @@ export const MEMORY_CONFIG = {
   dedup: {
     batchSize    : Number(process.env.DEDUP_BATCH_SIZE     || 100),
     minFragments : Number(process.env.DEDUP_MIN_FRAGMENTS  || 5),
+    /** semantic_dedup 단계의 시간 상한(ms). 넘으면 남은 topic은 다음 주기에 처음부터 다시 본다. */
+    timeBudgetMs : envInt("DEDUP_TIME_BUDGET_MS", 1200000, 60000, 86400000),
   },
   /** 기억 압축 정책 (consolidate 사이클) */
   compress: {
@@ -353,8 +357,8 @@ export const MEMORY_CONFIG = {
     // topic/type 일치 요구 — 운영 데이터 검토 후 활성화
     requireSameTopicOrType: false
   },
-  /** consolidate 주기 (ms). 기본 6시간 — scheduler.js가 본 값을 참조한다. */
-  consolidateIntervalMs: Number(process.env.CONSOLIDATE_INTERVAL_MS || 21600000),
+  /** consolidate 주기 (ms). 기본 8시간(하루 3회) — scheduler.js가 본 값을 참조한다. */
+  consolidateIntervalMs: Number(process.env.CONSOLIDATE_INTERVAL_MS || 28800000),
   /**
    * consolidate 실행 조건 및 위험 stage 활성화 설정
    *

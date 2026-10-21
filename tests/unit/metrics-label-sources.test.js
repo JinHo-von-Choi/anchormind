@@ -100,7 +100,7 @@ const REVIEWED = new Map([
   ["lib/llm/EgressGate.js|inc|skipReason",                                        "decideEgress의 거부 사유 상수(local_only, not_approved)"],
   ["lib/memory/consolidate/ConsolidatorGC.js|recordSplitSkip|reason",             "splitLongFragments 안의 고정 사유 문자열"],
   ["lib/memory/consolidate/ConsolidatorGC.js|recordSplitStepFailure|step",       "_recordSplitStepFailure 호출부의 고정 단계 문자열"],
-  ["lib/memory/consolidate/MemoryConsolidator.js|recordGateBlock|verdict.reason", "consolidate-gate 판정 사유 상수"],
+  ["lib/memory/consolidate/SemanticDedup.js|recordGateBlock|verdict.reason",     "consolidate-gate 판정 사유 상수"],
   ["lib/memory/write/WriteGate.js|recordWarning|`policy.${v.rule}`",              "PolicyRules 규칙 이름, workspace 판정 규칙 이름, 민감 정보 규칙 표의 이름"],
   ["lib/memory/write/WriteGate.js|recordWarning|v.severity || \"low\"",             "PolicyRules 심각도 상수"],
   ["lib/memory/write/WriteGate.js|recordGateBlock|rule",                          "PolicyRules 규칙 이름, workspace 판정 규칙 이름, 민감 정보 규칙 표의 이름, hard gate 조회 실패 상수"],

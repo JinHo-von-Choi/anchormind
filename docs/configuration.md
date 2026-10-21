@@ -106,7 +106,7 @@
 | MEMENTO_DECAY_MIN_DELTA | 0 | 감쇠량이 이 값보다 작은 행을 건너뛴다. 마지막 감쇠 후 24시간이 지난 행은 항상 갱신(하한 0.05에 닿은 행은 이 상한 때문에 대략 네 번에 한 번 다시 쓰인다). 숫자가 아니거나 음수인 값은 0으로 처리하고 경고를 남기며 1을 넘는 값은 1로 제한한다. `MEMENTO_SCORE_UPDATE_BATCH`가 0이면 적용하지 않는다 |
 | MEMENTO_UTILITY_MIN_DELTA | 0 | 저장값과의 차이가 이 값 이하인 utility_score를 다시 쓰지 않는다. 숫자가 아니거나 음수인 값은 0으로 처리하고 경고를 남기며 1을 넘는 값은 1로 제한한다. `MEMENTO_SCORE_UPDATE_BATCH`가 0이면 적용하지 않는다 |
 | MEMENTO_GC_THROUGHPUT | on | 만료 파편 정리의 처리량 스위치. `on`이면 정리 단계 `expired_delete`가 후보를 100건 청크로 반복해 주기당 삭제 상한(`MEMENTO_GC_MAX_DELETE_PER_CYCLE`), 시간 예산(`MEMENTO_GC_TIME_BUDGET_MS`), 후보 소진 중 먼저 닿는 것에서 멈춘다. 청크마다 별도 트랜잭션에서 대상 행을 id 오름차순으로 잠근 뒤 잠근 행만 지우며(잠금 대기 상한 3초, 교착과 잠금 대기 초과는 `MEMENTO_DB_LOCK_RETRY_MAX`까지 재실행), 청크가 실패하면 그때까지 지운 수를 돌려주고 다음 주기가 이어간다. 다른 정리 주기나 `forget`이 청크 도중에 대상 행을 먼저 지우면 그 청크가 요청보다 적게 지워 이번 주기가 일찍 끝날 수 있다(안전하며 다음 주기가 이어간다). 청크의 잠금 대기 상한은 `fragment_links`와 버전 행의 연쇄 삭제에도 적용되고, 재시도(`MEMENTO_DB_LOCK_RETRY_MAX`)까지 겹치면 청크 하나가 시간 예산을 넘어 약 12초 더 기다릴 수 있다. `off`이면 주기당 `gc.maxDeletePerCycle`(50)건을 한 문장으로 지운다. 호출 시점에 읽는다 |
-| MEMENTO_GC_MAX_DELETE_PER_CYCLE | 4000 | 만료 파편 정리가 한 주기(`CONSOLIDATE_INTERVAL_MS`, 기본 6시간)에 지우는 최대 건수. 기본값은 30일 일평균 파편 유입(약 1900건)의 두 배 이상이다. 100 이상 100000 이하의 정수만 받고 그 밖은 기본값이다. `MEMENTO_GC_THROUGHPUT=off`이면 쓰지 않는다. 호출 시점에 읽는다 |
+| MEMENTO_GC_MAX_DELETE_PER_CYCLE | 4000 | 만료 파편 정리가 한 주기(`CONSOLIDATE_INTERVAL_MS`, 기본 8시간)에 지우는 최대 건수. 기본값은 30일 일평균 파편 유입(약 1900건)의 두 배 이상이다. 100 이상 100000 이하의 정수만 받고 그 밖은 기본값이다. `MEMENTO_GC_THROUGHPUT=off`이면 쓰지 않는다. 호출 시점에 읽는다 |
 | MEMENTO_GC_TIME_BUDGET_MS | 60000 | 만료 파편 정리 한 주기에서 새 청크를 시작할 수 있는 시간(ms). 청크 하나는 항상 끝까지 실행한다. 1000 이상 600000 이하의 정수만 받고 그 밖은 기본값이다. `MEMENTO_GC_THROUGHPUT=off`이면 쓰지 않는다. 정리 주기가 끝날 때 남은 만료 후보 수(상한 100000에서 세기를 멈추는 근사값)를 `memento_gc_backlog` 게이지에 기록한다. 게이지는 동시에 도는 정리 주기 사이에서 마지막으로 쓴 값이 남고 첫 정리 주기 전에는 0이다. 호출 시점에 읽는다 |
 | MEMENTO_RUNTIME | (없음) | `docker`면 Docker 설치로 판정한다 |
 | GITHUB_TOKEN | (없음) | 업데이트 확인 시 GitHub API 인증 토큰 |
@@ -120,7 +120,7 @@
 | RATE_LIMIT_MAX_REQUESTS | 120 | 윈도우 내 IP당 최대 요청 수 |
 | RATE_LIMIT_PER_IP | 30 | IP당 분당 요청 한도 (미인증 요청) |
 | RATE_LIMIT_PER_KEY | 100 | API 키당 분당 요청 한도 (인증된 요청) |
-| CONSOLIDATE_INTERVAL_MS | 21600000 | 자동 유지보수(consolidate) 실행 간격 (ms). 기본 6시간 |
+| CONSOLIDATE_INTERVAL_MS | 28800000 | 자동 유지보수(consolidate) 실행 간격 (ms). 기본 8시간(하루 3회) |
 | MEMENTO_AUTO_PROMOTE_ANCHORS | true | `false`이면 consolidate의 자동 앵커 승격 stage만 건너뜀. 기존 앵커와 다른 stage는 불변 |
 | EVALUATOR_MAX_QUEUE | 100 | MemoryEvaluator 큐 크기 상한 (초과 시 오래된 작업 드롭) |
 | OAUTH_TRUSTED_ORIGINS | (없음) | OAuth redirect_uri 신뢰 도메인 추가 목록 (쉼표 구분, origin 단위). 기본 신뢰 도메인(claude.ai, chatgpt.com, platform.openai.com, copilot.microsoft.com, gemini.google.com)에 추가로 허용할 origin만 지정 |
@@ -142,6 +142,8 @@
 | FRAGMENT_DEFAULT_LIMIT | 5000 | 1 이상의 정수. 값을 읽어 기동 시 검사하지만 처리에는 쓰이지 않는다. API 키 생성의 기본 할당량은 `DEFAULT_FRAGMENT_LIMIT`이 정한다 |
 | DEDUP_BATCH_SIZE | 100 | 시맨틱 중복 제거 배치 크기 |
 | DEDUP_MIN_FRAGMENTS | 5 | dedup 최소 파편 수. 이 수 미만이면 중복 제거를 건너뛴다 |
+| DEDUP_TIME_BUDGET_MS | 1200000 | semantic_dedup 단계의 시간 상한(ms, 60000~86400000). 넘으면 남은 topic은 다음 주기에 처음부터 본다 |
+| MEMENTO_REFLECT_SLOW_LOG_MS | 5000 | reflect 처리 시간이 이 값(ms) 이상이거나 실패하면 단계별 소요 시간(sessionGroups, persist, taskFeedback, autoLink, queueEmbeddings, episodes, evict)을 info 로그 한 줄로 남긴다. 0이면 끈다 |
 | COMPRESS_AGE_DAYS | 30 | 기억 압축 대상 비활성 일수 |
 | COMPRESS_MIN_GROUP | 3 | 압축 그룹 최소 크기. 이 수 미만이면 압축하지 않는다 |
 | MEMENTO_RERANKER_ENABLED | false | in-process 교차 인코더 리랭커 활성화. 기본은 비활성이다. 기본 모델이 영어 전용이라 한국어 코퍼스에서는 끄는 쪽이 낫다. 절제 실험 기준 Recall@1 74%에서 85%, MRR 0.827에서 0.890, p50 561ms에서 126ms로 개선된다. `RERANKER_URL`로 지정한 외부 리랭커는 이 스위치와 무관하게 동작한다 |
@@ -806,7 +808,8 @@ export const MEMORY_CONFIG = {
     maxAgeDays       : 30,       // session_reflect 파편 삭제 기준 (일)
     maxImportance    : 0.55,     // 이 값 미만이면 삭제 대상
     keepPerType      : 5,        // type별 최신 N개 보존
-    maxDeletePerCycle: 30        // 1회 최대 삭제 건수
+    maxDeletePerCycle: 30,       // 1회 최대 삭제 건수
+    slowLogMs        : 5000      // MEMENTO_REFLECT_SLOW_LOG_MS
   },
   semanticSearch: {
     minSimilarity  : 0.4,        // L3 pgvector 검색 최소 유사도 (기본 0.4)
@@ -852,7 +855,7 @@ MemoryConsolidator 자동 실행 전 충분한 변경 누적 여부를 평가하
 | `fragmentsSinceLastRunMin` | `30` | 마지막 실행 이후 새 파편 수가 이 수 이상이면 조건 충족 |
 | `mode` | `"any"` | `"any"`: 3개 조건 중 1개 이상 충족 시 실행. `"all"`: 3개 모두 충족 시 실행. `"off"`: 게이트 비활성화(항상 실행). ENV: `MEMENTO_CONSOLIDATE_GATE_MODE` |
 
-consolidateIntervalMs(기본 6h = 21600000ms) 주기 타이머가 실행될 때마다 이 게이트를 평가한다. 게이트 미통과 시 해당 실행 주기를 건너뛴다. `consolidateIntervalMs`는 `CONSOLIDATE_INTERVAL_MS` 환경변수로 제어한다. proactiveRecall의 caseIdPolicy와 달리 schemaFit.mode는 런타임 변경이 반영되지 않으며 서버 재시작이 필요하다.
+consolidateIntervalMs(기본 8h = 28800000ms) 주기 타이머가 실행될 때마다 이 게이트를 평가한다. 게이트 미통과 시 해당 실행 주기를 건너뛴다. `consolidateIntervalMs`는 `CONSOLIDATE_INTERVAL_MS` 환경변수로 제어한다. proactiveRecall의 caseIdPolicy와 달리 schemaFit.mode는 런타임 변경이 반영되지 않으며 서버 재시작이 필요하다.
 
 ### consolidate.enableRiskyStages
 
@@ -1430,6 +1433,7 @@ EMBEDDING_DIMENSIONS=768
 | 067 | migration-067-api-key-tool-calls.sql | `api_key_usage`에 `tool_call_count`(그날 도구 호출 수)와 `tool_calls`(도구별 호출 수, JSONB)를 더한다. 일일 한도 판정에 쓰는 `call_count`는 그대로다 |
 | 068 | migration-068-synthetic-query-origin.sql | `fragment_synthetic_query.origin`(`generated` 기본, `cue`)을 더한다. reflect 교훈의 cue 행은 본문이 바뀌어도 남고, 역질의 백필은 `generated` 행만 보고 대상을 고른다 |
 | 069 | migration-069-embedding-profile.sql | 한 행짜리 표 `embedding_profile`(provider, model, dimensions, recorded_at). 첫 기동이 현재 설정을 기록하고, 이후 기동 검사가 모델 변경을 경고한다 |
+| 070 | migration-070-drop-morpheme-dict-hnsw.sql | `morpheme_dict`의 HNSW 색인 `idx_morpheme_dict_embedding`을 지운다. 형태소 사전은 형태소 키로만 조회하고 벡터 거리 질의가 없다. 색인을 만들지 않으므로 형태소 등록 비용이 줄어든다. `post-migrate-flexible-embedding-dims.js`도 이 표에 색인을 다시 만들지 않는다 |
 
 ---
 

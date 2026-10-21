@@ -6,6 +6,8 @@
 
 - migration-068(`fragment_synthetic_query.origin`), migration-069(`embedding_profile`)을 적용한다. 첫 기동이 현재 임베딩 설정을 `embedding_profile`에 기록한다.
 - `MEMENTO_CASE_BACKPROP_ENABLED=true`인 설치는 검증 보상 대상이 바뀐다. 사례 전체 근거가 아니라 그 검증 이벤트의 근거만 보상받는다.
+- migration-070이 `morpheme_dict`의 HNSW 색인을 지운다. 잠금을 5초 안에 못 잡으면 실패하고 적용 이력에 남지 않으므로 다시 실행한다. 형태소 벡터를 거리로 찾는 질의를 따로 붙였다면 색인을 직접 다시 만든다.
+- consolidate 기본 간격이 6시간에서 8시간으로 바뀐다. 이전 간격을 쓰려면 `CONSOLIDATE_INTERVAL_MS=21600000`을 둔다. 주기마다 적용되는 피드백 중요도 보정과 주기당 만료 삭제 상한(`MEMENTO_GC_MAX_DELETE_PER_CYCLE`)의 하루 적용 횟수가 4회에서 3회로 준다.
 
 ### Added
 
@@ -14,9 +16,20 @@
 - **context 앵커 토큰 예산.** `MEMENTO_CONTEXT_ANCHOR_TOKEN_BUDGET`(기본 1000). context 응답 `budget.anchor`에 앵커 사용량과 내릴 후보를 싣고, 예산을 넘기는 앵커 지정은 `MEMENTO_ANCHOR_TOKEN_BUDGET_MODE`(warn 기본, reject, off)에 따라 `anchorContextBudgetExceeded` 경고를 싣거나 앵커 지정을 거둔다. memory_stats의 workspace 분포에 앵커 수와 앵커 토큰 합을 싣는다.
 - **다른 작업 공간 fact 표시.** master의 allWorkspaces 조회에서 적용 대상 workspace와 다른 workspace의 fact에 `workspace_warning`을 단다(recall, pack, context).
 - **임베딩 프로파일.** 기동 검사가 저장된 임베딩의 제공자와 모델을 현재 설정과 비교해, 차원이 같은 다른 모델로 바뀌었으면 재임베딩이 필요하다고 경고한다. `node scripts/check-embedding-consistency.js --record`로 프로파일을 갱신한다.
+- reflect가 `MEMENTO_REFLECT_SLOW_LOG_MS`(기본 5000) 이상 걸리거나 실패하면 단계별 소요 시간을 한 줄로 남긴다.
+- consolidate 주기 종료 로그에 가장 오래 걸린 단계 다섯 개의 소요 시간을 싣는다.
+
+### Changed
+
+- **semantic_dedup.** 파편마다 KNN 질의를 보내던 방식에서, topic·workspace·key_id 묶음 벡터를 한 번 읽어 모든 쌍의 코사인을 메모리에서 계산하는 방식으로 바뀐다. 파편마다 정확 top-3 이웃 가운데 cosine 0.92 이상 쌍을 게이트를 거쳐 병합한다. 근사 색인이 놓치던 이웃도 후보가 된다. 생존자는 `(created_at, id)`가 큰 쪽이다. 단계 시간이 `DEDUP_TIME_BUDGET_MS`(기본 20분)를 넘으면 남은 topic은 다음 주기에 본다. 게이트 차단은 쌍마다 경고를 남기지 않고 단계 끝에 사유별 건수 한 줄로 남긴다(표본은 debug).
+- **reflect 교훈 cue 등록.** cue 역질의 행 등록이 reflect 응답을 기다리게 하지 않는다. 등록은 응답 뒤에 이어지고, 실패는 이전과 같이 경고로 남는다.
+- **consolidate 기본 간격** 8시간(`CONSOLIDATE_INTERVAL_MS=28800000`).
+- `post-migrate-flexible-embedding-dims.js`가 `morpheme_dict`에 HNSW 색인을 만들지 않는다.
 
 ### Fixed
 
+- `oneOf` 인자 검증 오류가 값과 타입이 맞는 형식의 위반 사유를 함께 싣는다. 예: `lessons[0]: matches none of the allowed forms (got object): lessons[0].confidence: must be one of high|medium|low`. 판정은 바뀌지 않는다.
+- 종료 시 reflect가 응답 뒤에 남긴 형태소·cue 등록도 기다린다. 세션 auto-reflect가 끝난 뒤 한 번 더 기다린 다음 연결을 닫는다.
 - 검증 보상이 사례의 모든 근거 파편을 검증할 때마다 다시 올려 누적되던 문제. 보상은 그 검증 이벤트에 연결된 `supports`, `produced_by` 근거에만 delta x confidence로 가고, `contradicts` 근거는 보상하지 않는다. confidence 0.5 이하 근거(검증 전 추론 파편이 낸 근거)는 `quality_verified`를 받지 않는다.
 - 사례 이벤트의 근거를 이벤트와 같은 트랜잭션에 기록한다. 검증 보상이 근거 기록보다 먼저 돌 수 있던 경합이 없어진다.
 - 모순과 대체 관계 판정에서 LLM에 넘기는 두 파편의 순서를 쌍 해시로 정한다. id가 작은 쪽이나 새 파편이 늘 A로 가던 순서 편향이 없어진다.

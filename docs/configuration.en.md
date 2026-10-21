@@ -106,7 +106,7 @@ The kind is determined automatically from the code and must match the registry.
 | MEMENTO_DECAY_MIN_DELTA | 0 | Skips rows whose decay change is below this value; rows last decayed more than 24 hours ago are always updated (rows at the 0.05 floor are therefore rewritten about every fourth cycle). Non-numeric or negative values are treated as 0 with a warning, and values above 1 are capped to 1. Ignored when `MEMENTO_SCORE_UPDATE_BATCH` is 0 |
 | MEMENTO_UTILITY_MIN_DELTA | 0 | Skips utility_score rewrites when the stored value differs by at most this value. Non-numeric or negative values are treated as 0 with a warning, and values above 1 are capped to 1. Ignored when `MEMENTO_SCORE_UPDATE_BATCH` is 0 |
 | MEMENTO_GC_THROUGHPUT | on | Expired fragment cleanup throughput switch. With `on`, the `expired_delete` stage repeats the candidates in chunks of 100 and stops at whichever comes first: the per-cycle delete cap (`MEMENTO_GC_MAX_DELETE_PER_CYCLE`), the time budget (`MEMENTO_GC_TIME_BUDGET_MS`) or running out of candidates. Each chunk runs in its own transaction that locks the target rows in id order and then deletes only the locked rows (lock wait limit 3 seconds; a deadlock or lock wait timeout re-runs the transaction up to `MEMENTO_DB_LOCK_RETRY_MAX` times). When a chunk fails, the stage returns the number deleted so far and the next cycle continues. When another cycle or a `forget` removes rows in the middle of a chunk, that chunk deletes fewer rows than asked and the cycle may end early (safe; the next cycle continues). The chunk's lock wait limit also bounds the cascade deletes in `fragment_links` and the version rows, and with retries (`MEMENTO_DB_LOCK_RETRY_MAX`) one chunk can wait about 12 seconds beyond the time budget. With `off`, `gc.maxDeletePerCycle` (50) rows are deleted per cycle in one statement. Read at call time |
-| MEMENTO_GC_MAX_DELETE_PER_CYCLE | 4000 | Maximum number of expired fragments one cleanup cycle deletes (`CONSOLIDATE_INTERVAL_MS`, default 6 hours). The default is at least twice the 30-day daily average fragment inflow (about 1900). Only integers from 100 to 100000 are accepted; anything else uses the default. Not used when `MEMENTO_GC_THROUGHPUT=off`. Read at call time |
+| MEMENTO_GC_MAX_DELETE_PER_CYCLE | 4000 | Maximum number of expired fragments one cleanup cycle deletes (`CONSOLIDATE_INTERVAL_MS`, default 8 hours). The default is at least twice the 30-day daily average fragment inflow (about 1900). Only integers from 100 to 100000 are accepted; anything else uses the default. Not used when `MEMENTO_GC_THROUGHPUT=off`. Read at call time |
 | MEMENTO_GC_TIME_BUDGET_MS | 60000 | Time (ms) within which one expired-cleanup cycle may start new chunks. A chunk always runs to completion. Only integers from 1000 to 600000 are accepted; anything else uses the default. Not used when `MEMENTO_GC_THROUGHPUT=off`. At the end of each cleanup the number of remaining expired candidates (an approximation that stops counting at 100000) is recorded in the `memento_gc_backlog` gauge. The gauge keeps the value of whichever concurrent cleanup cycle wrote last and reads 0 before the first cycle. Read at call time |
 | MEMENTO_RUNTIME | (none) | `docker` marks the installation as Docker |
 | GITHUB_TOKEN | (none) | GitHub API authentication token for update checks |
@@ -120,7 +120,7 @@ The kind is determined automatically from the code and must match the registry.
 | RATE_LIMIT_MAX_REQUESTS | 120 | Max requests per IP per window |
 | RATE_LIMIT_PER_IP | 30 | Per-IP requests per minute (unauthenticated) |
 | RATE_LIMIT_PER_KEY | 100 | Per-API-key requests per minute (authenticated) |
-| CONSOLIDATE_INTERVAL_MS | 21600000 | Auto-maintenance (consolidate) interval (ms). Default 6 hours |
+| CONSOLIDATE_INTERVAL_MS | 28800000 | Auto-maintenance (consolidate) interval (ms). Default 8 hours (three runs a day) |
 | MEMENTO_AUTO_PROMOTE_ANCHORS | true | When `false`, skips only automatic anchor promotion; existing anchors and other stages are unchanged |
 | EVALUATOR_MAX_QUEUE | 100 | MemoryEvaluator queue size cap (older jobs dropped on overflow) |
 | OAUTH_TRUSTED_ORIGINS | (none) | Additional OAuth redirect_uri trusted domains (comma-separated, origin level). Added on top of default trusted domains (claude.ai, chatgpt.com, platform.openai.com, copilot.microsoft.com, gemini.google.com). Only specify additional origins to allow |
@@ -142,6 +142,8 @@ The kind is determined automatically from the code and must match the registry.
 | FRAGMENT_DEFAULT_LIMIT | 5000 | Integer, 1 or more. The value is read and checked at startup but no processing uses it. The default quota for new API keys is set by `DEFAULT_FRAGMENT_LIMIT` |
 | DEDUP_BATCH_SIZE | 100 | Semantic deduplication batch size |
 | DEDUP_MIN_FRAGMENTS | 5 | Minimum fragment count for dedup. Deduplication is skipped below this threshold |
+| DEDUP_TIME_BUDGET_MS | 1200000 | Time limit (ms, 60000 to 86400000) of the semantic_dedup stage. Topics left when it is exceeded are examined from the start in the next cycle |
+| MEMENTO_REFLECT_SLOW_LOG_MS | 5000 | When reflect takes at least this many ms or fails, one info line logs the time of each step (sessionGroups, persist, taskFeedback, autoLink, queueEmbeddings, episodes, evict). 0 turns it off |
 | COMPRESS_AGE_DAYS | 30 | Memory compression target inactive days |
 | COMPRESS_MIN_GROUP | 3 | Minimum compression group size. Groups below this threshold are not compressed |
 | MEMENTO_RERANKER_ENABLED | false | Enables the in-process cross-encoder reranker. It is off by default: the default model is English-only, and on a Korean corpus an ablation showed turning it off improves Recall@1 from 74% to 85%, MRR from 0.827 to 0.890, and p50 latency from 561ms to 126ms. External rerankers configured through `RERANKER_URL` work regardless of this switch |
@@ -775,7 +777,8 @@ export const MEMORY_CONFIG = {
     maxAgeDays       : 30,       // session_reflect fragment deletion threshold (days)
     maxImportance    : 0.55,     // Below this = deletion candidate
     keepPerType      : 5,        // Keep latest N per type
-    maxDeletePerCycle: 30        // Max deletions per cycle
+    maxDeletePerCycle: 30,       // Max deletions per cycle
+    slowLogMs        : 5000      // MEMENTO_REFLECT_SLOW_LOG_MS
   },
   semanticSearch: {
     minSimilarity  : 0.4,        // L3 pgvector search minimum similarity (default 0.4)
@@ -821,7 +824,7 @@ Gate conditions that evaluate whether sufficient changes have accumulated before
 | `fragmentsSinceLastRunMin` | `30` | Condition met when new fragments since the last run reach this count |
 | `mode` | `"any"` | `"any"`: run if at least 1 of 3 conditions is met. `"all"`: run only if all 3 are met. `"off"`: disable gate (always run). ENV: `MEMENTO_CONSOLIDATE_GATE_MODE` |
 
-Each time the consolidateIntervalMs timer fires (default 6h = 21600000ms), this gate is evaluated. When the gate is not passed, that run cycle is skipped. `consolidateIntervalMs` is controlled by the `CONSOLIDATE_INTERVAL_MS` environment variable.
+Each time the consolidateIntervalMs timer fires (default 8h = 28800000ms), this gate is evaluated. When the gate is not passed, that run cycle is skipped. `consolidateIntervalMs` is controlled by the `CONSOLIDATE_INTERVAL_MS` environment variable.
 
 ### consolidate.enableRiskyStages
 
@@ -1333,6 +1336,7 @@ Run `npm run migrate` to execute unapplied migrations in order. History is manag
 | 067 | migration-067-api-key-tool-calls.sql | Adds `tool_call_count` (tool calls that day) and `tool_calls` (calls per tool, JSONB) to `api_key_usage`. `call_count`, used for the daily limit, is unchanged |
 | 068 | migration-068-synthetic-query-origin.sql | Adds `fragment_synthetic_query.origin` (`generated` by default, or `cue`). Cue rows of reflect lessons survive content changes, and the reverse-query backfill picks targets from `generated` rows only |
 | 069 | migration-069-embedding-profile.sql | One-row table `embedding_profile` (provider, model, dimensions, recorded_at). The first startup records the current settings and later startup checks warn on a model change |
+| 070 | migration-070-drop-morpheme-dict-hnsw.sql | Drops the HNSW index `idx_morpheme_dict_embedding` on `morpheme_dict`. The morpheme dictionary is looked up by morpheme key only and has no vector distance query, so morpheme registration no longer pays for index maintenance. `post-migrate-flexible-embedding-dims.js` no longer recreates the index on this table |
 
 ---
 

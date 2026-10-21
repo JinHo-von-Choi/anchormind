@@ -451,6 +451,19 @@ async function gracefulShutdown(signal, { exitCode = 0 } = {}) {
     await closeLegacySseSession(sessionId, { preserveRedis: true });
   }
 
+  /** 3-1. auto-reflect가 새로 남긴 형태소·교훈 cue 등록 대기 (최대 30초) */
+  try {
+    const { MemoryManager } = await import("./lib/memory/MemoryManager.js");
+    let lateDrainTimer;
+    await Promise.race([
+      MemoryManager.getInstance().drainMorpheme(),
+      new Promise(resolve => { lateDrainTimer = setTimeout(resolve, DRAIN_TIMEOUT_MS); })
+    ]);
+    clearTimeout(lateDrainTimer);
+  } catch (err) {
+    console.log(`[Shutdown] late drain skipped: ${err?.message}`);
+  }
+
   /** 4. DB/Redis 연결 종료 */
   await shutdownPool();
 

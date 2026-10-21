@@ -5,6 +5,7 @@
  * 작성자: 최진호
  * 작성일: 2026-03-08
  * 수정일: 2026-08-12 ((타입, 차원) 쌍 판정·dry-run·테이블별 트랜잭션 도입)
+ * 수정일: 2026-10-22 (morpheme_dict는 HNSW 색인을 만들지 않는다, migration-070)
  *
  * 목적: EMBEDDING_DIMENSIONS 환경변수에 따라 fragments + morpheme_dict +
  *       fragment_synthetic_query + fragment_segment 테이블의
@@ -39,17 +40,21 @@ import { resolveEmbeddingColumnSpec, embeddingColumnMismatch, fetchEmbeddingColu
 const SCHEMA  = "agent_memory";
 const DRY_RUN = process.argv.includes("--dry-run");
 
-/** 모든 임베딩 테이블을 갱신. ef_construction은 기본 스키마(128)와 정합 유지. */
+/**
+ * 모든 임베딩 테이블을 갱신. ef_construction은 기본 스키마(128)와 정합 유지.
+ * morpheme_dict는 형태소 키로만 조회하므로 HNSW 색인을 두지 않는다(indexName null). 예전 설치에 남은
+ * 색인은 dropIndexName으로 지운다.
+ */
 const TABLES = [
   { table: "fragments",                 indexName: "idx_frag_embedding",          whereClause: "WHERE embedding IS NOT NULL" },
-  { table: "morpheme_dict",             indexName: "idx_morpheme_dict_embedding", whereClause: ""                            },
+  { table: "morpheme_dict",             indexName: null, dropIndexName: "idx_morpheme_dict_embedding", whereClause: "" },
   { table: "fragment_synthetic_query",  indexName: "idx_fsq_embedding_hnsw",      whereClause: "WHERE embedding IS NOT NULL" },
   { table: "fragment_segment",          indexName: "idx_fseg_embedding_hnsw",     whereClause: "WHERE embedding IS NOT NULL" }
 ];
 const HNSW_M = 16;
 const HNSW_EF_CONSTRUCTION = 128;
 
-async function migrateTable(pool, { table, indexName, whereClause }, spec) {
+async function migrateTable(pool, { table, indexName, dropIndexName, whereClause }, spec) {
   const current  = await fetchEmbeddingColumn(pool, SCHEMA, table);
   const mismatch = embeddingColumnMismatch(current, spec);
 
@@ -80,18 +85,20 @@ async function migrateTable(pool, { table, indexName, whereClause }, spec) {
   try {
     await client.query("BEGIN");
     console.log(`migration-007: ${table} — 변환 중: ${mismatch.detail} (임베딩 데이터 NULL 초기화)`);
-    await client.query(`DROP INDEX IF EXISTS ${SCHEMA}.${indexName}`);
+    await client.query(`DROP INDEX IF EXISTS ${SCHEMA}.${indexName ?? dropIndexName}`);
     await client.query(
       `ALTER TABLE ${SCHEMA}.${table}
        ALTER COLUMN embedding TYPE ${spec.colType} USING NULL`
     );
-    const whereExpr = whereClause ? `\n       ${whereClause}` : "";
-    await client.query(
-      `CREATE INDEX ${indexName}
-       ON ${SCHEMA}.${table}
-       USING hnsw (embedding ${spec.opsType})
-       WITH (m = ${HNSW_M}, ef_construction = ${HNSW_EF_CONSTRUCTION})${whereExpr}`
-    );
+    if (indexName) {
+      const whereExpr = whereClause ? `\n       ${whereClause}` : "";
+      await client.query(
+        `CREATE INDEX ${indexName}
+         ON ${SCHEMA}.${table}
+         USING hnsw (embedding ${spec.opsType})
+         WITH (m = ${HNSW_M}, ef_construction = ${HNSW_EF_CONSTRUCTION})${whereExpr}`
+      );
+    }
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
@@ -110,6 +117,10 @@ async function verifyTable(pool, { table, indexName }) {
     `SELECT count(*)::int AS total, count(*) FILTER (WHERE embedding IS NULL)::int AS null_rows
      FROM ${SCHEMA}.${table}`
   );
+  if (!indexName) {
+    console.log(`검증: ${table} — 행 ${nulls.total}, embedding NULL ${nulls.null_rows}, 인덱스 미사용`);
+    return;
+  }
   const { rows: idx } = await pool.query(
     `SELECT i.indisvalid FROM pg_index i
      JOIN pg_class c ON c.oid = i.indexrelid

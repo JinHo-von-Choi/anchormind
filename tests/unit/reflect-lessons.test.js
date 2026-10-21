@@ -37,7 +37,7 @@ const { teardownTestResources, assertCleanShutdown } = await import("../_lifecyc
 
 const made = new Set();
 after(async () => {
-  for (const p of made) await Promise.allSettled([...(p._morphemePromises ?? [])]);
+  for (const p of made) await p.drainBackground();
   await new Promise(r => setImmediate(r));
   await teardownTestResources();
   await assertCleanShutdown();
@@ -128,6 +128,29 @@ describe("ReflectProcessor lessons", () => {
     const created = deps.factory.create.mock.calls[0].arguments[0];
     assert.equal(created.assertionStatus, "inferred");
     assert.equal(created.importance, 0.6);
+  });
+
+  it("응답은 cue 등록 완료를 기다리지 않고, drainBackground가 기다린다", async () => {
+    const { processor, deps } = makeProcessor();
+    let release;
+    let finished = false;
+    deps.registerCues.mock.mockImplementation(() => new Promise(r => { release = r; }).then(() => { finished = true; return 1; }));
+    const result = await processor.process({ agentId: "t", lessons: [LESSON] });
+    assert.equal(result.breakdown.lessons, 1);
+    assert.equal(finished, false, "등록이 끝나기 전에 응답한다");
+    const drained = processor.drainBackground();
+    release();
+    await drained;
+    assert.equal(finished, true);
+  });
+
+  it("cue 등록이 실패해도 reflect는 성공한다", async () => {
+    const { processor, deps } = makeProcessor();
+    deps.registerCues.mock.mockImplementation(async () => { throw new Error("statement timeout"); });
+    const result = await processor.process({ agentId: "t", lessons: [LESSON] });
+    assert.equal(result.breakdown.lessons, 1);
+    await processor.drainBackground();
+    assert.equal(processor._cuePromises.size, 0);
   });
 
   it("교훈이 없으면 cue 등록을 부르지 않는다", async () => {

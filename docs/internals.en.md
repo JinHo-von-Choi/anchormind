@@ -138,7 +138,7 @@ Stages are declared as a `stageDefs` array. Adding a new stage requires only a s
 4. `gc_preview` — counts GC candidates by type; written to results.gcCandidatesByType as a Map
 5. `split_long_fragments` — splits over-length fragments
 6. `merge_duplicates` — merges duplicates by content_hash. Group key is `(key_id, workspace, content_hash)`. Master key (key_id IS NULL) fragments are excluded from auto-merge. Post-GROUP BY scope mismatch assertion re-validates to block cross-tenant merges
-7. `semantic_dedup` — semantic deduplication for KNN cosine >= 0.92 within topic and key_id scope
+7. `semantic_dedup` — reads the vectors of each topic, workspace and key_id group once, computes the cosine of every pair in memory, and merges, through the gate, pairs with cosine >= 0.92 among each fragment's exact top 3. The survivor is the one with the larger (created_at, id). Topics left when the stage exceeds `DEDUP_TIME_BUDGET_MS` move to the next cycle
 8. `compress_old_fragments` — groups long-unaccessed low-importance fragments by topic, then KNN-compresses
 9. `embeddings_backfill` — async embedding generation for fragments with NULL embedding
 10. `retro_link` — GraphLinker.retroLink() retroactively links up to 20 orphan fragments (have embedding, no links)

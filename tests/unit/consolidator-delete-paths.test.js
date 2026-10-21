@@ -21,7 +21,7 @@ describe("통합과 GC 삭제 경로", () => {
   it("폐기와 삭제를 하는 모듈은 deindexRows 를 쓴다", () => {
     for (const rel of [
       "lib/memory/consolidate/ConsolidatorGC.js",
-      "lib/memory/consolidate/MemoryConsolidator.js",
+      "lib/memory/consolidate/SemanticDedup.js",
       "lib/memory/consolidate/FragmentGC.js",
       "lib/memory/write/ConflictResolver.js",
       "lib/memory/link/GraphLinker.js"
@@ -45,20 +45,18 @@ describe("통합과 GC 삭제 경로", () => {
   });
 
   it("semantic_dedup 병합은 단일 트랜잭션이며 순회 파편이 닫히면 루프를 끝낸다", () => {
-    const src = read("lib/memory/consolidate/MemoryConsolidator.js");
+    const src = read("lib/memory/consolidate/SemanticDedup.js");
     assert.match(src, /withTransaction\(getPrimaryPool\(\)/);
-    assert.match(src, /if \(oldId === frag\.id\) break;/);
+    assert.match(src, /return old\.id === frag\.id;/);
+    assert.match(src, /if \(closedSelf\) break;/);
   });
 
   it("semantic_dedup 은 두 행이 모두 살아 있을 때만 병합하고, 병합이 성립한 뒤에만 집계한다", () => {
-    const src   = read("lib/memory/consolidate/MemoryConsolidator.js");
-    const body  = src.slice(src.indexOf("async _semanticDedup()"), src.indexOf("async _compressOldFragments") > 0
-      ? src.indexOf("async _compressOldFragments")
-      : undefined);
+    const body  = read("lib/memory/consolidate/SemanticDedup.js");
     assert.match(body, /valid_to IS NULL[\s\S]{0,80}FOR NO KEY UPDATE/);
-    const skipAt  = body.indexOf("if (!merged) continue;");
-    const addAt   = body.indexOf("processed.add(oldId);");
-    const countAt = body.indexOf("mergedCount++;");
+    const skipAt  = body.indexOf("if (!merged) {");
+    const addAt   = body.indexOf("run.processed.add(old.id);");
+    const countAt = body.indexOf("run.stats.merged++;");
     assert.ok(skipAt > 0, "병합 불성립 시 건너뛰는 분기가 있어야 한다");
     assert.ok(skipAt < addAt && skipAt < countAt, "집계는 병합 성립 판정 뒤에 와야 한다");
   });

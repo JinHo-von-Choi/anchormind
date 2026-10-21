@@ -137,7 +137,7 @@ memory_consolidate 도구가 실행되거나 서버 내부 스케줄러(6시간 
 4. `gc_preview` — type별 GC 후보 카운트 조회. results.gcCandidatesByType에 Map으로 기록
 5. `split_long_fragments` — 길이 초과 파편 분할
 6. `merge_duplicates` — content_hash 기준 중복 병합. 그룹 키는 `(key_id, workspace, content_hash)`. master 키(key_id IS NULL) 파편은 자동 병합 대상에서 제외. SQL GROUP BY 이후 scope mismatch 어설션 재검증으로 cross-tenant 병합 차단
-7. `semantic_dedup` — topic·key_id 범위 안 KNN cosine >= 0.92 시맨틱 중복 제거
+7. `semantic_dedup` — topic·workspace·key_id 묶음 벡터를 한 번 읽어 모든 쌍의 코사인을 메모리에서 계산하고, 파편마다 정확 top-3 중 cosine >= 0.92 쌍을 게이트를 거쳐 병합한다. 생존자는 (created_at, id)가 큰 쪽이다. 단계 시간이 `DEDUP_TIME_BUDGET_MS`를 넘으면 남은 topic은 다음 주기로 넘긴다
 8. `compress_old_fragments` — 장기 미접근·저중요도 파편 topic별 그룹핑 후 KNN 압축
 9. `embeddings_backfill` — embedding이 NULL인 파편 비동기 임베딩 생성
 10. `retro_link` — GraphLinker.retroLink()로 고립 파편(임베딩 있음, 링크 없음) 최대 20건 소급 자동 링크

@@ -65,6 +65,25 @@ describe("validateToolArgs 대안 형태와 형식 표기", () => {
     assert.throws(enforce("reflect", { summary: 3 }), /summary: matches none of the allowed forms \(got number\)/);
   });
 
+  it("타입이 맞는 형식의 위반 사유를 함께 적는다", () => {
+    assert.throws(enforce("reflect", { summary: ["s"], lessons: [{ cue: "c", lesson: "l", evidence: "e", confidence: "HIGH" }] }),
+      /lessons\[0\]: matches none of the allowed forms \(got object\): lessons\[0\]\.confidence: must be one of high\|medium\|low/);
+  });
+
+  it("타입이 맞는 형식이 없으면 사유를 붙이지 않는다", () => {
+    assert.throws(enforce("reflect", { summary: ["s"], lessons: [7] }),
+      /lessons\[0\]: matches none of the allowed forms \(got number\)$/);
+  });
+
+  it("문자열 형식의 위반 사유를 적는다", () => {
+    assert.throws(enforce("reflect", { summary: ["s"], lessons: ["SKIP"] }),
+      /lessons\[0\]: matches none of the allowed forms \(got string\): lessons\[0\]: must be one of NO_ENTRY/);
+  });
+
+  it("판정은 바뀌지 않는다: 형식에 맞는 교훈과 NO_ENTRY는 통과한다", () => {
+    assert.doesNotThrow(enforce("reflect", { summary: ["s"], lessons: [{ cue: "c", lesson: "l", evidence: "e" }, "NO_ENTRY"] }));
+  });
+
   it("타입 위반에는 받은 형식을 함께 적는다", () => {
     assert.throws(enforce("remember", { content: "c", topic: "t", type: "fact", keywords: [2026] }),
       /keywords\[0\]: expected string \(got number\)/);
