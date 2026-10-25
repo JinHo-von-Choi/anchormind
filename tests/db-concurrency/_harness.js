@@ -164,8 +164,16 @@ async function migrateLaneDatabase(server, name) {
   }
 }
 
+/** 연결이 스스로 닫히기를 기다리는 최대 시간과 확인 간격(ms) */
+const DRAIN_TIMEOUT_MS  = 2000;
+const DRAIN_INTERVAL_MS = 50;
+
 /**
  * 이름이 시험 형식인 데이터베이스를 지운다. 남은 연결을 먼저 끊는다.
+ *
+ * pg.Pool.end()는 클라이언트 소켓이 닫히기 전에 끝나므로, 곧바로 끊으면 닫히는 중인
+ * 클라이언트가 57P01을 받아 풀의 error 이벤트가 처리되지 않은 예외로 올라온다.
+ * 그래서 연결이 스스로 빠지기를 잠시 기다린 뒤 남은 것만 끊는다.
  *
  * @param {{host: string, port: number, user: string, password: string}} server
  * @param {string} name
@@ -177,6 +185,15 @@ async function dropDatabaseByName(server, name) {
   const client = new pg.Client(maintenanceConfig(server));
   await client.connect();
   try {
+    const deadline = Date.now() + DRAIN_TIMEOUT_MS;
+    for (;;) {
+      const { rows } = await client.query(
+        "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
+        [name]
+      );
+      if (rows[0].n === 0 || Date.now() >= deadline) break;
+      await new Promise((resolve) => setTimeout(resolve, DRAIN_INTERVAL_MS));
+    }
     await client.query(
       "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
       [name]
