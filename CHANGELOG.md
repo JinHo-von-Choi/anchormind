@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `recall`의 caseMode가 응답 한 쪽(`pageSize`, `tokenBudget`으로 자른 파편)만 case_id로 묶어, 조건에 맞는 사례가 더 있어도 `maxCases`보다 적게 돌려주던 문제를 고쳤다. 사례는 조건에 맞는 검색 결과 전체에서 센다.
+
 ## [6.8.0] - 2026-10-28
 
 ### Added

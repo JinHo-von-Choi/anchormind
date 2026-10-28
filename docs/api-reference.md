@@ -636,13 +636,13 @@ Agent 조회는 생략 시 `default`, 지정 시 해당 agent와 `default`를 �
 | caseId | string | - | 케이스 ID 필터. 해당 케이스 파편만 반환. |
 | resolutionStatus | string | - | 해결 상태 필터 (open / resolved / abandoned) |
 | phase | string | - | 작업 단계 필터 (planning, debugging, verification 등) |
-| caseMode | boolean | - | CBR 모드. 유사 파편을 case_id별로 그루핑하여 (goal, events, outcome) 트리플로 반환. 과거 유사 작업 해결 사례 참조 시 사용. |
+| caseMode | boolean | - | CBR 모드. 조건에 맞는 검색 결과 전체를 case_id별로 묶어 출현 빈도 상위 `maxCases`개 사례를 (goal, events, outcome) 트리플로 반환한다. 사례를 셀 때는 `pageSize`, `tokenBudget`, `cursor`로 자른 한 쪽이 아니라 순위 목록 전체를 쓴다. 과거 유사 작업 해결 사례 참조 시 사용. |
 | maxCases | number | - | caseMode에서 반환할 최대 케이스 수. 기본 5, 상한 10. |
 | depth | string | - | 검색 깊이 필터. "high-level" / "detail" / "tool-level". 상세 설명은 아래 참조. |
 | workspace | string | - | 검색 범위 제한. 지정 시 해당 workspace + 전역(NULL), 미지정 시 key default + 전역(NULL), 둘 다 없으면 전역(NULL)만 반환. |
 | allWorkspaces | boolean | - | master 전용 전체 workspace 조회. 일반 API key가 true를 요청하면 권한 오류. |
 | contextText | string | - | 현재 대화 맥락 텍스트. 관련 파편을 선제적으로 활성화 (ENABLE_SPREADING_ACTIVATION=true 시). |
-| cursor | string | - | 불투명 페이지네이션 커서. 앞 응답의 `nextCursor`를 넣으면 다음 페이지를 받는다. 커서는 이미 돌려준 파편의 해시 표지와 고정 `anchorTime`을 담으므로, 호출 사이에 검색 후보가 달라져도 앞 페이지 파편이 다시 오지 않는다. 기존 offset 커서도 읽는다. `tokenBudget`은 페이지마다 적용되며, 앞 페이지의 예산에 들지 못한 결과는 다음 페이지로 넘어간다. 응답 최상위의 `totalCount`(끝까지 이어 받을 수 있는 결과 수. 혼자서도 `tokenBudget`을 넘는 파편은 빠진다), `nextCursor`(다음 페이지가 없으면 `null`), `hasMore`가 페이지 상태를 알려 주며 `format: "pack"` 응답에도 실린다. caseMode 응답에는 없다. |
+| cursor | string | - | 불투명 페이지네이션 커서. 앞 응답의 `nextCursor`를 넣으면 다음 페이지를 받는다. 커서는 이미 돌려준 파편의 해시 표지와 고정 `anchorTime`을 담으므로, 호출 사이에 검색 후보가 달라져도 앞 페이지 파편이 다시 오지 않는다. 기존 offset 커서도 읽는다. `tokenBudget`은 페이지마다 적용되며, 앞 페이지의 예산에 들지 못한 결과는 다음 페이지로 넘어간다. 응답 최상위의 `totalCount`(끝까지 이어 받을 수 있는 결과 수. 혼자서도 `tokenBudget`을 넘는 파편은 빠진다), `nextCursor`(다음 페이지가 없으면 `null`), `hasMore`가 페이지 상태를 알려 주며 `format: "pack"` 응답에도 실린다. caseMode는 상위 `maxCases`개(최대 10) 사례를 한 번에 돌려주는 방식이라 이 세 필드가 없다. |
 | pageSize | number | - | 기본 20, 최대 50 |
 | agentId | string | - | 에이전트 ID |
 | minImportance | number | - | 최소 중요도 필터 (0~1). 이 값 이상의 importance를 가진 파편만 반환. |

@@ -9,13 +9,15 @@ after(async () => {
   await assertCleanShutdown();
 });
 
-const capturedOptions = [];
+const capturedOptions   = [];
+const capturedFragments = [];
 
 mock.module("../../lib/memory/read/CaseRecall.js", {
   exports: {
     CaseRecall: class {
-      async buildCaseTriples(_fragments, options) {
+      async buildCaseTriples(fragments, options) {
         capturedOptions.push(options);
+        capturedFragments.push(fragments);
         return [];
       }
     }
@@ -26,7 +28,8 @@ const { MemoryRecaller: BaseRecaller } = await import("../../lib/memory/processo
 const MemoryRecaller = recallerWithSearchStub(BaseRecaller);
 
 beforeEach(() => {
-  capturedOptions.length = 0;
+  capturedOptions.length   = 0;
+  capturedFragments.length = 0;
 });
 
 describe("MemoryRecaller caseMode 검색 범위 전달", () => {
@@ -77,5 +80,24 @@ describe("MemoryRecaller caseMode 검색 범위 전달", () => {
 
     assert.deepEqual(options.groupKeyIds, ["synthetic-key-a", "synthetic-key-b"]);
     assert.equal(options.keyId, "synthetic-key-a");
+  });
+});
+
+describe("MemoryRecaller caseMode 사례 원천", () => {
+  it("응답 한 쪽(pageSize, tokenBudget)이 아니라 조건에 맞는 검색 결과 전체로 사례를 센다", async () => {
+    const rows = Array.from({ length: 12 }, (_, i) => ({
+      id: `f${String(i).padStart(2, "0")}`, content: `body ${i}`, type: "fact",
+      case_id: `case-${i % 6}`, estimated_tokens: 100, rerankerScore: 1 - i / 100,
+      created_at: "2026-01-01T00:00:00.000Z"
+    }));
+    const search = {
+      search: async () => ({ fragments: rows.map(r => ({ ...r })), totalTokens: 0, searchPath: "fixture", count: rows.length })
+    };
+    const recaller = new MemoryRecaller({ search, store: {}, index: { getSeenIds: async () => new Set() } });
+    await recaller.recall({ caseMode: true, includeLinks: false, excludeSeen: false, pageSize: 2, tokenBudget: 200, maxCases: 10 });
+
+    const source = capturedFragments.at(-1);
+    assert.equal(source.length, 12, "앞 쪽 2건이 아니라 12건 전체");
+    assert.equal(new Set(source.map(f => f.case_id)).size, 6);
   });
 });
