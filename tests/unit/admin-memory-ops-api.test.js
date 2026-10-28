@@ -330,13 +330,15 @@ describe("GET /memory/anomalies", () => {
   it("anomalies 응답 구조가 올바르다", () => {
     const response = {
       qualityUnverified:      25,
-      possibleSupersessions:  3,
+      openConflicts:          3,
+      failedSearchCount:      4,
       failedSearches:         [{ query_type: "text", result_count: 0, created_at: "2026-03-25" }],
       staleFragments:         10
     };
 
     assert.strictEqual(typeof response.qualityUnverified, "number");
-    assert.strictEqual(typeof response.possibleSupersessions, "number");
+    assert.strictEqual(typeof response.openConflicts, "number");
+    assert.strictEqual(typeof response.failedSearchCount, "number");
     assert.ok(Array.isArray(response.failedSearches));
     assert.strictEqual(typeof response.staleFragments, "number");
   });

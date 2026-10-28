@@ -5,7 +5,7 @@
  * 작성일: 2026-04-07
  */
 
-import { state }                                         from "./state.js";
+import { state, beginRender, syncRoute }                from "./state.js";
 import { api }                                           from "./api.js";
 import { showToast, showModal, closeModal }              from "./ui.js";
 import { fmt, relativeTime, fmtDate, fmtMs, loadingHtml } from "./format.js";
@@ -413,11 +413,23 @@ function renderSessionInspector(data) {
   return panel;
 }
 
+/** 선택한 세션과 주소 질의를 서로 옮긴다. */
+export const sessionsRoute = {
+  fromQuery(query) { state.selectedSessionId = query.get("session") || null; },
+  toQuery()        { return { session: state.selectedSessionId }; }
+};
+
 export async function renderSessions(container) {
+  const ctx = beginRender();
+  syncRoute();
   container.textContent = "";
   container.appendChild(loadingHtml());
 
-  const res = await api("/sessions");
+  const [res, detailRes] = await Promise.all([
+    api("/sessions", { signal: ctx.signal }),
+    state.selectedSessionId ? api("/sessions/" + state.selectedSessionId, { signal: ctx.signal }) : Promise.resolve(null)
+  ]);
+  if (!ctx.isCurrent()) return;
   const data     = res.ok ? res.data : { sessions: [], counts: {} };
   const sessions = data.sessions ?? [];
   const counts   = data.counts ?? {};
@@ -459,11 +471,8 @@ export async function renderSessions(container) {
 
   split.appendChild(renderSessionTable(sessions));
 
-  if (state.selectedSessionId) {
-    const detailRes = await api("/sessions/" + state.selectedSessionId);
-    if (detailRes.ok) {
-      split.appendChild(renderSessionInspector(detailRes.data));
-    }
+  if (detailRes?.ok) {
+    split.appendChild(renderSessionInspector(detailRes.data));
   }
 
   container.appendChild(split);

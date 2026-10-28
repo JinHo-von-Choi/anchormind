@@ -9,7 +9,7 @@
  * 만든다(마스터 키 로그인에서만). 서버 값은 textContent로만 넣는다.
  */
 
-import { state }     from "./state.js";
+import { state, beginRender } from "./state.js";
 import { api }       from "./api.js";
 import { fmtDate }   from "./format.js";
 import { showToast } from "./ui.js";
@@ -150,7 +150,9 @@ function createForm(container, empty) {
  * @param {HTMLElement} container
  */
 export async function renderAdminUsers(container) {
-  const res = await api("/admin-users");
+  const ctx = beginRender();
+  const res = await api("/admin-users", { signal: ctx.signal });
+  if (!ctx.isCurrent()) return;
   container.textContent = "";
   const wrap = el("div", "space-y-6");
   wrap.appendChild(el("h2", "text-lg font-bold", "관리자 계정"));
@@ -162,5 +164,61 @@ export async function renderAdminUsers(container) {
   state.adminUsers = res.data.users || [];
   wrap.appendChild(usersTable(container, state.adminUsers));
   wrap.appendChild(createForm(container, state.adminUsers.length === 0));
+  wrap.appendChild(explainPanel(ctx));
   container.appendChild(wrap);
+}
+
+/**
+ * 권한 판정 단계 문구.
+ *
+ * @param {Object} decision - /me/explain 응답
+ * @returns {string[]}
+ */
+export function explainLines(decision) {
+  const head = `${decision.allowed ? "허용" : "거부"} · ${decision.cap}${decision.workspace ? " @" + decision.workspace : ""}`
+    + (decision.allowed ? "" : ` · 거부 단계 ${decision.deniedAt ?? "-"}${decision.reason ? " (" + decision.reason + ")" : ""}`);
+  const steps = (decision.steps ?? []).map(step => `${step.ok ? "통과" : "실패"} ${step.step}${step.reason ? ": " + step.reason : ""}`);
+  return [head, ...steps];
+}
+
+/**
+ * 현재 주체의 능력 하나를 판정해 단계별 근거를 보여 주는 패널(GET /me/explain).
+ */
+function explainPanel(ctx) {
+  const panel = el("div", "glass-panel p-4 space-y-2");
+  panel.appendChild(el("h3", "text-sm font-bold", "권한 확인"));
+  panel.appendChild(el("p", "text-xs text-slate-400", "지금 로그인한 주체가 능력 하나를 가졌는지와 그 근거를 봅니다."));
+
+  const row = el("div", "flex flex-wrap gap-2");
+  const cap = field("text", "능력 (예: mem.write)");
+  cap.id = "explain-cap";
+  cap.setAttribute?.("list", "explain-cap-list");
+  const list = el("datalist", "");
+  list.id = "explain-cap-list";
+  const ws = field("text", "workspace (선택)");
+  ws.id = "explain-workspace";
+  const out = el("div", "text-xs font-mono whitespace-pre-wrap");
+  row.appendChild(cap);
+  row.appendChild(ws);
+  row.appendChild(button("확인", async () => {
+    if (!cap.value.trim()) return;
+    const params = new URLSearchParams({ cap: cap.value.trim() });
+    if (ws.value.trim()) params.set("workspace", ws.value.trim());
+    const r = await api(`/me/explain?${params}`);
+    out.textContent = r.ok ? explainLines(r.data).join("\n") : errorLabel(r);
+  }));
+  panel.appendChild(row);
+  panel.appendChild(list);
+  panel.appendChild(out);
+
+  /** 가진 능력을 입력 후보로 채운다 */
+  api("/me", { signal: ctx.signal }).then((me) => {
+    if (!ctx.isCurrent() || !me.ok) return;
+    for (const c of me.data?.capabilities ?? []) {
+      const opt = el("option", "");
+      opt.value = c.cap;
+      list.appendChild(opt);
+    }
+  });
+  return panel;
 }

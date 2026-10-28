@@ -9,8 +9,8 @@
  * 서버 값은 모두 textContent로만 넣는다.
  */
 
-import { state }               from "./state.js";
-import { api, API_BASE }       from "./api.js";
+import { state, beginRender, syncRoute } from "./state.js";
+import { api, downloadToFile }  from "./api.js";
 import { fmtDate, loadingHtml } from "./format.js";
 import { showToast }           from "./ui.js";
 
@@ -173,30 +173,23 @@ function readFilterInputs() {
   state.auditFilter = next;
 }
 
-/** 현재 조건의 JSONL을 내려받는다(Bearer 헤더 필요). */
+/** 현재 조건의 JSONL을 내려받는다. */
 async function downloadAuditExport() {
-  try {
-    const query = buildAuditQuery(state.auditFilter, { limit: null });
-    const resp  = await fetch(`${API_BASE}/audit/export?format=jsonl${query ? `&${query}` : ""}`, {
-      headers: { "Authorization": `Bearer ${state.masterKey}` }
-    });
-    if (!resp.ok) {
-      showToast(`EXPORT 실패 (${resp.status})`, "error");
-      return;
-    }
-    const url = URL.createObjectURL(await resp.blob());
-    const a   = document.createElement("a");
-    a.href     = url;
-    a.download = "audit-events.jsonl";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    showToast("EXPORT 완료", "info");
-  } catch (err) {
-    showToast(`EXPORT 실패: ${err.message}`, "error");
-  }
+  const query  = buildAuditQuery(state.auditFilter, { limit: null });
+  const result = await downloadToFile(`/audit/export?format=jsonl${query ? `&${query}` : ""}`, "audit-events.jsonl");
+  if (result.ok) showToast("EXPORT 완료", "info");
+  else showToast(`EXPORT 실패 (${result.status || result.error})`, "error");
 }
+
+/** 감사 필터와 주소 질의를 서로 옮긴다. */
+export const auditRoute = {
+  fromQuery(query) {
+    for (const f of AUDIT_FILTER_FIELDS) state.auditFilter[f.key] = query.get(f.key) ?? "";
+  },
+  toQuery() {
+    return Object.fromEntries(AUDIT_FILTER_FIELDS.map(f => [f.key, state.auditFilter[f.key]]));
+  }
+};
 
 /**
  * 감사 로그 뷰를 그린다.
@@ -205,12 +198,15 @@ async function downloadAuditExport() {
  * @param {{ append?: boolean }} [options] append: 다음 쪽을 이어 붙인다
  */
 export async function renderAudit(container, { append = false } = {}) {
+  const ctx = beginRender();
+  syncRoute();
   if (!append) {
     container.textContent = "";
     container.appendChild(loadingHtml());
   }
   const before = append ? state.auditNextBefore : null;
-  const res    = await api(`/audit?${buildAuditQuery(state.auditFilter, { before })}`);
+  const res    = await api(`/audit?${buildAuditQuery(state.auditFilter, { before })}`, { signal: ctx.signal });
+  if (!ctx.isCurrent()) return;
   if (res.ok) {
     state.auditEvents     = append ? [...state.auditEvents, ...(res.data?.events ?? [])] : (res.data?.events ?? []);
     state.auditNextBefore = res.data?.nextBefore ?? null;

@@ -5,7 +5,7 @@
  * 작성일: 2026-04-07
  */
 
-import { state }                        from "./state.js";
+import { state, beginRender, syncRoute } from "./state.js";
 import { api }                           from "./api.js";
 import { showToast, showModal, closeModal } from "./ui.js";
 import { fmt, fmtDate, loadingHtml }     from "./format.js";
@@ -233,6 +233,39 @@ export function renderKeyPolicyCard(key, container) {
     + "treats every workspace claim as outside the set. Up to "
     + KEY_WORKSPACE_LIMITS.count + " entries of " + KEY_WORKSPACE_LIMITS.length + " characters."));
   card.appendChild(wsArea);
+
+  /* default_workspace는 별도 경로(/keys/:id/workspace)로 저장한다 */
+  const defaultWsWrap = document.createElement("div");
+  defaultWsWrap.className = "flex gap-2";
+  const defaultWsInput = document.createElement("input");
+  defaultWsInput.type = "text";
+  defaultWsInput.id = "key-default-workspace";
+  defaultWsInput.className = "form-input flex-1 text-xs font-mono";
+  defaultWsInput.placeholder = "비우면 해제";
+  defaultWsInput.maxLength = KEY_WORKSPACE_LIMITS.length;
+  defaultWsInput.value = key.default_workspace ?? "";
+  const defaultWsSave = document.createElement("button");
+  defaultWsSave.className = "btn";
+  defaultWsSave.id = "key-default-workspace-save";
+  defaultWsSave.textContent = "SAVE";
+  defaultWsSave.addEventListener("click", async () => {
+    const next = defaultWsInput.value.trim() || null;
+    if (next === (key.default_workspace ?? null)) { showToast("No workspace change", "warning"); return; }
+    defaultWsSave.disabled = true;
+    const r = await api("/keys/" + key.id + "/workspace", { method: "PATCH", body: { workspace: next } });
+    defaultWsSave.disabled = false;
+    if (r.ok) {
+      key.default_workspace = r.data.default_workspace ?? null;
+      showToast("Default workspace updated", "success");
+      renderKeys(container);
+    } else {
+      showToast(r.data?.error ?? "Update failed", "error");
+    }
+  });
+  defaultWsWrap.appendChild(defaultWsInput);
+  defaultWsWrap.appendChild(defaultWsSave);
+  card.appendChild(policyRow("DEFAULT WORKSPACE", defaultWsWrap,
+    "Workspace applied when a call names none. Clearing it stores calls without a workspace in the global scope."));
 
   const gateCb = document.createElement("input");
   gateCb.type = "checkbox";
@@ -801,11 +834,26 @@ export function renderKeyInspector(key, container) {
   return panel;
 }
 
+/** 선택한 키, 목록 필터와 주소 질의를 서로 옮긴다. */
+export const keysRoute = {
+  fromQuery(query) {
+    state.selectedKeyId   = query.get("key") || null;
+    state.keyFilterGroup  = query.get("group") ?? "";
+    state.keyFilterStatus = query.get("status") ?? "";
+  },
+  toQuery() {
+    return { key: state.selectedKeyId, group: state.keyFilterGroup, status: state.keyFilterStatus };
+  }
+};
+
 export async function renderKeys(container) {
+  const ctx = beginRender();
+  syncRoute();
   container.textContent = "";
   container.appendChild(loadingHtml());
 
-  const [res, gRes] = await Promise.all([api("/keys"), api("/groups")]);
+  const [res, gRes] = await Promise.all([api("/keys", { signal: ctx.signal }), api("/groups", { signal: ctx.signal })]);
+  if (!ctx.isCurrent()) return;
   if (res.ok) state.keys   = res.data ?? [];
   if (gRes.ok) state.groups = gRes.data ?? [];
 

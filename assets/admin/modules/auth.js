@@ -12,7 +12,7 @@
  *                  POST /auth/totp로 등록을 마친 뒤 복구 코드 10개를 한 번 보여 준다.
  */
 
-import { state, navigate } from "./state.js";
+import { state, enterApp, closeView } from "./state.js";
 import { api } from "./api.js";
 
 const TOTP_PATTERN = /^\d{6}$/;
@@ -29,12 +29,6 @@ export function secondFactorFields(code) {
   return TOTP_PATTERN.test(value) ? { totp: value } : { recoveryCode: value };
 }
 
-/** 앱 화면으로 들어간다. */
-function enterApp() {
-  document.getElementById("login-root")?.classList.add("hidden");
-  document.getElementById("app")?.classList.add("visible");
-  navigate("overview");
-}
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -178,10 +172,7 @@ export function renderLogin() {
 
     const res = await api("/auth", { method: "POST", body: { key } });
     if (res.ok) {
-      root.classList.add("hidden");
-      const appEl = document.getElementById("app");
-      if (appEl) appEl.classList.add("visible");
-      navigate("overview");
+      enterApp();
     } else {
       errEl.classList.add("visible");
       state.masterKey = "";
@@ -197,6 +188,7 @@ export function renderLogin() {
  * 세션을 초기화하고 로그인 화면으로 돌아간다. 관리자 계정 세션이면 서버 세션도 폐기한다.
  */
 export async function logout() {
+  closeView();
   if (state.userSession) {
     await api("/auth/logout", { method: "POST" });
     state.userSession = false;

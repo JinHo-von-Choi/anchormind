@@ -64,7 +64,10 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | GET | /v1/internal/model/nothing/memory/fragments/:id/history | Fragment change history |
 | PATCH | /v1/internal/model/nothing/memory/fragments/:id | Update fragment. Returns 409 `duplicate_content` when the content matches another fragment |
 | DELETE | /v1/internal/model/nothing/memory/fragments/:id | Delete fragment. `dryRun=true` previews, `force=true` also deletes permanent fragments. Returns 409 `permanent_protected` when permanent protection blocks deletion |
-| GET | /v1/internal/model/nothing/memory/anomalies | Anomaly detection results |
+| GET | /v1/internal/model/nothing/memory/anomalies | Anomaly counts. `qualityUnverified` (no quality verdict yet), `staleFragments` and `staleDays` (no access for over 30 days), `openConflicts` (same-key contradictions with no resolution record whose two fragments are both valid), `failedSearchCount` and `failedSearchDays` (zero-result searches in 7 days), `failedSearches` (latest 10 zero-result searches) |
+| GET | /v1/internal/model/nothing/memory/conflicts | Latest 100 contradicts links between fragments of the same key. With `status=open`, only those with no resolution record whose two fragments are both valid. Items carry `id`, both sides' `*_id`, `*_preview` (320 characters), `*_topic`, `*_valid_to`, `*_anchor`, and the resolution `decision`, `reason`, `resolved_at` |
+| POST | /v1/internal/model/nothing/memory/conflicts/:id/resolve | Resolve a contradiction `{ decision: keep_left \| keep_right \| keep_both \| defer, reason? }`. Keeping one side expires the other and adds a `superseded_by` link. 409 when the side to expire is an anchor. A contradiction already resolved returns the first decision with `replayed: true` |
+| GET | /v1/internal/model/nothing/memory/as-of?as_of=&key_ids= | Up to 200 fragments valid at `as_of`, by importance |
 | POST | /v1/internal/model/nothing/search | Key-scoped recall proxy (key_ids, keywords, text, type, topic, pageSize) |
 | GET | /v1/internal/model/nothing/search-events | Search event list |
 | GET | /v1/internal/model/nothing/sessions | Session list (activity enrichment, unreflected session count) |

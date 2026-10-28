@@ -195,6 +195,54 @@ describe("GET /memory/graph", () => {
   });
 });
 
+describe("GET /memory/anomalies", () => {
+  it("파편 개수는 한 문장으로 세고 미해결 모순과 7일 실패 검색 수를 돌려준다", async () => {
+    queryResults = [
+      { rows: [{ total: 9, live: 8, verified: 3, embedding_backlog: 1, quality_pending: 4, stale: 2 }] },
+      { rows: [{ count: 5 }] },
+      { rows: [{ id: 1, result_count: 0 }] },
+      { rows: [{ count: 6 }] }
+    ];
+    const res = fakeRes();
+    await handleMemory({ method: "GET" }, res, makeUrl(`${ADMIN_BASE}/memory/anomalies`));
+
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.body);
+    assert.equal(body.qualityUnverified, 4);
+    assert.equal(body.staleFragments, 2);
+    assert.equal(body.failedSearchCount, 5);
+    assert.equal(body.openConflicts, 6);
+    assert.equal(body.failedSearches.length, 1);
+    assert.ok(!("possibleSupersessions" in body));
+    assert.equal(queryCalls.filter(c => /FROM agent_memory\.fragments\s+WHERE/.test(c.sql)).length, 1, "파편 테이블 집계는 한 번");
+    assert.match(queryCalls[0].sql, /COUNT\(\*\) FILTER/);
+    assert.match(queryCalls[3].sql, /resolution\.id IS NULL/);
+  });
+});
+
+describe("GET /memory/conflicts", () => {
+  it("status=open이면 해소 기록이 없고 두 파편이 유효한 모순만 조회한다", async () => {
+    queryResults = [{ rows: [] }];
+    await handleMemory({ method: "GET" }, fakeRes(), makeUrl(`${ADMIN_BASE}/memory/conflicts?status=open`));
+    assert.match(queryCalls[0].sql, /resolution\.id IS NULL/);
+    assert.match(queryCalls[0].sql, /left_fragment\.valid_to IS NULL AND right_fragment\.valid_to IS NULL/);
+  });
+
+  it("status가 없으면 해소한 모순도 조회한다", async () => {
+    queryResults = [{ rows: [] }];
+    await handleMemory({ method: "GET" }, fakeRes(), makeUrl(`${ADMIN_BASE}/memory/conflicts`));
+    assert.doesNotMatch(queryCalls[0].sql, /resolution\.id IS NULL/);
+  });
+});
+
+describe("GET /memory/graph 본문 길이", () => {
+  it("노드 본문은 DB에서 잘라 읽는다", async () => {
+    queryResults = [{ rows: [] }];
+    await handleMemory({ method: "GET" }, fakeRes(), makeUrl(`${ADMIN_BASE}/memory/graph?limit=50`));
+    assert.match(queryCalls[0].sql, /LEFT\(content, 300\) AS content/);
+  });
+});
+
 /* ── GET /memory/fragments/:id key_ids 스코프 ── */
 describe("GET /memory/fragments/:id key_ids 스코프", () => {
   it("key_ids가 오면 keyScopeClause 조건이 붙는다", async () => {

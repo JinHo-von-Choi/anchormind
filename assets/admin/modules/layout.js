@@ -8,6 +8,7 @@
 import { state, navigate, renderView } from "./state.js";
 import { relativeTime } from "./format.js";
 import { logout } from "./auth.js";
+import { loadStats } from "./stats.js";
 
 /**
  * 오프캔버스 사이드바를 열거나 닫는다 (768px 이하 전용).
@@ -35,6 +36,9 @@ const NAV_ITEMS = [
   { id: "keys",     label: "API 키",     icon: "vpn_key" },
   { id: "groups",   label: "그룹",       icon: "group" },
   { id: "memory",   label: "메모리 운영", icon: "memory" },
+  { id: "review",   label: "검토 대기",   icon: "fact_check" },
+  { id: "conflicts", label: "모순 처리",  icon: "rule" },
+  { id: "searchLab", label: "검색 진단",  icon: "manage_search" },
   { id: "sessions", label: "세션",       icon: "settings_input_component" },
   { id: "logs",     label: "로그",       icon: "terminal" },
   { id: "audit",    label: "감사 로그",   icon: "policy" },
@@ -128,7 +132,7 @@ export function renderSidebar() {
 
   NAV_ITEMS.forEach(n => {
     const item = document.createElement("a");
-    item.href = "#";
+    item.href = "#/" + n.id;
     const isActive = n.id === state.currentView;
 
     if (isActive) {
@@ -243,15 +247,11 @@ export function renderCommandBar() {
   refreshIcon.className = "material-symbols-outlined";
   refreshIcon.textContent = "refresh";
   refreshBtn.appendChild(refreshIcon);
+  refreshBtn.title = "현재 화면 새로고침";
   refreshBtn.addEventListener("click", async () => {
     renderView();
-    const { api } = await import("./api.js");
-    const res = await api("/stats");
-    if (res.ok) {
-      state.stats = res.data;
-      state.lastUpdated = Date.now();
-      renderCommandBar();
-    }
+    const res = await loadStats();
+    if (res.ok) renderCommandBar();
   });
   right.appendChild(refreshBtn);
 

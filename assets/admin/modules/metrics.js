@@ -9,12 +9,7 @@
 import { api }                                from "./api.js";
 import { fmt, fmtMs, fmtPct, fmtDate, loadingHtml } from "./format.js";
 import { renderSparkline, filterByWindow }    from "./metrics-sparkline.js";
-
-/** @type {number|null} 현재 polling interval ID */
-let _pollInterval  = null;
-
-/** @type {AbortController|null} visibilitychange 중지 제어 */
-let _visHandler    = null;
+import { createAutoRefresh }                  from "./auto-refresh.js";
 
 /**
  * 시간 범위 토글 상태 (분 단위).
@@ -344,7 +339,7 @@ export function renderMetricsView(container, viewState = {}) {
 
   const subtitle = document.createElement("p");
   subtitle.className = "text-sm text-slate-400 mt-1";
-  subtitle.textContent = "실시간 시스템 지표. 30초 자동 갱신.";
+  subtitle.textContent = "실시간 시스템 지표.";
   headerLeft.appendChild(subtitle);
   header.appendChild(headerLeft);
 
@@ -404,6 +399,11 @@ export function renderMetricsView(container, viewState = {}) {
   refreshBtn.appendChild(document.createTextNode("REFRESH"));
   headerRight.appendChild(refreshBtn);
 
+  /* 자동 갱신 표시 자리. mountMetricsView가 채운다 */
+  const autoSlot = document.createElement("div");
+  autoSlot.id = "metrics-auto-refresh-slot";
+  headerRight.appendChild(autoSlot);
+
   header.appendChild(headerRight);
   container.appendChild(header);
 
@@ -444,14 +444,15 @@ export function renderMetricsView(container, viewState = {}) {
 /* ── Polling 마운트 ──────────────────────────────────────── */
 
 /**
- * 메트릭 뷰를 마운트하고 30초 polling을 시작한다.
- * visibilitychange 이벤트로 탭 비활성 시 polling을 일시 중지한다.
+ * 메트릭 뷰를 마운트하고 자동 갱신을 시작한다. 탭이 가려져 있으면 갱신하지 않는다.
+ * 화면을 떠날 때 unmount()로 갱신을 멈춘다.
  *
  * @param {HTMLElement} container
  * @returns {{ unmount: () => void }}
  */
 export function mountMetricsView(container) {
   let mounted = true;
+  const auto  = createAutoRefresh(() => refresh());
 
   async function refresh() {
     if (!mounted) return;
@@ -460,6 +461,7 @@ export function mountMetricsView(container) {
     const isFirst = container.childElementCount === 0 || container.querySelector("#metrics-last-updated") === null;
     if (isFirst) {
       renderMetricsView(container, { loading: true });
+      container.querySelector("#metrics-auto-refresh-slot")?.appendChild(auto.element);
     }
 
     const res = await fetchMetricsSummary();
@@ -468,12 +470,14 @@ export function mountMetricsView(container) {
 
     if (res.ok) {
       renderMetricsView(container, { data: res.data });
+      auto.markUpdated();
     } else if (res.status === 403 || res.status === 401) {
       renderMetricsView(container, { error: "접근 권한이 없습니다 (master 키 또는 admin 권한 필요). HTTP " + res.status });
     } else {
       renderMetricsView(container, { error: res.error ?? ("API 오류: HTTP " + res.status) });
     }
 
+    container.querySelector("#metrics-auto-refresh-slot")?.appendChild(auto.element);
     /* 수동 새로고침 버튼 이벤트 재등록 */
     container.querySelector("#metrics-refresh-btn")?.addEventListener("click", refresh);
   }
@@ -481,29 +485,10 @@ export function mountMetricsView(container) {
   /* 최초 로드 */
   refresh();
 
-  /* 30초 polling */
-  _pollInterval = setInterval(() => {
-    if (document.visibilityState !== "hidden") refresh();
-  }, 30000);
-
-  /* visibilitychange: 탭 복귀 시 즉시 갱신 */
-  function onVisibility() {
-    if (document.visibilityState === "visible") refresh();
-  }
-  document.addEventListener("visibilitychange", onVisibility);
-  _visHandler = onVisibility;
-
   return {
     unmount() {
       mounted = false;
-      if (_pollInterval !== null) {
-        clearInterval(_pollInterval);
-        _pollInterval = null;
-      }
-      if (_visHandler !== null) {
-        document.removeEventListener("visibilitychange", _visHandler);
-        _visHandler = null;
-      }
+      auto.stop();
     }
   };
 }

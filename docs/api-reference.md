@@ -67,7 +67,10 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | GET | /v1/internal/model/nothing/memory/fragments/:id/history | 파편 변경 이력 |
 | PATCH | /v1/internal/model/nothing/memory/fragments/:id | 파편 수정. 본문이 다른 파편과 겹치면 409 `duplicate_content` |
 | DELETE | /v1/internal/model/nothing/memory/fragments/:id | 파편 삭제. `dryRun=true`는 미리보기, `force=true`는 permanent 파편도 삭제. permanent 보호로 못 지우면 409 `permanent_protected` |
-| GET | /v1/internal/model/nothing/memory/anomalies | 이상 탐지 결과 |
+| GET | /v1/internal/model/nothing/memory/anomalies | 이상 징후 집계. `qualityUnverified`(품질 판정 전), `staleFragments`와 `staleDays`(30일 넘게 접근 없음), `openConflicts`(해소 기록이 없고 두 파편이 모두 유효한 같은 키 모순), `failedSearchCount`와 `failedSearchDays`(7일 동안 결과 0건 검색 수), `failedSearches`(결과 0건 검색 최근 10건) |
+| GET | /v1/internal/model/nothing/memory/conflicts | 같은 키 파편 사이의 contradicts 링크 최근 100건. `status=open`이면 해소 기록이 없고 두 파편이 모두 유효한 것만. 항목은 `id`, 양쪽 `*_id`, `*_preview`(320자), `*_topic`, `*_valid_to`, `*_anchor`, 해소 결과 `decision`, `reason`, `resolved_at` |
+| POST | /v1/internal/model/nothing/memory/conflicts/:id/resolve | 모순 해소 `{ decision: keep_left \| keep_right \| keep_both \| defer, reason? }`. 한쪽을 남기면 다른 쪽을 만료하고 `superseded_by` 링크를 만든다. 만료될 쪽이 앵커이면 409. 이미 해소한 모순은 처음 결정과 `replayed: true` |
+| GET | /v1/internal/model/nothing/memory/as-of?as_of=&key_ids= | `as_of` 시각에 유효했던 파편을 중요도 순으로 최대 200개 |
 | POST | /v1/internal/model/nothing/search | 키 범위 recall 프록시 (key_ids, keywords, text, type, topic, pageSize) |
 | GET | /v1/internal/model/nothing/search-events | 검색 이벤트 목록 |
 | GET | /v1/internal/model/nothing/sessions | 세션 목록 (활동 enrichment, 미반영 세션 수) |

@@ -5,18 +5,33 @@
  * 작성일: 2026-04-07
  */
 
-import { state }                                from "./state.js";
+import { state, beginRender, syncRoute }        from "./state.js";
 import { api }                                  from "./api.js";
 import { fmt, fmtBytes, truncate, loadingHtml } from "./format.js";
 
+/** 로그 조회 조건과 주소 질의를 서로 옮긴다. */
+export const logsRoute = {
+  fromQuery(query) {
+    state.logFile   = query.get("file") ?? "";
+    state.logLevel  = query.get("level") ?? "";
+    state.logSearch = query.get("search") ?? "";
+    state.logTail   = parseInt(query.get("tail") ?? "", 10) || 200;
+  },
+  toQuery() {
+    return { file: state.logFile, level: state.logLevel, search: state.logSearch, tail: state.logTail === 200 ? "" : state.logTail };
+  }
+};
+
 export async function renderLogs(container) {
+  const ctx = beginRender();
   container.textContent = "";
   container.appendChild(loadingHtml());
 
   const [statsRes, filesRes] = await Promise.all([
-    api("/logs/stats"),
-    api("/logs/files")
+    api("/logs/stats", { signal: ctx.signal }),
+    api("/logs/files", { signal: ctx.signal })
   ]);
+  if (!ctx.isCurrent()) return;
 
   state.logStats = statsRes.ok ? statsRes.data : null;
   state.logFiles = filesRes.ok ? (filesRes.data?.files ?? []) : [];
@@ -30,9 +45,11 @@ export async function renderLogs(container) {
     const params = new URLSearchParams({ file: state.logFile, tail: state.logTail });
     if (state.logLevel)  params.set("level", state.logLevel);
     if (state.logSearch) params.set("search", state.logSearch);
-    const readRes = await api("/logs/read?" + params);
+    const readRes = await api("/logs/read?" + params, { signal: ctx.signal });
+    if (!ctx.isCurrent()) return;
     state.logLines = readRes.ok ? (readRes.data?.lines ?? []) : [];
   }
+  syncRoute();
 
   container.textContent = "";
 

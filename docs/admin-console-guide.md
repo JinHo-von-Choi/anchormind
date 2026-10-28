@@ -16,7 +16,7 @@ https://{도메인}/v1/internal/model/nothing/
 
 ## Admin UI 아키텍처
 
-Admin UI는 얇은 진입점 + 18개 ESM 모듈로 구성된다. Consolidator는 22개 stage(stageDefs 배열)를 순차 실행하며, 진행률 표시는 `stageDefs.length`(22)를 분모로 계산된다.
+Admin UI는 얇은 진입점 + 25개 ESM 모듈로 구성된다. Consolidator는 22개 stage(stageDefs 배열)를 순차 실행하며, 진행률 표시는 `stageDefs.length`(22)를 분모로 계산된다.
 
 ```
 assets/admin/
@@ -24,8 +24,10 @@ assets/admin/
 ├── admin.js            # 진입점, 모듈 초기화 오케스트레이션
 ├── vendor/             # Tailwind CSS 3.4.17, d3 7.9.0 사본과 PROVENANCE.md
 └── modules/
-    ├── state.js        # 전역 상태 관리
-    ├── api.js          # API 호출 추상화
+    ├── state.js        # 전역 상태, 화면 수명(렌더 문맥, 정리 함수), URL 해시 경로
+    ├── api.js          # API 호출 추상화, 파일 내려받기
+    ├── stats.js        # /stats 조회 공유(동시 요청 하나로 합침)
+    ├── auto-refresh.js # 자동 갱신 주기·마지막 갱신 시각·일시정지
     ├── ui.js           # 공통 UI 유틸리티
     ├── format.js       # 날짜/숫자 포매팅
     ├── auth.js         # 인증/로그인
@@ -35,14 +37,21 @@ assets/admin/
     ├── groups.js       # 그룹 관리
     ├── sessions.js     # 세션 관리
     ├── graph.js        # 지식 그래프
+    ├── galaxy-model.js # 지식 그래프 배치 모델
+    ├── galaxy-canvas.js # 지식 그래프 Canvas 렌더러
     ├── logs.js         # 로그 뷰어
     ├── audit.js        # 감사 로그
     ├── admin-users.js  # 관리자 계정
     ├── key-lifecycle.js # API 키 수명 카드
     ├── memory.js       # 메모리 운영
+    ├── review.js       # 검토 대기
+    ├── conflicts.js    # 모순 처리
+    ├── search-lab.js   # 검색 진단
     ├── metrics.js      # 메트릭 대시보드
     └── metrics-sparkline.js # 메트릭 스파크라인
 ```
+
+화면 렌더러는 시작할 때 렌더 문맥을 받는다. 다른 메뉴로 옮기거나 같은 화면을 다시 그리면 앞 문맥의 요청은 취소되고, 늦게 도착한 응답은 화면에 그려지지 않는다. 자동 갱신 타이머, 그래프 애니메이션처럼 화면을 떠날 때 멈춰야 하는 것은 정리 함수로 등록되어 메뉴를 옮길 때 함께 멈춘다.
 
 번들러 없이 브라우저 네이티브 ESM을 사용한다. index.html이 `<script type="module">` 태그로 진입점을 로드하고, 각 모듈은 ES import/export로 의존성을 해결한다.
 
@@ -52,12 +61,16 @@ Tailwind CSS와 d3 스크립트는 외부 CDN이 아니라 서버가 `assets/adm
 
 ## 화면 구성
 
-좌측 사이드바에 10개 메뉴가 있다. 각 메뉴의 역할과 읽는 법을 설명한다.
+좌측 사이드바에 13개 메뉴가 있다. 각 메뉴의 역할과 읽는 법을 설명한다.
 
 상단 커맨드바:
 - MASTER KEY 배지 -- 현재 세션이 master key 인증임을 표시한다.
 - HEALTH -- `/stats`의 healthFlags 실측 기반. 플래그가 없으면 OK(녹색), 있으면 개수를 적색으로 표시하며 마우스를 올리면 플래그 이름(redis_disconnected, db_pool_pressure, trust_proxy_hops_unset 등)이 보인다. 미로드 시 --.
-- SYNCED -- 마지막 데이터 동기화 시각. 새로고침 버튼으로 stats를 재조회한다.
+- SYNCED -- 마지막 데이터 동기화 시각. 새로고침 버튼은 현재 화면을 다시 그리고 stats를 재조회한다.
+
+주소:
+- 현재 메뉴와 조회 조건이 주소의 `#/` 뒤에 남는다(예: `#/memory?topic=deploy&page=3&frag=frag-…`). 새로고침해도 보던 화면과 조건이 유지되고, 주소를 복사해 같은 화면을 공유할 수 있다.
+- 브라우저의 뒤로 가기와 앞으로 가기로 메뉴 이동 기록을 오간다.
 - 768px 이하 화면에서는 좌측 메뉴 버튼으로 사이드바를 여닫는다(오버레이·ESC로 닫기).
 
 ---
@@ -76,14 +89,19 @@ Tailwind CSS와 d3 스크립트는 외부 CDN이 아니라 서버가 `assets/adm
 
 좌측 영역:
 - 시스템 건전성 -- CPU, 메모리, 디스크 사용률을 막대로 표시한다. 85% 이상이면 빨간색으로 바뀌며 주의가 필요하다. 우측에 서버 가동 시간(uptime)이 표시된다.
+- 운영 상태 -- 스케줄러 작업마다 마지막 성공 시각, 실행 수, 실패 수를 보여 준다. 마지막 실패가 마지막 성공보다 늦은 작업은 빨간색이며 마우스를 올리면 오류 문구가 보인다. 마지막 통합(consolidate) 실행 결과와 기능 스위치 요약(켜짐, 꺼짐, 모드, 기본값과 다른 수, 잘못된 설정값)도 함께 보인다.
 - 최근 메모리 활동 -- 가장 최근에 저장되거나 조회된 기억 파편 10건을 시간순으로 보여준다. 각 행의 타입 뱃지(Vector, Semantic, Graph 등)는 어떤 경로로 처리됐는지를 나타낸다.
 
 우측 영역:
 - 리스크 및 이상 징후 -- 임베딩 대기열 적체, 품질 미검증 파편 비율 등 운영 경고를 표시한다. 빨간 배경 항목은 즉시 확인이 필요하다.
-- 빠른 작업 -- 키 생성, 그룹 생성, 유지보수, 로그 열기 버튼. 클릭하면 해당 탭으로 이동하거나 동작을 실행한다.
+- 빠른 작업 -- 키 생성, 그룹 생성, 검토 대기, 로그 열기 버튼. 클릭하면 해당 메뉴로 이동한다.
 - Search Latency p50 -- L1(키워드)/L2(벡터)/L3(하이브리드) 검색 계층별 p50 응답 시간(ms) 실측값을 막대로 비교한다. 막대에 마우스를 올리면 실제 수치가 표시되며, 지표가 없으면 --로 표시된다. L3가 비정상적으로 높으면 벡터 인덱스 점검이 필요하다.
 - Quality Verified -- 품질 검증(quality_verified)을 통과한 파편의 비율과 실제 건수(N / M fragments)를 도넛으로 표시한다.
 - Top Topics -- 저장 파편 수 기준 상위 5개 주제와 전체 대비 비율. 데이터가 없으면 --로 표시된다.
+
+갱신:
+- 패널마다 따로 불러와 먼저 온 것부터 그린다.
+- 30초마다 자동 갱신하며, 갱신 중에는 새 값이 올 때까지 이전 값을 유지한다. 우측 상단에 주기와 마지막 갱신 시각, 일시정지 버튼이 있다. 브라우저 탭이 가려져 있으면 갱신하지 않고, 돌아오면 바로 한 번 갱신한다.
 
 ---
 
@@ -122,6 +140,7 @@ PERMISSIONS의 REVIEW_OFF와 REVIEW_ALL은 검토 대기열 방식 표지다(`ME
 - ACCESS POLICY -- 세 정책 열을 한 카드에서 편집하고 SAVE POLICY로 한 번에 저장한다. 바뀐 필드만 `PATCH /v1/internal/model/nothing/keys/:id/policy`로 전송한다. 변경은 감사 로그(`admin key_policy`)에 필드 이름과 이전, 이후 값으로 남는다.
   - DEFAULT MODE -- API 키의 기본 mode preset. 값: `recall-only`, `write-only`, `onboarding`, 또는 `(none)`(전체 도구 노출). 마스터 전용 preset(`audit`)은 API 키에 지정할 수 없다. 변경 이후 열린 세션부터 적용되고, `X-Memento-Mode` 헤더와 `initialize`의 `params.mode`가 DB 설정보다 우선한다.
   - RESTRICT WORKSPACES -- `allowed_workspaces` 허가 목록. 체크를 끄면 제한 없음(NULL)이다. 체크하고 한 줄에 하나씩 workspace를 입력한다. 목록 밖 workspace 주장은 `workspaceNotAllowed` 경고가 되고, `MEMENTO_WORKSPACE_GATE=true`이며 hard gate가 켜진 키에서만 저장이 거부된다. 읽기(recall, context 등과 resources/read)는 목록의 workspace와 전역 파편으로 제한되며, `MEMENTO_WORKSPACE_READ_AUTHZ=warn`(기본)에서는 목록 밖 읽기를 기록만 하고 `enforce`에서 거부한다. workspace가 없는 쓰기는 항상 통과한다. 체크하고 목록을 비우면 모든 workspace 주장이 허가 집합 밖으로 판정되며, 저장 전에 단추가 확인 상태로 바뀌어 한 번 더 누르게 한다. 항목은 최대 64개, 항목당 128자이며 앞뒤 공백과 제어 문자는 받지 않는다.
+  - DEFAULT WORKSPACE -- `default_workspace`. 호출이 workspace를 지정하지 않을 때 쓰는 값이다. 이 칸은 SAVE POLICY와 따로 옆의 SAVE로 저장하며 `PATCH /v1/internal/model/nothing/keys/:id/workspace`로 보낸다. 비우고 저장하면 해제되어 workspace 없는 호출이 전역 범위로 저장된다.
   - SYMBOLIC HARD GATE -- `symbolic_hard_gate`. 켜면 PolicyRules 위반 또는 고신뢰 민감 정보 탐지(`sensitive.*`) 파편의 `remember`가 거부된다(`-32003`).
   - hard gate와 workspace 허가 변경은 이 프로세스의 조회 캐시를 비우지만, 변경 시점에 이미 진행 중이던 조회가 이전 값을 캐시에 쓸 수 있다. 그 항목은 TTL 30초 안에 만료되므로 늦어도 약 30초 안에 적용된다. 다른 인스턴스도 같다.
 - LIFECYCLE -- 키 수명 카드. 변경은 모두 감사 이벤트로 남는다(`admin.key.lifecycle_update`, `admin.key.rotate`, `admin.key.revoke`, `admin.key.access_review`).
@@ -169,19 +188,22 @@ API 키를 논리적 단위로 묶어 관리한다. 같은 그룹의 키들은 �
 - TYPE -- 파편 유형 (fact, error, decision, procedure, preference, episode, relation)
 - KEY / GROUP -- 특정 API 키 또는 키 그룹의 파편만 조회
 - SEARCH 버튼 또는 입력창에서 Enter로 검색 실행
-- EXPORT JSONL -- 현재 필터(KEY/GROUP/TOPIC/TYPE)에 해당하는 파편을 JSON Lines 파일로 다운로드한다. KEY 또는 GROUP 필터가 필수다(무필터 전체 반출은 API에서 `confirm=full` 명시 시에만 허용).
+- EXPORT JSONL -- 현재 필터(KEY/GROUP/TOPIC/TYPE)에 해당하는 파편을 JSON Lines 파일로 다운로드한다. KEY 또는 GROUP 필터가 필수다(무필터 전체 반출은 API에서 `confirm=full` 명시 시에만 허용). 관리자 계정 로그인에서도 동작한다.
+- IMPORT -- export 파일(`.jsonl`, `.ndjson`)이나 JSON 본문(`.json`)을 가져온다. 기록할 키 id를 비우면 마스터 범위로 기록한다. 기본은 시험 실행이며, 결과(새로 기록, 중복, 거부와 거부 사유, 오류, 링크 수)를 확인한 뒤 시험 실행을 끄고 다시 실행하면 기록된다.
 
 검색 결과:
 - 각 파편은 고유 ID(#MEM_XXXXX), 주제, 본문 미리보기(200자), 중요도, 접근 횟수를 표시한다.
-- 행을 클릭하면 우측 인스펙터에 파편 상세가 열린다(목록은 그대로 유지되고 인스펙터만 갱신된다): 전문, keywords, 메타(anchor·assertion·case·agent 등), 1-hop 링크(관계 유형·방향·상대 파편 미리보기), VIEW IN GRAPH 버튼(지식 그래프로 이동).
+- 행을 클릭하면 우측 인스펙터에 파편 상세가 열린다(목록은 그대로 유지되고 인스펙터만 갱신된다): 전문, keywords, 메타(anchor·assertion·case·agent 등), 1-hop 링크(관계 유형·방향·상대 파편 미리보기), VIEW IN GRAPH 버튼(그 파편의 topic으로 지식 그래프를 연다), 변경 이력 버튼(amend 이전 판과 이 파편을 대체한 파편).
 
 우측 패널:
 - Retrieval Analytics (7d) -- 최근 7일 실측: 검색 수, zero-result 비율, 검색 레이턴시 p50/p90/p99/avg, 피드백 품질(relevance/sufficiency). 값이 없으면 --.
 - Anomaly Insights:
-  - Failed Searches (7d) -- 최근 7일 결과 0건 검색 수
-  - Superseded Candidates -- 더 최신 기억으로 대체 가능한 후보 수
-  - Low Quality Fragments -- 품질 검증 미통과 파편 수
-  - Stale Fragments -- 검증 주기를 초과한 파편 수
+  - 결과 0건 검색 (7일) -- 최근 7일 결과가 0건인 검색 수. 누르면 검색 진단으로 이동한다.
+  - 미해결 모순 -- 해소 기록이 없고 두 파편이 모두 유효한 모순 수. 누르면 모순 처리로 이동한다.
+  - 품질 판정 전 -- 품질 판정(quality_verified)이 아직 없는 파편 수
+  - 30일 넘게 접근 없음 -- 마지막 접근이 30일보다 오래된 파편 수
+
+파편 목록, 검색 분석, 이상 징후는 따로 불러와 먼저 온 것부터 그린다.
 
 하단 Search Activity (7d):
 - 검색 경로 분포(L1/L2/L3 등 경로별 건수 막대)와 상위 검색 키워드를 표시한다.
@@ -191,7 +213,42 @@ API 키를 논리적 단위로 묶어 관리한다. 같은 그룹의 키들은 �
 
 ---
 
-### 5. 세션
+### 5. 검토 대기
+
+검토 관문에 걸린 파편을 오래된 순으로 보여 준다(`GET /review`, 능력 `review.decide`). 결정하지 않은 파편은 만든 지 30일이 지나면 자동으로 거절된다.
+
+- 키 id 입력 -- 특정 키의 파편만 본다. `master`는 마스터 키가 쓴 파편이다.
+- 각 행 -- 유형, topic, 키, workspace, 만든 시각, 자동 거절까지 남은 일수, 본문 미리보기(500자), 검토 사유(지시 덮어쓰기 문구, 낮은 신뢰 출처의 지시성 파편, 권한 없는 앵커 요청, 앵커 지정 요청, 키 설정: 전부 검토), 출처와 신뢰 등급
+- 승인 / 거절 -- 결정 메모(500자)를 함께 남길 수 있다. 권한 없는 앵커 요청은 "승인하면서 앵커 적용"을 고르면 앵커 상한을 확인한 뒤 적용한다. 거절한 파편은 만료된다.
+- 결정 요청에는 파편마다 멱등 키가 붙는다. 같은 단추를 다시 눌러도 결정은 한 번만 기록된다.
+- 50건씩 불러오며 더 있으면 "더 보기"가 나온다.
+
+---
+
+### 6. 모순 처리
+
+같은 키의 두 파편을 잇는 `contradicts` 링크를 보여 주고 해소한다(`GET /memory/conflicts`, `POST /memory/conflicts/:id/resolve`).
+
+- 미해결 / 전체 -- 미해결은 해소 기록이 없고 두 파편이 모두 유효한 모순이다. 전체는 해소한 것을 포함한 최근 100건이다.
+- 왼쪽 유지 / 오른쪽 유지 -- 남길 쪽을 고르면 다른 쪽은 만료되고 `superseded_by` 링크가 생긴다. 만료될 쪽이 앵커 파편이면 단추가 꺼져 있다.
+- 둘 다 유지 / 보류 -- 파편은 그대로 두고 결정만 기록한다.
+- 파편 id를 누르면 메모리 운영 인스펙터에서 그 파편을 연다.
+- 같은 모순을 다시 해소하면 처음 결정이 유지된다.
+
+---
+
+### 7. 검색 진단
+
+- 키 범위 검색 -- 키 id(쉼표로 여러 개), 키워드, 자연어 질의, topic, type, 결과 수(최대 50)로 recall한다(`POST /search`). 키를 비우면 전체 범위다. 호출마다 감사 기록 `admin.memory.search`가 남는다. 결과에서 그 검색의 이벤트를 바로 열 수 있다.
+- 검색 이벤트 -- 이벤트 id로 기록된 검색을 연다(`GET /search-events/:id`). 경로, 질의 유형, 결과·후보·예산 안 건수, 지연, 필터, 선택된 파편과 선택 근거 코드를 보여 준다.
+  - 지금 상태로 확인 -- 기록 당시 선택된 파편 중 지금도 유효한 것과 사라진 것을 비교한다(`POST /search-events/:id/replay`, 부작용 없음).
+  - 피드백 -- 관련 있음 / 관련 없음을 남긴다. 이미 피드백이 있는 이벤트는 새로 기록하지 않는다.
+  - 아래 "최근 결과 0건 검색" 목록에서 고를 수도 있다.
+- 시점 조회 -- 지정한 시각에 유효했던 파편을 중요도 순으로 최대 200개 보여 준다(`GET /memory/as-of`). 키 id로 좁힐 수 있다.
+
+---
+
+### 8. 세션
 
 현재 MCP 서버에 연결된 클라이언트 세션을 관리한다.
 
@@ -223,7 +280,7 @@ API 키를 논리적 단위로 묶어 관리한다. 같은 그룹의 키들은 �
 
 ---
 
-### 6. 로그
+### 9. 로그
 
 서버의 Winston 로그 파일을 실시간으로 조회한다.
 
@@ -263,10 +320,11 @@ API 키를 논리적 단위로 묶어 관리한다. 같은 그룹의 키들은 �
 - 행 단추 -- ROLES(역할 바인딩 교체), DISABLE과 ENABLE, RESET TOTP(TOTP와 복구 코드를 초기화하고 그 계정의 세션을 폐기), REVOKE SESSIONS(계정의 모든 세션 폐기), DELETE(확인 뒤 삭제). 활성 owner가 하나뿐이면 그 계정의 삭제, 비활성화, owner 제거는 409 `last_owner`로 거절된다.
 - 만들기 -- USERNAME, PASSWORD(12자 이상), ROLES(쉼표로 구분)를 넣고 CREATE를 누른다. 계정이 0개이면 BOOTSTRAP OWNER 양식이 나오며 첫 owner는 마스터 키로 로그인한 상태에서만 만들 수 있다.
 - 모든 변경은 감사 로그의 `admin.user.*` 행위로 남는다. 계정 세션이 TOTP 코드를 잃었을 때의 비상 복구는 서버 호스트에서 `anchormind admin recover --confirm`을 쓴다([cli.md](cli.md)).
+- 권한 확인 -- 능력 이름(예: `mem.write`)과 workspace를 넣으면 지금 로그인한 주체가 그 능력을 가졌는지와 단계별 근거를 보여 준다(`GET /me/explain`). 입력 후보는 지금 가진 능력이다.
 
 ---
 
-### 7. 메트릭
+### 10. 메트릭
 
 Prometheus 기반 핵심 지표를 한 화면에서 확인하는 대시보드다. 외부 Grafana 탭 없이 즉각 진단을 목적으로 하며, 심층 분석은 Grafana에서 수행한다.
 
@@ -306,7 +364,7 @@ Prometheus 기반 핵심 지표를 한 화면에서 확인하는 대시보드다
 | last_seen | 마지막 발생 시각 (ISO 8601) |
 
 폴링 및 새로고침:
-- Admin UI는 30초 간격으로 자동 폴링한다.
+- 30초 간격으로 자동 갱신한다. 헤더에 주기와 마지막 갱신 시각, 일시정지 버튼이 있다. 다른 메뉴로 옮기면 갱신을 멈춘다.
 - 즉시 갱신이 필요하면 상단 바의 새로고침 아이콘을 클릭한다.
 - 서버 측 캐시 TTL(10초)로 인해 갱신 후에도 최대 10초의 지연이 있을 수 있다.
 
@@ -314,14 +372,14 @@ Admin 메트릭 메뉴는 운영자 즉각 진단(at-a-glance health) 용도다.
 
 ---
 
-### 8. 지식 그래프
+### 11. 지식 그래프
 
 파편 간 관계를 시각적으로 탐색하는 화면이다.
 
 상단 컨트롤:
 - Topic 필터 -- 특정 토픽의 파편만 표시 (빈칸이면 전체)
 - Group / Key 필터 -- 키 그룹 또는 특정 키의 파편으로 한정
-- Limit 슬라이더 -- 표시할 최대 노드 수 (10~10000, 기본 50)
+- Limit 슬라이더 -- 표시할 최대 노드 수 (10~1000, 기본 200). API는 10000까지 받는다.
 - Load 버튼 -- 그래프 데이터를 서버에서 불러와 렌더링
 - COLOR 토글 -- 노드 색상 기준 전환. TYPE(기본, 파편 유형별)과 AGENT(agent_id 해시 색 — 멀티에이전트 케이스에서 기여 에이전트 구분) 두 모드이며, 범례가 함께 전환된다.
 
@@ -344,6 +402,8 @@ Admin 메트릭 메뉴는 운영자 즉각 진단(at-a-glance health) 용도다.
 - 인접맵(adjMap) 사전 구축: hover 시 O(1)로 연결된 링크를 하이라이트한다. 매 hover마다 전체 엣지를 순회하지 않는다.
 - 위성 rAF 제어: force 시뮬레이션 진행 중에는 위성 애니메이션을 정지하고, document.hidden 상태에서는 requestAnimationFrame을 중단한다.
 - 행성 크기 결정적 난수: fragRng 기반으로 노드 크기에 +-15% 변동을 적용한다. 동일 데이터에 대해 항상 같은 시각적 결과를 보장한다.
+
+다른 메뉴로 옮기면 시뮬레이션과 애니메이션을 멈춘다.
 
 API: `GET /memory/graph?topic=xxx&limit=50` -> `{ nodes: [...], edges: [...], edges_truncated: false }` (노드에 agent_id·is_anchor 포함)
 

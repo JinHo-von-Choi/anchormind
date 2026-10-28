@@ -124,7 +124,7 @@ describe("렌더", () => {
   });
 
   it("뷰가 등록되고 사이드바에 있다", () => {
-    assert.match(ADMIN_JS, /registerView\("audit",\s*renderAudit\)/);
+    assert.match(ADMIN_JS, /registerView\("audit",\s*renderAudit[,)]/);
     assert.match(LAYOUT_JS, /id: "audit"/);
   });
 });

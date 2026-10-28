@@ -37,7 +37,7 @@ const NON_ROUTE_MODULES = new Set([
   "admin-principal", "admin-redact", "AdminUserStore", "admin-password", "admin-totp", "admin-seal",
   "admin-session-policy", "admin-user-rules", "ApiKeyLifecycleStore", "key-cidr", "key-lifecycle", "key-lifecycle-limits",
   "key-material", "key-schema-state", "ReviewStore", "admin-handler-registry", "ToolCallUsage",
-  "fragment-write-rejection"
+  "fragment-write-rejection", "FragmentHealth"
 ]);
 
 const sampleOf = (p) => p.split("/").map((seg) => (seg.startsWith(":") ? SAMPLE : seg)).join("/");

@@ -1,4 +1,5 @@
 import { api }       from "./api.js";
+import { state, onViewCleanup, syncRoute } from "./state.js";
 import { showToast } from "./ui.js";
 import { renderGalaxyCanvas } from "./galaxy-canvas.js";
 
@@ -61,9 +62,24 @@ function disposeGraphRenderer() {
   _moonRafId = null;
 }
 
+/** 그래프 topic 조건과 주소 질의를 서로 옮긴다. */
+export const graphRoute = {
+  fromQuery(query) { state.graphTopic = query.get("topic") ?? ""; },
+  toQuery()        { return { topic: state.graphTopic ?? "" }; }
+};
+
+/** 화면에 띄울 수 있는 노드 수 상한과 기본값 */
+const GRAPH_LIMIT_MAX     = 1000;
+const GRAPH_LIMIT_DEFAULT = 200;
+
 async function renderGraph(container) {
   disposeGraphRenderer();
   document.getElementById("graph-tooltip")?.remove();
+  /** 다른 화면으로 옮기면 시뮬레이션, 애니메이션, 툴팁을 멈춘다 */
+  onViewCleanup(() => {
+    disposeGraphRenderer();
+    document.getElementById("graph-tooltip")?.remove();
+  });
   container.textContent = "";
 
   const wrap = document.createElement("div");
@@ -94,6 +110,7 @@ async function renderGraph(container) {
   topicInput.type = "text";
   topicInput.id = "graph-topic";
   topicInput.placeholder = "Topic filter";
+  topicInput.value = state.graphTopic ?? "";
   topicInput.className = "bg-surface-container border border-outline-variant/30 rounded-sm px-3 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-none w-48";
 
   const limitLabel = document.createElement("label");
@@ -104,15 +121,15 @@ async function renderGraph(container) {
   limitRange.type = "range";
   limitRange.id = "graph-limit";
   limitRange.min = "10";
-  limitRange.max = "10000";
-  limitRange.value = "50";
+  limitRange.max = String(GRAPH_LIMIT_MAX);
+  limitRange.value = String(GRAPH_LIMIT_DEFAULT);
   limitRange.step = "10";
   limitRange.className = "w-32 accent-primary";
 
   const limitValue = document.createElement("span");
   limitValue.id = "graph-limit-value";
   limitValue.className = "font-mono text-on-surface w-8";
-  limitValue.textContent = "50";
+  limitValue.textContent = String(GRAPH_LIMIT_DEFAULT);
 
   limitRange.addEventListener("input", () => {
     limitValue.textContent = limitRange.value;
@@ -282,9 +299,11 @@ let _moonRafId = null; // 위성 애니메이션 rAF ID — 재로딩 시 취소
 async function loadGraph() {
   disposeGraphRenderer();
   const topic   = document.getElementById("graph-topic")?.value   || "";
-  const limit   = document.getElementById("graph-limit")?.value   || "50";
+  const limit   = document.getElementById("graph-limit")?.value   || String(GRAPH_LIMIT_DEFAULT);
   const keyId   = document.getElementById("graph-key-id")?.value  || "";
   const groupId = document.getElementById("graph-group-id")?.value || "";
+  state.graphTopic = topic;
+  syncRoute();
 
   const params = new URLSearchParams({ limit });
   if (topic)   params.set("topic",    topic);

@@ -5,9 +5,9 @@
  * 작성일: 2026-04-07
  */
 
-import { state, navigate }                               from "./state.js";
-import { api, API_BASE }                                 from "./api.js";
-import { showToast }                                     from "./ui.js";
+import { state, navigate, beginRender, syncRoute }      from "./state.js";
+import { api, downloadToFile }                           from "./api.js";
+import { showToast, showModal, closeModal }              from "./ui.js";
 import { fmt, fmtDate, fmtPct, truncate, loadingHtml }  from "./format.js";
 
 export function renderMemoryFilters() {
@@ -119,6 +119,16 @@ export function renderMemoryFilters() {
   exportBtn.appendChild(exportIcon);
   exportBtn.appendChild(document.createTextNode("EXPORT JSONL"));
   rightSide.appendChild(exportBtn);
+
+  const importBtn = document.createElement("button");
+  importBtn.className = "flex items-center gap-2 bg-transparent border border-outline-variant px-4 py-1.5 text-[10px] font-bold text-slate-400 hover:text-primary";
+  importBtn.id = "import-jsonl";
+  const importIcon = document.createElement("span");
+  importIcon.className = "material-symbols-outlined text-[14px]";
+  importIcon.textContent = "upload";
+  importBtn.appendChild(importIcon);
+  importBtn.appendChild(document.createTextNode("IMPORT"));
+  rightSide.appendChild(importBtn);
 
   bar.appendChild(rightSide);
 
@@ -348,7 +358,8 @@ export function renderRetrievalAnalytics(searchEvents) {
 
 export function renderAnomalyCards(anomalies) {
   if (!anomalies) return document.createDocumentFragment();
-  anomalies = { ...anomalies, failedSearchCount: (anomalies.failedSearches ?? []).length };
+  const failedDays = anomalies.failedSearchDays ?? 7;
+  const staleDays  = anomalies.staleDays ?? 30;
 
   const panel = document.createElement("section");
   panel.className = "glass-panel rounded-sm p-6 border-t border-error/20";
@@ -362,10 +373,10 @@ export function renderAnomalyCards(anomalies) {
   list.className = "space-y-3";
 
   const items = [
-    { label: "Failed Searches (7d)",  key: "failedSearchCount",     icon: "crisis_alert",         isCritical: true },
-    { label: "Superseded Candidates", key: "possibleSupersessions", icon: "auto_awesome_motion",  isCritical: false },
-    { label: "Low Quality Fragments", key: "qualityUnverified",     icon: "low_priority",         isCritical: false },
-    { label: "Stale Fragments",       key: "staleFragments",        icon: "history_toggle_off",   isCritical: false }
+    { label: `결과 0건 검색 (${failedDays}일)`,      key: "failedSearchCount", icon: "crisis_alert",       isCritical: true,  view: "searchLab" },
+    { label: "미해결 모순",                           key: "openConflicts",     icon: "rule",               isCritical: false, view: "conflicts" },
+    { label: "품질 판정 전",                          key: "qualityUnverified", icon: "low_priority",       isCritical: false },
+    { label: `${staleDays}일 넘게 접근 없음`,         key: "staleFragments",    icon: "history_toggle_off", isCritical: false }
   ];
 
   items.forEach(a => {
@@ -374,6 +385,11 @@ export function renderAnomalyCards(anomalies) {
       ? "flex items-center justify-between p-3 bg-error-container/10 border-l-2 border-error"
       : "flex items-center justify-between p-3 bg-surface-container-high";
     row.dataset.anomaly = a.key;
+    if (a.view) {
+      row.className += " cursor-pointer hover:bg-white/5";
+      row.title = "눌러서 처리 화면으로 이동";
+      row.addEventListener("click", () => navigate(a.view));
+    }
 
     const left = document.createElement("div");
     left.className = "flex items-center gap-3 " + (a.isCritical ? "" : "text-slate-400");
@@ -602,12 +618,88 @@ export function renderFragmentInspector(detail) {
   graphBtn.appendChild(graphIcon);
   graphBtn.appendChild(document.createTextNode("VIEW IN GRAPH"));
   graphBtn.addEventListener("click", () => {
-    state.memoryFilter.topic = fragment.topic ?? "";
-    navigate("graph");
+    navigate("graph", { topic: fragment.topic ?? "" });
   });
-  panel.appendChild(graphBtn);
+
+  const historyBtn = document.createElement("button");
+  historyBtn.className = "flex items-center gap-2 text-[10px] font-bold text-slate-400 hover:text-primary border border-outline-variant px-3 py-1";
+  historyBtn.id = "fragment-history-btn";
+  const historyIcon = document.createElement("span");
+  historyIcon.className = "material-symbols-outlined text-[14px]";
+  historyIcon.textContent = "history";
+  historyBtn.appendChild(historyIcon);
+  historyBtn.appendChild(document.createTextNode("변경 이력"));
+
+  const actions = document.createElement("div");
+  actions.className = "flex gap-2 flex-wrap";
+  actions.appendChild(graphBtn);
+  actions.appendChild(historyBtn);
+  panel.appendChild(actions);
+
+  const historySlot = document.createElement("div");
+  historySlot.className = "mt-4";
+  panel.appendChild(historySlot);
+  historyBtn.addEventListener("click", () => loadFragmentHistory(fragment.id, historySlot));
 
   return panel;
+}
+
+/**
+ * 파편 변경 이력: amend 이전 판(versions)과 이 파편을 대체한 파편(superseded_by_chain).
+ *
+ * @param {{ versions?: Object[], superseded_by_chain?: Object[] }} history
+ * @returns {HTMLElement}
+ */
+export function renderFragmentHistory(history) {
+  const wrap = document.createElement("div");
+  wrap.className = "space-y-3";
+  wrap.id = "fragment-history";
+
+  const versions = history?.versions ?? [];
+  const chain    = history?.superseded_by_chain ?? [];
+
+  const vTitle = document.createElement("div");
+  vTitle.className   = "text-[9px] font-mono text-slate-500 uppercase";
+  vTitle.textContent = `이전 판 ${versions.length}개`;
+  wrap.appendChild(vTitle);
+  for (const v of versions) {
+    const row = document.createElement("div");
+    row.className = "text-[10px] border-l border-white/10 pl-2";
+    const head = document.createElement("div");
+    head.className   = "font-mono text-slate-400";
+    head.textContent = `${fmtDate(v.amended_at)} · ${v.amended_by ?? "-"} · ${v.type ?? ""} · ${v.topic ?? ""}`;
+    row.appendChild(head);
+    const body = document.createElement("div");
+    body.className   = "text-slate-500 whitespace-pre-wrap";
+    body.textContent = truncate(v.content ?? "", 400);
+    row.appendChild(body);
+    wrap.appendChild(row);
+  }
+
+  const cTitle = document.createElement("div");
+  cTitle.className   = "text-[9px] font-mono text-slate-500 uppercase";
+  cTitle.textContent = chain.length > 0 ? `이 파편을 대체한 파편 ${chain.length}개` : "대체한 파편 없음";
+  wrap.appendChild(cTitle);
+  for (const c of chain) {
+    const row = document.createElement("div");
+    row.className   = "text-[10px] border-l border-primary/30 pl-2 text-slate-400";
+    row.textContent = `${c.to_id} · ${fmtDate(c.created_at)} · ${truncate(c.content ?? "", 200)}`;
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
+async function loadFragmentHistory(fragId, slot) {
+  slot.textContent = "";
+  slot.appendChild(loadingHtml());
+  const res = await api(`/memory/fragments/${encodeURIComponent(fragId)}/history`);
+  if (slot.isConnected === false) return;
+  slot.textContent = "";
+  if (!res.ok) {
+    showToast(`변경 이력 조회 실패 (${res.status || res.error})`, "error");
+    return;
+  }
+  slot.appendChild(renderFragmentHistory(res.data));
 }
 
 export function renderPagination() {
@@ -695,7 +787,9 @@ function closeFragmentInspector() {
   if (!slot) return;
   slot.classList.remove("open");
   slot.textContent = "";
-  state.selectedFragment = null;
+  state.selectedFragment   = null;
+  state.selectedFragmentId = null;
+  syncRoute();
   document.querySelectorAll("[data-frag-id]").forEach(el => el.classList.remove("frag-selected"));
 }
 
@@ -712,6 +806,8 @@ document.addEventListener("keydown", e => {
 async function showFragmentDetail(fragId) {
   const slot = document.getElementById("inspector-slot");
   if (!slot) return;
+  state.selectedFragmentId = fragId;
+  syncRoute();
 
   document.querySelectorAll("[data-frag-id]").forEach(el => {
     el.classList.toggle("frag-selected", el.dataset.fragId === fragId);
@@ -726,6 +822,7 @@ async function showFragmentDetail(fragId) {
   if (state.memoryFilter.group_id) params.set("group_id", state.memoryFilter.group_id);
   const qs  = params.toString();
   const res = await api(`/memory/fragments/${encodeURIComponent(fragId)}${qs ? "?" + qs : ""}`);
+  if (state.selectedFragmentId !== fragId || slot.isConnected === false) return;
 
   slot.textContent = "";
   if (!res.ok) {
@@ -737,49 +834,186 @@ async function showFragmentDetail(fragId) {
   slot.appendChild(renderFragmentInspector(res.data));
 }
 
-/** 현재 필터를 쿼리로 변환해 /export JSONL을 다운로드한다 (Bearer 헤더 필요). */
+/** 현재 필터를 쿼리로 변환해 /export JSONL을 내려받는다. */
 async function downloadExport() {
   const btn = document.getElementById("export-jsonl");
-  if (btn) btn.disabled = true;
-  try {
-    const params = new URLSearchParams();
-    if (state.memoryFilter.key_id)   params.set("key_id",   state.memoryFilter.key_id);
-    if (state.memoryFilter.group_id) params.set("group_id", state.memoryFilter.group_id);
-    if (state.memoryFilter.topic)    params.set("topic",    state.memoryFilter.topic);
-    if (state.memoryFilter.type)     params.set("type",     state.memoryFilter.type);
+  const params = new URLSearchParams();
+  if (state.memoryFilter.key_id)   params.set("key_id",   state.memoryFilter.key_id);
+  if (state.memoryFilter.group_id) params.set("group_id", state.memoryFilter.group_id);
+  if (state.memoryFilter.topic)    params.set("topic",    state.memoryFilter.topic);
+  if (state.memoryFilter.type)     params.set("type",     state.memoryFilter.type);
 
-    if (!params.has("key_id") && !params.has("group_id")) {
-      showToast("EXPORT는 KEY 또는 GROUP 필터가 필요합니다", "error");
-      return;
-    }
-
-    const resp = await fetch(`${API_BASE}/export?${params}`, {
-      headers: { "Authorization": `Bearer ${state.masterKey}` }
-    });
-    if (!resp.ok) {
-      showToast(`EXPORT 실패 (${resp.status})`, "error");
-      return;
-    }
-    const blob = await resp.blob();
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href     = url;
-    a.download = "fragments.jsonl";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    showToast("EXPORT 완료", "info");
-  } catch (err) {
-    showToast(`EXPORT 실패: ${err.message}`, "error");
-  } finally {
-    if (btn) btn.disabled = false;
+  if (!params.has("key_id") && !params.has("group_id")) {
+    showToast("EXPORT는 KEY 또는 GROUP 필터가 필요합니다", "error");
+    return;
   }
+  if (btn) btn.disabled = true;
+  const result = await downloadToFile(`/export?${params}`, "fragments.jsonl");
+  if (btn) btn.disabled = false;
+  if (result.ok) showToast("EXPORT 완료", "info");
+  else showToast(`EXPORT 실패 (${result.status || result.error})`, "error");
 }
 
+/**
+ * 가져오기 결과 요약 문구.
+ *
+ * @param {Object} report - /import 응답
+ * @returns {string}
+ */
+export function importSummary(report) {
+  const mode = report?.dryRun ? "시험 실행" : "가져오기";
+  const reasons = Object.entries(report?.rejected_by_reason ?? {}).map(([k, v]) => `${k} ${v}`).join(", ");
+  return `${mode}: 새로 기록 ${fmt(report?.imported ?? 0)} · 중복 ${fmt(report?.duplicates ?? 0)} · 거부 ${fmt(report?.rejected ?? 0)}`
+    + ` · 오류 ${fmt(report?.errors ?? 0)} · 링크 ${fmt(report?.links?.imported ?? 0)}`
+    + (reasons ? ` (거부 사유: ${reasons})` : "")
+    + ((report?.warnings ?? []).length ? ` · 경고 ${report.warnings.join(", ")}` : "");
+}
+
+/** export 파일(JSONL)이나 JSON 본문을 가져오는 대화상자. 기본은 시험 실행이다. */
+function openImportDialog(container) {
+  const body = document.createElement("div");
+  body.className = "space-y-3 text-xs";
+
+  const fileInput = document.createElement("input");
+  fileInput.type   = "file";
+  fileInput.accept = ".jsonl,.ndjson,.json";
+  fileInput.id     = "import-file";
+  body.appendChild(fileInput);
+
+  const keyInput = document.createElement("input");
+  keyInput.type        = "text";
+  keyInput.id          = "import-key-id";
+  keyInput.placeholder = "기록할 키 id (비우면 마스터 범위)";
+  keyInput.value       = state.memoryFilter.key_id ?? "";
+  keyInput.className   = "w-full bg-surface-container border border-outline-variant/30 px-3 py-1.5";
+  body.appendChild(keyInput);
+
+  const dryLabel = document.createElement("label");
+  dryLabel.className = "flex items-center gap-2";
+  const dryRun = document.createElement("input");
+  dryRun.type    = "checkbox";
+  dryRun.id      = "import-dry-run";
+  dryRun.checked = true;
+  dryLabel.appendChild(dryRun);
+  dryLabel.appendChild(document.createTextNode("시험 실행(기록하지 않고 결과만 확인)"));
+  body.appendChild(dryLabel);
+
+  const result = document.createElement("div");
+  result.id        = "import-result";
+  result.className = "text-slate-300 whitespace-pre-wrap";
+  body.appendChild(result);
+
+  showModal("IMPORT", body, [{
+    label: "RUN",
+    cls  : "btn-primary",
+    handler: async (e) => {
+      const file = fileInput.files?.[0];
+      if (!file) {
+        result.textContent = "파일을 고르세요.";
+        return;
+      }
+      const btn = e?.currentTarget;
+      if (btn) btn.disabled = true;
+      result.textContent = "처리 중...";
+      const text   = await file.text();
+      const isJson = /\.json$/i.test(file.name);
+      const params = new URLSearchParams();
+      if (keyInput.value.trim()) params.set("key_id", keyInput.value.trim());
+      if (dryRun.checked) params.set("dryRun", "true");
+      const res = await api("/import?" + params, {
+        method : "POST",
+        body   : text,
+        headers: { "Content-Type": isJson ? "application/json" : "application/x-ndjson" }
+      });
+      if (btn) btn.disabled = false;
+      if (!res.ok) {
+        result.textContent = `실패 (${res.status}): ${res.data?.error ?? res.error ?? ""}`;
+        return;
+      }
+      result.textContent = importSummary(res.data);
+      if (!dryRun.checked) {
+        showToast("IMPORT 완료", "success");
+        closeModal();
+        renderMemory(container);
+      }
+    }
+  }]);
+}
+
+/** 메모리 조회 조건, 쪽, 선택한 파편과 주소 질의를 서로 옮긴다. */
+export const memoryRoute = {
+  fromQuery(query) {
+    state.memoryFilter = {
+      q:        query.get("q") ?? "",
+      topic:    query.get("topic") ?? "",
+      type:     query.get("type") ?? "",
+      key_id:   query.get("key_id") ?? "",
+      group_id: query.get("group_id") ?? ""
+    };
+    state.memoryPage         = Math.max(1, parseInt(query.get("page") ?? "", 10) || 1);
+    state.selectedFragmentId = query.get("frag") || null;
+  },
+  toQuery() {
+    return {
+      ...state.memoryFilter,
+      page: state.memoryPage > 1 ? state.memoryPage : "",
+      frag: state.selectedFragmentId
+    };
+  }
+};
+
+function slotError(message) {
+  const el = document.createElement("div");
+  el.className   = "glass-panel p-4 text-xs text-error";
+  el.textContent = message;
+  return el;
+}
+
+/**
+ * 메모리 운영 화면. 파편 목록, 검색 분석, 이상 징후를 따로 불러와 먼저 온 것부터 그린다.
+ *
+ * @param {HTMLElement} container
+ */
 export async function renderMemory(container) {
+  const ctx = beginRender();
+  syncRoute();
   container.textContent = "";
-  container.appendChild(loadingHtml());
+
+  const filterSlot = document.createElement("div");
+  container.appendChild(filterSlot);
+
+  /* Grid */
+  const grid = document.createElement("div");
+  grid.className = "grid grid-cols-12 gap-6 mt-6";
+
+  /* Center: fragments */
+  const centerCol = document.createElement("div");
+  centerCol.className = "col-span-12 lg:col-span-8 space-y-6";
+  centerCol.appendChild(loadingHtml());
+  grid.appendChild(centerCol);
+
+  /* Right: inspector slot + analytics + anomalies */
+  const rightCol = document.createElement("div");
+  rightCol.className = "col-span-12 lg:col-span-4 space-y-6";
+  const inspectorSlot = document.createElement("div");
+  inspectorSlot.id = "inspector-slot";
+  rightCol.appendChild(inspectorSlot);
+  const analyticsSlot = document.createElement("div");
+  analyticsSlot.appendChild(loadingHtml());
+  rightCol.appendChild(analyticsSlot);
+  const anomalySlot = document.createElement("div");
+  anomalySlot.appendChild(loadingHtml());
+  rightCol.appendChild(anomalySlot);
+  grid.appendChild(rightCol);
+  container.appendChild(grid);
+
+  /* Bottom: Search Activity */
+  const bottomGrid = document.createElement("div");
+  bottomGrid.className = "grid grid-cols-12 gap-6 mt-6";
+  const bottomCol = document.createElement("div");
+  bottomCol.className = "col-span-12";
+  bottomGrid.appendChild(bottomCol);
+  container.appendChild(bottomGrid);
 
   const params = new URLSearchParams();
   if (state.memoryFilter.q)        params.set("q",        state.memoryFilter.q);
@@ -789,75 +1023,74 @@ export async function renderMemory(container) {
   if (state.memoryFilter.group_id) params.set("group_id", state.memoryFilter.group_id);
   params.set("page", state.memoryPage);
 
-  const [fragRes, anomalyRes, groupsRes, seRes] = await Promise.all([
-    api("/memory/fragments?" + params),
-    api("/memory/anomalies"),
-    api("/groups"),
-    api("/memory/search-events?days=7")
-  ]);
-  if (groupsRes.ok) state.groups = groupsRes.data ?? [];
+  const loadMain = (async () => {
+    const [fragRes, groupsRes] = await Promise.all([
+      api("/memory/fragments?" + params, { signal: ctx.signal }),
+      api("/groups", { signal: ctx.signal })
+    ]);
+    if (!ctx.isCurrent()) return;
+    if (groupsRes.ok) state.groups = groupsRes.data ?? [];
 
-  if (fragRes.ok) {
-    const data = fragRes.data ?? {};
-    if (Array.isArray(fragRes.data)) {
-      state.fragments   = fragRes.data;
-      state.memoryPages = 1;
+    if (fragRes.ok) {
+      const data = fragRes.data ?? {};
+      if (Array.isArray(fragRes.data)) {
+        state.fragments   = fragRes.data;
+        state.memoryPages = 1;
+      } else {
+        state.fragments   = data.items ?? data.fragments ?? [];
+        state.memoryPages = Math.ceil((data.total ?? 0) / (data.limit ?? 20)) || 1;
+      }
     } else {
-      state.fragments   = data.items ?? data.fragments ?? [];
-      state.memoryPages = Math.ceil((data.total ?? 0) / (data.limit ?? 20)) || 1;
+      state.fragments = [];
     }
-  } else {
-    state.fragments = [];
-  }
 
-  state.anomalies    = anomalyRes.ok ? anomalyRes.data : null;
-  state.searchEvents = seRes.ok ? seRes.data : null;
+    filterSlot.textContent = "";
+    filterSlot.appendChild(renderMemoryFilters());
+    centerCol.textContent = "";
+    if (!fragRes.ok) centerCol.appendChild(slotError(`파편 조회 실패 (${fragRes.status || fragRes.error})`));
+    centerCol.appendChild(renderFragmentList(state.fragments));
+    centerCol.appendChild(renderPagination());
+    wireMemoryEvents(container);
+    if (state.selectedFragmentId) showFragmentDetail(state.selectedFragmentId);
+  })();
 
-  container.textContent = "";
+  const loadAnalytics = (async () => {
+    const seRes = await api("/memory/search-events?days=7", { signal: ctx.signal });
+    if (!ctx.isCurrent()) return;
+    state.searchEvents = seRes.ok ? seRes.data : null;
+    analyticsSlot.textContent = "";
+    if (!seRes.ok) analyticsSlot.appendChild(slotError(`검색 분석 조회 실패 (${seRes.status || seRes.error})`));
+    analyticsSlot.appendChild(renderRetrievalAnalytics(state.searchEvents));
+    bottomCol.textContent = "";
+    bottomCol.appendChild(renderRecentEventsChart(state.searchEvents));
+  })();
 
-  /* Filter bar */
-  container.appendChild(renderMemoryFilters());
+  const loadAnomalies = (async () => {
+    const anomalyRes = await api("/memory/anomalies", { signal: ctx.signal });
+    if (!ctx.isCurrent()) return;
+    state.anomalies = anomalyRes.ok ? anomalyRes.data : null;
+    anomalySlot.textContent = "";
+    if (!anomalyRes.ok) anomalySlot.appendChild(slotError(`이상 징후 조회 실패 (${anomalyRes.status || anomalyRes.error})`));
+    anomalySlot.appendChild(renderAnomalyCards(state.anomalies));
+  })();
 
-  /* Grid */
-  const grid = document.createElement("div");
-  grid.className = "grid grid-cols-12 gap-6 mt-6";
+  await Promise.all([loadMain, loadAnalytics, loadAnomalies]);
+}
 
-  /* Center: fragments */
-  const centerCol = document.createElement("div");
-  centerCol.className = "col-span-12 lg:col-span-8 space-y-6";
-  centerCol.appendChild(renderFragmentList(state.fragments));
-  centerCol.appendChild(renderPagination());
-  grid.appendChild(centerCol);
-
-  /* Right: inspector slot + analytics + anomalies */
-  const rightCol = document.createElement("div");
-  rightCol.className = "col-span-12 lg:col-span-4 space-y-6";
-  const inspectorSlot = document.createElement("div");
-  inspectorSlot.id = "inspector-slot";
-  rightCol.appendChild(inspectorSlot);
-  rightCol.appendChild(renderRetrievalAnalytics(state.searchEvents));
-  rightCol.appendChild(renderAnomalyCards(state.anomalies));
-  grid.appendChild(rightCol);
-
-  container.appendChild(grid);
-
-  /* Bottom: Search Activity */
-  const bottomGrid = document.createElement("div");
-  bottomGrid.className = "grid grid-cols-12 gap-6 mt-6";
-  const bottomCol = document.createElement("div");
-  bottomCol.className = "col-span-12";
-  bottomCol.appendChild(renderRecentEventsChart(state.searchEvents));
-  bottomGrid.appendChild(bottomCol);
-  container.appendChild(bottomGrid);
-
+/** 필터, 내보내기, 가져오기, 쪽 이동, 파편 선택 이벤트를 연결한다. */
+function wireMemoryEvents(container) {
   /* Event: search (버튼 + 입력 Enter 공용) */
-  const applyFilters = () => {
+  const readFilterInputs = () => {
     state.memoryFilter.q        = document.getElementById("filter-q")?.value ?? "";
     state.memoryFilter.topic    = document.getElementById("filter-topic")?.value ?? "";
     state.memoryFilter.type     = document.getElementById("filter-type")?.value ?? "";
     state.memoryFilter.key_id   = document.getElementById("filter-key-id")?.value ?? "";
     state.memoryFilter.group_id = document.getElementById("filter-group")?.value ?? "";
-    state.memoryPage = 1;
+  };
+  const applyFilters = () => {
+    readFilterInputs();
+    state.memoryPage         = 1;
+    state.selectedFragmentId = null;
     renderMemory(container);
   };
   document.getElementById("filter-search")?.addEventListener("click", applyFilters);
@@ -867,19 +1100,18 @@ export async function renderMemory(container) {
     });
   });
 
-  /* Event: export */
+  /* Event: export, import */
   document.getElementById("export-jsonl")?.addEventListener("click", () => {
-    state.memoryFilter.key_id   = document.getElementById("filter-key-id")?.value ?? "";
-    state.memoryFilter.group_id = document.getElementById("filter-group")?.value ?? "";
-    state.memoryFilter.topic    = document.getElementById("filter-topic")?.value ?? "";
-    state.memoryFilter.type     = document.getElementById("filter-type")?.value ?? "";
+    readFilterInputs();
     downloadExport();
   });
+  document.getElementById("import-jsonl")?.addEventListener("click", () => openImportDialog(container));
 
   /* Event: pagination */
   container.querySelectorAll("[data-page]").forEach(btn => {
     btn.addEventListener("click", () => {
-      state.memoryPage = parseInt(btn.dataset.page);
+      state.memoryPage         = parseInt(btn.dataset.page);
+      state.selectedFragmentId = null;
       renderMemory(container);
     });
   });

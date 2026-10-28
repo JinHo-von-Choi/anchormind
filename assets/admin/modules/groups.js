@@ -5,7 +5,7 @@
  * 작성일: 2026-04-07
  */
 
-import { state }                        from "./state.js";
+import { state, beginRender, syncRoute } from "./state.js";
 import { api }                           from "./api.js";
 import { showToast, showModal, closeModal } from "./ui.js";
 import { fmt, fmtDate, loadingHtml }     from "./format.js";
@@ -260,21 +260,31 @@ export function renderGroupInspector(selected, members) {
   return panel;
 }
 
+/** 선택한 그룹과 주소 질의를 서로 옮긴다. */
+export const groupsRoute = {
+  fromQuery(query) { state.selectedGroupId = query.get("group") || null; },
+  toQuery()        { return { group: state.selectedGroupId }; }
+};
+
 export async function renderGroups(container) {
+  const ctx = beginRender();
+  syncRoute();
   container.textContent = "";
   container.appendChild(loadingHtml());
 
   const [gRes, kRes] = await Promise.all([
-    api("/groups"),
-    api("/keys")
+    api("/groups", { signal: ctx.signal }),
+    api("/keys", { signal: ctx.signal })
   ]);
+  if (!ctx.isCurrent()) return;
   if (gRes.ok) state.groups = gRes.data ?? [];
   if (kRes.ok) state.keys   = kRes.data ?? [];
 
   const selected = state.groups.find(g => g.id === state.selectedGroupId) ?? null;
   let members = [];
   if (selected) {
-    const mRes = await api("/groups/" + selected.id + "/members");
+    const mRes = await api("/groups/" + selected.id + "/members", { signal: ctx.signal });
+    if (!ctx.isCurrent()) return;
     if (mRes.ok) members = mRes.data ?? [];
   }
 

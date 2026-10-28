@@ -5,9 +5,11 @@
  * 작성일: 2026-04-07
  */
 
-import { state, navigate }  from "./state.js";
+import { state, navigate, beginRender, onViewCleanup } from "./state.js";
 import { api }               from "./api.js";
 import { renderCommandBar }  from "./layout.js";
+import { loadStats }         from "./stats.js";
+import { createAutoRefresh } from "./auto-refresh.js";
 import { fmt, fmtBytes, loadingHtml, relativeTime } from "./format.js";
 
 export function renderOverviewCards(stats) {
@@ -329,7 +331,7 @@ export function renderQuickActions() {
   [
     { icon: "add_link",  label: "Create Key",   view: "keys" },
     { icon: "group_add", label: "Create Group",  view: "groups" },
-    { icon: "build",     label: "Run Maint",     view: null },
+    { icon: "fact_check", label: "Review Queue", view: "review" },
     { icon: "list_alt",  label: "Open Logs",     view: "logs" }
   ].forEach(a => {
     const btn = document.createElement("button");
@@ -509,27 +511,121 @@ export function renderTopTopics(stats) {
   return panel;
 }
 
-export async function renderOverview(container) {
-  container.textContent = "";
-  container.appendChild(loadingHtml());
+/** 스케줄러 작업 이름 → 화면 표시 이름 */
+const SCHEDULER_JOB_LABELS = {
+  outbox:            "아웃박스 처리",
+  graphLinker:       "그래프 링크",
+  morphemeBackfill:  "형태소 백필",
+  embeddingBackfill: "임베딩 백필"
+};
 
-  const [statsRes, activityRes] = await Promise.all([
-    api("/stats"),
-    api("/activity")
-  ]);
+function opsRow(labelText, valueText, cls = "") {
+  const row = document.createElement("div");
+  row.className = "flex justify-between gap-4 text-[11px] py-1 border-b border-white/5";
+  const l = document.createElement("span");
+  l.className   = "text-slate-400";
+  l.textContent = labelText;
+  const v = document.createElement("span");
+  v.className   = "font-mono text-right " + cls;
+  v.textContent = valueText;
+  row.appendChild(l);
+  row.appendChild(v);
+  return row;
+}
 
-  if (statsRes.ok) {
-    state.stats = statsRes.data;
-    state.lastUpdated = Date.now();
-    renderCommandBar();
+/**
+ * 운영 상태 패널: 스케줄러 작업의 마지막 성공과 실패, 마지막 통합 실행, 기능 스위치 요약.
+ *
+ * @param {Object|null} stats - /stats 응답
+ * @returns {HTMLElement}
+ */
+export function renderOpsPanel(stats) {
+  const panel = document.createElement("section");
+  panel.className = "glass-panel p-5";
+  panel.id = "ops-panel";
+
+  const title = document.createElement("h3");
+  title.className   = "text-[10px] font-bold font-headline tracking-widest text-slate-400 uppercase mb-3";
+  title.textContent = "운영 상태";
+  panel.appendChild(title);
+
+  const jobs = Object.entries(stats?.schedulerJobs ?? {});
+  const jobsTitle = document.createElement("div");
+  jobsTitle.className   = "text-[10px] text-slate-500 uppercase mt-1 mb-1";
+  jobsTitle.textContent = "스케줄러 작업";
+  panel.appendChild(jobsTitle);
+  if (jobs.length === 0) {
+    panel.appendChild(opsRow("등록된 작업", "없음"));
+  }
+  for (const [name, job] of jobs) {
+    const failed  = job.lastFailure && (!job.lastSuccess || new Date(job.lastFailure) > new Date(job.lastSuccess));
+    const success = job.lastSuccess ? `성공 ${relativeTime(job.lastSuccess)}` : "성공 기록 없음";
+    const value   = `${success} · 실행 ${fmt(job.runCount ?? 0)} · 실패 ${fmt(job.failureCount ?? 0)}`;
+    const row     = opsRow(SCHEDULER_JOB_LABELS[name] ?? name, value, failed ? "text-error" : "text-slate-300");
+    if (failed && job.lastError) row.title = String(job.lastError);
+    panel.appendChild(row);
   }
 
-  const activities = activityRes.ok ? activityRes.data : [];
+  const consolidation = stats?.lastConsolidation;
+  panel.appendChild(opsRow(
+    "마지막 통합 실행",
+    consolidation?.timestamp
+      ? `${relativeTime(consolidation.timestamp)} · 만료 삭제 ${fmt(consolidation.expiredDeleted ?? 0)} · 병합 ${fmt(consolidation.duplicatesMerged ?? 0)}`
+      : "서버 시작 뒤 실행 기록 없음"
+  ));
 
+  const sw = stats?.switches;
+  if (sw) {
+    panel.appendChild(opsRow("기능 스위치", `켜짐 ${fmt(sw.on)} · 꺼짐 ${fmt(sw.off)} · 모드 ${fmt(sw.mode)} · 기본값과 다름 ${fmt(sw.nonDefaultCount)}`));
+    if (Array.isArray(sw.invalid) && sw.invalid.length > 0) {
+      panel.appendChild(opsRow("잘못된 설정값", sw.invalid.join(", "), "text-error"));
+    }
+    if (Array.isArray(sw.nonDefault) && sw.nonDefault.length > 0) {
+      const details = document.createElement("details");
+      details.className = "mt-2 text-[10px]";
+      const summary = document.createElement("summary");
+      summary.className   = "cursor-pointer text-slate-500";
+      summary.textContent = "기본값과 다른 스위치 보기";
+      details.appendChild(summary);
+      const list = document.createElement("div");
+      list.className   = "font-mono text-slate-400 mt-1 break-all";
+      list.textContent = sw.nonDefault.join(", ");
+      details.appendChild(list);
+      panel.appendChild(details);
+    }
+  }
+  return panel;
+}
+
+/** 슬롯 내용을 바꾼다. node가 없으면 비운다. */
+function fillSlot(slot, node) {
+  slot.textContent = "";
+  if (node) slot.appendChild(node);
+}
+
+function slotError(message) {
+  const el = document.createElement("div");
+  el.className   = "glass-panel p-4 text-xs text-error";
+  el.textContent = message;
+  return el;
+}
+
+/**
+ * 개요 화면. 패널마다 따로 불러와 그리고, 자동 갱신 중에는 새 값이 올 때까지 이전 값을 유지한다.
+ *
+ * @param {HTMLElement} container
+ */
+export async function renderOverview(container) {
+  const ctx = beginRender();
   container.textContent = "";
 
-  /* KPI Grid */
-  container.appendChild(renderOverviewCards(state.stats));
+  const header = document.createElement("div");
+  header.className = "flex justify-end mb-4";
+  container.appendChild(header);
+
+  const kpiSlot = document.createElement("div");
+  kpiSlot.appendChild(loadingHtml());
+  container.appendChild(kpiSlot);
 
   /* Main Layout: flex row */
   const mainLayout = document.createElement("div");
@@ -538,23 +634,67 @@ export async function renderOverview(container) {
   /* LEFT */
   const leftCol = document.createElement("div");
   leftCol.className = "flex-1 space-y-8";
-
-  const hp = renderHealthPanel(state.stats);
-  if (hp) leftCol.appendChild(hp);
-  leftCol.appendChild(renderTimeline(activities));
+  const healthSlot   = document.createElement("div");
+  const opsSlot      = document.createElement("div");
+  const timelineSlot = document.createElement("div");
+  timelineSlot.appendChild(loadingHtml());
+  leftCol.appendChild(healthSlot);
+  leftCol.appendChild(opsSlot);
+  leftCol.appendChild(timelineSlot);
   mainLayout.appendChild(leftCol);
 
   /* RIGHT */
   const rightCol = document.createElement("div");
   rightCol.className = "w-full lg:w-80 space-y-6";
-  rightCol.appendChild(renderRiskPanel(state.stats));
+  const riskSlot = document.createElement("div");
+  rightCol.appendChild(riskSlot);
   rightCol.appendChild(renderQuickActions());
-  rightCol.appendChild(renderLatencyIndex(state.stats));
-  rightCol.appendChild(renderQualityCoverage(state.stats));
-  rightCol.appendChild(renderTopTopics(state.stats));
+  const sideSlot = document.createElement("div");
+  sideSlot.className = "space-y-6";
+  rightCol.appendChild(sideSlot);
   mainLayout.appendChild(rightCol);
 
   container.appendChild(mainLayout);
+
+  let statsShown    = false;
+  let activityShown = false;
+
+  async function refreshStats() {
+    const res = await loadStats();
+    if (!ctx.isCurrent()) return;
+    if (!res.ok) {
+      if (!statsShown) fillSlot(kpiSlot, slotError(`통계 조회 실패 (${res.status || res.error})`));
+      return;
+    }
+    statsShown = true;
+    renderCommandBar();
+    fillSlot(kpiSlot, renderOverviewCards(state.stats));
+    fillSlot(healthSlot, renderHealthPanel(state.stats));
+    fillSlot(opsSlot, renderOpsPanel(state.stats));
+    fillSlot(riskSlot, renderRiskPanel(state.stats));
+    const side = document.createDocumentFragment();
+    side.appendChild(renderLatencyIndex(state.stats));
+    side.appendChild(renderQualityCoverage(state.stats));
+    side.appendChild(renderTopTopics(state.stats));
+    fillSlot(sideSlot, side);
+    auto.markUpdated();
+  }
+
+  async function refreshActivity() {
+    const res = await api("/activity", { signal: ctx.signal });
+    if (!ctx.isCurrent()) return;
+    if (!res.ok) {
+      if (!activityShown) fillSlot(timelineSlot, slotError(`활동 조회 실패 (${res.status || res.error})`));
+      return;
+    }
+    activityShown = true;
+    fillSlot(timelineSlot, renderTimeline(res.data ?? []));
+  }
+
+  const refresh = () => Promise.all([refreshStats(), refreshActivity()]);
+  const auto    = createAutoRefresh(refresh);
+  onViewCleanup(auto.stop);
+  header.appendChild(auto.element);
 
   /* Backdrop accents */
   if (!document.querySelector(".backdrop-accent-primary")) {
@@ -565,4 +705,6 @@ export async function renderOverview(container) {
     bs.className = "backdrop-accent-secondary";
     document.body.appendChild(bs);
   }
+
+  await refresh();
 }
