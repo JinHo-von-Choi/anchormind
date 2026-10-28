@@ -6,6 +6,7 @@
 
 - `recall` 응답에 `totalCount`, `nextCursor`, `hasMore`가 실린다. 기본 응답과 `format: "pack"` 응답 모두 해당하고 caseMode 응답은 제외다.
 - `recall`의 `tokenBudget`이 페이지마다 적용된다. 예산에 들지 못한 결과는 버려지지 않고 `nextCursor`로 다음 페이지에서 이어 받는다. 혼자서도 예산을 넘는 파편은 결과와 `totalCount`에서 빠진다.
+- `recall`의 `nextCursor`는 이미 돌려준 파편의 해시 표지를 담는다. 호출 사이에 검색 후보가 달라져도(보조 검색 시간 초과 등) 앞 페이지 파편이 다시 오지 않는다. 기존 offset 커서도 읽는다.
 - `recall`의 `threshold`, `depth`, `excludeSeen` 조건이 예산 선택 전에 적용된다. 응답에서 빠질 파편이 예산과 페이지 위치를 차지하지 않고 접근 기록도 남기지 않는다.
 
 ## [6.7.1] - 2026-10-22

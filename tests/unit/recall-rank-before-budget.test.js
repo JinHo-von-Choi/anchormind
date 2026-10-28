@@ -450,7 +450,7 @@ describe("recall 순위 후 예산 선택", () => {
       }
     });
 
-    it("성질: 추정값이 섞인 후보에서 페이지 합집합은 pageSize와 무관하고 중복이 없으며 페이지마다 예산 안이고 반복 호출이 같다(시드 300개)", async () => {
+    it("성질: 추정값이 섞인 후보에서 페이지 합집합은 pageSize와 무관한 같은 집합이고 중복이 없으며 페이지마다 예산 안이고 반복 호출이 같다(시드 300개)", async () => {
       let paged = 0;
       for (let seed = 3101; seed <= 3400; seed++) {
         const scenario = randomScenario(seed);
@@ -466,7 +466,7 @@ describe("recall 순위 후 예산 선택", () => {
         const union = pages.flatMap(idsOf);
         assert.equal(new Set(union).size, union.length, `seed ${seed}: 페이지 사이 중복`);
         assert.equal(union.length, pages[0].totalCount, `seed ${seed}: 합집합과 totalCount가 다르다`);
-        assert.deepStrictEqual(union, wide.flatMap(idsOf), `seed ${seed}: pageSize에 따라 합집합이 다르다`);
+        assert.deepStrictEqual([...union].sort(), wide.flatMap(idsOf).sort(), `seed ${seed}: pageSize에 따라 합집합이 다르다`);
         for (const page of [...pages, ...wide]) assert.ok(tokenSum(page.fragments) <= budget, `seed ${seed}: 페이지 예산 초과`);
         assert.deepStrictEqual(again.result, full.result, `seed ${seed}: 반복 호출이 다르다`);
         if (pages.length > 1) paged++;

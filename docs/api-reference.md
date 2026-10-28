@@ -639,7 +639,7 @@ Agent 조회는 생략 시 `default`, 지정 시 해당 agent와 `default`를 �
 | workspace | string | - | 검색 범위 제한. 지정 시 해당 workspace + 전역(NULL), 미지정 시 key default + 전역(NULL), 둘 다 없으면 전역(NULL)만 반환. |
 | allWorkspaces | boolean | - | master 전용 전체 workspace 조회. 일반 API key가 true를 요청하면 권한 오류. |
 | contextText | string | - | 현재 대화 맥락 텍스트. 관련 파편을 선제적으로 활성화 (ENABLE_SPREADING_ACTIVATION=true 시). |
-| cursor | string | - | 정렬 위치와 고정 `anchorTime`을 담은 기존 호환 불투명 페이지네이션 커서. 앞 응답의 `nextCursor`를 넣으면 다음 페이지를 받는다. `tokenBudget`은 페이지마다 적용되며, 앞 페이지의 예산에 들지 못한 결과는 다음 페이지로 넘어간다. 응답 최상위의 `totalCount`(끝까지 이어 받을 수 있는 결과 수. 혼자서도 `tokenBudget`을 넘는 파편은 빠진다), `nextCursor`(다음 페이지가 없으면 `null`), `hasMore`가 페이지 상태를 알려 주며 `format: "pack"` 응답에도 실린다. caseMode 응답에는 없다. |
+| cursor | string | - | 불투명 페이지네이션 커서. 앞 응답의 `nextCursor`를 넣으면 다음 페이지를 받는다. 커서는 이미 돌려준 파편의 해시 표지와 고정 `anchorTime`을 담으므로, 호출 사이에 검색 후보가 달라져도 앞 페이지 파편이 다시 오지 않는다. 기존 offset 커서도 읽는다. `tokenBudget`은 페이지마다 적용되며, 앞 페이지의 예산에 들지 못한 결과는 다음 페이지로 넘어간다. 응답 최상위의 `totalCount`(끝까지 이어 받을 수 있는 결과 수. 혼자서도 `tokenBudget`을 넘는 파편은 빠진다), `nextCursor`(다음 페이지가 없으면 `null`), `hasMore`가 페이지 상태를 알려 주며 `format: "pack"` 응답에도 실린다. caseMode 응답에는 없다. |
 | pageSize | number | - | 기본 20, 최대 50 |
 | agentId | string | - | 에이전트 ID |
 | minImportance | number | - | 최소 중요도 필터 (0~1). 이 값 이상의 importance를 가진 파편만 반환. |

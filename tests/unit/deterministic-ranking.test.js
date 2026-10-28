@@ -273,11 +273,34 @@ describe("토큰 예산과 cursor", () => {
     assert.deepEqual(ids, rows.slice(0, 12).map(f => f.id));
   });
 
-  it("pageSize가 예산보다 작으면 같은 회차 안에서 이어 받는다", async () => {
+  it("pageSize가 예산보다 작으면 남은 결과에서 이어 받는다", async () => {
     const pages = await readAll(recallerFor(fixture(7)), { excludeSeen: false, pageSize: 2, tokenBudget: 300 });
 
-    assert.deepEqual(pages.map(p => p.fragments.length), [2, 1, 2, 1, 1]);
+    assert.deepEqual(pages.map(p => p.fragments.length), [2, 2, 2, 1]);
     assert.deepEqual(pages.flatMap(p => p.fragments.map(f => f.id)), fixture(7).map(f => f.id));
+  });
+
+  it("다음 호출의 후보 집합이 달라져도 앞 페이지 파편을 다시 돌려주지 않는다", async () => {
+    const rows     = fixture(6);
+    const recaller = recallerFor(rows);
+    const first    = await recaller.recall({ includeLinks: false, excludeSeen: false, anchorTime, pageSize: 50, tokenBudget: 300 });
+    rows.unshift({ id: "late", type: "fact", content: "late", estimated_tokens: 100, rerankerScore: 5, created_at: "2026-01-01T00:00:00.000Z" });
+    const second   = await recaller.recall({ includeLinks: false, excludeSeen: false, pageSize: 50, tokenBudget: 300, cursor: first.nextCursor });
+
+    assert.deepEqual(first.fragments.map(f => f.id), ["f00", "f01", "f02"]);
+    assert.deepEqual(second.fragments.map(f => f.id), ["late", "f03", "f04"]);
+    assert.equal(second.totalCount, 7);
+    assert.equal(second.hasMore, true);
+    assert.doesNotMatch(Buffer.from(second.nextCursor, "base64url").toString(), /f0\d/, "cursor에 원본 id가 드러나지 않는다");
+  });
+
+  it("기존 offset cursor 위치가 결과 수를 넘으면 빈 마지막 페이지다", async () => {
+    const cursor = Buffer.from(JSON.stringify({ offset: 99, anchorTime })).toString("base64url");
+    const page   = await recallerFor(fixture(3)).recall({ includeLinks: false, excludeSeen: false, pageSize: 50, cursor });
+
+    assert.equal(page.count, 0);
+    assert.equal(page.hasMore, false);
+    assert.equal(page.nextCursor, null);
   });
 
   it("excludeSeen으로 빠지는 파편은 예산과 totalCount를 차지하지 않는다", async () => {
