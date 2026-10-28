@@ -16,6 +16,9 @@ import { api }                           from "./api.js";
 import { showToast }                     from "./ui.js";
 import { fmt, fmtDate, truncate, loadingHtml } from "./format.js";
 
+/** 입력 칸 스타일. 어두운 테마의 다른 화면 입력과 같다 */
+const INPUT_CLASS = "bg-surface-container border border-outline-variant/30 rounded-sm px-3 py-1.5 text-xs text-on-surface placeholder:text-slate-500 focus:border-primary focus:outline-none";
+
 /** 검색 이벤트 id와 주소 질의를 서로 옮긴다. */
 export const searchLabRoute = {
   fromQuery(query) {
@@ -62,7 +65,7 @@ function el(tag, className, text) {
   return node;
 }
 
-function field(placeholder, id, className = "form-input text-xs") {
+function field(placeholder, id, className = INPUT_CLASS) {
   const input = el("input", className);
   input.type        = "text";
   input.id          = id;
@@ -207,7 +210,7 @@ export async function renderSearchLab(container) {
   /* 2. 검색 이벤트 */
   const eventPanel = section("검색 이벤트", "이벤트 id로 열거나 아래 최근 결과 0건 검색에서 고릅니다.");
   const eRow = el("div", "flex gap-2");
-  const eInput = field("이벤트 id", "lab-event-id", "form-input text-xs flex-1");
+  const eInput = field("이벤트 id", "lab-event-id", INPUT_CLASS + " flex-1");
   eInput.value = state.searchLabEventId ?? "";
   const eBtn = el("button", "btn", "열기");
   eRow.appendChild(eInput);
@@ -278,10 +281,10 @@ export async function renderSearchLab(container) {
   /* 3. 시점 조회 */
   const asOfPanel = section("시점 조회", "지정한 시각에 유효했던 파편을 중요도 순으로 최대 200개 보여 줍니다.");
   const aRow  = el("div", "flex flex-wrap gap-2");
-  const aTime = el("input", "form-input text-xs");
+  const aTime = el("input", INPUT_CLASS);
   aTime.type = "datetime-local";
   aTime.id   = "lab-as-of";
-  const aKeys = field("키 id (쉼표, 선택)", "lab-as-of-keys", "form-input text-xs flex-1");
+  const aKeys = field("키 id (쉼표, 선택)", "lab-as-of-keys", INPUT_CLASS + " flex-1");
   const aBtn  = el("button", "btn", "조회");
   aRow.appendChild(aTime);
   aRow.appendChild(aKeys);

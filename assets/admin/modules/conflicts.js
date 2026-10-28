@@ -13,6 +13,9 @@ import { api }                                     from "./api.js";
 import { showToast }                               from "./ui.js";
 import { fmtDate, loadingHtml }                    from "./format.js";
 
+/** 입력 칸 스타일. 어두운 테마의 다른 화면 입력과 같다 */
+const INPUT_CLASS = "bg-surface-container border border-outline-variant/30 rounded-sm px-3 py-1.5 text-xs text-on-surface placeholder:text-slate-500 focus:border-primary focus:outline-none";
+
 /** 해소 결정 → 화면 문구 */
 export const CONFLICT_DECISIONS = Object.freeze([
   { value: "keep_left",  label: "왼쪽 유지" },
@@ -85,7 +88,7 @@ export function renderConflictItem(conflict, onResolve) {
   }
 
   const actions = el("div", "flex flex-wrap items-center gap-2");
-  const reason  = el("input", "form-input flex-1 text-xs");
+  const reason  = el("input", INPUT_CLASS + " flex-1");
   reason.type        = "text";
   reason.maxLength   = 500;
   reason.placeholder = "해소 사유(선택)";

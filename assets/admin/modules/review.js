@@ -14,6 +14,9 @@ import { api }                           from "./api.js";
 import { showToast }                     from "./ui.js";
 import { fmtDate, truncate, loadingHtml } from "./format.js";
 
+/** 입력 칸 스타일. 어두운 테마의 다른 화면 입력과 같다 */
+const INPUT_CLASS = "bg-surface-container border border-outline-variant/30 rounded-sm px-3 py-1.5 text-xs text-on-surface placeholder:text-slate-500 focus:border-primary focus:outline-none";
+
 /** 한 번에 불러오는 검토 대기 수 */
 export const REVIEW_PAGE_SIZE = 50;
 
@@ -115,7 +118,7 @@ export function renderReviewItem(item, onDecide) {
     `사유: ${reviewReasonLabel(item.review_reasons)} · 출처 ${item.origin ?? "-"} · 신뢰 등급 ${item.trust_tier ?? "-"}`));
 
   const actions = el("div", "flex flex-wrap items-center gap-2");
-  const note = el("input", "form-input flex-1 text-xs");
+  const note = el("input", INPUT_CLASS + " flex-1");
   note.type        = "text";
   note.maxLength   = 500;
   note.placeholder = "결정 메모(선택)";
@@ -174,7 +177,7 @@ export async function renderReview(container) {
   header.appendChild(left);
 
   const filters = el("div", "flex gap-2 items-center");
-  const keyInput = el("input", "form-input text-xs w-56");
+  const keyInput = el("input", INPUT_CLASS + " w-56");
   keyInput.type        = "text";
   keyInput.id          = "review-key-id";
   keyInput.placeholder = "키 id (master = 마스터 키)";
