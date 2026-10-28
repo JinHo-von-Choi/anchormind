@@ -409,6 +409,9 @@ describe("GET /memory/fragments/:id/history", () => {
     assert.equal(res.statusCode, 200);
     assert.equal(mgrCalls[0][0], "fragmentHistory");
     assert.equal(mgrCalls[0][1].id, "frag-1");
+    assert.equal(mgrCalls[0][1].allWorkspaces, true, "workspace 파편 이력도 읽는다");
+    assert.equal(mgrCalls[0][1]._isMaster, true);
+    assert.equal(mgrCalls[0][1].includePeerAgents, true);
   });
 });
 
