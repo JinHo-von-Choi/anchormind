@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `recall` 응답에 `totalCount`, `nextCursor`, `hasMore`가 실린다. 기본 응답과 `format: "pack"` 응답 모두 해당하고 caseMode 응답은 제외다.
+- `recall`의 `tokenBudget`이 페이지마다 적용된다. 예산에 들지 못한 결과는 버려지지 않고 `nextCursor`로 다음 페이지에서 이어 받는다. 혼자서도 예산을 넘는 파편은 결과와 `totalCount`에서 빠진다.
+- `recall`의 `threshold`, `depth`, `excludeSeen` 조건이 예산 선택 전에 적용된다. 응답에서 빠질 파편이 예산과 페이지 위치를 차지하지 않고 접근 기록도 남기지 않는다.
+
 ## [6.7.1] - 2026-10-22
 
 ### Changed

@@ -613,7 +613,7 @@ ID lookups through `fragment_history` and `graph_explore` now apply workspace fi
 | text | string | - | Natural language query (L3 semantic) |
 | topic | string | - | Topic filter |
 | type | string | - | Type filter (fact, decision, error, preference, procedure, relation, episode) |
-| tokenBudget | number | - | Maximum return tokens. Default 1000. Candidates including linked fragments receive the final score and are selected within this budget; linked fragments use the same budget. |
+| tokenBudget | number | - | Maximum return tokens per response (page). Default 1000. Candidates including linked fragments receive the final score and are selected within this budget; linked fragments use the same budget. Results that do not fit are returned on later pages via `nextCursor`. |
 | includeLinks | boolean | - | Include linked fragments (1-hop, resolved_by/caused_by prioritized). Default true. |
 | linkRelationType | string | - | Link relation type filter (related, caused_by, resolved_by, part_of, contradicts) |
 | threshold | number | - | Similarity threshold (0-1) |
@@ -637,7 +637,7 @@ ID lookups through `fragment_history` and `graph_explore` now apply workspace fi
 | workspace | string | - | Returns the selected workspace + global (NULL), falls back to the key default, and returns global-only when neither exists. |
 | allWorkspaces | boolean | - | Master-only cross-workspace read. API keys receive a permission error when requesting true. |
 | contextText | string | - | Current conversation context text. Proactively activates related fragments (when ENABLE_SPREADING_ACTIVATION=true). |
-| cursor | string | - | Backward-compatible opaque pagination cursor carrying the offset and fixed `anchorTime` |
+| cursor | string | - | Backward-compatible opaque pagination cursor carrying the offset and fixed `anchorTime`. Pass the previous response's `nextCursor` to get the next page. `tokenBudget` applies per page, and results that did not fit the previous page's budget move to the next page. The top-level `totalCount` (number of results reachable by following cursors; fragments that alone exceed `tokenBudget` are excluded), `nextCursor` (`null` when there is no next page), and `hasMore` describe the page state, and are also present in `format: "pack"` responses. caseMode responses do not carry them. |
 | pageSize | number | - | Default 20, max 50 |
 | agentId | string | - | Agent ID |
 | minImportance | number | - | Minimum importance filter (0-1). Only fragments with importance at or above this value are returned. |

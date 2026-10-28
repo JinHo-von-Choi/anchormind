@@ -18,9 +18,20 @@ process.env.REDIS_ENABLED           ??= "false";
 process.env.CACHE_ENABLED           ??= "false";
 const savedProvenance = process.env.MEMENTO_PROVENANCE;
 
-const state = { result: null, queries: [], failProvenance: false };
+const { paginateRankedFragments } = await import("../../lib/memory/read/DeterministicRanking.js");
 
-const fakeManager = { recall: async () => structuredClone(state.result) };
+const state = { result: null, ranked: null, queries: [], failProvenance: false };
+
+/** state.ranked가 있으면 MemoryRecaller와 같은 방식으로 cursor와 pageSize를 적용한다. */
+const fakeManager = {
+  recall: async (args) => {
+    if (!state.ranked) return structuredClone(state.result);
+    const page = paginateRankedFragments(structuredClone(state.ranked), {
+      cursor: args.cursor, pageSize: Math.min(args.pageSize ?? 20, 50), anchorTime: 0
+    });
+    return { ...page, totalTokens: 0, searchPath: "stub" };
+  }
+};
 const realManager = await import("../../lib/memory/MemoryManager.js");
 mock.module("../../lib/memory/MemoryManager.js", {
   namedExports: { ...realManager, MemoryManager: { getInstance: () => fakeManager } }
@@ -66,6 +77,7 @@ beforeEach(() => {
   else process.env.MEMENTO_PROVENANCE = savedProvenance;
   state.queries        = [];
   state.failProvenance = false;
+  state.ranked         = null;
   state.result         = {
     fragments  : [fragment("new"), fragment("old", { valid_to: "2026-10-01T00:00:00Z" })],
     totalTokens: 12,
@@ -173,6 +185,51 @@ describe("recall format", () => {
       assert.deepEqual(item.supersedes, []);
       assert.equal(item.source, null);
     }
+  });
+});
+
+describe("recall 페이지네이션 응답", () => {
+  const ranked = Array.from({ length: 65 }, (_, i) => fragment(`f${String(i).padStart(2, "0")}`));
+
+  for (const format of [undefined, "pack"]) {
+    it(`${format ?? "기본"} 응답은 nextCursor로 마지막 페이지까지 이어 조회한다`, async () => {
+      state.ranked = ranked;
+      const first  = await tool_recall({ keywords: ["k"], pageSize: 50, ...(format ? { format } : {}) });
+
+      assert.equal(first.count, 50);
+      assert.equal(first.totalCount, 65);
+      assert.equal(first.hasMore, true);
+      assert.equal(typeof first.nextCursor, "string");
+
+      const second = await tool_recall({ keywords: ["k"], pageSize: 50, cursor: first.nextCursor, ...(format ? { format } : {}) });
+
+      assert.equal(second.count, 15);
+      assert.equal(second.totalCount, 65);
+      assert.equal(second.hasMore, false);
+      assert.equal(second.nextCursor, null);
+
+      const ids = format === "pack"
+        ? [...first.pack.items, ...second.pack.items].map(item => item.id)
+        : [...first.fragments, ...second.fragments].map(f => f.id);
+      assert.deepEqual(ids.sort(), ranked.map(f => f.id));
+    });
+  }
+
+  it("결과가 없으면 totalCount 0, nextCursor null, hasMore false다", async () => {
+    state.ranked = [];
+    const response = await tool_recall({ keywords: ["k"] });
+
+    assert.equal(response.count, 0);
+    assert.equal(response.totalCount, 0);
+    assert.equal(response.nextCursor, null);
+    assert.equal(response.hasMore, false);
+  });
+
+  it("caseMode 응답에는 페이지 필드가 없다", async () => {
+    state.result = { caseMode: true, cases: [], caseCount: 0, searchPath: "case", fragments: [] };
+    const response = await tool_recall({ keywords: ["k"], caseMode: true });
+
+    for (const key of ["totalCount", "nextCursor", "hasMore"]) assert.ok(!(key in response), key);
   });
 });
 
