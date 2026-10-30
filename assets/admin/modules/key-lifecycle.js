@@ -37,6 +37,7 @@ export function rotateConfirmLabel(graceText) {
 }
 
 /** 빈 문자열은 null */
+// iron-laws: ignore[IL-307] null·false·빈 값은 입력 없음이나 조건 불충족을 뜻하는 정상 결과다
 function textOrNull(value) {
   const text = String(value ?? "").trim();
   return text === "" ? null : text;

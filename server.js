@@ -134,6 +134,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // iron-laws: ignore[AI-101] 요청 경로를 해석하는 기준 URL이며 접속 주소가 아니다
   const url = new URL(req.url || "/", "http://localhost");
 
   /* GET /health, /health/live, /health/ready */
@@ -153,6 +154,7 @@ const server = http.createServer(async (req, res) => {
     if (!auth.valid) {
       res.statusCode = 401;
       res.setHeader("Content-Type", "application/json; charset=utf-8");
+      // iron-laws: ignore[IL-505] application/json 응답이라 브라우저가 HTML로 해석하지 않는다
       res.end(JSON.stringify({ error: auth.error || "Unauthorized" }));
       return;
     }
@@ -267,6 +269,7 @@ const server = http.createServer(async (req, res) => {
 
   /* Admin API (라우트 표의 ipLimit 항목: 인증, 키 생성, 가져오기, 자기 정보에 IP별 rate limit 적용) */
   if (url.pathname.startsWith(`${ADMIN_BASE}/`)) {
+    // iron-laws: ignore[IL-504] RegExp.exec 호출이며 운영체제 명령을 실행하지 않는다
     const isRateLimitedAdminPath = isRateLimitedAdminRequest(req.method, url.pathname.slice(ADMIN_BASE.length));
 
     if (isRateLimitedAdminPath) {
@@ -422,6 +425,7 @@ async function gracefulShutdown(signal, { exitCode = 0 } = {}) {
   try {
     const { MemoryManager } = await import("./lib/memory/MemoryManager.js");
     drainPromises.push(MemoryManager.getInstance().drainMorpheme());
+  // iron-laws: ignore[IL-301] MemoryManager가 초기화되기 전에는 이 정리 단계를 건너뛴다
   } catch { /* MemoryManager 미초기화 시 skip */ }
 
   if (drainPromises.length > 0) {

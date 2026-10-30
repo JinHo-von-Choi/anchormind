@@ -1,3 +1,4 @@
+// iron-laws: ignore-file[IL-111] JSDoc 타입 표기이며 실제 값이 아니다
 /**
  * 복구 훈련 순수 함수
  *
@@ -14,6 +15,7 @@ import crypto from "node:crypto";
 
 export const TEST_PORT     = 35433;
 export const TEST_USER     = "memento";
+// iron-laws: ignore[IL-101] CI·로컬 시험용 일회성 DB 계정이며 운영 비밀이 아니다
 export const TEST_PASSWORD = "memento_test";
 export const LOCAL_HOSTS   = Object.freeze(["localhost", "127.0.0.1", "::1"]);
 

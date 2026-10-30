@@ -35,6 +35,7 @@ async function main() {
   const factory = new FragmentFactory();
 
   /** 본문에 식별자가 있으나 keywords에는 없는 파편만 대상으로 한다. */
+  // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
   const { rows } = await pool.query(
     `SELECT id, content, keywords
        FROM ${SCHEMA}.fragments

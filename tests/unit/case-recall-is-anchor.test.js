@@ -175,7 +175,9 @@ describe("CaseRecall isAnchor 3상태", () => {
     assert.match(queries[0].sql, /key_id = ANY\(\$\d+::text\[\]\)/);
     assert.match(queries[1].sql, /ce\.key_id = ANY\(\$\d+::text\[\]\)/);
     assert.deepEqual(queries[0].params.at(-1), ["synthetic-key"]);
-    assert.deepEqual(queries[1].params.at(-1), ["synthetic-key"]);
+    assert.deepEqual(queries[1].params.at(-2), ["synthetic-key"]);
+    /** 마지막 인자는 검토 가시성의 보는 주체(호출 키)다 */
+    assert.equal(queries[1].params.at(-1), "synthetic-key");
   });
 
   it("isAnchor 지정 여부와 무관하게 event 조회는 case_events 자체 키 그룹으로 격리한다", async () => {
@@ -192,8 +194,9 @@ describe("CaseRecall isAnchor 3상태", () => {
     const ordinary = await build(false);
 
     assert.deepEqual(anchored[0].events, ordinary[0].events);
+    /** 원본 파편은 검토 가시성 판정에만 쓰고, 현재 is_anchor·valid_to로 이벤트를 거르지 않는다 */
     assert.ok(queries
       .filter(({ sql }) => sql.includes("case_events"))
-      .every(({ sql, params }) => !sql.includes("source_fragment_id") && !params.some(value => typeof value === "boolean")));
+      .every(({ sql, params }) => !/valid_to|is_anchor/.test(sql) && !params.some(value => typeof value === "boolean")));
   });
 });

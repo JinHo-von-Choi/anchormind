@@ -63,7 +63,7 @@ describe("통합과 GC 삭제 경로", () => {
 });
 
 describe("deindexRows", () => {
-  it("RETURNING 행마다 deindex 를 id, keywords, topic, type, key_id 순으로 부른다", async () => {
+  it("RETURNING 행마다 deindex 를 id, keywords, topic, type, key_id, content 순으로 부른다", async () => {
     const { getFragmentIndex, deindexRows } = await import("../../lib/memory/FragmentIndex.js");
     const index    = getFragmentIndex();
     const original = index.deindex;
@@ -71,12 +71,12 @@ describe("deindexRows", () => {
     index.deindex  = spy;
     try {
       await deindexRows([
-        { id: "a", keywords: ["k1"], topic: "t", type: "fact", key_id: "K" },
+        { id: "a", keywords: ["k1"], topic: "t", type: "fact", key_id: "K", content: "본문" },
         { id: "b", keywords: [],     topic: "u", type: "error" }
       ]);
       assert.equal(spy.mock.callCount(), 2);
-      assert.deepEqual(spy.mock.calls[0].arguments, ["a", ["k1"], "t", "fact", "K"]);
-      assert.deepEqual(spy.mock.calls[1].arguments, ["b", [], "u", "error", null]);
+      assert.deepEqual(spy.mock.calls[0].arguments, ["a", ["k1"], "t", "fact", "K", { content: "본문" }]);
+      assert.deepEqual(spy.mock.calls[1].arguments, ["b", [], "u", "error", null, { content: undefined }]);
     } finally {
       index.deindex = original;
     }

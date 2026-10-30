@@ -64,6 +64,8 @@ const ALLOWED = {
   "memory/read/ContextBuilder.js": 1,
   "memory/read/FragmentReader.js": 18, // recall 예산 선택 토큰, 모순 감사 등급, Hot Cache 본문·검토 버전 재검증
   "memory/read/HistoryReconstructor.js": 1,
+  "memory/read/GraphNeighborSearch.js": 2, // 그래프 이웃의 양방향 링크마다 파편을 기본 키로 한 번 조회한다. 파편 조건을 링크 조인에 섞으면 플래너가 키 전체 파편을 훑는 해시 조인을 고르므로 OFFSET 0 하위 질의로 분리한다
+  "memory/read/LinkedFragmentLoader.js": 1, // linked 미리보기는 정렬된 링크 순서대로 파편을 하나씩 조회해 조건을 통과한 3건에서 멈춘다. 링크와 파편을 한 번에 조인해 정렬하면 시드의 링크 수만큼 파편을 조회한다
   "memory/read/DigestLoader.js": 1, // 묶음 요약을 읽을 때 출처 파편이 모두 유효한지 같은 문장의 NOT EXISTS로 확인한다
   "memory/read/KeyNameEnricher.js": 1,
   "memory/read/ProvenanceLoader.js": 1, // 답 꾸러미, recall 응답, context core 후보의 출처 열(source, origin, trust_tier)을 대체 체인 조회와 같은 recall의 agent, 키, workspace 범위 절로 읽는다. 답 꾸러미 source 조회를 옮겨 와 AnswerPackLoader에는 직접 접근이 없다. FragmentReader 메서드로 옮기면 그 범위 절을 중복한다

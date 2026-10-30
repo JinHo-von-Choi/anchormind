@@ -71,6 +71,7 @@ export async function main({
     throw new Error("DB pool unavailable");
   }
 
+  // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
   const { rows: wsRows } = await pool.query(
     `SELECT workspace, count(*)::int AS cnt
        FROM ${SCHEMA}.fragments
@@ -99,6 +100,7 @@ export async function main({
   const topicMatched = byTopic.length;
 
   /** 규칙 2: session_reflect 파편 본문에서 workspace 이름을 하나만 찾는다. */
+  // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
   const { rows: frags } = await pool.query(
     `SELECT id, content, keywords
        FROM ${SCHEMA}.fragments
@@ -112,6 +114,7 @@ export async function main({
     const haystack = (String(f.content ?? "") + " " + (f.keywords ?? []).join(" ")).toLowerCase();
     const matched  = [];
 
+    // iron-laws: ignore[PERF-102] 안쪽 반복 대상의 크기가 작게 제한돼 있다
     for (const ws of candidates) {
       const needle = ws.toLowerCase();
       if (!haystack.includes(needle)) continue;

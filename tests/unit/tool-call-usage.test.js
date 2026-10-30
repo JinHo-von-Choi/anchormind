@@ -35,6 +35,7 @@ describe("recordToolCall", () => {
     assert.equal(calls.length, 0);
   });
 
+  // iron-laws: ignore[IL-306] 예외 없이 끝나는지가 검증 대상이며 node:test는 던진 예외를 실패로 처리한다
   it("열이 없거나 질의가 실패해도 예외를 던지지 않는다", async () => {
     const missing = Object.assign(new Error("column does not exist"), { code: "42703" });
     await recordToolCall("k1", "recall", () => ({ query: async () => { throw missing; } }));

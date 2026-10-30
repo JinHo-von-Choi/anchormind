@@ -1,3 +1,4 @@
+// iron-laws: ignore-file[IL-306] 검증은 테스트 도우미 함수 안의 assert가 맡는다
 /**
  * master 전용 mode preset 요청 판정 시험(실제 handleMcpPost, 키 조회는 대역)
  *

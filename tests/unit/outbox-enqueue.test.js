@@ -1,3 +1,4 @@
+// iron-laws: ignore-file[IL-306] 검증은 테스트 도우미 함수 안의 assert가 맡는다
 /**
  * outbox 기록(enqueue) 시험
  *

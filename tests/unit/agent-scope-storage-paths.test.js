@@ -286,7 +286,8 @@ describe("reconstruct/search trace scope", () => {
       keyId: {
         keyId: "key-a", groupKeyIds: ["key-a"], workspace: "workspace-a",
         allWorkspaces: false, _isMaster: false,
-        agentId: "agent-a", includePeerAgents: false
+        agentId: "agent-a", includePeerAgents: false,
+        limit: 100
       }
     });
     const linkCall = calls.find(call => /FROM agent_memory\.fragment_links fl/.test(call.sql));

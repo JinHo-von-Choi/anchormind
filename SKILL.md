@@ -930,7 +930,7 @@ async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기�
 | type | string | - | 타입 필터 (fact, decision, error, preference, procedure, relation, episode) |
 | tokenBudget | number | - | 최대 반환 토큰. 기본 1000. |
 | includeLinks | boolean | - | 연결 파편 포함. 기본 true. |
-| linkRelationType | string | - | 연결 관계 필터 (related, caused_by, resolved_by, part_of, contradicts) |
+| linkRelationType | string | - | 연결 관계 필터 (related, caused_by, resolved_by, part_of, contradicts). 미지정 시 `linked` 미리보기는 resolved_by → caused_by → related 순 |
 | threshold | number | - | similarity 임계값 0~1 |
 | includeSuperseded | boolean | - | 만료 파편 포함. 기본 false. |
 | includeHistory | boolean | - | 결과 파편이 대체한 이전 값을 바로 뒤에 state=superseded로 끼우고 대체한 쪽에 state=current를 단다(최대 5건). 값이 어떻게 바뀌었는지 물을 때 쓴다. 기본 false. |

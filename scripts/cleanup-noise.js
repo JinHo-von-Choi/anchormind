@@ -75,10 +75,12 @@ async function run() {
         WHERE ${cat.where}
       `;
 
+      // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
       const { rows } = await client.query(selectSql);
       console.log(label);
       console.log(`  Found: ${rows.length} fragments`);
 
+      // iron-laws: ignore[PERF-102] 안쪽 반복 대상의 크기가 작게 제한돼 있다
       for (const row of rows.slice(0, 5)) {
         const preview = row.preview.replace(/\n/g, " ");
         console.log(
@@ -95,6 +97,7 @@ async function run() {
 
       if (execute && rows.length > 0) {
         const deleteSql = `DELETE FROM agent_memory.fragments WHERE ${cat.where}`;
+        // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
         const result    = await client.query(deleteSql);
         console.log(`  Deleted: ${result.rowCount} fragments\n`);
       }

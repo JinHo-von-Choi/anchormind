@@ -45,12 +45,14 @@ describe("CaseRecall event workspace isolation", () => {
     const eventQuery = queries[1];
     assert.match(caseQuery.sql, /\(workspace = \$\d+ OR workspace IS NULL\)/);
     assert.doesNotMatch(eventQuery.sql, /JOIN agent_memory\.fragments/);
-    assert.doesNotMatch(eventQuery.sql, /source_fragment_id|valid_to/);
+    assert.doesNotMatch(eventQuery.sql, /valid_to|is_anchor/);
+    assert.match(eventQuery.sql, /rv\.id = ce\.source_fragment_id/);
+    assert.match(eventQuery.sql, /rv\.review_state IN \('pending', 'rejected'\)/);
     assert.match(eventQuery.sql, /ce\.agent_id/);
     assert.match(eventQuery.sql, /ce\.key_id = ANY/);
     assert.match(eventQuery.sql, /\(ce\.workspace = \$\d+ OR ce\.workspace IS NULL\)/);
     assert.doesNotMatch(eventQuery.sql, /ce\.key_id IS NULL/);
-    assert.deepEqual(eventQuery.params, [["case-a"], "default", ["key-a"], "ws-a"]);
+    assert.deepEqual(eventQuery.params, [["case-a"], "default", ["key-a"], "ws-a", "key-a"]);
     assert.equal(cases[0].events[0].summary, "source-independent event");
   });
 
@@ -78,6 +80,6 @@ describe("CaseRecall event workspace isolation", () => {
     assert.doesNotMatch(eventQuery.sql, /JOIN agent_memory\.fragments/);
     assert.match(eventQuery.sql, /ce\.key_id = ANY/);
     assert.doesNotMatch(eventQuery.sql, /ce\.key_id IS NULL/);
-    assert.deepEqual(eventQuery.params, [["case-a"], "default", [], "ws-a"]);
+    assert.deepEqual(eventQuery.params, [["case-a"], "default", [], "ws-a", "key-a"]);
   });
 });

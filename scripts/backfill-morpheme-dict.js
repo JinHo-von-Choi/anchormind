@@ -52,12 +52,14 @@ async function main() {
     process.exit(1);
   }
 
+  // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
   const { rows: [{ count }] } = await pool.query(
     `SELECT count(*)::int AS count FROM ${SCHEMA}.morpheme_dict WHERE embedding IS NULL`
   );
   console.log(`morpheme_dict embedding NULL: ${count}행`);
 
   if (DRY_RUN) {
+    // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
     const { rows } = await pool.query(
       `SELECT morpheme FROM ${SCHEMA}.morpheme_dict WHERE embedding IS NULL ORDER BY morpheme LIMIT 10`
     );

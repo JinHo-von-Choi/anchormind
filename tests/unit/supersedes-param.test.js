@@ -8,10 +8,12 @@ import assert from "node:assert/strict";
  * 따라서 본 스위트는 MemoryRememberer.prototype을 직접 검증한다.
  */
 describe("remember supersedes parameter", () => {
-  test("MemoryRememberer._persistNonAtomic이 supersedes 파라미터를 처리한다", async () => {
+  test("비원자·원자 저장 경로가 공통 후속 처리에서 supersedes 파라미터를 처리한다", async () => {
     const { MemoryRememberer } = await import("../../lib/memory/processors/MemoryRememberer.js");
-    const src = MemoryRememberer.prototype._persistNonAtomic.toString();
-    assert.ok(src.includes("supersedes"), "_persistNonAtomic에 supersedes 처리 로직 필수");
+    const persist  = MemoryRememberer.prototype._persistNonAtomic.toString();
+    const finalize = MemoryRememberer.prototype._finalizeRemember.toString();
+    assert.ok(persist.includes("_finalizeRemember"), "_persistNonAtomic은 공통 후속 처리에 위임해야 한다");
+    assert.ok(finalize.includes("supersedes"), "_finalizeRemember에 supersedes 처리 로직 필수");
   });
 
   test("MemoryRememberer._supersede 헬퍼가 존재한다", async () => {

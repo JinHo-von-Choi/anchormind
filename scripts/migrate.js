@@ -72,6 +72,7 @@ async function applyBaseSchemaIfMissing(client) {
   if (rows[0]?.t) return false;
 
   const schemaPath = path.join(import.meta.dirname, "..", "lib", "memory", "memory-schema.sql");
+  // iron-laws: ignore[IL-516] 서버가 관리하는 파일이며 사이에 바뀌면 뒤 읽기·쓰기가 오류를 던져 호출부가 처리한다
   if (!fs.existsSync(schemaPath)) {
     throw new Error(`기반 스키마 파일을 찾을 수 없습니다: ${schemaPath}`);
   }
@@ -119,6 +120,7 @@ async function migrate() {
         if (extResult.rows.length > 0 && extResult.rows[0].nspname !== "public") {
           pgvectorSchema = extResult.rows[0].nspname;
         }
+      // iron-laws: ignore[IL-301] pgvector가 없으면 기본값을 유지한다
       } catch { /* pgvector not installed */ }
     }
 
@@ -135,6 +137,7 @@ async function migrate() {
       if (colResult.rows.length > 0 && colResult.rows[0].udt_name === "halfvec") {
         opsClass = "halfvec_cosine_ops";
       }
+    // iron-laws: ignore[IL-301] fragments 표가 없으면 기본값을 유지한다
     } catch { /* fragments 테이블 미존재 시 기본값 유지 */ }
     console.log(`Embedding ops class: ${opsClass}`);
 
@@ -144,6 +147,7 @@ async function migrate() {
     const searchPathSQL = `SET search_path TO ${searchPathParts.join(", ")}`;
     console.log(`search_path: ${searchPathParts.join(", ")}${pgvectorSchema ? ` (pgvector in ${pgvectorSchema})` : ""}`);
 
+    // iron-laws: ignore[PERF-104] 행 수가 적은 관리용 표의 전체 목록이다
     const { rows } = await client.query(
       "SELECT filename FROM agent_memory.schema_migrations ORDER BY filename"
     );

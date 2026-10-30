@@ -6,7 +6,7 @@
  *
  * MEMENTO_REMEMBER_ATOMIC 경로(_rememberAtomic)는 트랜잭션을 커밋한 뒤 중복 적중을 판정한다.
  * 확인이 꺼져 있으면 응답 구조와 후속 처리는 그대로이고, 켜져 있으면 기존 파편 상태만
- * scope persistent로 알리며 색인, 후처리, 충돌 감지, 연결을 하지 않는다.
+ * scope permanent로 알리며 색인, 후처리, 충돌 감지, 연결을 하지 않는다.
  */
 import { describe, it, mock, beforeEach } from "node:test";
 import assert                              from "node:assert/strict";
@@ -73,7 +73,7 @@ describe("_rememberAtomic 중복 적중", () => {
   it("확인이 꺼져 있으면 기존 응답 구조와 후속 처리를 그대로 타고 같은 범위 적중은 duplicate_of를 싣는다", async () => {
     const res = await makeRememberer("frag-old")._rememberAtomic(fragment(), ctx());
     assert.deepEqual(res, {
-      id: "frag-old", keywords: ["k"], ttl_tier: "warm", scope: "persistent", conflicts: [], duplicate_of: "frag-old"
+      id: "frag-old", keywords: ["k"], ttl_tier: "warm", scope: "permanent", conflicts: [], duplicate_of: "frag-old"
     });
     assert.equal(calls.index, 1);
     assert.equal(calls.post, 1);
@@ -84,11 +84,11 @@ describe("_rememberAtomic 중복 적중", () => {
     assert.equal(calls.released, 1);
   });
 
-  it("확인이 켜져 있고 살아 있는 기존 파편이 있으면 persistent 범위의 중복 응답을 돌려준다", async () => {
+  it("확인이 켜져 있고 살아 있는 기존 파편이 있으면 permanent 범위의 중복 응답을 돌려준다", async () => {
     process.env.MEMENTO_REMEMBER_DUPLICATE_GUARD = "true";
     const res = await makeRememberer("frag-old")._rememberAtomic(fragment(), ctx());
     assert.deepEqual(res, {
-      id: "frag-old", keywords: ["k"], ttl_tier: "permanent", scope: "persistent",
+      id: "frag-old", keywords: ["k"], ttl_tier: "permanent", scope: "permanent",
       conflicts: [], existing: true, duplicate: "same_scope", duplicate_of: "frag-old"
     });
     assert.deepEqual(calls.state, [["frag-old", "key-1", "default"]]);

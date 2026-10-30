@@ -1,3 +1,4 @@
+<!-- iron-laws: ignore-file[IL-102] 중복 적재를 막는 색인 키이며 보안 용도가 아니다 -->
 # Architecture
 
 ## System Architecture
@@ -1084,7 +1085,7 @@ After the three layers' results are merged via RRF, time-semantic composite rank
 
 **Content lexical channel (`LexicalSearch`, L2b).** A text search opened by recall calls the lexical channel in parallel with L2 and L3 (`lexicalChannel: true` on the search query is set only by the recall entry point; internal searches of the write paths such as conflict detection and auto linking never call the channel). The write paths (remember, batch_remember, amend that changes content, reflect, import, split) store the morpheme tokens of the content plus numbers of 3 or more digits (`LexicalTokens`, first 2000 characters, long runs without whitespace are not tokenized) joined by spaces into `fragments.content_tokens` (`to_tsvector('simple', ...)`, migration 053) in the same statement. The search turns the query into an OR tsquery with the same tokenization, reads up to 400 matching rows within the key, workspace and agent scope and the search filters, and returns the top 200 of them by `ts_rank_cd`. A query that exceeds `MEMENTO_LEXICAL_TIMEOUT_MS` (default 120 ms) is cancelled and the channel is left out of that request only. `ts_rank_cd` looks only at one document and the query, so data of other keys does not affect the ranking. With embeddings on, the candidates join RRF as the `lexical` layer (weight `lexicalWeightFactor`); with embeddings off, only candidates that no other layer returned are appended to the fallback result. The channel contributes to the ranking only through the RRF input and does not change the recall final score (`computeRecallScore`). The score relative to the best `ts_rank_cd` of that search (`_lexicalScore`) only orders lexical-only candidates, which have no other score, inside the search layer and is removed from responses. Rows whose `content_tokens` is NULL are left out of the channel; `scripts/backfill-content-tokens.mjs` fills them. `LexicalSchema` decides participation: the channel takes part only while a valid GIN index exists; without the column, or with the index missing or invalid, it does not take part (one warning each).
 
-When `includeLinks: true` (default) is set on recall, linked fragments are fetched via a 1-hop traversal. The `linkRelationType` parameter filters for specific relation types -- when unspecified, caused_by, resolved_by, and related are included. The linked fragment fetch limit is `MEMORY_CONFIG.linkedFragmentLimit` (default 10).
+When `includeLinks: true` (default) is set on recall, linked fragments are fetched via a 1-hop traversal. The `linkRelationType` parameter filters for specific relation types. When unspecified, candidate expansion uses caused_by, resolved_by, related and co_retrieved, and the response `linked` preview picks up to 3 outgoing links in the order resolved_by, caused_by, related, by weight within a relation. Deleted links (rows with `deleted_at`) are used by no path. The linked fragment fetch limit is `MEMORY_CONFIG.linkedFragmentLimit` (default 10), applied after sorting by relation priority and weight.
 
 > **Note:** The L1 Redis index currently supports namespace isolation by API key (keyId) only. Agent-level isolation is enforced at L2/L3, so final result accuracy is unaffected. In multi-agent deployments, L1 candidate sets may include fragments from other agents.
 
@@ -1571,15 +1572,17 @@ Related code: `lib/memory/embedding/MorphemeTokenizer.js`, `lib/memory/embedding
 
 `lib/memory/read/SearchScope.js`. Encapsulates filter conditions across all search layers in a single object.
 
-Encapsulated fields: `workspace`, `caseId`, `resolutionStatus`, `phase`, `affect`, `type`, `topic`, `isAnchor`, `keyId`.
+Encapsulated fields: `workspace`, `caseId`, `resolutionStatus`, `phase`, `affect`, `type`, `topic`, `isAnchor`, `keyId`, `readRange`, `timeRange`.
 
 `SearchScope.fromQuery(sq)` static factory creates an instance from the normalized query returned by `_buildSearchQuery()`. `applyTo(fragment) -> boolean` performs per-fragment coherence checking.
 
-Each call site (L1 HotCache, L2, L3, Graph) prefilters candidates with `scope.applyTo(fragment)`, and `search()` applies the same contract once more before token trimming.
+Layers that cut candidates with LIMIT (L2, L3 vector/segment/synthetic-query, the temporal layer, Graph, link expansion) apply the recall conditions (`type`, `topic`, `caseId`, `resolutionStatus`, `phase`, `affect`, `minImportance`, `timeRange`) in SQL before the LIMIT. `lib/memory/read/FragmentFieldFilter.js` builds these conditions. Applying a condition after the cut lets non-matching top candidates take the slots, so matching fragments drop out. Each call site and `search()` then check the same contract again with `scope.applyTo(fragment)`.
 
 ## SearchSideEffects Side-Effect Isolation
 
 The search event recording and SearchParamAdaptor learning logic are isolated in `lib/memory/read/SearchSideEffects.js`, separate from FragmentSearch. The searchEventId return follows a synchronous contract.
+
+The search's `sideEffects` value sets the scope of side effects. `all` (default) records the search event, adaptor learning and access; `access` records access only; `none` records nothing. Conflict detection and related-fragment search right after a write use `none`, and per-type loads in context use `access`. Search events and search metrics therefore contain only recalls that a user called.
 
 `commitSearchSideEffects(query, sq, cleanResult, ctx) -> Promise<string|null>`:
 - `recordSearchEvent(searchEvent)` await -- synchronously returns searchEventId so the caller can attach `_meta.searchEventId` to the response (tool_feedback FK contract)

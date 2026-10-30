@@ -82,12 +82,15 @@ export async function alignDerivedEmbedding(client, targetTable, targetIndex, la
     // including when the HNSW index is missing and DROP INDEX is a no-op.
     await client.query(`LOCK TABLE ${SCHEMA}.${targetTable} IN ACCESS EXCLUSIVE MODE`);
     await client.query(`DROP INDEX IF EXISTS ${SCHEMA}.${targetIndex}`);
+    // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
     await client.query(`DELETE FROM ${SCHEMA}.${targetTable}`);
+    // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
     await client.query(
       `ALTER TABLE ${SCHEMA}.${targetTable}
          ALTER COLUMN embedding TYPE ${sourceType} USING NULL`
     );
     // PostgreSQL creates the index in the table's schema; its name must be unqualified.
+    // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
     await client.query(
       `CREATE INDEX ${targetIndex}
          ON ${SCHEMA}.${targetTable}
@@ -97,6 +100,7 @@ export async function alignDerivedEmbedding(client, targetTable, targetIndex, la
     );
     await client.query("COMMIT");
   } catch (err) {
+    // iron-laws: ignore[IL-301] ROLLBACK 실패만 무시하고 원래 오류를 다시 던진다
     await client.query("ROLLBACK").catch(() => {});
     throw new Error(
       `${label} embedding alignment failed (${describe(target)} -> ${sourceType})`,

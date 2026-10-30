@@ -180,6 +180,7 @@ async function main() {
 
   // Non-blocking update check (hook은 하네스 훅 안에서 네트워크 확인을 하지 않는다)
   if (cmd !== "update" && !IS_HOOK && process.env.UPDATE_CHECK_DISABLED !== "true") {
+    // iron-laws: ignore[IL-301] 업데이트 확인은 부가 기능이라 실패해도 명령 실행을 막지 않는다
     import("../lib/updater/cache.js").then(async ({ UpdateCache }) => {
       const c = new UpdateCache();
       if (!c.isExpired(Number(process.env.UPDATE_CHECK_INTERVAL_HOURS || 24))) return;
@@ -189,6 +190,7 @@ async function main() {
         const { detectInstallType } = await import("../lib/updater/install-detector.js");
         c.set({ ...r, installType: await detectInstallType() });
         if (r.updateAvailable) process.stderr.write(`\n[memento-mcp] v${r.latestVersion} available. Run "memento-mcp update" to upgrade.\n`);
+      // iron-laws: ignore[IL-301] 업데이트 확인은 부가 기능이라 실패해도 명령 실행을 막지 않는다
       } catch { /* network failure - silent */ }
     }).catch(() => {});
   }

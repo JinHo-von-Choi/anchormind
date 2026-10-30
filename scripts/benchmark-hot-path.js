@@ -116,6 +116,7 @@ const getGitSha = () => {
       cwd     : path.join(import.meta.dirname, '..'),
       encoding: 'utf8',
     }).trim();
+  // iron-laws: ignore[IL-301] git이 없으면 커밋 표기 없이 결과를 남긴다
   } catch {
     return null;
   }

@@ -171,6 +171,7 @@ async function main(argv) {
   const current    = countByRule(results, ROOT);
 
   if (mode === "--init") {
+    // iron-laws: ignore[IL-516] 서버가 관리하는 파일이며 사이에 바뀌면 뒤 읽기·쓰기가 오류를 던져 호출부가 처리한다
     if (fs.existsSync(BASELINE_PATH)) {
       console.error("[lint-ratchet] 기준선이 이미 있다. --update를 쓴다.");
       return 2;

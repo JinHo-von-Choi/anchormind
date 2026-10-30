@@ -109,6 +109,7 @@ describe("PollingWorker 종료", () => {
     assert.equal(w.timer, null);
   });
 
+  // iron-laws: ignore[IL-306] 예외 없이 끝나는지가 검증 대상이며 node:test는 던진 예외를 실패로 처리한다
   test("기동한 적 없는 워커의 stop()도 안전하다", async () => {
     await new Probe().stop();
   });

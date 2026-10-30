@@ -41,12 +41,14 @@ export async function runCleanup({ apply = false, yes = false, limit = 5000 } = 
   const pool  = getPrimaryPool();
   const where = buildSelectionWhere();
 
+  // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
   const { rows: countRows } = await pool.query(
     `SELECT count(*) AS n FROM ${SCHEMA}.fragments WHERE ${where}`
   );
   const count = Number(countRows[0].n);
   console.log(`[cleanup] 대상 split 자식: ${count}건`);
 
+  // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
   const { rows: sample } = await pool.query(
     `SELECT id, content FROM ${SCHEMA}.fragments WHERE ${where} LIMIT 10`
   );

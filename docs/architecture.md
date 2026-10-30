@@ -1,3 +1,4 @@
+<!-- iron-laws: ignore-file[IL-102] 중복 적재를 막는 색인 키이며 보안 용도가 아니다 -->
 # Architecture
 
 작성자: 최진호
@@ -1082,7 +1083,7 @@ Redis와 임베딩 API는 선택 사항이다. 없으면 해당 계층 없이 �
 
 세 계층의 결과가 RRF로 병합된 뒤 시간-의미 복합 랭킹이 적용된다. 복합 점수 공식: `score = effectiveImportance × 0.4 + temporalProximity × 0.3 + similarity × 0.3`. effectiveImportance는 `importance + computeEmaRankBoost(ema_activation) × 0.5`로 계산된다 — ACT-R EMA 활성화 값이 높을수록 자주 회상된 파편의 랭킹이 추가로 부스트된다. `computeEmaRankBoost(ema) = 0.2 × (1 - e^{-ema})`이며 최대 부스트는 0.10이다. 상한을 0.3→0.2로 제한한 이유: importance=0.65 파편의 effectiveImportance가 최대 0.65+0.10×0.5=0.70으로 permanent 승격 기준(importance≥0.8)에 미달, 가비지 파편의 등급 상향 순환을 차단한다. temporalProximity는 anchorTime(기본: 현재 시각) 기준 지수 감쇠로 계산된다 — `Math.pow(2, -distDays / 30)`. anchorTime이 과거 시점이면 그 시점에 가까운 파편이 높은 점수를 받는다. `asOf` 파라미터를 전달하면 자동으로 anchorTime으로 변환되어 일반 recall 경로에서 처리된다. 최종 반환량은 `tokenBudget` 파라미터로 제어된다. js-tiktoken cl100k_base 인코더로 파편마다 토큰을 정확히 계산하여 예산 초과 시 잘라낸다. 기본 토큰 예산은 1000이다. `pageSize`와 `cursor` 파라미터로 결과를 페이지네이션할 수 있다.
 
-recall에 `includeLinks: true`(기본값)가 설정되어 있으면 결과 파편들의 연결 파편을 1-hop 추가 조회한다. `linkRelationType` 파라미터로 특정 관계 유형만 포함할 수 있다 — 미지정 시 caused_by, resolved_by, related가 포함된다. 연결 파편 조회 한도는 `MEMORY_CONFIG.linkedFragmentLimit`(기본 10)이다.
+recall에 `includeLinks: true`(기본값)가 설정되어 있으면 결과 파편들의 연결 파편을 1-hop 추가 조회한다. `linkRelationType` 파라미터로 특정 관계 유형만 포함할 수 있다. 미지정 시 후보 확장은 caused_by, resolved_by, related, co_retrieved를 쓰고, 응답의 `linked` 미리보기는 나가는 링크 중 resolved_by → caused_by → related 순, 같은 관계 안에서는 가중치 순으로 최대 3건을 고른다. 지운 링크(`deleted_at`이 있는 행)는 어느 경로에서도 쓰지 않는다. 연결 파편 조회 한도는 `MEMORY_CONFIG.linkedFragmentLimit`(기본 10)이고, 관계 우선순위와 가중치로 정렬한 뒤 자른다.
 
 **MemoryRecaller 최종 정렬 (`computeRecallScore`).** FragmentSearch가 반환한 결과에 includeLinks 파편이 합류한 직후, `MemoryRecaller.recall`이 통합 정렬을 한 번 더 수행한다. 단순 복합 점수 재정렬은 cross-encoder reranker 결과를 폐기하므로 다음 4원칙을 따른다. (1) `rerankerScore`가 있으면 그것을 base로 보존한다. (2) 없으면 `effectiveImportance × 0.4 + temporalProximity × 0.3 + similarity × 0.3`에 `unrerankedBaseDiscount`(0.85)를 곱해 reranking 미검증 페널티를 부여한다. (3) `lexicalMatchScore`(topic exact +4, kw in topic +2, kw in keywords +1.5, kw in content +1, 다중 결합 +2)를 log 스케일로 정규화한 뒤 제한 가중치(`lexicalWeightReranked` 0.12 / `lexicalWeightFallback` 0.18)로 가산한다. `lexWeight`는 집합 단위가 아닌 파편별 `rerankerScore` 유무로 분기한다. (4) includeLinks로 추가된 파편은 정렬 직전에 `_source="linked"`로 태깅되어 `lexicalLinkedMultiplier`(0.5)로 lexical 가중치가 절반으로 감쇠된 뒤, 정렬 직후 응답에서 제거된다. 이 설계는 `if (lexical > 0) return 1000 + lexical` 같은 hard override를 의도적으로 피해 cross-encoder 결과 폐기·이중 계산·페이지네이션 불안정을 막는다.
 
@@ -1581,15 +1582,17 @@ lib/memory/
 
 `lib/memory/read/SearchScope.js`. 검색 레이어 간 필터 조건을 단일 객체로 캡슐화한다.
 
-캡슐화 필드: `workspace`, `caseId`, `resolutionStatus`, `phase`, `affect`, `type`, `topic`, `isAnchor`, `keyId`.
+캡슐화 필드: `workspace`, `caseId`, `resolutionStatus`, `phase`, `affect`, `type`, `topic`, `isAnchor`, `keyId`, `readRange`, `timeRange`.
 
 `SearchScope.fromQuery(sq)` 정적 팩토리로 `_buildSearchQuery()` 반환값에서 생성한다. `applyTo(fragment) → boolean`으로 fragment 단위 정합 검사를 수행한다.
 
-L1 HotCache, L2, L3, Graph 각 호출 사이트가 `scope.applyTo(fragment)`로 후보를 사전 필터링하고, `search()`가 토큰 절삭 전에 같은 계약의 최종 공통 필터를 적용한다.
+후보 수를 LIMIT으로 자르는 계층(L2, L3 벡터·구간·역질의, 기간 계층, Graph, 연결 확장)은 recall 조건(`type`, `topic`, `caseId`, `resolutionStatus`, `phase`, `affect`, `minImportance`, `timeRange`)을 SQL의 LIMIT 앞에 건다. 조건 SQL은 `lib/memory/read/FragmentFieldFilter.js`가 만든다. 조건을 자른 뒤에 걸면 조건에 맞지 않는 상위 후보가 자리를 차지해 맞는 파편이 빠지기 때문이다. 그 뒤 각 호출 사이트와 `search()`가 `scope.applyTo(fragment)`로 같은 계약을 한 번 더 확인한다.
 
 ### SearchSideEffects 부작용 격리
 
 검색 이벤트 기록 및 SearchParamAdaptor 학습 로직은 `lib/memory/read/SearchSideEffects.js`로 분리되어 있다. SearchEventId는 동기 반환 계약을 따른다.
+
+검색의 `sideEffects` 값이 부수 효과 범위를 정한다. `all`(기본)은 검색 이벤트, 학습, 접근 기록을 모두 남기고, `access`는 접근 기록만, `none`은 아무것도 남기지 않는다. 저장 직후의 모순 탐지와 연관 검색은 `none`, context의 유형별 조회는 `access`를 쓴다. 그래서 검색 이벤트와 검색 지표에는 사용자가 호출한 recall만 남는다.
 
 `commitSearchSideEffects(query, sq, cleanResult, ctx) → Promise<string|null>`:
 - `recordSearchEvent(searchEvent)` await — searchEventId를 동기 반환하여 호출자가 응답에 `_meta.searchEventId`를 부착할 수 있도록 보장 (tool_feedback FK 계약)

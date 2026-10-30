@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+### Added
+
+- 단계별 지연 히스토그램 3종이 생겼다. `memento_recall_l3_stage_duration_seconds`(질의 임베딩과 벡터 조회), `memento_recall_stage_duration_seconds`(recall의 검색, 연결 미리보기, 문맥, 상태, 모순 확인), `memento_remember_stage_duration_seconds`(저장, 색인, 후처리, 모순 탐지, 자동 링크)다. 라벨과 의미는 [monitoring](docs/operations/monitoring.md#recall-remember-단계별-지연-지표)에 있다.
+
+### Changed
+
+- `recall`의 `linked` 미리보기가 `linkRelationType`을 따른다. 지정하지 않으면 resolved_by, caused_by, related 링크를 이 순서로 우선하고 같은 관계 안에서는 가중치 순으로 최대 3건을 고른다. 이전에는 관계와 무관하게 가중치 상위 3건이었다. `includeLinks: false`면 미리보기를 싣지 않는다.
+- `idempotencyKey` 재시도 기록의 범위에 `agentId`가 들어간다. 같은 API 키를 쓰는 다른 agent가 같은 키 값을 보내도 서로의 응답을 받지 않는다. migration-071이 유일 색인을 `(scope_key, agent_id, tool, idempotency_key)`로 바꾼다.
+- 검색 이벤트(`search_events`)와 검색 지표에는 사용자가 호출한 `recall`만 남는다. 저장 직후의 모순 탐지와 연관 검색은 기록을 남기지 않고, `context`의 유형별 조회는 접근 기록만 남긴다.
+- `remember`가 모순 탐지와 자동 링크 생성을 함께 실행한다. `recall`의 연결 미리보기, 문맥, 상태, 모순 확인 조회와 `context`의 영역별 조회도 함께 실행한다. caseMode `recall`은 쓰지 않는 파편 단위 부가 조회를 하지 않는다.
+- 대체 관계 후보 탐색이 파편마다 따로 묻지 않고 100건씩 묶어 조회한다.
+
+### Fixed
+
+- `recall`의 `linked` 미리보기가 `linkRelationType`을 무시하고 가중치 상위 3건을 먼저 잘라, 지정한 관계(예: 가중치 4순위의 part_of)가 빠지던 문제를 고쳤다. ([#103](https://github.com/JinHo-von-Choi/anchormind/issues/103))
+- `recall` 조건(`type`, `topic`, `caseId`, `resolutionStatus`, `phase`, `affect`, `minImportance`, `timeRange`)이 그래프 이웃, 연결 확장, 기간 검색, 벡터·구간·역질의 검색에서 후보를 자른 뒤에 적용되던 문제를 고쳤다. 조건에 맞지 않는 상위 후보가 자리를 차지해 맞는 파편이 결과에서 빠졌다. 조건은 이제 자르기 전에 SQL에서 걸린다.
+- 그래프 이웃과 연결 확장이 점수가 아니라 id 순으로 먼저 잘라 강한 연결이 빠지던 문제를 고쳤다.
+- 삭제 표시된 링크가 연결 미리보기, 후보 확장, `graph_explore`, 대체 이력, `reconstruct_history`, 인과 문맥, 관리 콘솔 통계에서 계속 쓰이던 문제를 고쳤다. 삭제 표시된 링크를 다시 만들면 새 링크로 되살린다.
+- 검토 대기·거절 파편이 그 파편을 쓴 키가 아닌 다른 키에게 보이던 경로를 막았다. 해당 경로는 `includeContext`의 출처 조회, `context`의 학습 주입, 사례 이벤트(`reconstruct_history`, caseMode)의 요약·간선·근거, 미해결 모순 표시, 관리 콘솔 파편 상세의 연결 미리보기다. 관리 콘솔 연결 미리보기는 요청의 key, group 필터도 따른다.
+- `includeContext`의 `nearby_context`가 비어 있던 문제를 고쳤다. 같은 `session_id`에서 앞뒤 30분 안에 저장된 파편을 찾는다.
+- `timeRange`가 Hot Cache, 그래프 이웃, 연결 확장 결과에 적용되지 않던 문제를 고쳤다.
+- 연결 파편과 `includeHistory` 이력 파편이 `totalTokens`에 빠지고, 연결 파편에 `includeKeyName`의 키 이름이 붙지 않던 문제를 고쳤다.
+- `reconstruct_history`의 `timeRange`와 `limit`이 사례 이벤트에도 적용된다.
+- `amend`, `forget` 뒤에도 본문에서 뽑은 낱말이 키워드 색인(L1)에 남아 옛 파편이 후보로 잡히던 문제를 고쳤다.
+- 키 그룹을 쓰는 `recall`이 Hot Cache에 파편을 저장하지 못하던 문제를 고쳤다. 파편을 쓴 키의 영역에 저장한다.
+- `MEMENTO_REMEMBER_ATOMIC=true`에서 `remember` 응답의 `conflicts` 항목에 id와 본문이 비던 문제를 고쳤다.
+- 모순 해소가 중간에 실패하면 다음 주기에도 다시 처리되지 않던 문제를 고쳤다. 대체 링크와 만료를 먼저 기록하고 모순 링크를 마지막에 만든다. 통합 작업의 모순 해소도 같은 규칙(검토 보류, 키 경계, 앵커 보호)을 따른다.
+- 파편 단건 삭제가 링크를 먼저 지운 뒤 파편 삭제에 실패하면 링크만 사라지던 문제를 고쳤다. 에이전트 전체 삭제는 `forget`과 같은 연쇄 정리를 한다.
+- `DELETE /mcp`가 인증 전에 세션 만료 시각을 늘리던 문제를 고쳤다. 인증을 먼저 한다.
+- 중복 병합 단계의 id 배열 형 변환 오류를 고쳤다.
+
 ## [6.8.1] - 2026-10-28
 
 ### Fixed

@@ -133,11 +133,13 @@ describe("ContradictionDetector 모순 해소", () => {
     const older = { id: "o", key_id: null, created_at: "2026-09-01T00:00:00Z", content: "포트는 8080이다", is_anchor: false };
     await detector().resolveContradiction(newer, older, "port changed");
 
+    /** 재탐지를 막는 contradicts 링크는 패자를 닫은 뒤에 만든다 */
     assert.deepEqual(links, [
-      { from: "n", to: "o", rel: "contradicts" },
-      { from: "o", to: "n", rel: "superseded_by" }
+      { from: "o", to: "n", rel: "superseded_by" },
+      { from: "n", to: "o", rel: "contradicts" }
     ]);
-    assert.ok(writes.some(w => /SET valid_to = NOW\(\)/.test(w.sql) && w.params[0] === "o"));
+    /** 중요도 반감과 닫기는 한 문장이다. 반복 실행해도 아직 닫히지 않은 행에만 한 번 일어난다. */
+    assert.ok(writes.some(w => /SET importance = importance \* 0\.5, valid_to = NOW\(\)/.test(w.sql) && w.params[0] === "o"));
     assert.equal(audits.length, 1);
     assert.equal(audits[0].topic, CONTRADICTION_AUDIT_TOPIC);
   });

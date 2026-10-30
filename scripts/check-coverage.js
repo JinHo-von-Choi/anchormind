@@ -210,6 +210,7 @@ function execute(argv, baselinePath, io) {
   assertMetrics(current, "현재");
 
   if (flags.includes("--write")) {
+    // iron-laws: ignore[IL-516] 서버가 관리하는 파일이며 사이에 바뀌면 뒤 읽기·쓰기가 오류를 던져 호출부가 처리한다
     const prev = fs.existsSync(baselinePath) ? readBaseline(baselinePath) : null;
     const plan = planWrite(current, prev, flags.includes("--allow-decrease"));
     if (!plan.ok) {

@@ -26,6 +26,7 @@ import { listSourceFiles, scanFile, scanSource } from "./_source-scan.js";
 import { reachesGateCheck, semanticCallViolations, findSemanticCalls, gateApprovalImportViolations } from "./_write-rules.js";
 
 const MR  = "lib/memory/processors/MemoryRememberer.js";
+const MA  = "lib/memory/processors/MemoryAmender.js";
 const MM  = "lib/memory/MemoryManager.js";
 const BRP = "lib/memory/write/BatchRememberProcessor.js";
 const RP  = "lib/memory/processors/ReflectProcessor.js";
@@ -37,7 +38,7 @@ const CGC = "lib/memory/consolidate/ConsolidatorGC.js";
 /** WriteGate.check()를 직접 부르는 함수 */
 const GATED = Object.freeze([
   `${MR}::remember`,
-  `${MR}::amend`,
+  `${MA}::amendFragment`,
   `${BRP}::_validateAndBuild`,
   `${RP}::_persistIndividually`,
   `${FI}::checkImportRow`,
@@ -53,6 +54,7 @@ const EDGES = Object.freeze({
   [`${TM}::tool_reflect`]                  : [[/^mgr\.reflect$/, `${MM}::reflect`]],
   [`${MM}::remember`]                      : [[/^this\.rememberer\.remember$/, `${MR}::remember`]],
   [`${MM}::amend`]                         : [[/^this\.rememberer\.amend$/, `${MR}::amend`]],
+  [`${MR}::amend`]                         : [[/^amendFragment$/, `${MA}::amendFragment`]],
   [`${MM}::batchRemember`]                 : [[/^this\.rememberer\.batchRemember$/, `${MR}::batchRemember`]],
   [`${MM}::reflect`]                       : [[/^this\.reflector\.reflect$/, "lib/memory/processors/MemoryReflector.js::reflect"]],
   [`${MR}::batchRemember`]                 : [[/^this\.batchRememberProcessor\.process$/, `${BRP}::process`]],

@@ -22,6 +22,7 @@ docker compose -f docker-compose.test.yml exec postgres-test \
 
 echo "[e2e] 마이그레이션 실행..."
 for f in lib/memory/migrations/migration-*.sql; do
+  # iron-laws: ignore[IL-101] CI·로컬 시험용 일회성 DB 계정이며 운영 비밀이 아니다
   psql postgresql://memento:memento_test@localhost:35433/memento_test -f "$f"
 done
 

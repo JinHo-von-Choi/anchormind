@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS agent_memory.fragment_synthetic_query (
 
 -- 같은 파편에 같은 질의를 중복 적재하지 않는다. 워커 재시도 시 멱등성 근거.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_fsq_fragment_query
+    -- iron-laws: ignore[IL-102] 중복 적재를 막는 색인 키이며 보안 용도가 아니다
     ON agent_memory.fragment_synthetic_query (fragment_id, md5(query_text));
 
 CREATE INDEX IF NOT EXISTS idx_fsq_fragment

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// iron-laws: ignore-file[IL-111] 시험용 DB 접속 예시다
+// iron-laws: ignore-file[IL-102] 시험 데이터 생성용 값이며 보안 용도가 아니다
 /**
  * recall-scale.mjs - 파편 수에 따른 recall 지연 측정
  *

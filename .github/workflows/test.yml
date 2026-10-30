@@ -1,3 +1,4 @@
+# iron-laws: ignore-file[IL-101] CI·로컬 시험용 일회성 DB 계정이며 운영 비밀이 아니다
 name: Tests
 
 on:

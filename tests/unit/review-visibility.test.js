@@ -269,6 +269,7 @@ describe("모순 해소", () => {
 
       const consolidator = Object.create(MemoryConsolidator.prototype);
       consolidator.store = { createLink: async (...args) => { links.push(args); } };
+      consolidator.contradictionDetector = detector;
       await consolidator._resolveContradiction(frag("new", { review_state: held }), frag("old"), "r");
       assert.deepEqual(links, [], held);
     }

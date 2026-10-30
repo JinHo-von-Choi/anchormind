@@ -1,3 +1,4 @@
+<!-- iron-laws: ignore-file[IL-102] RFC 6238 TOTP 표준 HMAC-SHA1이며 인증기 앱 호환에 필요하다 -->
 # Configuration
 
 ---

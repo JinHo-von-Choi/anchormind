@@ -309,7 +309,7 @@ describe("ContradictionDetector.detectContradictions 진행 위치", () => {
     const path             = (await import("node:path")).default;
     const ROOT = path.resolve(import.meta.dirname, "../..");
     const src  = readFileSync(path.join(ROOT, "lib/memory/link/ContradictionDetector.js"), "utf8");
-    const hits = src.match(/RETURNING id, keywords, topic, type, key_id`,\s*\[[^\]]+\], "write"\s*\)\.then\(r => deindexRows\(r\.rows\)\)/g) || [];
+    const hits = src.match(/RETURNING \$\{DEINDEX_COLUMNS\}`,\s*\[[^\]]+\], "write"\s*\)\.then\(r => deindexRows\(r\.rows\)\)/g) || [];
     assert.equal(hits.length, 2);
   });
 });

@@ -4,6 +4,7 @@ services:
     environment:
       POSTGRES_DB: memento_dev
       POSTGRES_USER: memento
+      # iron-laws: ignore[IL-101] CI·로컬 시험용 일회성 DB 계정이며 운영 비밀이 아니다
       POSTGRES_PASSWORD: memento_dev
     ports:
       - "35432:5432"

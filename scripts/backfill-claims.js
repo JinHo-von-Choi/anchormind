@@ -210,6 +210,7 @@ async function processFragment(fragment, keyId) {
   let claims;
   try {
     claims = await extractor.extract(fragment.content, fragment.topic);
+  // iron-laws: ignore[IL-301] 실패를 extractor_errors로 세어 끝에 출력한다
   } catch {
     counters.extractor_errors++;
     return;
@@ -302,6 +303,7 @@ async function main() {
 
 main().catch(async (err) => {
   console.error("[backfill] fatal:", err);
+  // iron-laws: ignore[IL-301] 종료·정리 단계의 실패라 결과에 영향이 없다
   try { await pool.end?.(); } catch {}
   process.exit(1);
 });

@@ -1,3 +1,4 @@
+// iron-laws: ignore-file[IL-306] 검증은 테스트 도우미 함수 안의 assert가 맡는다
 /**
  * 검색 평가 지표 순수 함수 시험
  *

@@ -276,6 +276,7 @@ function fetchWorkflowRuns(ws) {
   let runs;
   try {
     runs = JSON.parse(out);
+  // iron-laws: ignore[IL-301] 해석 실패는 아래 배열 검사에서 오류로 처리한다
   } catch {
     runs = null;
   }
@@ -353,6 +354,7 @@ function writeAll(ws, originals, next) {
     for (const file of written) {
       try {
         ws.writeAtomic(file, originals[file]);
+      // iron-laws: ignore[IL-301] 되돌리지 못한 파일을 stuck 목록에 모아 오류로 알린다
       } catch {
         stuck.push(file);
       }

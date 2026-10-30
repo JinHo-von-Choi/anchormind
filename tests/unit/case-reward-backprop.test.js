@@ -85,6 +85,7 @@ describe("CaseRewardBackprop", () => {
     assert.strictEqual(mockQuery.mock.callCount(), 0);
   });
 
+  // iron-laws: ignore[IL-306] 예외 없이 끝나는지가 검증 대상이며 node:test는 던진 예외를 실패로 처리한다
   test("DB 오류 시 예외 전파 없음 (fire-and-forget 안전)", async () => {
     mockQuery.mock.mockImplementationOnce(() => Promise.reject(new Error("connection lost")));
 

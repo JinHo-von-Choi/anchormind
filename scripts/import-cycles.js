@@ -87,6 +87,7 @@ export function buildImportGraph(root = REPO_ROOT) {
     const from = rel(file);
     if (count > 0) nonLiteral.push(from);
     const list = [];
+    // iron-laws: ignore[PERF-102] 안쪽 반복 대상의 크기가 작게 제한돼 있다
     for (const { spec, kind } of specs) {
       if (!spec.startsWith(".")) continue;
       const target = path.resolve(path.dirname(file), spec);

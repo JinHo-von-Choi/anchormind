@@ -25,6 +25,7 @@ async function main() {
   }
   const factory = new FragmentFactory();
 
+  // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
   const { rows } = await pool.query(
     `SELECT id, type, importance, ttl_tier
        FROM ${SCHEMA}.fragments

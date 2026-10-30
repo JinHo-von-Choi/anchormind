@@ -36,8 +36,9 @@ mock.module("../../lib/tools/db.js", {
         sinceParams.push(params.slice(0, -1));
         return { rows: newFrags };
       }
-      if (params[1] === failOn) throw new Error("statement timeout");
-      return { rows: neighbors[params[1]] ?? [] };
+      /** 이웃은 묶음마다 한 질의로 묻는다. params[0]이 묶음의 파편 id 목록이다. */
+      if (params[0].includes(failOn)) throw new Error("statement timeout");
+      return { rows: params[0].flatMap(id => (neighbors[id] ?? []).map(n => ({ src_id: id, ...n }))) };
     }
   }
 });
@@ -77,13 +78,14 @@ describe("detectSupersessions", () => {
     assert.equal(pairN00N01.length, 1);
   });
 
-  it("이웃 조회가 실패한 파편부터 다음 주기에 다시 본다", async () => {
+  it("이웃 조회가 실패한 묶음부터 다음 주기에 다시 본다", async () => {
     newFrags = [frag("m1", "2026-03-03T00:00:00"), frag("m2", "2026-03-03T00:00:01"), frag("m3", "2026-03-03T00:00:02")];
     failOn   = "m2";
     const d  = new ContradictionDetector({ createLink: async () => {} });
     await d.detectSupersessions();
     newFrags = [];
     await d.detectSupersessions();
-    assert.deepEqual(sinceParams[1], ["2026-03-03T00:00:00.000000Z", "m1"]);
+    /** 세 파편이 한 묶음이라 묶음 전체를 다시 본다. 워터마크가 전진하지 않는다. */
+    assert.deepEqual(sinceParams[1], sinceParams[0]);
   });
 });

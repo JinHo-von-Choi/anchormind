@@ -118,6 +118,7 @@ try {
     }
   });
   server = http.createServer((req, res) => {
+    // iron-laws: ignore[AI-101] 요청 경로를 해석하는 기준 URL이며 접속 주소가 아니다
     handler(req, res, { pathname: new URL(req.url, "http://localhost").pathname });
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));

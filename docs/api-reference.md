@@ -619,8 +619,8 @@ Agent 조회는 생략 시 `default`, 지정 시 해당 agent와 `default`를 �
 | topic | string | - | 주제 필터 |
 | type | string | - | 타입 필터 (fact, decision, error, preference, procedure, relation, episode) |
 | tokenBudget | number | - | 한 응답(페이지)의 최대 반환 토큰. 기본 1000. 연결 파편을 포함한 후보에 최종 점수를 매긴 뒤 이 예산 안에서 고르고, 연결 파편도 같은 예산을 쓴다. 예산에 들지 못한 결과는 `nextCursor`로 이어 받는다. |
-| includeLinks | boolean | - | 연결된 파편 포함 (1-hop, resolved_by/caused_by 우선). 기본 true. |
-| linkRelationType | string | - | 연결 파편 관계 유형 필터 (related, caused_by, resolved_by, part_of, contradicts) |
+| includeLinks | boolean | - | 연결 파편 포함. 기본 true. true면 1-hop 연결 파편을 검색 후보에 더하고 각 파편의 `linked`에 나가는 링크 미리보기를 최대 3건 싣는다. false면 둘 다 하지 않는다. |
+| linkRelationType | string | - | 연결 파편 관계 유형 필터 (related, caused_by, resolved_by, part_of, contradicts). 지정하면 후보 확장과 `linked` 미리보기 모두 그 관계만 쓴다. 미지정 시 `linked`는 resolved_by → caused_by → related 순으로 고르고 같은 관계 안에서는 가중치 순이다. 후보 확장은 caused_by, resolved_by, related, co_retrieved를 쓴다. |
 | threshold | number | - | similarity 임계값 (0~1) |
 | includeSuperseded | boolean | - | 만료(superseded) 파편 포함. 기본 false. |
 | includeHistory | boolean | - | true면 결과 파편이 대체한 이전 값(`superseded_by` 링크로 이어진 닫힌 파편)을 그 파편 바로 뒤에 `state: "superseded"`로 끼우고, 대체한 파편에는 `state: "current"`를 단다. 한 recall에 최대 5건이며 토큰 예산과 `pageSize` 밖에서 더해진다. 기본 false. |

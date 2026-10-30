@@ -617,8 +617,8 @@ ID lookups through `fragment_history` and `graph_explore` now apply workspace fi
 | topic | string | - | Topic filter |
 | type | string | - | Type filter (fact, decision, error, preference, procedure, relation, episode) |
 | tokenBudget | number | - | Maximum return tokens per response (page). Default 1000. Candidates including linked fragments receive the final score and are selected within this budget; linked fragments use the same budget. Results that do not fit are returned on later pages via `nextCursor`. |
-| includeLinks | boolean | - | Include linked fragments (1-hop, resolved_by/caused_by prioritized). Default true. |
-| linkRelationType | string | - | Link relation type filter (related, caused_by, resolved_by, part_of, contradicts) |
+| includeLinks | boolean | - | Include linked fragments. Default true. When true, 1-hop linked fragments join the search candidates and each fragment's `linked` carries up to 3 outgoing link previews. When false, neither happens. |
+| linkRelationType | string | - | Link relation type filter (related, caused_by, resolved_by, part_of, contradicts). When set, both candidate expansion and the `linked` preview use only that relation. When unset, `linked` picks resolved_by, then caused_by, then related, by weight within a relation; candidate expansion uses caused_by, resolved_by, related and co_retrieved. |
 | threshold | number | - | Similarity threshold (0-1) |
 | includeSuperseded | boolean | - | Include expired (superseded) fragments. Default false. |
 | includeHistory | boolean | - | When true, the earlier values a result fragment replaced (closed fragments linked by `superseded_by`) are inserted right after that fragment with `state: "superseded"`, and the replacing fragment gets `state: "current"`. At most 5 per recall, added outside the token budget and `pageSize`. Default false. |

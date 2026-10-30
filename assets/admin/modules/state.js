@@ -173,6 +173,7 @@ export function parseHash(hash) {
   let name = view;
   try {
     name = decodeURIComponent(view);
+  // iron-laws: ignore[IL-301] 잘못 인코딩된 주소 조각은 빈 화면 이름으로 처리한다
   } catch {
     name = "";
   }

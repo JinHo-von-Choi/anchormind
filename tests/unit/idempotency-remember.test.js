@@ -132,7 +132,7 @@ describe("idempotencyKey — 중복 호출 시 기존 파편 반환", async () =
     assert.strictEqual(second.id, existingFragment.id, "두 번째 호출은 기존 파편 id를 반환해야 한다");
     assert.strictEqual(second.existing, true, "existing 플래그가 true여야 한다");
     assert.strictEqual(second.idempotent, true, "idempotent 플래그가 true여야 한다");
-    assert.strictEqual(second.scope, "persistent", "scope는 persistent여야 한다");
+    assert.strictEqual(second.scope, "permanent", "scope는 permanent여야 한다");
   });
 
   it("idempotencyKey 미제공 시 정상 삽입 경로가 실행된다", async () => {

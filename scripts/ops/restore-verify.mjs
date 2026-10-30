@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// iron-laws: ignore-file[IL-111] JSDoc 타입 표기이며 실제 값이 아니다
 /**
  * 복구 훈련: 덤프를 일회용 데이터베이스에 복원하고 원본 기록과 대조한다
  *
@@ -100,6 +101,7 @@ function sha256File(file) {
  */
 async function verifyChecksum(dumpPath) {
   const sidecar = `${dumpPath}.sha256`;
+  // iron-laws: ignore[IL-516] 서버가 관리하는 파일이며 사이에 바뀌면 뒤 읽기·쓰기가 오류를 던져 호출부가 처리한다
   if (!fs.existsSync(sidecar)) return "absent";
   const expected = parseChecksumFile(fs.readFileSync(sidecar, "utf8"), path.basename(dumpPath));
   return (await sha256File(dumpPath)) === expected ? "verified" : "mismatch";

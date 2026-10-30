@@ -35,7 +35,7 @@ const NON_ROUTE_MODULES = new Set([
   "admin-route-table", "admin-audit-actions", "capabilities", "AdminAuthz", "ScopeFilter", "admin-auth",
   "admin-login-guard", "admin-metrics", "ApiKeyStore", "OAuthClientStore", "key-policy", "key-state-cache",
   "admin-principal", "admin-redact", "AdminUserStore", "admin-password", "admin-totp", "admin-seal",
-  "admin-session-policy", "admin-user-rules", "ApiKeyLifecycleStore", "key-cidr", "key-lifecycle", "key-lifecycle-limits",
+  "admin-session-policy", "admin-user-rules", "ApiKeyLifecycleStore", "key-cidr", "admin-key-filter", "key-lifecycle", "key-lifecycle-limits",
   "key-material", "key-schema-state", "ReviewStore", "admin-handler-registry", "ToolCallUsage",
   "fragment-write-rejection", "FragmentHealth"
 ]);

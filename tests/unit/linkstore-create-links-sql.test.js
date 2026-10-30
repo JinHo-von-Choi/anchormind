@@ -54,7 +54,10 @@ describe("LinkStore.createLinks 갱신 열", () => {
     const insert = captured.find(c => /INSERT INTO\s+\S*fragment_links/.test(c.sql));
     assert.match(insert.sql, /ON CONFLICT \(from_id, to_id\) DO UPDATE/);
     assert.match(insert.sql, /relation_type\s*=\s*EXCLUDED\.relation_type/);
-    assert.match(insert.sql, /weight\s*=\s*GREATEST\(\S*fragment_links\.weight, EXCLUDED\.weight\)/);
+    assert.match(insert.sql, /ELSE GREATEST\(\S*fragment_links\.weight, EXCLUDED\.weight\)/);
+    /** 지운 행은 새 링크로 되살린다. 남겨 두면 같은 쌍의 링크가 다시 보이지 않는다. */
+    assert.match(insert.sql, /WHEN \S*fragment_links\.deleted_at IS NOT NULL THEN EXCLUDED\.weight/);
+    assert.match(insert.sql, /deleted_at = NULL, delete_reason = NULL/);
     assert.match(insert.sql, /RETURNING id/);
   });
 

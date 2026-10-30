@@ -257,6 +257,7 @@ EOF
 if [[ -n "$REDIS_PASSWORD" ]]; then
   echo "REDIS_PASSWORD=${REDIS_PASSWORD}" >> "$ENV_FILE"
 else
+  # iron-laws: ignore[IL-101] .env에 빈 값 예시 주석을 쓰는 줄이다
   echo "# REDIS_PASSWORD=" >> "$ENV_FILE"
 fi
 

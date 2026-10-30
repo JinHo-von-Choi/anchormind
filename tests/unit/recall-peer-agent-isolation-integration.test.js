@@ -442,7 +442,9 @@ describe("GraphNeighborSearch SQL 및 최종 RRF 격리", () => {
     assert.ok((sql.match(/f\.workspace/g) ?? []).length >= 4);
     assert.ok((sql.match(/\(f\.agent_id = \$5 OR f\.agent_id = 'default'\)/g) ?? []).length >= 2);
     assert.ok((sql.match(/\(f\.workspace = \$6 OR f\.workspace IS NULL\)/g) ?? []).length >= 2);
-    assert.deepEqual(params, [["seed"], ["seed"], 10, ["key-1"], "agent-a", "ws-a", "key-1"]);
+    assert.deepEqual(params.slice(0, -1), [["seed"], ["seed"], 10, ["key-1"], "agent-a", "ws-a", "key-1"]);
+    /** 마지막 인자는 SQL 점수식에 쓰는 관계 부스트 표다 */
+    assert.equal(typeof JSON.parse(params.at(-1)), "object");
   });
 
   it("includePeerAgents=true는 agent 일치 조건만 생략하고 귀속 불명 파편 제외와 key_id/workspace 조건은 유지한다", async () => {
@@ -458,7 +460,7 @@ describe("GraphNeighborSearch SQL 및 최종 RRF 격리", () => {
     assert.doesNotMatch(sql, /f\.agent_id = \$/);
     assert.match(sql, /f\.key_id = ANY\(\$4::text\[\]\)/);
     assert.match(sql, /\(f\.workspace = \$5 OR f\.workspace IS NULL\)/);
-    assert.deepEqual(params, [["seed"], ["seed"], 10, ["key-1"], "ws-a", "key-1"]);
+    assert.deepEqual(params.slice(0, -1), [["seed"], ["seed"], 10, ["key-1"], "ws-a", "key-1"]);
   });
 
   it("SQL mock이 범위 밖 행을 반환해도 RRF 병합 전에 scope가 다시 차단한다", async () => {
@@ -572,9 +574,9 @@ describe("LinkStore SQL agent/workspace 격리", () => {
     const { sql, params } = vectorQueries.at(-1);
     assert.ok((sql.match(/f\.agent_id/g) ?? []).length >= 4);
     assert.ok((sql.match(/f\.workspace/g) ?? []).length >= 4);
-    assert.ok((sql.match(/\(f\.agent_id = \$3 OR f\.agent_id = 'default'\)/g) ?? []).length >= 2);
-    assert.ok((sql.match(/\(f\.workspace = \$4 OR f\.workspace IS NULL\)/g) ?? []).length >= 2);
-    assert.deepEqual(params, [["seed"], ["key-1"], "agent-a", "ws-a", "key-1"]);
+    assert.ok((sql.match(/\(f\.agent_id = \$4 OR f\.agent_id = 'default'\)/g) ?? []).length >= 2);
+    assert.ok((sql.match(/\(f\.workspace = \$5 OR f\.workspace IS NULL\)/g) ?? []).length >= 2);
+    assert.deepEqual(params, [["seed"], ["caused_by", "resolved_by", "related", "co_retrieved"], ["key-1"], "agent-a", "ws-a", "key-1"]);
   });
 
   it("includePeerAgents=true는 agent 일치 조건만 생략하고 귀속 불명 파편 제외와 key_id/workspace 조건은 유지한다", async () => {
@@ -590,9 +592,9 @@ describe("LinkStore SQL agent/workspace 격리", () => {
     const { sql, params } = vectorQueries.at(-1);
     assert.doesNotMatch(sql, /f\.agent_id = \$/);
     assert.equal((sql.match(/f\.agent_id IS NOT NULL/g) ?? []).length, 2);
-    assert.match(sql, /f\.key_id = ANY\(\$2(::text\[\])?\)/);
-    assert.match(sql, /\(f\.workspace = \$4 OR f\.workspace IS NULL\)/);
-    assert.deepEqual(params, [["seed"], ["key-1"], "agent-a", "ws-a", "key-1"]);
+    assert.match(sql, /f\.key_id = ANY\(\$3(::text\[\])?\)/);
+    assert.match(sql, /\(f\.workspace = \$5 OR f\.workspace IS NULL\)/);
+    assert.deepEqual(params, [["seed"], ["caused_by", "resolved_by", "related", "co_retrieved"], ["key-1"], "agent-a", "ws-a", "key-1"]);
   });
 
   it("isAnchor=false를 양방향 UNION SQL에 동일하게 적용한다", async () => {
@@ -639,7 +641,7 @@ describe("LinkStore SQL agent/workspace 격리", () => {
     const { sql, params } = vectorQueries.at(-1);
     assert.equal((sql.match(/f\.valid_to IS NULL/g) || []).length, 2);
     assert.doesNotMatch(sql, /f\.is_anchor = \$/);
-    assert.deepEqual(params, [["seed"], ["key-1"], "agent-a", "key-1"]);
+    assert.deepEqual(params, [["seed"], ["caused_by", "resolved_by", "related", "co_retrieved"], ["key-1"], "agent-a", "key-1"]);
   });
 
   it("opts.isAnchor=null은 미지정으로 정규화한다", async () => {
@@ -697,6 +699,7 @@ describe("MemoryRecaller 기본 includeLinks 최종 병합 격리", () => {
 
     assert.deepEqual(idsOf(result), new Set(["base", "linked-own", "linked-global"]));
     assert.deepEqual(calls[0][4], {
+      excludeIds        : ["base"],
       workspace         : "ws-a",
       allWorkspaces     : false,
       viewerKeyId       : null,
@@ -719,6 +722,7 @@ describe("MemoryRecaller 기본 includeLinks 최종 병합 격리", () => {
       new Set(["base", "linked-own", "linked-peer", "linked-global"])
     );
     assert.deepEqual(calls[0][4], {
+      excludeIds        : ["base"],
       workspace         : "ws-a",
       allWorkspaces     : false,
       viewerKeyId       : null,
@@ -742,6 +746,7 @@ describe("MemoryRecaller 기본 includeLinks 최종 병합 격리", () => {
 
     assert.deepEqual(idsOf(result), new Set(["base", "linked-non-anchor"]));
     assert.deepEqual(calls[0][4], {
+      excludeIds        : ["base"],
       workspace        : "ws-a",
       allWorkspaces    : false,
       viewerKeyId      : null,
@@ -780,6 +785,7 @@ describe("MemoryRecaller 기본 includeLinks 최종 병합 격리", () => {
     });
 
     assert.deepEqual(calls[0][4], {
+      excludeIds        : ["base"],
       workspace         : "ws-a",
       allWorkspaces     : false,
       viewerKeyId       : null,

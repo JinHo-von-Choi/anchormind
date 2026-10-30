@@ -1,3 +1,4 @@
+<!-- iron-laws: ignore-file[IL-102] 커밋 해시 자리표시자이며 해시 함수 사용이 아니다 -->
 # upstream-porting 운영 가이드
 
 작성자: 최진호

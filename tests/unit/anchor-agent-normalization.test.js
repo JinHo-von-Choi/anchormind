@@ -274,7 +274,8 @@ describe("anchor normalization cache ordering", () => {
     const result = await rememberer.normalizeAnchorAgentToDefault(existing.id, "agent-b");
     assert.equal(result.updated, true);
     assert.deepEqual(order.map(item => item[0]), ["deindex", "update", "index"]);
-    assert.deepEqual(order[0][1], { strict: true });
+    /** 본문에서 추출한 색인 낱말도 지우도록 옛 본문을 함께 넘긴다 */
+    assert.deepEqual(order[0][1], { strict: true, content: existing.content });
     assert.deepEqual(order[1][1], {
       amendedBy: "system:anchor-scope", normalizeVersionAgentToDefault: true
     });

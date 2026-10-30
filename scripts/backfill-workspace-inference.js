@@ -55,6 +55,7 @@ const batchId     = batchIdArg ? batchIdArg.slice("--batch-id=".length) : `backf
  * @returns {Promise<Map<string, { workspace: string, ratio: number }>>}
  */
 async function buildRelationMajorityMap(pool, column) {
+  // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
   const { rows } = await pool.query(
     `SELECT ${column} AS cluster_key, workspace, count(*)::int AS cnt
        FROM ${SCHEMA}.fragments
@@ -115,6 +116,7 @@ async function main() {
     buildRelationMajorityMap(pool, "session_id")
   ]);
 
+  // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
   const { rows: wsRows } = await pool.query(
     `SELECT workspace, count(*)::int AS cnt
        FROM ${SCHEMA}.fragments
@@ -126,6 +128,7 @@ async function main() {
     .filter(w => !EXCLUDED_WORKSPACES.has(w))
     .sort((a, b) => b.length - a.length);   /** 긴 이름 우선 — 부분 문자열 중복 판정용 */
 
+  // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
   const { rows: targets } = await pool.query(
     `SELECT id, session_id, case_id, content, keywords
        FROM ${SCHEMA}.fragments

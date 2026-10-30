@@ -22,6 +22,7 @@ import {
   selectGuaranteedCoreFragments
 } from "../../lib/memory/read/ContextBuilder.js";
 import { countContentTokens } from "../../lib/memory/read/BudgetSelector.js";
+import { REVIEW_VIEWER_NONE } from "../../lib/memory/read/ReviewVisibility.js";
 
 /* ── 헬퍼: 파편 팩토리 ── */
 function frag(id, type, content, extra = {}) {
@@ -281,6 +282,7 @@ describe("ContextBuilder.build()", () => {
       workspace: "ws-a",
       allWorkspaces: false,
       isAnchor: false,
+      viewerKeyId: REVIEW_VIEWER_NONE,
       includePeerAgents: false
     });
   });
@@ -422,6 +424,7 @@ describe("ContextBuilder.build()", () => {
       workspace: "synthetic-workspace",
       allWorkspaces: false,
       isAnchor: false,
+      viewerKeyId: REVIEW_VIEWER_NONE,
       includePeerAgents: false
     });
   });

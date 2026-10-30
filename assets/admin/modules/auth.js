@@ -1,3 +1,5 @@
+// iron-laws: ignore-file[IL-111] JSDoc 타입 표기이며 실제 값이 아니다
+// iron-laws: ignore-file[IL-307] null·false·빈 값은 입력 없음이나 조건 불충족을 뜻하는 정상 결과다
 /**
  * Memento MCP Admin Console — 인증 (로그인 / 로그아웃)
  *

@@ -509,6 +509,7 @@ describe("알아볼 수 없는 입력", () => {
     assert.equal(short.summary.rejected, 1);
   });
 
+  // iron-laws: ignore[IL-306] 검증은 테스트 도우미 함수 안의 assert가 맡는다
   it("머리 줄만 있는 파일과 빈 입력은 거부하지 않는다", async () => {
     await run([header(), trailer({ fragments: 0, links: 0, versions: 0 })]);
     await run([]);

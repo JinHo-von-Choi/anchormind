@@ -135,6 +135,18 @@ outbox 게이지는 작업자를 돌리는 프로세스만 갱신한다. 작업�
 
 두 게이지는 `/metrics` 수집 시점에 10분이 지났을 때만 현행 파편을 키로 묶어 다시 센다. `MEMENTO_LEXICAL_CHANNEL=off`이거나 열이 없으면(마이그레이션 053 이전) 값을 내보내지 않는다.
 
+### recall, remember 단계별 지연 지표
+
+어느 단계에서 지연이 생기는지 가르는 히스토그램이다. 버킷은 5ms부터 30초까지다.
+
+| 지표 | 라벨 | 의미 |
+|-|-|-|
+| `memento_recall_l3_stage_duration_seconds` | `stage`(embedding, search), `cache`(hit, miss, n/a) | 의미 검색(L3) 안의 단계. embedding은 질의 임베딩 생성이고 `cache`는 임베딩 캐시 적중 여부다. search는 벡터, 형태소, 역질의, 구간 조회를 함께 기다린 시간이다 |
+| `memento_recall_stage_duration_seconds` | `stage`(search, linked, context, state, contradiction) | `recall` 도구의 단계. search는 검색 전체, linked는 연결 미리보기, context는 `includeContext` 문맥, state는 상태와 근거, contradiction은 미해결 모순 확인이다 |
+| `memento_remember_stage_duration_seconds` | `stage`(insert, index, postprocess, conflict, autolink) | `remember` 저장 경로의 단계. conflict는 저장 직후 모순 탐지, autolink는 자동 링크 생성이다 |
+
+`search_events.l3_latency_ms`는 임베딩과 벡터 조회를 합친 값이다. 둘 중 어느 쪽이 느린지는 `memento_recall_l3_stage_duration_seconds`의 stage별 분포로 본다.
+
 ### 감사, 검토, 외부 전송, 훅 지표
 
 경보 규칙 없이 추세와 이상을 보는 계수기다. 감사 이벤트의 승격 지연과 실패는 `memento_outbox_*{topic="audit.record"}`로 본다.

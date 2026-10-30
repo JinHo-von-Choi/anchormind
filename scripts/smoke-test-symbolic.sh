@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# iron-laws: ignore-file[IL-101] 접속 정보를 환경변수에서 읽는다
 # smoke-test-symbolic.sh — v2.8.0 Symbolic Memory end-to-end smoke 검증
 #
 # 작성자: 최진호
