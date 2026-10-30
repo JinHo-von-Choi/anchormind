@@ -124,7 +124,7 @@ describe("잠금 순서", () => {
       [idX]);
     const ids = await seedPair(tag, { linkedTo: idX });
     const { FragmentWriter } = await import("../../lib/memory/write/FragmentWriter.js");
-    const err = await interleave(ids, () => new FragmentWriter().delete(idX, "default", null), "%linked_to @> ARRAY%FOR NO KEY UPDATE%");
+    const err = await interleave(ids, () => new FragmentWriter().delete(idX, "default", null), "%linked_to && %FOR NO KEY UPDATE%");
     assert.equal(err, null, `삭제 실패: ${err?.code} ${err?.message}`);
     const { rows } = await admin.query(`SELECT count(*)::int AS c FROM agent_memory.fragments WHERE id = $1`, [idX]);
     assert.equal(rows[0].c, 0);
