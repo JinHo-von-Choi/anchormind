@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [6.9.0] - 2026-10-30
+
 ### Added
 
 - 단계별 지연 히스토그램 3종이 생겼다. `memento_recall_l3_stage_duration_seconds`(질의 임베딩과 벡터 조회), `memento_recall_stage_duration_seconds`(recall의 검색, 연결 미리보기, 문맥, 상태, 모순 확인), `memento_remember_stage_duration_seconds`(저장, 색인, 후처리, 모순 탐지, 자동 링크)다. 라벨과 의미는 [monitoring](docs/operations/monitoring.md#recall-remember-단계별-지연-지표)에 있다.
