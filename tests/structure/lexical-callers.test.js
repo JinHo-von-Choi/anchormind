@@ -29,7 +29,6 @@ const FLAG_FILES = Object.freeze({
 /** FragmentSearch 검색 함수를 부르는 파일과 사유 */
 const SEARCH_CALLERS = Object.freeze({
   "lib/memory/processors/MemoryRecaller.js": "recall 진입점(플래그를 켠다)",
-  "lib/memory/write/ConflictResolver.js"   : "remember의 충돌 탐지. 본문을 질의로 쓰므로 플래그를 두지 않는다",
   "lib/memory/write/RememberPostProcessor.js": "remember 뒤 자동 링크. keywords 검색이며 플래그를 두지 않는다"
 });
 

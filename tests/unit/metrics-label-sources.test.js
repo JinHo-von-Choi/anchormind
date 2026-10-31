@@ -75,6 +75,9 @@ const METRIC_MODULES = new Set([
 
 /** 검토를 마친 비리터럴 라벨 식. 키는 "파일|함수|식", 값은 값이 닫힌 집합인 근거다. */
 const REVIEWED = new Map([
+  ["lib/memory/consolidate/FragmentGC.js|inc|transition",                         "countTier 호출부의 고정 문자열(preference_permanent, hub_permanent, importance_permanent, warm_cold, permanent_cold)"],
+  ["lib/memory/link/LinkStore.js|inc|producer",                                   "LINK_PRODUCERS 목록 또는 other로 닫는다"],
+  ["lib/memory/link/LinkStore.js|inc|r.relationType",                             "fragment_links 관계 CHECK 제약을 통과한 값이다(쓰기가 성공한 뒤에만 센다)"],
   ["server.js|recordHttpRequest|req.method",                                      "Node HTTP 파서가 http.METHODS(35개) 밖 메서드를 400으로 끊는다"],
   ["lib/handlers/health-handler.js|recordHttpRequest|req.method",                 "Node HTTP 파서가 http.METHODS(35개) 밖 메서드를 400으로 끊는다"],
   ["lib/handlers/health-handler.js|recordHttpRequest|statusCode",                 "200 또는 503"],

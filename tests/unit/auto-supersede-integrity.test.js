@@ -56,15 +56,16 @@ beforeEach(() => {
 const norm = sql => String(sql).replace(/\s+/g, " ").trim();
 
 /**
- * GraphLinker의 조회 순서(원본 → 중복 차단 후보 → 링크 후보)에 맞춰 응답한다.
+ * GraphLinker의 조회 순서(원본 → 중복 판정·링크 후보를 함께 고르는 질의)에 맞춰 응답한다.
  */
 function graphLinkerDb({ source, dedup = [], candidates = [] }) {
   return async (_agentId, sql, params, mode) => {
     const n = norm(sql);
     if (mode === "write") { writes.push({ sql: n, params: [...params] }); return { rows: [], rowCount: 1 }; }
     if (n.startsWith("SELECT id, content, topic, type, created_at, key_id")) return { rows: [{ ...source }] };
-    if (n.includes(">= 0.90")) return { rows: dedup.map(r => ({ ...r })) };
-    if (n.includes("> 0.7"))   return { rows: candidates.map(r => ({ ...r })) };
+    if (n.includes("scored AS MATERIALIZED")) {
+      return { rows: [...dedup.map(r => ({ kind: "dedup", ...r })), ...candidates.map(r => ({ kind: "candidate", ...r }))] };
+    }
     throw new Error(`unexpected SQL: ${n.slice(0, 80)}`);
   };
 }

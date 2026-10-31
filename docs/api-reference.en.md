@@ -721,7 +721,7 @@ When a shared key has no `default_workspace` and writes use an explicit workspac
 
 Rules are evaluated in the order above and only the first match is attached to `_meta.suggestion`. The field is omitted when nothing matches.
 
-`explanation` (included only when `MEMENTO_SYMBOLIC_EXPLAIN=true`): Explains why the fragment was included in the search results, using up to 3 reason codes.
+`explanation` (included only when `MEMENTO_SYMBOLIC_EXPLAIN=true`): Explains why the fragment was included in the search results, using up to 3 reason codes. The codes come from the search layers that found that fragment, so they differ per fragment.
 
 ```json
 {
@@ -899,6 +899,8 @@ dryRun=true response (no actual storage):
   }
 }
 ```
+
+`conflicts`: Up to 10 existing fragments in the same topic and storage scope (key, workspace, agent) whose similarity exceeds 0.8, in descending similarity. Each item has `existing_id`, `existing_content` (first 100 characters), `similarity`, `recommendation`.
 
 Without violations (normal storage):
 ```json

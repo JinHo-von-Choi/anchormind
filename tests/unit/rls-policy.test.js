@@ -18,11 +18,11 @@ import assert             from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath }  from "node:url";
 import path               from "node:path";
+import { transactionSettings } from "../../lib/tools/db.js";
 
 const HERE      = path.dirname(fileURLToPath(import.meta.url));
 const ROOT      = path.resolve(HERE, "..", "..");
 const MIGRATION = path.join(ROOT, "lib", "memory", "migrations", "migration-045-fragment-rls.sql");
-const DB_HELPER = readFileSync(path.join(ROOT, "lib", "tools", "db.js"), "utf8");
 
 describe("RLS 마이그레이션", () => {
   const sql = existsSync(MIGRATION) ? readFileSync(MIGRATION, "utf8") : "";
@@ -70,22 +70,22 @@ describe("RLS 마이그레이션", () => {
 });
 
 describe("키 세션 변수 배관", () => {
+  const keyOf = (opts) => Object.fromEntries(transactionSettings("default", opts))["app.current_key_id"];
+
   test("질의 헬퍼가 키 범위를 세션에 알린다", () => {
-    assert.match(DB_HELPER, /SET LOCAL app\.current_key_id/);
+    assert.equal(keyOf({ keyId: "key-1" }), "key-1");
   });
 
   test("키 값을 정제해 주입한다", () => {
-    const block = DB_HELPER.slice(DB_HELPER.indexOf("const rawKeyId"));
-    assert.match(block.slice(0, 400), /replace\(\/\[\^a-zA-Z0-9_-\]\/g, ""\)/);
+    assert.equal(keyOf({ keyId: "k'; DROP TABLE x; --" }), "kDROPTABLEx--");
   });
 
   test("키를 주지 않으면 빈 값으로 둔다", () => {
-    const block = DB_HELPER.slice(DB_HELPER.indexOf("const safeKeyId"));
-    assert.match(block.slice(0, 200), /rawKeyId == null \? "" :/);
+    assert.equal(keyOf({}), "");
+    assert.equal(keyOf({ keyId: null }), "");
   });
 
   test("문자열 opts를 넘기는 기존 호출부에서도 안전하다", () => {
-    const block = DB_HELPER.slice(DB_HELPER.indexOf("const rawKeyId"));
-    assert.match(block.slice(0, 200), /typeof opts === "object" && opts !== null/);
+    assert.equal(keyOf("write"), "");
   });
 });

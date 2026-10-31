@@ -147,6 +147,18 @@ outbox 게이지는 작업자를 돌리는 프로세스만 갱신한다. 작업�
 
 `search_events.l3_latency_ms`는 임베딩과 벡터 조회를 합친 값이다. 둘 중 어느 쪽이 느린지는 `memento_recall_l3_stage_duration_seconds`의 stage별 분포로 본다.
 
+### 배경 작업 지표
+
+요청 밖에서 도는 링크 생성과 계층 조정을 세는 지표다. 히스토그램 버킷은 5ms부터 30초까지다.
+
+| 지표 | 라벨 | 의미 |
+|-|-|-|
+| `memento_link_writes_total` | `producer`, `relation` | 쓴 링크 수(새로 만든 것과 갱신한 것). `producer`는 링크를 만든 경로(temporal, graph_linker, auto_link, proactive, linked_to, session, other)다 |
+| `memento_link_write_duration_seconds` | `producer` | 링크 쓰기 트랜잭션 하나의 시간. 잠금 대기를 포함한다 |
+| `memento_background_task_duration_seconds` | `task`(graph_linker, temporal_linker) | 임베딩 완료 뒤 의미 유사도 링크, 저장 뒤 시간 링크 작업 하나의 시간 |
+| `memento_tier_transitions_total` | `transition`(preference_permanent, hub_permanent, importance_permanent, warm_cold, permanent_cold) | 계층 조정 규칙별로 바꾼 파편 수 |
+| `memento_link_cycle_blocked_total` | `source`(session) | reflect의 세션 링크 가운데 순환 검사로 만들지 않은 링크 수 |
+
 ### 감사, 검토, 외부 전송, 훅 지표
 
 경보 규칙 없이 추세와 이상을 보는 계수기다. 감사 이벤트의 승격 지연과 실패는 `memento_outbox_*{topic="audit.record"}`로 본다.

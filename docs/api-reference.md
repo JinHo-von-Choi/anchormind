@@ -738,7 +738,7 @@ Agent 조회는 생략 시 `default`, 지정 시 해당 agent와 `default`를 �
 
 규칙은 위 순서대로 평가되어 최초 1건만 `_meta.suggestion`에 실린다. 조건에 해당하지 않으면 필드는 생략된다.
 
-`explanation` (`MEMENTO_SYMBOLIC_EXPLAIN=true` 시에만 포함): 해당 파편이 검색 결과에 포함된 이유를 최대 3개 reason code로 설명한다.
+`explanation` (`MEMENTO_SYMBOLIC_EXPLAIN=true` 시에만 포함): 해당 파편이 검색 결과에 포함된 이유를 최대 3개 reason code로 설명한다. 코드는 그 파편을 찾은 검색 계층으로 정하므로 파편마다 다르다.
 
 ```json
 {
@@ -916,6 +916,8 @@ dryRun=true 응답 (실제 저장 없음):
   }
 }
 ```
+
+`conflicts`: 같은 topic과 저장 범위(키, workspace, agent)에서 유사도 0.8을 넘는 기존 파편을 유사도 순으로 최대 10건 담는다. 항목은 `existing_id`, `existing_content`(앞 100자), `similarity`, `recommendation`이다.
 
 violations 없는 경우 (정상 저장):
 ```json

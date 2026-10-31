@@ -5,7 +5,8 @@
  * 작성일: 2026-10-03
  *
  * createLinks에 서로 겹치지 않는 쌍 여러 개를 넘기면 각 파편의 linked_to에는
- * 자기 쌍의 상대만 더해져야 한다. fragment_links 행도 쌍과 같아야 한다.
+ * 자기 쌍의 상대만 더해져야 한다. fragment_links 행도 쌍과 같아야 한다. 배치 쓰기도 단건과 같이
+ * 더 구체적인 기존 관계를 자동 관계로 덮지 않는다.
  */
 
 import { describe, it, after } from "node:test";
@@ -76,5 +77,18 @@ describe("LinkStore.createLinks linked_to", () => {
       `SELECT linked_to FROM ${SCHEMA}.fragments WHERE id = $1`, [a]
     );
     assert.deepEqual([...rows[0].linked_to].sort(), [b, c].sort());
+  });
+
+  it("배치 쓰기도 더 구체적인 기존 관계를 덮지 않고 weight는 큰 값을 남긴다", async () => {
+    const [e, d] = await seedFragments(topic, 2);
+    const store  = new LinkStore();
+    await store.createLink(e, d, "caused_by", "default", 0.4);
+    await store.createLinks([{ fromId: e, toId: d, relationType: "temporal", weight: 0.9 }], "default");
+
+    const { rows } = await directQuery(
+      `SELECT relation_type, weight FROM ${SCHEMA}.fragment_links WHERE from_id = $1 AND to_id = $2`, [e, d]
+    );
+    assert.equal(rows[0].relation_type, "caused_by");
+    assert.ok(Math.abs(Number(rows[0].weight) - 0.9) < 1e-6);
   });
 });

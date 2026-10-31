@@ -24,11 +24,16 @@ describe("검색 부수 효과 범위", () => {
     assert.equal(searchSideEffects({ sideEffects: "access" }), "access");
   });
 
-  it("충돌 탐지는 부수 효과 없는 내부 검색이다", async () => {
-    const seen = [];
-    const resolver = new ConflictResolver({}, { search: async (q) => { seen.push(q); return { fragments: [] }; } });
+  it("충돌 탐지는 부수 효과가 있는 search()를 쓰지 않고 유사 파편 조회만 한다", async () => {
+    const searched = [];
+    const similar  = [];
+    const resolver = new ConflictResolver({}, {
+      search          : async (q) => { searched.push(q); return { fragments: [] }; },
+      similarFragments: async (q, opts) => { similar.push({ q, opts }); return []; }
+    });
     await resolver.detectConflicts("본문", "topic", "id-1", "default", "key-1", "ws");
-    assert.equal(seen.at(-1).sideEffects, "none");
+    assert.equal(searched.length, 0);
+    assert.deepEqual(similar[0].q, { text: "본문", topic: "topic", agentId: "default", keyId: "key-1", workspace: "ws" });
   });
 
   it("recall 인자 _searchSideEffects를 검색 질의로 넘긴다", () => {

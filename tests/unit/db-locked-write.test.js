@@ -51,7 +51,7 @@ const WRITE_SQL = "UPDATE agent_memory.fragments f SET accessed_at = NOW() WHERE
 
 /** 세션의 실행 문장 중 설정 문장을 뺀 본문 */
 function body(log) {
-  return log.filter(e => !/^(SET |BEGIN|COMMIT|ROLLBACK)/.test(e.sql.trim()));
+  return log.filter(e => !/^(SET |SELECT set_config\(|BEGIN|COMMIT|ROLLBACK)/.test(e.sql.trim()));
 }
 
 function deadlock() {

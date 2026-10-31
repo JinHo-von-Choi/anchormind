@@ -33,8 +33,8 @@ describe("superseded_by valid_to 연동", () => {
 
   test("GraphLinker.linkFragment이 superseded_by 시 valid_to를 갱신한다", async () => {
     const { GraphLinker } = await import("../../lib/memory/link/GraphLinker.js");
-    const gl = new GraphLinker();
-    const src = gl.linkFragment.toString();
-    assert.ok(src.includes("valid_to"), "linkFragment에 valid_to 갱신 필수");
+    /** linkFragment는 실행 시간 지표로 감싼 진입점이고 본문은 같은 클래스의 비공개 메서드에 있다. */
+    const src = GraphLinker.toString();
+    assert.ok(src.includes("SET valid_to = NOW()"), "linkFragment에 valid_to 갱신 필수");
   });
 });

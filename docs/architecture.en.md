@@ -1535,7 +1535,7 @@ The errors x decisions and procedures x errors cross products run through a four
 3. Record `wouldCreateCycle` results in a `Map` cache to remove duplicate DB round trips for the same pair
 4. Pass all pairs that clear the cycle check to a single-transaction `store.createLinks()` call
 
-On partial failure the whole batch is rolled back and the path switches to single-row `createLink` fallback. `LinkStore.createLinks` runs `SET LOCAL lock_timeout='5s'`, bulk advisory lock acquisition, multi-row INSERT ON CONFLICT, and RETURNING id in a single transaction.
+On partial failure the whole batch is rolled back and the path switches to single-row `createLink` fallback. `LinkStore.createLinks` and the single-link `createLink` share one write path. In one transaction it takes advisory locks on all target fragment ids in sorted order, then runs a multi-row upsert (same relation precedence and weight rules as a single link) and updates `linked_to` on both fragments. `createLinks` sets a 5-second `lock_timeout`.
 
 Related code: `lib/memory/link/SessionLinker.js`, `lib/memory/link/LinkStore.js`.
 

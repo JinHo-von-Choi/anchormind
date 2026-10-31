@@ -19,6 +19,7 @@ import { fileURLToPath }  from "node:url";
 import path               from "node:path";
 
 import { DEFAULT_DB_STATEMENT_TIMEOUT_MS } from "../../lib/config.js";
+import { transactionSettings }             from "../../lib/tools/db.js";
 
 const HERE   = path.dirname(fileURLToPath(import.meta.url));
 const ROOT   = path.resolve(HERE, "..", "..");
@@ -43,16 +44,20 @@ describe("요청 수신 상한", () => {
 });
 
 describe("질의 시간 상한", () => {
+  const timeoutOf = (agent, opts = {}) =>
+    transactionSettings(agent, opts).filter(([name]) => name === "statement_timeout").map(([, v]) => v);
+
   test("사용자 경로에 상한을 건다", () => {
-    assert.match(DB, /SET LOCAL statement_timeout/);
+    assert.deepEqual(timeoutOf("default"), [String(DEFAULT_DB_STATEMENT_TIMEOUT_MS)]);
   });
 
   test("유지보수 에이전트는 상한에서 제외한다", () => {
-    const block = DB.slice(DB.indexOf("const stmtTimeout"));
-    const guard = DB.slice(DB.indexOf('if (safeAgent !== "system"'), DB.indexOf("const stmtTimeout"));
-    assert.match(guard, /safeAgent !== "system"/);
-    assert.match(guard, /safeAgent !== "admin"/);
-    assert.ok(block.length > 0);
+    assert.deepEqual(timeoutOf("system"), []);
+    assert.deepEqual(timeoutOf("admin"), []);
+  });
+
+  test("호출자가 준 질의 상한이 뒤에 와서 우선한다", () => {
+    assert.deepEqual(timeoutOf("default", { statementTimeoutMs: 1200 }).at(-1), "1200");
   });
 
   test("실측 기반 기본값이 회상 최대 소요보다 크다", () => {

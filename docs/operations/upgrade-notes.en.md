@@ -178,6 +178,14 @@ CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_fragments_idempotency_master
 
 To confirm, run `\d agent_memory.fragments` in psql and check that both indexes appear.
 
+migration-072 sets the `fragments` fillfactor to 90. The setting applies to newly written pages, so on a table with many existing rows the HOT ratio of recall's access-count updates rises gradually. To apply it at once, rewrite the table in a maintenance window. `VACUUM FULL` holds an exclusive lock for the whole run, so on a production database that cannot stop writes use a tool that holds locks briefly, such as [pg_repack](https://reorg.github.io/pg_repack/).
+
+```bash
+pg_repack --table=agent_memory.fragments --no-order <connection options>
+```
+
+Check the effect with `n_tup_hot_upd / n_tup_upd` in `pg_stat_user_tables`.
+
 ## Working with migration files directly
 
 - To apply one file by hand: `psql $DATABASE_URL -f lib/memory/migrations/<file>`. Use `npm run migrate` when you can; it also records history and handles the opclass replacement.

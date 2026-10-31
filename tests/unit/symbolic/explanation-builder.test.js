@@ -80,6 +80,20 @@ describe("ExplanationBuilder", () => {
     assert.ok(codes.includes("temporal_proximity"));
   });
 
+  it("파편별 출처 계층이 있으면 파편마다 다른 사유를 붙인다", () => {
+    const builder = new ExplanationBuilder();
+    const channelsById = new Map([["kw", ["l1", "l2"]], ["vec", ["l3"]], ["nb", ["graph"]], ["t", ["temporal", "lexical"]]]);
+    const result = builder.annotate([{ id: "kw" }, { id: "vec" }, { id: "nb" }, { id: "t" }],
+      { searchPath: ["L1:3", "L2:2", "L2.5Graph:1", "L3:4", "RRF"], channelsById });
+    const codes = Object.fromEntries(result.map(f => [f.id, f.explanations.map(r => r.code)]));
+    assert.deepEqual(codes, {
+      kw : ["direct_keyword_match"],
+      vec: ["semantic_similarity"],
+      nb : ["graph_neighbor_1hop"],
+      t  : ["direct_keyword_match", "temporal_proximity"]
+    });
+  });
+
   it("caseContext 일치 → case_cohort_member reason", () => {
     const builder  = new ExplanationBuilder();
     const fragment = { id: "f1", case_id: "case-1" };

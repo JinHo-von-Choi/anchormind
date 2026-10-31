@@ -4,8 +4,7 @@ import { beforeEach, mock, test } from "node:test";
 let sourceRow;
 let duplicateRow;
 let writes;
-let dedupQuery;
-let candidateQuery;
+let scoredQuery;
 let warnings;
 let sourceQuery;
 
@@ -21,13 +20,9 @@ mock.module("../../lib/tools/db.js", {
         sourceQuery = { sql: normalized, params: [...params] };
         return { rows: sourceRow ? [{ ...sourceRow }] : [] };
       }
-      if (normalized.includes(">= 0.90")) {
-        dedupQuery = { sql: normalized, params: [...params] };
-        return { rows: duplicateRow ? [{ ...duplicateRow }] : [] };
-      }
-      if (normalized.includes("> 0.7")) {
-        candidateQuery = { sql: normalized, params: [...params] };
-        return { rows: [] };
+      if (normalized.includes("scored AS MATERIALIZED")) {
+        scoredQuery = { sql: normalized, params: [...params] };
+        return { rows: duplicateRow ? [{ kind: "dedup", ...duplicateRow }] : [] };
       }
       if (mode === "write") {
         writes.push({ sql: normalized, params: [...params] });
@@ -71,8 +66,7 @@ beforeEach(() => {
     similarity: "0.9926964636264142"
   };
   writes = [];
-  dedupQuery = null;
-  candidateQuery = null;
+  scoredQuery = null;
   sourceQuery = null;
   warnings = [];
 });
@@ -84,24 +78,32 @@ test("high semantic similarity does not retire distinct batch memories", async (
   assert.equal(writes.length, 0, "different content must never be soft-deleted as an exact duplicate");
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /Near-duplicate detected/);
-  assert.match(dedupQuery.sql, /created_at < \$3::timestamptz/);
-  assert.match(dedupQuery.sql, /key_id IS NOT DISTINCT FROM \$4/);
-  assert.deepEqual(dedupQuery.params, [
+  /** 중복 판정은 같은 key 범위의 이전 파편에서만 고르고, 링크 후보도 같은 key 범위에서 고른다. */
+  assert.match(scoredQuery.sql, /AND f\.key_id = \$4/);
+  assert.match(scoredQuery.sql, /similarity >= 0\.90 AND \(created_at < \$3::timestamptz/);
+  assert.match(scoredQuery.sql, /similarity > 0\.7/);
+  assert.deepEqual(scoredQuery.params, [
     "frag-b",
     "batch-canary",
     "2026-09-09T05:25:43.875Z",
     "key-web"
   ]);
-  assert.match(candidateQuery.sql, /key_id IS NOT DISTINCT FROM \$3/);
-  assert.deepEqual(candidateQuery.params, ["frag-b", "batch-canary", "key-web"]);
 });
 
 test("retired rows are excluded from the source, dedup, and candidate lookups", async () => {
   await new GraphLinker().linkFragment("frag-b", "system", null, []);
 
   assert.match(sourceQuery.sql, /WHERE id = \$1 AND embedding IS NOT NULL AND valid_to IS NULL/);
-  assert.match(dedupQuery.sql, /AND valid_to IS NULL AND \(created_at < \$3::timestamptz/);
-  assert.match(candidateQuery.sql, /AND embedding IS NOT NULL AND valid_to IS NULL AND 1 - \(embedding/);
+  /** 중복 판정과 후보는 같은 scored 집합에서 고르므로 그 집합이 닫힌 파편을 빼야 한다. */
+  assert.match(scoredQuery.sql, /scored AS MATERIALIZED \( SELECT .* AND f\.embedding IS NOT NULL AND f\.valid_to IS NULL/);
+});
+
+test("a source without key_id compares only against rows without key_id", async () => {
+  sourceRow.key_id = null;
+  await new GraphLinker().linkFragment("frag-b", "system", null, []);
+
+  assert.match(scoredQuery.sql, /AND f\.key_id IS NULL/);
+  assert.equal(scoredQuery.params.length, 3);
 });
 
 test("an older byte-identical memory remains the winner", async () => {
@@ -122,6 +124,6 @@ test("an already retired source is ignored", async () => {
   const count = await new GraphLinker().linkFragment("frag-b", "system", null, []);
 
   assert.equal(count, 0);
-  assert.equal(dedupQuery, null);
+  assert.equal(scoredQuery, null);
   assert.equal(writes.length, 0);
 });

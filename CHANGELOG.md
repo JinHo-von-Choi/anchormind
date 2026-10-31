@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Added
+
+- 배경 작업 지표가 생겼다. `memento_link_writes_total{producer,relation}`, `memento_link_write_duration_seconds{producer}`(링크 쓰기), `memento_background_task_duration_seconds{task}`(GraphLinker, TemporalLinker), `memento_tier_transitions_total{transition}`(계층 조정 규칙별 변경 수), `memento_link_cycle_blocked_total{source}`(순환 검사로 만들지 않은 링크 수)다. 라벨과 의미는 [monitoring](docs/operations/monitoring.md#배경-작업-지표)에 있다.
+
+### Changed
+
+- `remember` 응답의 `conflicts`가 같은 topic과 저장 범위에서 유사도 0.8을 넘는 기존 파편을 유사도 순으로 최대 10건 담는다. 이전에는 recall 검색 전체를 토큰 예산 500으로 돌린 결과에서 골라, 예산 안에 든 파편만 들어가고 순서도 유사도 순이 아니었다. 모순 탐지 단계가 벡터 질의 한 번으로 끝난다.
+- 링크 하나를 만들 때 링크 행과 양쪽 파편의 `linked_to`를 한 트랜잭션에서 쓴다. 이전에는 트랜잭션 세 개로 나뉘어 중간에 실패하면 `linked_to`가 링크 표와 어긋났다. 시간 링크(temporal)는 새 파편 하나의 링크를 한 번에 쓴다.
+- 임베딩이 끝난 파편의 자동 링크(GraphLinker)가 같은 범위의 거리를 한 번만 계산해 중복 판정과 링크 후보를 함께 고른다. key 조건은 색인을 쓰는 형태로 바뀌었다.
+- 질의마다 따로 보내던 트랜잭션 설정(에이전트, 키, 시간 상한, 벡터 탐색 폭)을 `set_config` 한 문장으로 보낸다.
+- migration-072가 `fragments`의 `access_count`, `ema_activation` 단일 열 색인을 지우고 fillfactor를 90으로 둔다. recall의 접근 기록 갱신이 HOT 갱신이 되어 다른 색인(HNSW 포함)을 다시 쓰지 않는다. 기존 페이지에도 적용하려면 [업그레이드 노트](docs/operations/upgrade-notes.md#5-행이-매우-많은-운영-db)를 따른다.
+
+### Fixed
+
+- `recall`의 `explanations`가 파편마다 그 파편을 찾은 계층으로 만들어진다. 이전에는 검색에서 돈 계층을 모든 파편에 똑같이 붙였고 `graph_neighbor_1hop`은 붙지 않았다. `search_events.selection_reasons`도 같은 값을 남긴다.
+- 링크 일괄 쓰기(`createLinks`, reflect의 세션 링크)가 기존의 더 구체적인 관계(caused_by, resolved_by 등)를 새 관계로 덮어쓰던 문제를 고쳤다. 단건 쓰기와 같은 관계 우선순위와 weight 규칙을 따른다.
+
 ## [6.9.0] - 2026-10-30
 
 ### Added

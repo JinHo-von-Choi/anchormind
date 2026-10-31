@@ -178,6 +178,14 @@ CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_fragments_idempotency_master
 
 적용됐는지는 psql에서 `\d agent_memory.fragments`를 실행해 두 색인이 보이는지 확인한다.
 
+migration-072는 `fragments`의 fillfactor를 90으로 둔다. 이 값은 새로 쓰는 페이지부터 적용되므로, 기존 행이 많으면 recall 접근 기록 갱신의 HOT 비율이 천천히 오른다. 바로 적용하려면 점검 시간에 표를 다시 쓴다. `VACUUM FULL`은 작업 내내 표를 배타 잠금하므로 쓰기를 막을 수 없는 운영 DB에서는 [pg_repack](https://reorg.github.io/pg_repack/)처럼 잠금을 짧게 잡는 도구를 쓴다.
+
+```bash
+pg_repack --table=agent_memory.fragments --no-order <접속 옵션>
+```
+
+효과는 `pg_stat_user_tables`의 `n_tup_hot_upd / n_tup_upd`로 본다.
+
 ## 마이그레이션 파일을 직접 다룰 때
 
 - 파일 하나만 수동으로 적용: `psql $DATABASE_URL -f lib/memory/migrations/<파일>`. 가능하면 `npm run migrate`를 쓴다. 적용 이력과 opclass 치환을 자동으로 처리한다.

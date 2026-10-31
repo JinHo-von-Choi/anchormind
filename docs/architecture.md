@@ -1520,7 +1520,7 @@ errors×decisions, procedures×errors 곱집합을 다음 4단계 배치 처리�
 3. `wouldCreateCycle` 결과를 `Map` 캐시에 기록하여 동일 페어 DB 왕복 중복 제거
 4. cycle을 통과한 페어 전체를 `store.createLinks()` 단일 트랜잭션 호출
 
-부분 실패 시 전체 롤백 후 단건 `createLink` fallback으로 전환한다. `LinkStore.createLinks`는 `SET LOCAL lock_timeout='5s'`, advisory lock 일괄 획득, multi-row INSERT ON CONFLICT, RETURNING id를 단일 트랜잭션으로 실행한다.
+부분 실패 시 전체 롤백 후 단건 `createLink` fallback으로 전환한다. `LinkStore.createLinks`와 단건 `createLink`는 같은 쓰기 경로를 쓴다. 한 트랜잭션에서 대상 파편 id 전체를 정렬 순서로 advisory lock 잡고, 다중 행 upsert(단건과 같은 관계 우선순위와 weight 규칙)와 양쪽 파편의 `linked_to` 갱신을 실행한다. `createLinks`는 `lock_timeout` 5초를 건다.
 
 관련 코드: `lib/memory/link/SessionLinker.js`, `lib/memory/link/LinkStore.js`.
 

@@ -50,21 +50,26 @@ after(async () => {
 describe("detectConflicts", () => {
   it("자기 자신을 빼고 유사도 0.8 초과 파편만 충돌로 돌려준다", async () => {
     const search = {
-      search: async () => ({
-        fragments: [
-          { id: "new", content: "self",  similarity: 0.99 },
-          { id: "a",   content: "close", similarity: 0.81 },
-          { id: "b",   content: "edge",  similarity: 0.8 },
-          { id: "c",   content: "none" }
-        ]
-      })
+      similarFragments: async () => [
+        { id: "new", content: "self",  similarity: 0.99 },
+        { id: "a",   content: "close", similarity: 0.81 },
+        { id: "b",   content: "edge",  similarity: 0.8 },
+        { id: "c",   content: "none" }
+      ]
     };
     const conflicts = await new ConflictResolver({}, search).detectConflicts("본문", "topic", "new");
     assert.deepEqual(conflicts.map(c => c.existing_id), ["a"]);
   });
 
+  it("유사도 순으로 최대 10건만 돌려준다", async () => {
+    const rows   = Array.from({ length: 12 }, (_, i) => ({ id: `s${i}`, content: "c", similarity: 0.95 - i * 0.01 }));
+    const search = { similarFragments: async () => rows };
+    const conflicts = await new ConflictResolver({}, search).detectConflicts("본문", "topic", "new");
+    assert.deepEqual(conflicts.map(c => c.existing_id), rows.slice(0, 10).map(r => r.id));
+  });
+
   it("검색이 실패하면 빈 배열을 돌려준다", async () => {
-    const search = { search: async () => { throw new Error("search down"); } };
+    const search = { similarFragments: async () => { throw new Error("search down"); } };
     assert.deepEqual(await new ConflictResolver({}, search).detectConflicts("본문", "topic", "new"), []);
   });
 });
