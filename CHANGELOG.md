@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [7.0.0] - 2026-11-01
+
 ### Changed
 
 - 시맨틱 하한을 임베딩 모델별로 둔다(`semanticSearch.modelCalibration`). bge-m3는 하한 0.48, 학습 하한 0.48이고 질의 의도별 하한 보정을 적용하지 않는다. 이전에는 text-embedding-3-small 기준 하한 0.40과 개념 질의 보정 -0.20을 그대로 써서, bge-m3에서는 질의마다 7천~1만 건의 무관 파편이 하한을 넘었다. 하한보다 낮게 학습된 SearchParamAdaptor 행은 읽을 때 하한으로 올린다. 맞는 항목이 없는 모델은 동작이 같다.
