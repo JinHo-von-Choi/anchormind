@@ -127,6 +127,16 @@ describe("관문 적용", () => {
 });
 
 describe("저장소 선택", () => {
+  it("dryRun은 작업 기억에도 DB에도 쓰지 않고 session 미리보기를 돌려준다", async () => {
+    const { rememberer, calls } = makeRememberer({ redisStores: false });
+    const result = await rememberer.remember({ ...SESSION_WRITE, dryRun: true });
+    assert.equal(calls.wm.length, 0);
+    assert.equal(calls.inserted.length, 0);
+    assert.equal(result.dryRun, true);
+    assert.equal(result.simulated.scope, "session");
+    assert.equal(result.simulated.fragment.ttl_tier, "session");
+  });
+
   it("Redis에 넣으면 DB에 쓰지 않고 redis로 알린다", async () => {
     const { rememberer, calls } = makeRememberer({ redisStores: true });
     const result = await rememberer.remember({ ...SESSION_WRITE });

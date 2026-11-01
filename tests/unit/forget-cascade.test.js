@@ -208,11 +208,12 @@ describe("MemoryRememberer.forget 삭제 연쇄", () => {
   it("topic 삭제는 소유한 대상만 한 번에 연쇄 삭제하고 영수증을 더한다", async () => {
     delete process.env.MEMENTO_FORGET_CASCADE;
     const { rememberer, store } = makeRememberer();
+    /** 조회는 permanent를 뒤로 보내고 조건 전체의 permanent 수를 행마다 싣는다 */
     store.searchByTopic = mock.fn(async () => [
-      { id: "f1", key_id: "k1", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact" },
-      { id: "f2", key_id: "k9", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact" },
-      { id: "f3", key_id: "k1", ttl_tier: "permanent", keywords: [], topic: "ops", type: "fact" },
-      { id: "f4", key_id: "k1", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact" }
+      { id: "f1", key_id: "k1", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact", permanent_total: 1 },
+      { id: "f2", key_id: "k9", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact", permanent_total: 1 },
+      { id: "f4", key_id: "k1", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact", permanent_total: 1 },
+      { id: "f3", key_id: "k1", ttl_tier: "permanent", keywords: [], topic: "ops", type: "fact", permanent_total: 1 }
     ]);
     const res = await rememberer.forget({ topic: "ops", _keyId: "k1" });
 
@@ -227,9 +228,9 @@ describe("MemoryRememberer.forget 삭제 연쇄", () => {
     delete process.env.MEMENTO_FORGET_CASCADE;
     const { rememberer, store, index } = makeRememberer();
     store.searchByTopic = mock.fn(async () => [
-      { id: "f1", key_id: "k1", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact", linked_to: ["x", "y"] },
-      { id: "f2", key_id: "k9", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact" },
-      { id: "f3", key_id: "k1", ttl_tier: "permanent", keywords: [], topic: "ops", type: "fact" }
+      { id: "f1", key_id: "k1", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact", linked_to: ["x", "y"], permanent_total: 1 },
+      { id: "f2", key_id: "k9", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact", permanent_total: 1 },
+      { id: "f3", key_id: "k1", ttl_tier: "permanent", keywords: [], topic: "ops", type: "fact", permanent_total: 1 }
     ]);
     const res = await rememberer.forget({ topic: "ops", dryRun: true, _keyId: "k1", agentId: "a1" });
 
@@ -239,10 +240,26 @@ describe("MemoryRememberer.forget 삭제 연쇄", () => {
       purged: { case_summaries: 2, audit_fragments: 1, digests: 1 }
     });
     assert.equal(store.searchByTopic.mock.calls[0].arguments[1].withTtlTier, true);
+    assert.equal(store.searchByTopic.mock.calls[0].arguments[1].protectPermanent, true);
     assert.deepEqual(store.previewCascade.mock.calls[0].arguments, [["f1"], "a1"]);
     assert.equal(store.deleteWithCascade.mock.calls.length, 0);
     assert.equal(store.deleteMany.mock.calls.length, 0);
     assert.equal(index.deindex.mock.calls.length, 0);
+  });
+
+  it("id와 topic을 함께 준 dryRun은 id 대상을 뺀 topic 대상도 미리 보여 주고 지우지 않는다", async () => {
+    delete process.env.MEMENTO_FORGET_CASCADE;
+    const { rememberer, store } = makeRememberer();
+    store.searchByTopic = mock.fn(async () => [
+      { id: "f1", key_id: "k1", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact" },
+      { id: "f5", key_id: "k1", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact" }
+    ]);
+    const res = await rememberer.forget({ id: "f1", topic: "ops", dryRun: true, _keyId: "k1" });
+
+    assert.equal(res.simulated.would_delete, true);
+    assert.deepEqual(res.simulated.topic_targets.fragment_ids, ["f5"]);
+    assert.equal(store.deleteWithCascade.mock.calls.length, 0);
+    assert.equal(store.delete.mock.calls.length, 0);
   });
 
   it("삭제하지 않은 조기 응답(권한 없음, permanent 보호)은 그대로다", async () => {

@@ -1111,7 +1111,7 @@ In the third case the payload reports `success: true` while carrying an `error` 
 
 `purged` is the deletion cascade receipt (`MEMENTO_FORGET_CASCADE=on`, the default). In the same transaction as the fragment deletion, `case_summaries` counts the `case_events` summaries of the deleted fragments that were replaced with `[삭제됨]`, `audit_fragments` counts the server-written contradiction resolution records that pointed at a deleted fragment and were deleted with it (they are not counted in `deleted`), and `digests` counts the digests (`fragment_digest`) that had a deleted fragment as a source and were deleted. It appears on responses that reached the deletion step (a topic delete with no targets included), and not on responses that ended because the id target is missing, not permitted or permanent-protected. With `off` the response has no `purged`.
 
-A topic delete also keeps permanent-tier fragments unless `force` is set, and counts them in `protected`.
+A topic delete removes up to 200 fragments per call. Without `force` it keeps permanent-tier fragments and picks deletable fragments first; `protected` is then the number of permanent fragments in the whole topic plus the not-owned fragments within the picked range.
 
 ### dryRun response
 
@@ -1119,6 +1119,8 @@ A topic delete also keeps permanent-tier fragments unless `force` is set, and co
 
 - id: `{success: true, dryRun: true, simulated: {fragment, linked_count, would_delete, reason}}`
 - topic: `{success: true, dryRun: true, simulated: {topic, would_delete, protected, linked_count, fragment_ids, purged}}`. Targets are chosen by the same rules as the real delete. `would_delete` is the number of fragments that would be deleted, `protected` the number kept because they are not owned or are permanent-protected, and `linked_count` the total `linked_to` entries of the fragments to delete. `purged` is the expected cascade cleanup and is absent with `MEMENTO_FORGET_CASCADE=off`.
+- With both id and topic, the id target is checked first, as in the real delete. If it can be deleted, a topic preview without the id target is added as `simulated.topic_targets`.
+- With neither id nor topic, the response is `{dryRun: true, simulated: null, error: "id or topic is required"}`.
 
 dryRun responses record no audit event.
 

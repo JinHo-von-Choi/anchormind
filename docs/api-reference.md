@@ -1128,7 +1128,7 @@ violations 있는 경우 (soft gate — 저장됨):
 
 `purged`는 삭제 연쇄의 영수증이다(`MEMENTO_FORGET_CASCADE=on`, 기본). 파편 삭제와 같은 트랜잭션에서 `case_summaries`는 지운 파편을 출처로 한 `case_events` 요약을 `[삭제됨]`으로 바꾼 수, `audit_fragments`는 지운 파편을 가리키던 서버 기록 모순 해소 파편을 함께 지운 수(`deleted`에는 세지 않는다), `digests`는 지운 파편을 출처로 가진 묶음 요약(`fragment_digest`)을 지운 수다. 삭제 단계까지 간 응답(대상이 없는 topic 삭제 포함)에 실리고, id 대상이 없거나 권한이 없거나 permanent 보호로 끝난 응답에는 없다. `off`이면 `purged`가 없다.
 
-topic 삭제도 permanent 계층 파편은 force 없이 지우지 않고 `protected`로 센다.
+topic 삭제는 한 번에 200건까지 지운다. force가 없으면 permanent 계층 파편은 지우지 않고, 지울 수 있는 파편부터 고른다. 이때 `protected`는 topic 전체의 permanent 파편 수에 고른 범위 안에서 소유하지 않은 파편 수를 더한 값이다.
 
 ### dryRun 응답
 
@@ -1136,6 +1136,8 @@ topic 삭제도 permanent 계층 파편은 force 없이 지우지 않고 `protec
 
 - id: `{success: true, dryRun: true, simulated: {fragment, linked_count, would_delete, reason}}`
 - topic: `{success: true, dryRun: true, simulated: {topic, would_delete, protected, linked_count, fragment_ids, purged}}`. 실제 삭제와 같은 규칙으로 대상을 고른다. `would_delete`는 지울 파편 수, `protected`는 소유하지 않거나 permanent 보호로 남는 파편 수, `linked_count`는 지울 파편들의 `linked_to` 수 합계다. `purged`는 삭제 연쇄로 함께 정리될 예상 건수이며 `MEMENTO_FORGET_CASCADE=off`이면 없다.
+- id와 topic을 함께 주면 실제 삭제처럼 id 대상을 먼저 본다. id 대상을 지울 수 있으면 id 대상을 뺀 topic 미리보기를 `simulated.topic_targets`에 싣는다.
+- id와 topic이 모두 없으면 `{dryRun: true, simulated: null, error: "id or topic is required"}`다.
 
 dryRun 응답은 감사 이벤트를 남기지 않는다.
 

@@ -125,6 +125,18 @@ describe("amend, forget, link", () => {
     assert.equal(recorded.length, 1);
   });
 
+  it("미리보기가 없는 batch_remember와 memory_consolidate는 dryRun을 거부하고 처리기를 부르지 않는다", async () => {
+    let called = 0;
+    manager.batchRemember = async () => { called++; return { inserted: 1, skipped: 0 }; };
+    manager.consolidate   = async () => { called++; return {}; };
+    const batch = await tool_batchRemember(args({ fragments: [{ content: CONTENT, topic: "t", type: "fact" }], dryRun: true }));
+    const cons  = await tool_memoryConsolidate({ dryRun: true });
+    assert.equal(batch.success, false);
+    assert.equal(cons.success, false);
+    assert.equal(called, 0);
+    assert.deepEqual(recorded, []);
+  });
+
   it("link는 출발 파편을 대상으로, 도착 파편과 관계를 detail로 남긴다", async () => {
     manager.link = async () => ({ linkId: 9 });
     await tool_link(args({ fromId: "frag-6", toId: "frag-7", relationType: "resolved_by" }));
