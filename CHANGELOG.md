@@ -19,7 +19,7 @@
 - `forget`을 topic으로 지정하면 `dryRun=true`를 무시하고 실제로 지우던 문제를 고쳤다. 이때 감사 이벤트도 남지 않았다. 이제 topic 지정 dryRun은 지우지 않고 지울 파편 수, 보호되는 파편 수, 연결 링크 수, 지울 파편 id, 삭제 연쇄 예상 건수를 돌려준다. 감사 이벤트는 처리기가 실제로 미리보기를 했을 때만 생략한다. ([#108](https://github.com/JinHo-von-Choi/anchormind/issues/108))
 - topic으로 `forget`하면 permanent 계층 파편도 `force` 없이 지워지던 문제를 고쳤다. topic 조회가 `ttl_tier`를 읽지 않아 보호 검사가 항상 통과했다. force가 없으면 한 번에 지우는 200건을 permanent가 아닌 파편부터 고르고, `protected`는 topic 전체의 permanent 수를 센다.
 - `remember`에 `scope=session`과 `dryRun=true`를 함께 주면 작업 기억에 실제로 저장하던 문제를 고쳤다. 이제 저장하지 않고 session 미리보기를 돌려준다.
-- `batch_remember`와 `memory_consolidate`는 dryRun을 지원하지 않는데, 스키마 밖 인자를 허용하는 서버(`MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN=true`)에서 `dryRun=true`를 무시하고 실제로 실행했다. 이제 `dryRun=true`를 거부한다. `batch_remember`는 이때 감사 이벤트도 남기지 않았다.
+- `batch_remember`와 `memory_consolidate`는 dryRun을 지원하지 않는데, 스키마 밖 인자를 허용하는 서버(`MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN=true`)에서 `dryRun=true`를 무시하고 실제로 실행했다. 이제 dryRun이 없거나 `false`일 때만 실행하고, 그 밖의 값은 거부한다. `batch_remember`는 이때 감사 이벤트도 남기지 않았다.
 - `recall`의 `explanations`가 파편마다 그 파편을 찾은 계층으로 만들어진다. 이전에는 검색에서 돈 계층을 모든 파편에 똑같이 붙였고 `graph_neighbor_1hop`은 붙지 않았다. `search_events.selection_reasons`도 같은 값을 남긴다.
 - 링크 일괄 쓰기(`createLinks`, reflect의 세션 링크)가 기존의 더 구체적인 관계(caused_by, resolved_by 등)를 새 관계로 덮어쓰던 문제를 고쳤다. 단건 쓰기와 같은 관계 우선순위와 weight 규칙을 따른다.
 - `remember` 직후의 연관 검색이 토큰 예산 절단에서 예산에 들지 않는 후보까지 모두 토큰화해, 흔한 키워드에서는 이벤트 루프가 수백 ms 멈추고 그동안 들어온 다른 요청이 함께 늦어지던 문제를 고쳤다. 토큰 수의 하한(사전 분할 조각 수)이 남은 예산을 넘는 후보는 세지 않는다. 고르는 파편은 이전과 같다.

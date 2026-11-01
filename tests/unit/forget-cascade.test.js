@@ -250,14 +250,14 @@ describe("MemoryRememberer.forget 삭제 연쇄", () => {
   it("id와 topic을 함께 준 dryRun은 id 대상을 뺀 topic 대상도 미리 보여 주고 지우지 않는다", async () => {
     delete process.env.MEMENTO_FORGET_CASCADE;
     const { rememberer, store } = makeRememberer();
-    store.searchByTopic = mock.fn(async () => [
-      { id: "f1", key_id: "k1", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact" },
-      { id: "f5", key_id: "k1", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact" }
-    ]);
+    /** 실제 삭제는 f1을 먼저 지우고 topic에서 200건을 고르므로 f1을 뺀 200건이 대상이다 */
+    const rows = Array.from({ length: 202 }, (_, i) => ({ id: `f${i + 1}`, key_id: "k1", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact" }));
+    store.searchByTopic = mock.fn(async (topic, opts) => rows.slice(0, opts.limit));
     const res = await rememberer.forget({ id: "f1", topic: "ops", dryRun: true, _keyId: "k1" });
 
     assert.equal(res.simulated.would_delete, true);
-    assert.deepEqual(res.simulated.topic_targets.fragment_ids, ["f5"]);
+    assert.equal(res.simulated.topic_targets.would_delete, 200);
+    assert.equal(res.simulated.topic_targets.fragment_ids.includes("f1"), false);
     assert.equal(store.deleteWithCascade.mock.calls.length, 0);
     assert.equal(store.delete.mock.calls.length, 0);
   });

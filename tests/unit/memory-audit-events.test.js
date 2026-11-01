@@ -131,8 +131,11 @@ describe("amend, forget, link", () => {
     manager.consolidate   = async () => { called++; return {}; };
     const batch = await tool_batchRemember(args({ fragments: [{ content: CONTENT, topic: "t", type: "fact" }], dryRun: true }));
     const cons  = await tool_memoryConsolidate({ dryRun: true });
+    /** 스키마 밖 인자는 타입 검사를 받지 않으므로 문자열도 거부해야 한다 */
+    const text  = await tool_batchRemember(args({ fragments: [{ content: CONTENT, topic: "t", type: "fact" }], dryRun: "true" }));
     assert.equal(batch.success, false);
     assert.equal(cons.success, false);
+    assert.equal(text.success, false);
     assert.equal(called, 0);
     assert.deepEqual(recorded, []);
   });
