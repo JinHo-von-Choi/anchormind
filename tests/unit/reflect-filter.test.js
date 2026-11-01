@@ -13,6 +13,7 @@ import assert             from "node:assert/strict";
 import {
   _isEmptySession,
   _shouldSkipReflect,
+  dropActivityStatements,
   MIN_SESSION_DURATION_MS
 } from "../../lib/memory/processors/AutoReflect.js";
 
@@ -179,5 +180,24 @@ describe("_shouldSkipReflect", () => {
       fragments:    []
     };
     assert.strictEqual(_shouldSkipReflect(activity), true);
+  });
+});
+
+describe("dropActivityStatements", () => {
+  test("도구 활동만 서술한 항목을 빼고 사실은 남긴다", () => {
+    const { result, dropped } = dropActivityStatements({
+      summary: [
+        "forget 도구를 4회 실행하여 특정 기억을 삭제했다.",
+        "Zero memory fragments were created or accessed during the 8-minute session",
+        "개천록 금단 남성 스프라이트 이미지 생성에 대한 정보를 검색했다.",
+        "arcana.nerdvana.kr/api/stats 호출 급증 원인은 cast.html의 30초 자동 폴링이었고 하루 990회 호출이 발생했다"
+      ],
+      open_questions: ["[미해결] batch_remember 도구 호출 29회 대비 생성·접근 파편 수가 0건인 이유가 파악되지 않는다"],
+      narrative_summary: "context 도구 8회, recall 도구 4회로 총 12회의 도구 호출이 발생함"
+    });
+    assert.equal(dropped, 5);
+    assert.deepEqual(result.summary, ["arcana.nerdvana.kr/api/stats 호출 급증 원인은 cast.html의 30초 자동 폴링이었고 하루 990회 호출이 발생했다"]);
+    assert.deepEqual(result.open_questions, []);
+    assert.equal(result.narrative_summary, null);
   });
 });
