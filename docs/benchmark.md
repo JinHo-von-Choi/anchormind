@@ -179,6 +179,7 @@ cp .env.example .env       # POSTGRES_* 와 MEMENTO_ACCESS_KEY 를 채운다
 npm run migrate
 node bin/memento.js benchmark --repeat 3
 node bin/memento.js benchmark --key-scope corpus --repeat 3
+node bin/memento.js benchmark --age-spread 365 --key-scope corpus   # 골드셋 mentionTime을 1년에 흩어 최근성 영향을 본다
 ```
 
 | 자산 | 경로 |
@@ -293,7 +294,7 @@ bge-m3는 값이 높은 대역에 몰려 있어 선형 가중 합에서 변별�
 
 따라서 격리 모드 수치는 모델을 교체한 시점을 넘어 비교하지 않는다. 기준선도 `scripts/baseline-recall.json`(격리)과 `scripts/baseline-recall-corpus.json`(코퍼스)으로 나눠 보관한다.
 
-후속 과제는 점수 정규화다. 결과 집합 안에서 유사도를 상대화한 뒤 가중치를 적용하면 모델의 값 대역과 무관하게 변별이 유지된다.
+이 약점은 `semanticSearch.modelCalibration`의 bge-m3 항목이 다룬다. 0.50~0.85 구간의 유사도를 0~1로 펴서 순위 점수에 넣고(`rankBand`), 순위 가중치를 0.3/0.1/0.6으로 두며(`ranking`), similarity 없이 들어온 후보도 질의 벡터와의 코사인으로 순위를 매긴다. 하한 0.48과 함께 R@1은 격리 80%→97%, 코퍼스 83%→97%다(골드셋 100문항, 1회 실행). 기존 측정은 골드셋을 측정 직전에 저장해 골드셋이 늘 가장 최근 파편이므로 최근성 가중치의 영향을 재지 못한다. `--age-spread 365`로 `mentionTime`을 1년에 흩으면 기본 가중치의 R@1은 격리 47%, 코퍼스 70%이고 현재 가중치는 95%, 94%다.
 
 ### 측정 재현성
 

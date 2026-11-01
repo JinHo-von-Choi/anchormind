@@ -291,10 +291,31 @@ export const MEMORY_CONFIG = {
     slowLogMs        : envInt("MEMENTO_REFLECT_SLOW_LOG_MS", 5000, 0, 600000)
   },
   /** 시맨틱 검색 설정. minSimilarity는 SearchParamAdaptor가 적응형으로 조정한다.
-   *  0.40: 12쿼리 골드셋 실측에서 상위5 유용건 최대(0.5는 자유 회상 질의 침묵, 0.35는 노이즈가 이득 상쇄). */
+   *  0.40: text-embedding-3-small, 12쿼리 골드셋 실측에서 상위5 유용건 최대(0.5는 자유 회상 질의 침묵, 0.35는 노이즈가 이득 상쇄). */
   semanticSearch: {
     minSimilarity  : 0.4,
     limit          : 30,
+    /** 임베딩 모델별 하한. 모델마다 코사인 값이 몰리는 대역이 달라 하한 하나를 모든 모델에 쓸 수 없다.
+     *  match는 EMBEDDING_MODEL에 들어 있는 문자열(대소문자 무시)이고, 맞는 항목이 없으면 위 minSimilarity를 쓴다.
+     *  floor는 학습 하한(SearchParamAdaptor)이 내려갈 수 있는 최저값, profileDelta는 질의 의도별 하한 보정 적용 여부,
+     *  rankBand [lo, hi]는 순위 점수에 넣기 전에 유사도를 0~1로 펴는 구간(lo 이하 0, hi 이상 1, SemanticThresholds.rankingSimilarity),
+     *  ranking은 이 모델에서 쓸 순위 가중치다(합계 1.0. exactKeywordBoost와 lexicalWeightFallback은 semanticWeight 비율만큼
+     *  함께 바뀐다). ranking이 있으면 similarity 없이 들어온 후보(키워드, 그래프, 연결 파편)도 질의 벡터와의 코사인으로
+     *  순위를 매긴다(RankSimilarity).
+     *
+     *  bge-m3: 골드셋 100문항의 정답 쌍 유사도는 최소 0.49, 10번째 백분위 0.59, 중앙값 0.70이다. 운영 파편 14.4만 건에서
+     *  무관 파편은 중앙값 0.31, 상위 1% 0.46이라 0.40 하한을 넘는 파편이 질의마다 7천~1만 건이다. 0.48이면 정답 100건이
+     *  남고 하한을 넘는 파편은 질의마다 130~1,300건이다(0.50은 정답 1건이 빠진다). 의도별 보정(CONCEPT_INTENT -0.20 등)은
+     *  text-embedding-3-small 측정값이고 bge-m3에서는 개념 질의 정답 쌍도 최소 0.52라 적용하지 않는다.
+     *  관련 결과가 0.65~0.80에 몰려 원값 그대로는 유사도 차이가 순위를 거의 움직이지 못했고, 기본 가중치 0.4/0.3/0.3에서는
+     *  최근성 0.3(반감기 30일)이 지난주 파편에 0.25점을 더 주어 유사도 차이를 덮었다. 골드셋 R@1(하한 0.40·원값·기본 가중치
+     *  → 현재 값): 격리 80%→97%, 코퍼스 83%→97%. 골드셋 mentionTime을 1년에 흩은 측정(--age-spread 365)에서 기본 가중치는
+     *  격리 47%, 코퍼스 70%이고(하한과 펴기는 현재 값) 현재 가중치는 격리 95%, 코퍼스 94%다. 0.25/0.05/0.7은 격리 95%로 거의 같지만 최근성을 사실상 꺼서 같은 내용의 옛 기록과
+     *  새 기록을 가르지 못한다. */
+    modelCalibration: Object.freeze([
+      Object.freeze({ match: "bge-m3", minSimilarity: 0.48, floor: 0.48, profileDelta: false, rankBand: Object.freeze([0.50, 0.85]),
+        ranking: Object.freeze({ importanceWeight: 0.3, recencyWeight: 0.1, semanticWeight: 0.6 }) })
+    ]),
     /** text 없는 keywords-only 쿼리에서 L3 시맨틱 보조 실행 여부.
      *  L1/L2는 저장 keywords 배열만 보므로 content 매칭은 이 경로가 유일하다. */
     keywordFallback: process.env.MEMENTO_KEYWORD_SEMANTIC_FALLBACK !== "false",

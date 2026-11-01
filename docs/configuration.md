@@ -813,8 +813,12 @@ export const MEMORY_CONFIG = {
     slowLogMs        : 5000      // MEMENTO_REFLECT_SLOW_LOG_MS
   },
   semanticSearch: {
-    minSimilarity  : 0.4,        // L3 pgvector 검색 최소 유사도 (기본 0.4)
+    minSimilarity  : 0.4,        // L3 pgvector 검색 최소 유사도 (modelCalibration에 맞는 모델이 없을 때)
     limit          : 30,         // L3 반환 최대 건수
+    modelCalibration: [          // 임베딩 모델별 하한. match는 EMBEDDING_MODEL에 든 문자열(대소문자 무시)
+      { match: "bge-m3", minSimilarity: 0.48, floor: 0.48, profileDelta: false, rankBand: [0.50, 0.85],
+        ranking: { importanceWeight: 0.3, recencyWeight: 0.1, semanticWeight: 0.6 } }
+    ],
     keywordFallback: true,       // text 없는 keywords-only 쿼리에서 L3 시맨틱 보조 실행 (env MEMENTO_KEYWORD_SEMANTIC_FALLBACK=false로 비활성)
     keywordFallbackTimeoutMs: 1500 // keywords 보조 L3 실행 상한 (env MEMENTO_KEYWORD_FALLBACK_TIMEOUT_MS)
   },
@@ -946,6 +950,34 @@ recall은 자체 힌트 경로를 이미 갖고 있어 `rates`에서 제외된�
 
 `CONCEPT_INTENT`의 임계값 보정이 큰 이유는 임베딩 모델의 실제 유사도 분포 때문이다. text-embedding-3-small에서 한국어 질의와 영문 기술용어가 섞인 저장문의 패러프레이즈 쌍 코사인이 0.26 부근으로 측정되었고, 임의 파편 대비 분포는 p50 0.228 / p95 0.335였다. 기본 임계값 0.40을 그대로 쓰면 정답 파편이 후보에 진입하지 못한다.
 
+`minSimilarityDelta`는 `semanticSearch.modelCalibration`에서 `profileDelta: false`인 모델에는 적용하지 않는다. bge-m3는 코사인 값이 높은 대역에 몰려 있어 위 보정을 적용하면 하한이 무관 파편 대역(중앙값 0.31, 상위 1% 0.46) 아래로 내려간다.
+
+### 임베딩 모델별 시맨틱 하한 (semanticSearch.modelCalibration)
+
+L3 검색과 SearchParamAdaptor는 `EMBEDDING_MODEL`에 맞는 `modelCalibration` 항목의 값을 쓴다. 맞는 항목이 없으면 `semanticSearch.minSimilarity`, 학습 하한 0.10, 의도별 보정 적용이다.
+
+| 키 | 설명 |
+|-|-|
+| `match` | `EMBEDDING_MODEL`에 들어 있는 문자열(대소문자 무시) |
+| `minSimilarity` | 학습값이 없을 때의 하한 |
+| `floor` | SearchParamAdaptor 학습값의 최저값. 이보다 낮게 학습된 행은 읽을 때 이 값으로 올린다 |
+| `profileDelta` | 질의 의도별 `minSimilarityDelta` 적용 여부 |
+| `rankBand` | `[lo, hi]`. 순위 점수(검색 단계와 최종 정렬)에 넣기 전에 유사도를 0~1로 편다. lo 이하는 0, hi 이상은 1이다. 응답의 `similarity`와 `threshold` 필터는 원값을 쓴다 |
+| `ranking` | 이 모델에서 쓸 `importanceWeight`, `recencyWeight`, `semanticWeight`(기본 `ranking`과 합쳐 합계 1.0, 기동 검사), `recencyHalfLifeDays`. `exactKeywordBoost`와 `lexicalWeightFallback`(질의 의도별 값 포함)은 `semanticWeight`가 바뀐 비율만큼 함께 바뀐다. 지정하면 similarity 없이 들어온 후보(키워드, 그래프 이웃, 연결 파편)도 같은 요청의 질의 벡터와의 코사인으로 순위를 매긴다. 이 코사인은 응답에 싣지 않는다 |
+
+bge-m3의 하한 0.48은 골드셋 100문항의 정답 쌍 유사도(최소 0.49, 10번째 백분위 0.59, 중앙값 0.70)와 운영 파편 14.4만 건의 무관 파편 분포로 정했다. 0.40에서는 하한을 넘는 파편이 질의마다 7천~1만 건이었고, 0.48에서는 정답 100건이 모두 남고 하한을 넘는 파편이 질의마다 130~1,300건이다.
+
+bge-m3는 관련 결과의 유사도가 0.65~0.80에 몰려 있어, 원값 그대로는 유사도 차이가 순위 점수(`importance 0.4 + recency 0.3 + similarity 0.3`)를 거의 움직이지 못했다. 또 최근성 0.3(반감기 30일)이 지난주 파편에 0.25점을 더 주어, 유사도 0.60인 최근 파편이 유사도 0.75인 몇 달 전 파편보다 앞섰다. bge-m3 항목은 `rankBand [0.50, 0.85]`로 유사도를 펴고 가중치를 `0.3 / 0.1 / 0.6`으로 둔다.
+
+| 골드셋 R@1 | 하한 0.40, 원값, 0.4/0.3/0.3 | 현재 값 |
+|-|-|-|
+| 격리 | 80% | 97% |
+| 코퍼스 | 83% | 97% |
+| 격리, `--age-spread 365` | 47%(하한과 펴기는 현재 값) | 95% |
+| 코퍼스, `--age-spread 365` | 70%(하한과 펴기는 현재 값) | 94% |
+
+`--age-spread`는 골드셋의 `mentionTime`을 1년에 흩는다. 흩지 않으면 골드셋이 항상 가장 최근 파편이라 최근성 가중치의 영향이 드러나지 않는다.
+
 `ranking`의 `importanceWeight` / `recencyWeight` / `semanticWeight`는 합계 1.0을 기동 게이트가 강제하므로 프로파일 조정 대상이 아니다.
 
 효과는 `benchmark` 서브명령으로 계측한다. 100문항 골드셋 격리 모드 기준 Recall@5는 프로파일 비활성 64%에서 활성 86%로, 운영 코퍼스 경쟁 모드에서는 50%에서 76%로 측정되었다.
@@ -1023,12 +1055,12 @@ recall은 자체 힌트 경로를 이미 갖고 있어 `rates`에서 제외된�
 
 ### SearchParamAdaptor (자동 검색 파라미터 학습)
 
-SearchParamAdaptor는 별도 환경변수 없이 자동으로 동작한다. `config/memory.js`의 `semanticSearch.minSimilarity` 값을 기본값으로 사용하며, 50회 이상 검색 후 key_id x query_type x hour 조합별로 학습된 값으로 대체된다.
+SearchParamAdaptor는 별도 환경변수 없이 자동으로 동작한다. 임베딩 모델별 하한(`semanticSearch.modelCalibration`, 맞는 항목이 없으면 `semanticSearch.minSimilarity`)을 기본값으로 사용하며, 50회 이상 검색 후 key_id x query_type x hour 조합별로 학습된 값으로 대체된다.
 
 | 하드코딩 상수 | 값 | 설명 |
 |-------------|-----|------|
 | MIN_SAMPLE | 50 | 학습 적용 최소 샘플 수 |
-| CLAMP_MIN | 0.10 | minSimilarity 하한 |
+| 하한 | 0.10 | minSimilarity 하한. `modelCalibration` 항목의 `floor`가 있으면 그 값 |
 | CLAMP_MAX | 0.60 | minSimilarity 상한 |
 | step | 0.01 | 조정 보폭 (대칭) |
 

@@ -7,6 +7,25 @@
  */
 
 /**
+ * 임베딩 모델별 ranking 덮어쓰기(semanticSearch.modelCalibration[].ranking)를 기본 ranking에 합친 세 가중치의 합계가 1.0인지 본다.
+ *
+ * @param {object} cfg
+ * @returns {string[]}
+ */
+function modelRankingErrors(cfg) {
+  const errors = [];
+  for (const entry of cfg.semanticSearch?.modelCalibration ?? []) {
+    if (!entry.ranking) continue;
+    const merged = { ...cfg.ranking, ...entry.ranking };
+    const sum    = merged.importanceWeight + merged.recencyWeight + merged.semanticWeight;
+    if (Math.abs(sum - 1.0) > 0.001) {
+      errors.push(`semanticSearch.modelCalibration[${entry.match}].ranking weights must sum to 1.0 (got ${sum})`);
+    }
+  }
+  return errors;
+}
+
+/**
  * MEMORY_CONFIG 전체 구조를 검증한다.
  * 유효하지 않은 설정이 하나라도 있으면 에러를 throw한다.
  *
@@ -21,6 +40,8 @@ export function validateMemoryConfig(cfg) {
   if (Math.abs(rankSum - 1.0) > 0.001) {
     errors.push(`ranking weights must sum to 1.0 (got ${rankSum})`);
   }
+
+  errors.push(...modelRankingErrors(cfg));
 
   // contextInjection.rankWeights 합계 = 1.0
   const rw    = cfg.contextInjection.rankWeights;

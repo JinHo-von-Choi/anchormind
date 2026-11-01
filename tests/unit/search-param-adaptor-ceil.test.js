@@ -13,9 +13,11 @@ const mockPool  = { query: mockQuery };
 
 mock.module("../../lib/tools/db.js",     { namedExports: { getPrimaryPool: () => mockPool } });
 mock.module("../../lib/logger.js",       { namedExports: { logWarn: mock.fn() } });
-mock.module("../../config/memory.js",    { namedExports: { MEMORY_CONFIG: { semanticSearch: { minSimilarity: 0.40 } } } });
+const semanticSearch = { minSimilarity: 0.40 };
+mock.module("../../config/memory.js",    { namedExports: { MEMORY_CONFIG: { semanticSearch } } });
 
 const { SearchParamAdaptor, _resetForTesting } = await import("../../lib/memory/signals/SearchParamAdaptor.js");
+const { EMBEDDING_MODEL } = await import("../../lib/config.js");
 
 const row = (sim, samples) => () => Promise.resolve({ rows: [{ min_similarity: sim, sample_count: samples }] });
 
@@ -63,5 +65,15 @@ describe("SearchParamAdaptor — MEMENTO_RECALL_MIN_SIM_CEIL", () => {
     process.env.MEMENTO_RECALL_MIN_SIM_CEIL = "0.30";
     mockQuery.mock.mockImplementationOnce(() => Promise.reject(new Error("db down")));
     assert.equal(await new SearchParamAdaptor().getMinSimilarity("k", "text", 3), 0.30);
+  });
+
+  test("모델 보정 하한보다 낮게 학습된 행은 하한으로 올린다", async () => {
+    semanticSearch.modelCalibration = [{ match: EMBEDDING_MODEL, minSimilarity: 0.50, floor: 0.50, profileDelta: false }];
+    try {
+      mockQuery.mock.mockImplementationOnce(row(0.40, 500));
+      assert.equal(await new SearchParamAdaptor().getMinSimilarity("k", "text", 3), 0.50);
+    } finally {
+      delete semanticSearch.modelCalibration;
+    }
   });
 });

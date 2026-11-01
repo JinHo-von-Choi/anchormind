@@ -4,6 +4,9 @@
 
 ### Changed
 
+- 시맨틱 하한을 임베딩 모델별로 둔다(`semanticSearch.modelCalibration`). bge-m3는 하한 0.48, 학습 하한 0.48이고 질의 의도별 하한 보정을 적용하지 않는다. 이전에는 text-embedding-3-small 기준 하한 0.40과 개념 질의 보정 -0.20을 그대로 써서, bge-m3에서는 질의마다 7천~1만 건의 무관 파편이 하한을 넘었다. 하한보다 낮게 학습된 SearchParamAdaptor 행은 읽을 때 하한으로 올린다. 맞는 항목이 없는 모델은 동작이 같다.
+- bge-m3의 순위 점수를 바꿨다. 유사도는 0.50~0.85 구간을 0~1로 펴서 넣고(`rankBand`), 가중치는 중요도 0.3, 최근성 0.1, 유사도 0.6이다(`ranking`). similarity 없이 들어온 후보(키워드, 그래프 이웃, 연결 파편)도 같은 요청의 질의 벡터와의 코사인으로 순위를 매긴다. 이전에는 유사도가 0.65~0.80에 몰려 순위에 거의 반영되지 않았고, 최근성 0.3이 지난주 파편에 0.25점을 더 주어 유사도 차이를 덮었다. 골드셋 R@1은 격리 80%→97%, 코퍼스 83%→97%다. 응답의 `similarity` 값은 그대로다.
+- `memento-mcp benchmark --age-spread <일수>`가 골드셋의 `mentionTime`을 지난 일수 안에 흩는다. 골드셋이 늘 가장 최근 파편이 되어 최근성 가중치의 영향을 재지 못하던 측정을 보완한다.
 - 관리 API `/memory/graph`의 노드 상한이 10000에서 관리 콘솔과 같은 1000으로 바뀌었다. 10000건 응답은 약 3초, 10MB였다. 응답에 실제로 적용한 `limit`을 싣는다.
 - 정리 주기에 `dead_reference_sweep`(linked_to의 없는 파편 id 제거)과 `orphan_copy_sweep`(원본 없는 사례 요약 사본 치환) 단계를 더했다. 삭제 뒤 정리 실패는 `memento_delete_cleanup_failures_total{step}`, 정리 주기가 지운 참조 수는 `memento_dead_references_swept_total`로 낸다.
 - `amend`가 중복 때문에 수정하지 않았을 때 `code: "duplicate"`를 싣는다. `merged: true`는 이전 응답과의 호환을 위해 같이 싣지만 병합은 하지 않는다. `supersedes`는 효과가 없으며 지정하면 `validation_warnings`에 `supersedesIgnored`를 싣는다.
@@ -14,6 +17,8 @@
 
 ### Fixed
 
+- 질의 임베딩 캐시가 Redis에 저장된 벡터를 읽지 못하던 문제를 고쳤다. Redis가 돌려준 Buffer가 4의 배수가 아닌 위치에서 시작하면 벡터 복원이 RangeError로 실패했고, 오류를 캐시 미스로 처리해 recall마다 질의 임베딩을 새로 만들었다.
+- 자동 reflect가 "forget 도구를 4회 실행했다", "관련 정보를 검색했다"처럼 도구 활동만 서술한 항목을 저장하지 않는다. 자동 reflect의 입력은 도구 호출 수와 검색 키워드뿐이라 이런 문장만 나왔고, 저장되면 검색 결과에 섞였다. 에이전트가 직접 부른 reflect는 대상이 아니다.
 - `remember`, `amend`, `link`, `forget`이 boolean이 아닌 `dryRun`(예: `"true"`)을 거부한다. 인자 검증이 `warn`·`off`인 서버에서 이런 값이 들어오면 실제로 쓰면서 감사 이벤트를 남기지 않았다.
 - `amend` 미리보기(`dryRun=true`)가 멱등 기록을 남기지 않는다. 같은 `idempotencyKey`로 미리본 뒤 실제 수정을 부르면 수정 대신 미리보기 응답이 돌아왔다.
 - `reflect`가 `dryRun`을 받으면 저장하지 않고 거부한다.

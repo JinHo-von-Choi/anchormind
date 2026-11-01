@@ -782,8 +782,12 @@ export const MEMORY_CONFIG = {
     slowLogMs        : 5000      // MEMENTO_REFLECT_SLOW_LOG_MS
   },
   semanticSearch: {
-    minSimilarity  : 0.4,        // L3 pgvector search minimum similarity (default 0.4)
+    minSimilarity  : 0.4,        // L3 pgvector search minimum similarity (when no modelCalibration entry matches)
     limit          : 30,         // L3 max return count
+    modelCalibration: [          // Per-embedding-model thresholds. match is a substring of EMBEDDING_MODEL (case-insensitive)
+      { match: "bge-m3", minSimilarity: 0.48, floor: 0.48, profileDelta: false, rankBand: [0.50, 0.85],
+        ranking: { importanceWeight: 0.3, recencyWeight: 0.1, semanticWeight: 0.6 } }
+    ],
     keywordFallback: true,       // Run L3 semantic supplement for keywords-only queries without text (disable with MEMENTO_KEYWORD_SEMANTIC_FALLBACK=false)
     keywordFallbackTimeoutMs: 1500 // Upper bound for the keyword-supplement L3 run (env MEMENTO_KEYWORD_FALLBACK_TIMEOUT_MS)
   },
@@ -890,12 +894,12 @@ recall is excluded from `rates` because it already has its own hint path. Cap an
 
 ### SearchParamAdaptor (Automatic Search Parameter Learning)
 
-SearchParamAdaptor operates automatically without any separate environment variables. It uses the `semanticSearch.minSimilarity` value from `config/memory.js` as the default. After 50 or more searches, the learned value per key_id x query_type x hour combination replaces the default.
+SearchParamAdaptor operates automatically without any separate environment variables. It uses the per-model threshold (`semanticSearch.modelCalibration`, or `semanticSearch.minSimilarity` when no entry matches) as the default. After 50 or more searches, the learned value per key_id x query_type x hour combination replaces the default.
 
 | Hardcoded Constant | Value | Description |
 |--------------------|-------|-------------|
 | MIN_SAMPLE | 50 | Minimum sample count before learned values are applied |
-| CLAMP_MIN | 0.10 | minSimilarity lower bound |
+| Floor | 0.10 | minSimilarity lower bound; the matching `modelCalibration` entry's `floor` when present |
 | CLAMP_MAX | 0.60 | minSimilarity upper bound |
 | step | 0.01 | Adjustment step size (symmetric) |
 
@@ -1427,6 +1431,34 @@ Classifies a query as `EXACT_SYMBOL`, `CONCEPT_INTENT`, or `HYBRID` and switches
 | `HYBRID` | mixed or undecidable | 1.0 | 1.1 | 1.0 | -0.06 |
 
 The large threshold shift for `CONCEPT_INTENT` follows from the measured similarity distribution. With text-embedding-3-small, paraphrase pairs mixing Korean queries with English technical terms measured around 0.26 cosine, while the distribution against arbitrary fragments was p50 0.228 / p95 0.335. Keeping the 0.40 default kept correct fragments out of the candidate set entirely.
+
+`minSimilarityDelta` is not applied for models whose `semanticSearch.modelCalibration` entry sets `profileDelta: false`. bge-m3 cosine values sit in a high band, so applying the shifts above would put the threshold below the unrelated-fragment band (median 0.31, top 1% 0.46).
+
+### Per-model semantic thresholds (semanticSearch.modelCalibration)
+
+L3 search and SearchParamAdaptor use the `modelCalibration` entry that matches `EMBEDDING_MODEL`. Without a match they use `semanticSearch.minSimilarity`, a learned floor of 0.10, and the per-intent shifts.
+
+| Key | Description |
+|-|-|
+| `match` | Substring of `EMBEDDING_MODEL` (case-insensitive) |
+| `minSimilarity` | Threshold used when there is no learned value |
+| `floor` | Lowest value SearchParamAdaptor may learn. Rows learned below it are raised to it when read |
+| `profileDelta` | Whether the per-intent `minSimilarityDelta` applies |
+| `rankBand` | `[lo, hi]`. Before similarity enters a ranking score (search stage and final sort), it is stretched to 0..1: values at or below lo become 0 and values at or above hi become 1. The response `similarity` and the `threshold` filter use the raw value |
+| `ranking` | `importanceWeight`, `recencyWeight`, `semanticWeight` (merged with the base `ranking`, must sum to 1.0, checked at startup) and `recencyHalfLifeDays` for this model. `exactKeywordBoost` and `lexicalWeightFallback` (including per-intent values) scale with the change in `semanticWeight`. When set, candidates that arrive without a similarity (keyword hits, graph neighbors, linked fragments) are ranked by their cosine to the request's query vector. That cosine is not returned |
+
+The bge-m3 threshold of 0.48 comes from the goldset's 100 correct pairs (min 0.49, 10th percentile 0.59, median 0.70) and the unrelated-fragment distribution over 144k production fragments. At 0.40, 7,000 to 10,000 fragments per query passed the threshold; at 0.48 all 100 correct pairs remain and 130 to 1,300 fragments per query pass.
+
+bge-m3 puts relevant results between 0.65 and 0.80, so raw similarity barely moved the ranking score (`importance 0.4 + recency 0.3 + similarity 0.3`). Recency 0.3 with a 30-day half-life also gave last week's fragments 0.25 extra, so a recent fragment at 0.60 similarity ranked above a months-old one at 0.75. The bge-m3 entry stretches similarity with `rankBand [0.50, 0.85]` and uses weights `0.3 / 0.1 / 0.6`.
+
+| Goldset R@1 | 0.40 threshold, raw, 0.4/0.3/0.3 | Current |
+|-|-|-|
+| Isolated | 80% | 97% |
+| Corpus | 83% | 97% |
+| Isolated, `--age-spread 365` | 47% (current threshold and stretch) | 95% |
+| Corpus, `--age-spread 365` | 70% (current threshold and stretch) | 94% |
+
+`--age-spread` spreads the goldset `mentionTime` over one year. Without it the goldset is always the newest data, so the effect of the recency weight does not show.
 
 `ranking.importanceWeight` / `recencyWeight` / `semanticWeight` must sum to 1.0 and are enforced at startup, so they are not part of any profile.
 

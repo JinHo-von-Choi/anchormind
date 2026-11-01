@@ -69,6 +69,7 @@ const ALLOWED = {
   "memory/read/DigestLoader.js": 1, // 묶음 요약을 읽을 때 출처 파편이 모두 유효한지 같은 문장의 NOT EXISTS로 확인한다
   "memory/read/KeyNameEnricher.js": 1,
   "memory/read/ProvenanceLoader.js": 1, // 답 꾸러미, recall 응답, context core 후보의 출처 열(source, origin, trust_tier)을 대체 체인 조회와 같은 recall의 agent, 키, workspace 범위 절로 읽는다. 답 꾸러미 source 조회를 옮겨 와 AnswerPackLoader에는 직접 접근이 없다. FragmentReader 메서드로 옮기면 그 범위 절을 중복한다
+  "memory/read/RankSimilarity.js": 1, // 이미 범위를 통과한 후보 id의 순위용 코사인. 순위 보정 전용 질의를 한 모듈에 두어 FragmentReader의 크기를 늘리지 않는다
   "memory/read/LexicalSearch.js": 1, // 본문 어휘 채널 질의. content_tokens 전문 검색과 범위 조건을 한 모듈에 두어 FragmentReader의 크기를 늘리지 않는다
   "memory/read/RecallSuggestionEngine.js": 2,
   "memory/read/StitchSourceLoader.js": 1,

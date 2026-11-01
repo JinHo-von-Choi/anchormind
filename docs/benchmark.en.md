@@ -278,6 +278,7 @@ cp .env.example .env       # fill in POSTGRES_* and MEMENTO_ACCESS_KEY
 npm run migrate
 node bin/memento.js benchmark --repeat 3
 node bin/memento.js benchmark --key-scope corpus --repeat 3
+node bin/memento.js benchmark --age-spread 365 --key-scope corpus   # spread goldset mentionTime over a year to see the recency effect
 ```
 
 | Asset | Path |
@@ -390,7 +391,7 @@ The threshold is not the cause. Raising the semantic floor from 0.40 to 0.72 mov
 
 Isolated-mode figures are therefore not compared across the point where the model was replaced. The baselines are also kept separately as `scripts/baseline-recall.json` (isolated) and `scripts/baseline-recall-corpus.json` (corpus).
 
-The follow-up item is score normalization. Making similarity relative within the result set before applying the weights keeps discrimination independent of the model's value band.
+The bge-m3 entry in `semanticSearch.modelCalibration` addresses this weakness. It stretches similarity between 0.50 and 0.85 to 0..1 before ranking (`rankBand`), uses ranking weights 0.3/0.1/0.6 (`ranking`), and ranks candidates that arrive without a similarity by their cosine to the query vector. With the 0.48 threshold, R@1 goes from 80% to 97% isolated and from 83% to 97% in corpus mode (100-entry goldset, single run). The existing runs store the goldset right before measuring, so the goldset is always the newest data and the recency weight cannot be measured. With `--age-spread 365`, which spreads `mentionTime` over a year, the default weights reach 47% isolated and 70% corpus R@1, and the current weights reach 95% and 94%.
 
 ### Reproducibility
 
