@@ -118,7 +118,7 @@ When the server starts, the MemoryEvaluator worker runs in the background. It is
 
 The worker polls the Redis queue `memory_evaluation` every 5 seconds. It waits when the queue is empty. When a job is dequeued, it calls Gemini CLI (`geminiCLIJson`) to evaluate the fragment content's soundness. Evaluation results are used to update the utility_score and verified_at in the fragments table.
 
-New fragments are enqueued for evaluation when stored via remember. However, fact, procedure, error, and episode types are excluded. Only decision, preference, and relation types are evaluated. When the queue length exceeds `EVALUATOR_MAX_QUEUE` (default 100), the excess is dropped and the fragments are marked `quality_verified=false` so the next consolidate cycle picks them up again. Evaluation is decoupled from storage, so it does not affect remember call response time.
+New fragments are enqueued for evaluation when stored via remember. However, fact, procedure, error, and episode types are excluded. Only decision, preference, and relation types are evaluated. When the queue length exceeds `EVALUATOR_MAX_QUEUE` (default 100), the oldest excess jobs move to a deferred list (`memory_evaluation_deferred`, capped at 10000) that is drained when the queue is empty. No evaluation result (`quality_verified`) is written for them, so promotion is not affected. Once the deferred list is full, the remaining jobs stay unevaluated. Evaluation is decoupled from storage, so it does not affect remember call response time.
 
 In environments where Gemini CLI is not installed, the worker starts but skips evaluation tasks.
 

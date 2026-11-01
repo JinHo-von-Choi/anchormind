@@ -123,7 +123,7 @@
 | RATE_LIMIT_PER_KEY | 100 | API 키당 분당 요청 한도 (인증된 요청) |
 | CONSOLIDATE_INTERVAL_MS | 28800000 | 자동 유지보수(consolidate) 실행 간격 (ms). 기본 8시간(하루 3회) |
 | MEMENTO_AUTO_PROMOTE_ANCHORS | true | `false`이면 consolidate의 자동 앵커 승격 stage만 건너뜀. 기존 앵커와 다른 stage는 불변 |
-| EVALUATOR_MAX_QUEUE | 100 | MemoryEvaluator 큐 크기 상한 (초과 시 오래된 작업 드롭) |
+| EVALUATOR_MAX_QUEUE | 100 | MemoryEvaluator 큐 크기 상한. 넘으면 오래된 작업을 지연 목록으로 옮기고 큐가 빌 때 평가한다 |
 | OAUTH_TRUSTED_ORIGINS | (없음) | OAuth redirect_uri 신뢰 도메인 추가 목록 (쉼표 구분, origin 단위). 기본 신뢰 도메인(claude.ai, chatgpt.com, platform.openai.com, copilot.microsoft.com, gemini.google.com)에 추가로 허용할 origin만 지정 |
 | MCP_STRICT_ORIGIN | false | `true`로 설정 시 Origin 헤더 엄격 검증 활성화 (DNS rebinding 방어). 허용 목록(`OAUTH_TRUSTED_ORIGINS` + `ALLOWED_ORIGINS` + 기본 신뢰 도메인)에 없는 Origin에서 온 요청을 403으로 거부. Origin 헤더 없는 요청(CLI/curl)은 항상 허용. **opt-in** — 기본 `false`로 기존 동작 유지 |
 | MEMENTO_CORS_MODE | observe | `ALLOWED_ORIGINS` 미설정 시 교차 출처 응답 방식. `reflect`: 요청 Origin을 그대로 돌려준다. `observe`(기본): `reflect`와 응답이 같고 처음 본 Origin을 `[CORS] cross-origin request from` 로그로 프로세스당 256건까지 남긴다. `allowlist`: 기본 신뢰 도메인과 `OAUTH_TRUSTED_ORIGINS`에 있는 Origin에만 `Access-Control-Allow-Origin`을 붙인다. Origin이 있는 응답에는 `Vary: Origin`이 붙는다. `ALLOWED_ORIGINS`가 설정되면 모드와 무관하게 목록이 우선한다. 호출 시점에 읽으므로 재시작 없이 바뀐다 |

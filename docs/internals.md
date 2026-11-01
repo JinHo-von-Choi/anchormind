@@ -117,7 +117,7 @@ recall(query)
 
 워커는 5초 간격으로 Redis 큐 `memory_evaluation`을 폴링한다. 큐가 비어 있으면 대기한다. 큐에서 잡(job)을 꺼내면 Gemini CLI(`geminiCLIJson`)를 호출하여 파편 내용의 합리성을 평가한다. 평가 결과는 fragments 테이블의 utility_score와 verified_at을 갱신하는 데 사용된다.
 
-새 파편이 remember로 저장될 때 평가 큐에 투입된다. 단, fact, procedure, error, episode 유형은 제외된다. 평가 대상은 decision, preference, relation 유형이다. 큐 길이가 `EVALUATOR_MAX_QUEUE`(기본 100)를 넘으면 초과분을 버리고 해당 파편을 `quality_verified=false`로 표시해 다음 consolidate 주기가 다시 집어가게 한다. 평가는 저장과 비동기로 분리되어 있으므로 remember 호출의 응답 시간에 영향을 주지 않는다.
+새 파편이 remember로 저장될 때 평가 큐에 투입된다. 단, fact, procedure, error, episode 유형은 제외된다. 평가 대상은 decision, preference, relation 유형이다. 큐 길이가 `EVALUATOR_MAX_QUEUE`(기본 100)를 넘으면 오래된 초과분을 지연 목록(`memory_evaluation_deferred`, 상한 10000)으로 옮기고, 큐가 비면 지연 목록에서 꺼내 평가한다. 평가 결과(`quality_verified`)는 쓰지 않으므로 승격 판정에 영향을 주지 않는다. 지연 목록도 가득 차면 남는 작업은 평가 없이 둔다. 평가는 저장과 비동기로 분리되어 있으므로 remember 호출의 응답 시간에 영향을 주지 않는다.
 
 Gemini CLI가 설치되지 않은 환경에서는 워커가 구동되지만 평가 작업을 건너뛴다.
 
