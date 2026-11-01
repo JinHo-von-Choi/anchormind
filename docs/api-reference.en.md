@@ -1579,7 +1579,7 @@ curl -si -X POST https://anchormind.example.com/mcp \
 ## Recommended Usage Flow
 
 - Session start -- Call `context()` to load core memories. Preferences, error patterns, and procedures are restored. If unreflected sessions exist, a hint is displayed.
-- During work -- Save important decisions, errors, and procedures with `remember()`. Similar fragments are automatically linked at storage time. Use `recall()` to search past experience when needed. After resolving an error, clean up the error fragment with `forget()` and record the resolution procedure with `remember()`.
+- During work -- Save important decisions, errors, and procedures with `remember()`. Similar fragments are automatically linked at storage time. Use `recall()` to search past experience when needed. After resolving an error, first record the cause and the resolution with `remember(type="procedure")`, then clean up the error fragment with `forget()` (`force=true` if it is permanent). Deleting the error fragment also deletes its links.
 - Session end -- Use `reflect()` to persist session content as structured fragments. Even without manual invocation, AutoReflect runs automatically on session end/expiration.
 
 ---

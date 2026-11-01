@@ -176,7 +176,7 @@ recall 호출
 
 ### forget 의무 호출 상황
 
-- 에러를 완전히 해결한 직후: 해당 error 파편 삭제. importance 0.8로 저장한 error 파편은 permanent라 `force=true`를 함께 준다(아래 "permanent 계층과 forget").
+- 에러를 완전히 해결한 직후: 원인과 해결을 procedure로 remember한 뒤 해당 error 파편 삭제. importance 0.8로 저장한 error 파편은 permanent라 `force=true`를 함께 준다(아래 "permanent 계층과 forget").
 - 사용자가 "잊어", "지워" 언급 시: 즉시 삭제.
 
 ### 세션 종료 시
@@ -537,7 +537,7 @@ tool_feedback(
 → relevant=false: 링크 weight -0.15 (decay), 반복 시 quarantine 가능
 
 #### forget 시점
-- 에러를 완전히 해결한 직후 해당 error 파편 삭제(permanent이면 `force=true`)
+- 에러를 완전히 해결한 직후, 원인과 해결을 procedure로 남긴 뒤 해당 error 파편 삭제(permanent이면 `force=true`)
 - 사용자가 명시적으로 요청 시
 
 #### link 활용
@@ -1659,9 +1659,10 @@ recall 시 신뢰도 기반 판단:
   └─ remember(type="error", importance=0.8) 즉시 저장
 
 에러 해결 완료
-  └─ forget(id=해당 error 파편 ID, force=true) — importance 0.8로 저장한 error는 permanent
-  └─ remember(type="procedure", importance=0.8) — 해결책 저장
-  └─ link(fromId=에러파편, toId=해결파편, relationType="resolved_by") — 이미 forget 전이라면
+  └─ remember(type="procedure", importance=0.8) — 원인과 해결을 한 파편에 함께 적는다
+  └─ forget(id=해당 error 파편 ID, force=true) — importance 0.8로 저장한 error는 permanent. 지우면 그 파편의 링크도 지워지므로 resolved_by 링크는 걸지 않는다
+
+해결 기록이 남는 곳은 위 procedure 파편이다. reflect의 `errors_resolved`가 남기는 `[해결됨]` error 파편은 단기 기록이라, 만든 지 30일이 지나고 importance가 0.3 미만으로 내려가면 주기 정리가 지운다(`gc.errorResolvedPolicy`). 해결 표시(`[해결됨]` 접두사 또는 `resolution_status=resolved`)가 있는 error는 `active_errors` 힌트에서 세지 않는다.
 
 "설정/포트/경로/버전" 변경 시작 전
   └─ recall(keywords=[설정명]) — 이전 결정 확인
@@ -1690,7 +1691,7 @@ recall·context 응답과 쓰기 도구(remember/amend/forget) 성공 응답의 
 | contradiction_pending | 반환 파편에 미해결 contradicts 링크 | 상충 파편 확인 후 amend 정리 또는 잘못된 쪽 forget |
 | stale_results | 30일+ 경과 파편 | amend로 갱신 또는 forget |
 | consider_context | 파편 5개 이상 | includeContext=true 재검색 |
-| active_errors | 미해결 error 파편 존재 | 각 파편 확인 후 forget |
+| active_errors | 해결 표시가 없는 error 파편 존재 | 해결된 항목은 원인과 해결을 procedure로 남긴 뒤 forget(permanent이면 force=true) |
 | empty_context | 저장된 기억 없음 | 세션 후 remember/reflect |
 | feedback_sampled | 쓰기 도구 응답에 피드백 요청이 표집됨 | 직전 결과를 `tool_feedback(tool_name=대상 도구, trigger_type="sampled")`로 평가. relevant=false이면 `irrelevance_reason`도 함께 전달 |
 
@@ -1765,7 +1766,7 @@ reason code 6종 (`code` 필드값):
 |---------|----------|------------|
 | 사용자가 "기억해"라고 해야만 remember 호출 | 중요 정보가 세션 경계에서 유실됨 | 중요 발생 시점에 자동 저장 |
 | recall 없이 에러 수정 시작 | 과거 동일 에러 해결책을 중복 재발견하는 낭비 | recall(type="error") 선행 필수 |
-| 에러 해결 후 forget 생략 | 다음 세션에도 동일 error 파편이 context에 잡혀 혼란 | 해결 즉시 forget |
+| 에러 해결 후 forget 생략 | 다음 세션에도 동일 error 파편이 context에 잡혀 혼란 | 원인과 해결을 procedure로 남긴 뒤 forget |
 | context 호출 없이 작업 시작 | 이전 세션에서 축적된 전체 맥락 유실 | 세션 시작 즉시 context |
 | reflect 없이 세션 종료 | 이번 세션 작업이 전부 휘발됨 | 중요 작업 완료 후 reflect |
 | remember 후 link 생략 | 고립된 파편만 생성, 그래프 연결 없음 | 인과관계 있는 파편은 link로 연결 |

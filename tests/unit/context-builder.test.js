@@ -41,6 +41,17 @@ describe("buildContextHint", () => {
     assert.equal(hint.trigger, "forget");
   });
 
+  it("해결 표시(resolution_status=resolved, [해결됨] 접두사)가 있는 error는 active_errors로 세지 않는다", () => {
+    const hint = buildContextHint([
+      frag("1", "error", "nginx 오류 원인 확인", { resolution_status: "resolved" }),
+      frag("2", "error", "[해결됨] 원인: X → 해결: Y"),
+      frag("3", "fact", "ok")
+    ]);
+    assert.equal(hint, null);
+    const open = buildContextHint([frag("4", "error", "아직 원인 모름"), frag("5", "error", "[해결됨] 원인: X")]);
+    assert.match(open.suggestion, /미해결 에러 파편 1개/);
+  });
+
   it("파편이 비어 있으면 empty_context 힌트 반환", () => {
     const hint = buildContextHint([]);
     assert.equal(hint.signal, "empty_context");

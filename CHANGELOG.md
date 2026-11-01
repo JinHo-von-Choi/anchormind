@@ -4,6 +4,7 @@
 
 ### Changed
 
+- context의 `active_errors` 힌트가 해결 표시(`resolution_status=resolved` 또는 reflect가 붙이는 `[해결됨]` 접두사)가 있는 error 파편을 미해결로 세지 않는다. 이전에는 reflect가 남긴 해결 기록까지 forget하라고 안내했다. 해결된 에러는 원인과 해결을 procedure로 남긴 뒤 forget하도록 서버 안내문, forget 도구 설명, SKILL.md, API 문서의 순서를 바꿨다.
 - `forget` 도구 설명과 SKILL.md가 permanent 계층이 되는 조건(preference, 저장할 때 요청한 importance 0.8 이상, 주기 정리의 승격), topic 삭제가 한 번에 200건까지 지우고 permanent를 남긴다는 점, permanent인 error 파편을 지울 때 `force=true`가 필요하다는 점을 안내한다. SKILL.md의 dryRun 응답 형식 설명을 실제 응답에 맞췄다.
 
 ## [6.10.0] - 2026-11-01
