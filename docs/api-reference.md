@@ -952,7 +952,6 @@ violations 있는 경우 (soft gate — 저장됨):
 - `errorHasResolutionPath` — error 타입이 cause/fix 키워드 또는 resolution_status 미포함
 - `procedureHasStepMarkers` — procedure 타입에 번호/단계 마커 부재
 - `caseIdHasResolutionStatus` — case_id 보유 파편이 resolution_status 미설정
-- `assertionNotContradictory` - assertion이 verified이면서 rejected로 표시됨
 - `fragmentHasWorkspace` — workspace가 명시값·키 default 어느 쪽으로도 해석되지 않음 (severity: low)
 
 경고는 soft gate이므로 저장을 차단하지 않는다. `api_keys.symbolic_hard_gate=true` 설정 시 경고 발생 파편은 저장 거부된다. 이 경우 아래 에러 코드가 반환된다. `fragmentHasWorkspace`는 `MEMENTO_WORKSPACE_GATE=true`일 때만 hard gate 대상에 포함되며, 기본값(`false`)에서는 hard gate 활성 키에서도 저장을 차단하지 않는다.

@@ -159,6 +159,8 @@ outbox 게이지는 작업자를 돌리는 프로세스만 갱신한다. 작업�
 | `memento_background_task_duration_seconds` | `task`(graph_linker, temporal_linker) | 임베딩 완료 뒤 의미 유사도 링크, 저장 뒤 시간 링크 작업 하나의 시간 |
 | `memento_tier_transitions_total` | `transition`(preference_permanent, hub_permanent, importance_permanent, warm_cold, permanent_cold) | 계층 조정 규칙별로 바꾼 파편 수 |
 | `memento_link_cycle_blocked_total` | `source`(session) | reflect의 세션 링크 가운데 순환 검사로 만들지 않은 링크 수 |
+| `memento_delete_cleanup_failures_total` | `step`(copies, audit, links, linked_to, deindex) | 파편 삭제 뒤 정리 단계 실패 수. 남은 `linked_to` 참조와 요약 사본은 정리 주기의 `dead_reference_sweep`, `orphan_copy_sweep`가 지운다 |
+| `memento_dead_references_swept_total` | 없음 | 정리 주기가 `linked_to`에서 지운 없는 파편 참조 수 |
 
 ### 감사, 검토, 외부 전송, 훅 지표
 

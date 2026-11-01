@@ -1728,7 +1728,6 @@ Gemini CLI 외 `agy-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`를 포함한 18
 - `errorHasResolutionPath` — error 타입인데 해결 경로 부재 → cause/fix 키워드 또는 `resolutionStatus` 명시
 - `procedureHasStepMarkers` — procedure 타입인데 단계 부재 → "1.", "2.", "먼저", "다음" 등 마커 포함
 - `caseIdHasResolutionStatus` — case_id 보유 파편인데 resolution_status 미설정 → `resolutionStatus: "resolved"` 등 명시
-- `assertionNotContradictory` - assertion이 verified이면서 rejected로 표시됨 → `amend` 또는 `forget`으로 정리
 - `fragmentHasWorkspace` - workspace가 명시값과 키 기본값 어느 쪽으로도 해석되지 않음 → `workspace` 명시. 저장 차단 대상은 `MEMENTO_WORKSPACE_GATE=true`일 때뿐이다
 
 `sensitive.<규칙>` 항목은 알림이다. 서버가 비밀이나 개인 식별 번호를 이미 가려 저장했으므로 재호출하지 않는다. 이메일과 전화번호는 가리기만 하고 경고에 나타나지 않는다. 저장된 파편의 `validation_warnings` 열에도 규칙 이름만 남고 일치한 문자열은 남지 않는다. 규칙 이름: `api_key_legacy`, `password_field`, `anthropic_key`, `openai_project_key`, `api_key_generic`, `github_token`, `aws_access_key`, `slack_token`, `jwt`, `private_key`, `mmcp_key`, `bearer_token`, `rrn_kr`, `card_number`.

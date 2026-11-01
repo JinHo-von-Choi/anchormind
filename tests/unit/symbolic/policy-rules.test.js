@@ -4,13 +4,12 @@
  * 작성자: 최진호
  * 작성일: 2026-04-15
  *
- * 6개 predicate 독립 검증:
+ * 5개 predicate 독립 검증:
  * 1. decisionHasRationale
  * 2. errorHasResolutionPath
  * 3. procedureHasStepMarkers
  * 4. caseIdHasResolutionStatus
- * 5. assertionNotContradictory
- * 6. fragmentHasWorkspace
+ * 5. fragmentHasWorkspace
  */
 
 import { describe, it } from "node:test";
@@ -175,31 +174,6 @@ describe("PolicyRules.check — caseIdHasResolutionStatus", () => {
   });
 
 });
-
-describe("PolicyRules.check — assertionNotContradictory", () => {
-
-  const rules = new PolicyRules();
-
-  it("verified 단독 → 위반 없음", () => {
-    const v = rules.check({
-      type            : "fact",
-      content         : "test",
-      assertion_status: "verified"
-    });
-    assert.equal(v.filter(x => x.rule === "assertionNotContradictory").length, 0);
-  });
-
-  it("verified + rejected=true 동시 → 위반", () => {
-    const v = rules.check({
-      type              : "fact",
-      content           : "test",
-      assertion_status  : "verified",
-      assertion_rejected: true
-    });
-    const m = v.find(x => x.rule === "assertionNotContradictory");
-    assert.ok(m);
-    assert.equal(m.severity, "high");
-  });
 
 });
 

@@ -4,6 +4,7 @@
 
 ### Changed
 
+- 정리 주기에 `dead_reference_sweep`(linked_to의 없는 파편 id 제거)과 `orphan_copy_sweep`(원본 없는 사례 요약 사본 치환) 단계를 더했다. 삭제 뒤 정리 실패는 `memento_delete_cleanup_failures_total{step}`, 정리 주기가 지운 참조 수는 `memento_dead_references_swept_total`로 낸다.
 - `amend`가 중복 때문에 수정하지 않았을 때 `code: "duplicate"`를 싣는다. `merged: true`는 이전 응답과의 호환을 위해 같이 싣지만 병합은 하지 않는다. `supersedes`는 효과가 없으며 지정하면 `validation_warnings`에 `supersedesIgnored`를 싣는다.
 - `forget` 스키마에 `workspace`, `reflect` 스키마에 `caseId`를 넣었다. 처리기는 이미 이 값을 읽고 있었다.
 - recall `contextText`, tool_feedback의 링크 weight 갱신 설명이 `ENABLE_SPREADING_ACTIVATION`, `ENABLE_RECONSOLIDATION`이 켜진 서버에서만 동작한다고 적는다. 결과 0건 제안(`empty_result_no_context`)은 SpreadingActivation이 켜진 서버에서만 contextText를 권한다.
@@ -21,6 +22,11 @@
 - 관리 콘솔이 주소의 `?key=`로 받은 마스터 키를 읽은 즉시 주소에서 지운다.
 - `affect` 필터를 준 recall에서 L1 보충 조회로 가져온 파편이 모두 빠지던 문제를 고쳤다. 보충 조회(`getByIds`)와 단건 조회가 `affect`를 읽지 않았고, 보충 조회는 `key_id`도 읽지 않아 `includeKeyName`의 값이 비었다.
 - `remember`가 소유권 검사에서 떨어진 `linkedTo` id를 `linked_to`에 저장하지 않는다. 링크는 만들지 않으면서 배열에는 없는 파편이나 다른 키 파편의 id가 남았다.
+- 만료 삭제, reflect 정리, 정확 중복 병합, 단건·묶음 삭제, 에이전트 전체 삭제가 forget과 같은 정리를 거친다. 지운 파편을 가리키는 다른 파편의 `linked_to`, 사례 요약 사본, 묶음 요약, 서버 기록 모순 해소 파편, Redis 색인을 지운다. 이전에는 forget만 정리해, 정리 주기가 지운 파편의 id가 다른 파편 `linked_to`에 남고(허브 승격과 recall 응답의 `linked_to`가 그 id를 셌다) 지운 본문의 요약 사본이 남았다. 정확 중복 병합은 지우는 파편의 링크를 남는 파편으로 옮긴다.
+- 그룹 키의 topic `forget`이 다른 멤버의 파편을 Redis 색인에서만 지우고 행은 남기던 문제를 고쳤다. 삭제는 그 파편을 쓴 키만 하며(amend와 같은 규칙), topic 대상도 쓴 키의 파편만 고른다. id로 다른 키 파편을 지우려 하면 `No permission to delete this fragment`가 돌아온다.
+- 링크 자동 생성(GraphLinker), batch_remember의 색인·임베딩 대기열 적재, reflect의 milestone 연결이 실패를 기록하지 않고 삼키던 것을 경고 로그로 남긴다. GraphLinker는 그사이 지워진 파편(외래 키 위반)만 조용히 건너뛴다.
+- milestone 사례 이벤트는 원본 파편이 아직 있을 때만 그 행을 잠근 채 넣는다. 조회와 삽입 사이에 지워진 파편의 요약 사본이 남을 수 있었다.
+- 구조상 발동할 수 없던 정책 규칙 `assertionNotContradictory`(없는 열 `assertion_rejected`를 봤다)를 지웠다.
 
 ## [6.10.0] - 2026-11-01
 

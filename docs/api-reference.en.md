@@ -935,7 +935,6 @@ With violations (soft gate, stored):
 - `errorHasResolutionPath` — error type lacks cause/fix keywords or resolution_status
 - `procedureHasStepMarkers` — procedure type lacks numbered/step markers
 - `caseIdHasResolutionStatus` — fragment with a case_id has no resolution_status set
-- `assertionNotContradictory` - the assertion is marked both verified and rejected
 - `fragmentHasWorkspace` — workspace could not be resolved from an explicit value or the key default (severity: low)
 
 Warnings are soft gates and do not block storage. When `api_keys.symbolic_hard_gate=true`, fragments triggering warnings are rejected. `fragmentHasWorkspace` is only included in the hard-gate-eligible set when `MEMENTO_WORKSPACE_GATE=true`; by default (`false`) it never blocks storage even on hard-gate-enabled keys.

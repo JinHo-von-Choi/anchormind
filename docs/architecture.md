@@ -1604,33 +1604,35 @@ FragmentSearch는 검색 파이프라인 결과 생성에만 집중하고, 부�
 
 `lib/memory/consolidate/MemoryConsolidator.js`. stage 목록을 `stageDefs[]` 배열로 선언하며 `TOTAL_STAGES = stageDefs.length`로 자동 집계한다. 새 stage 추가 시 배열에 항목 1개만 push하면 progress 계산과 emit이 자동 반영된다.
 
-현재 23개 stage (순서):
+현재 25개 stage (순서):
 
 | 번호 | name | 설명 |
 |---|---|---|
 | 1 | ttl_transition | TTL 계층 전환 |
 | 2 | importance_decay | 중요도 감쇠 |
 | 3 | expired_delete | 만료 파편 삭제 |
-| 4 | gc_preview | GC 후보 프리뷰 |
-| 5 | split_long_fragments | 긴 파편 분할 |
-| 6 | merge_duplicates | 중복 병합 (GROUP BY key_id, workspace, content_hash) |
-| 7 | semantic_dedup | 시맨틱 중복 제거 |
-| 8 | compress_old_fragments | 오래된 파편 압축 |
-| 9 | embeddings_backfill | 임베딩 소급 처리 |
-| 10 | retro_link | 소급 링킹 |
-| 11 | utility_score_update | utility_score 갱신 |
-| 12 | requeue_high_ema | EMA 높은 저품질 파편 재평가 큐 등록 |
-| 13 | promote_anchors | anchor 승격 |
-| 14 | detect_contradictions | 모순 감지 |
-| 15 | detect_supersessions | supersede 관계 감지 |
-| 16 | build_digests | topic 시간선과 선호 목록 요약 생성(`MEMENTO_DIGEST`) |
-| 17 | process_pending_contradictions | 보류 모순 처리 |
-| 18 | feedback_report | 피드백 리포트 생성 |
-| 19 | feedback_calibration | 피드백 기반 보정 |
-| 20 | prune_keyword_indexes | 키워드 인덱스 정리 |
-| 21 | collect_stale_fragments | stale 파편 수집 |
-| 22 | purge_stale_reflections | 오래된 reflect 정리 |
-| 23 | gc_search_events | 검색 이벤트 GC |
+| 4 | dead_reference_sweep | `linked_to`에서 없는 파편 id 제거 |
+| 5 | orphan_copy_sweep | 지운 파편의 사례 요약 사본 치환 |
+| 6 | gc_preview | GC 후보 프리뷰 |
+| 7 | split_long_fragments | 긴 파편 분할 |
+| 8 | merge_duplicates | 중복 병합 (GROUP BY key_id, workspace, content_hash) |
+| 9 | semantic_dedup | 시맨틱 중복 제거 |
+| 10 | compress_old_fragments | 오래된 파편 압축 |
+| 11 | embeddings_backfill | 임베딩 소급 처리 |
+| 12 | retro_link | 소급 링킹 |
+| 13 | utility_score_update | utility_score 갱신 |
+| 14 | requeue_high_ema | EMA 높은 저품질 파편 재평가 큐 등록 |
+| 15 | promote_anchors | anchor 승격 |
+| 16 | detect_contradictions | 모순 감지 |
+| 17 | detect_supersessions | supersede 관계 감지 |
+| 18 | build_digests | topic 시간선과 선호 목록 요약 생성(`MEMENTO_DIGEST`) |
+| 19 | process_pending_contradictions | 보류 모순 처리 |
+| 20 | feedback_report | 피드백 리포트 생성 |
+| 21 | feedback_calibration | 피드백 기반 보정 |
+| 22 | prune_keyword_indexes | 키워드 인덱스 정리 |
+| 23 | collect_stale_fragments | stale 파편 수집 |
+| 24 | purge_stale_reflections | 오래된 reflect 정리 |
+| 25 | gc_search_events | 검색 이벤트 GC |
 
 ### batchPool / Primary pool 분리
 

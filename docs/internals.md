@@ -133,27 +133,29 @@ memory_consolidate 도구가 실행되거나 서버 내부 스케줄러(6시간 
 
 1. `ttl_transition`: 저장할 때의 계층은 `FragmentFactory`가 정한다. preference와 요청 importance 0.8 이상은 permanent다(유형별 importance 상한을 적용하기 전의 값). 이 스테이지는 preference 유형을 permanent로 고정하고 `linked_to`가 5개 이상인 허브 파편을 permanent로 승격한다. importance≥0.8 파편의 permanent 승격은 `quality_verified`가 TRUE이거나, NULL이면서 앵커 또는 importance≥0.9일 때만 하며 FALSE는 항상 차단한다(Circuit Breaker 패턴). warm 파편은 importance<0.3이거나 30일 이상 미접근이면 cold로 강등한다. permanent 파편도 is_anchor=false + importance<0.5 + 180일 미접근 조건 충족 시 cold로 강등(parole)
 2. `importance_decay`: PostgreSQL `POWER()` SQL. 공식: `importance × 2^(−Δt / halfLife)`. Δt는 `COALESCE(last_decay_at, accessed_at, created_at)` 기준. 유형별 반감기: procedure:30일, fact:60일, decision:90일, error:45일, preference:120일, relation:90일, 나머지:60일. 반감기에는 `1 + ema_activation × 0.5`(1~2로 제한)를 곱한다. `is_anchor=true`와 permanent 계층은 제외, 최솟값 0.05 보장. 기본은 대상 행을 id 오름차순 묶음(`MEMENTO_SCORE_UPDATE_BATCH`, 기본 200)으로 `FOR NO KEY UPDATE` 잠금 후 갱신하며 모든 묶음이 첫 조회의 기준 시각 하나를 쓴다. 묶음 크기 0이면 단일 UPDATE 문장이다. `MEMENTO_DECAY_MIN_DELTA`가 0보다 크면 감쇠량이 그 값보다 작은 행은 건너뛰고 마지막 감쇠 후 24시간이 지난 행은 항상 갱신한다
-3. `expired_delete`: 5가지 복합 GC 조건. (a) utility_score < 0.15 + 비활성 60일, (b) fact/decision 고립 파편, (c) 하위 호환 조건(importance < 0.1, 90일), (d) 해결된 error 파편, (e) NULL type 파편. gracePeriod 7일 이내 파편 보호. 분할 자식이 남은 원본은 보존. `is_anchor=true`·`permanent` 제외. 구현은 `FragmentGC.deleteExpired` 하나이며 보관 시간이 지난 작업 기억 행(`source=wm-fallback`, 생성 24시간 경과)을 먼저 지우고, 후보를 `utility_score` 오름차순 100건 청크로 반복해 지운다. 주기당 상한(`MEMENTO_GC_MAX_DELETE_PER_CYCLE`, 기본 4000), 시간 예산(`MEMENTO_GC_TIME_BUDGET_MS`, 기본 60000), 후보 소진 중 먼저 닿는 곳에서 멈춘다. 청크는 id 오름차순 잠금 문장과 잠근 행 삭제 문장을 한 트랜잭션(잠금 대기 3초)으로 실행한다. 정리 직후 남은 후보 수를 `memento_gc_backlog` 게이지에 기록한다. `MEMENTO_GC_THROUGHPUT=off`이면 주기당 50건을 한 문장으로 지운다
-4. `gc_preview` — type별 GC 후보 카운트 조회. results.gcCandidatesByType에 Map으로 기록
-5. `split_long_fragments` — 길이 초과 파편 분할
-6. `merge_duplicates` — content_hash 기준 중복 병합. 그룹 키는 `(key_id, workspace, content_hash)`. master 키(key_id IS NULL) 파편은 자동 병합 대상에서 제외. SQL GROUP BY 이후 scope mismatch 어설션 재검증으로 cross-tenant 병합 차단
-7. `semantic_dedup` — topic·workspace·key_id 묶음 벡터를 한 번 읽어 모든 쌍의 코사인을 메모리에서 계산하고, 파편마다 정확 top-3 중 cosine >= 0.92 쌍을 게이트를 거쳐 병합한다. 생존자는 (created_at, id)가 큰 쪽이다. 단계 시간이 `DEDUP_TIME_BUDGET_MS`를 넘으면 남은 topic은 다음 주기로 넘긴다
-8. `compress_old_fragments` — 장기 미접근·저중요도 파편 topic별 그룹핑 후 KNN 압축
-9. `embeddings_backfill` — embedding이 NULL인 파편 비동기 임베딩 생성
-10. `retro_link` — GraphLinker.retroLink()로 고립 파편(임베딩 있음, 링크 없음) 최대 20건 소급 자동 링크
-11. `utility_score_update`: `importance * (1 + ln(max(access_count,1))) / age_months^0.3` 공식 갱신. 저장값이 실제로 바뀌는 행만 id 오름차순 묶음으로 기록하며 `MEMENTO_UTILITY_MIN_DELTA`가 0보다 크면 저장값과의 차이가 그 값 이하인 행도 다시 쓰지 않는다
-12. `requeue_high_ema` — ema_activation>0.3 AND importance<0.4 파편을 MemoryEvaluator 재평가 큐에 등록
-13. `promote_anchors` — access_count >= 10 + importance >= 0.8 파편을 `is_anchor=true`로 승격. `MEMENTO_AUTO_PROMOTE_ANCHORS=false`이면 이 stage만 `disabled_by_config` 사유로 건너뛴다(기본 true).
-14. `detect_contradictions`: 3단계 하이브리드 모순 탐지. pgvector cosine > 0.85 후보 추출 → mDeBERTa NLI → Gemini CLI 에스컬레이션. 모순이면 `contradicts` 링크를 걸고 오래된 쪽의 importance를 절반으로 낮춘 뒤 `superseded_by`로 닫는다. 오래된 쪽이 앵커면 닫지 않는다. 해소 기록은 `contradiction_audit` topic에 남기며 이 topic은 모순·대체 탐지 대상에서 빠진다. 기록 함수는 `MemoryManager`가 `MemoryConsolidator`에 주입한 `rememberAudit` 콜백이며 `ContradictionDetector`는 facade를 import하지 않는다. 콜백이 없거나 기록에 실패해도 해소 결과는 유지된다. 결과는 `nliResolvedDirectly`, `nliSkippedAsNonContra`로 분리 반환
-15. `detect_supersessions`: 임베딩 유사도 0.7~0.85 구간 파편 쌍에 대해 Gemini CLI로 대체 관계 판단. GraphLinker는 유사도만으로 대체 관계를 만들지 않고 0.7 초과 후보를 `related`로만 잇는다. 파편 대체는 이 판정과 remember의 명시 `supersedes` 인자로만 일어난다
-16. `build_digests`: topic별 유효 파편이 5개 이상인 묶음의 시간선과 preference 파편 2개 이상인 묶음의 선호 목록을 규칙으로 만들어 `fragment_digest`(migration-066)에 둔다. LLM을 부르지 않는다. 출처 id와 content_hash로 만든 해시가 같으면 다시 쓰지 않고, 이번 주기에 다시 쓰지 않았으며 출처가 하나라도 유효하지 않은 요약은 지운다. 한 주기에 최근 활동 순 200개 묶음까지 다룬다. `MEMENTO_DIGEST=off`이면 건너뛴다
-17. `process_pending_contradictions` — Gemini CLI 가용 시 Redis pending 큐에서 최대 10건 꺼내 재판정
-18. `feedback_report` — tool_feedback/task_feedback 집계 리포트 생성. 무관 판정이 1건 이상이면 원인(not_stored/search_miss/scope_leak/topic_mismatch/other/미보고) 분포 표를 덧붙이고, 작업 레벨 통계에는 outcome 분포·outcome 보고 세션 수·human 판정 세션 수·미충족 요구사항 보유 세션 수를 포함한다. outcome 미보고가 있으면 과대 해석 경고를, 성공 비율 100%인데 미보고가 보고보다 많으면 자기보고 편향 주의 문구를 남긴다
-19. `feedback_calibration` — 최근 7일 tool_feedback을 세션별로 집계한 뒤 `feedbackFactor(allRelevant, allSufficient)` 순수함수(lib/memory/consolidate/feedbackFactor.js)로 importance 보정 계수를 결정한다. POSITIVE(allRelevant=true AND allSufficient=true): ×1.1, MIXED(allRelevant=true AND allSufficient=false): ×0.95, NEGATIVE(allRelevant=false): ×0.85. `is_anchor=true` 제외, 클리핑 [0.05, 1.0]
-20. `prune_keyword_indexes` — Redis 고아 키워드 인덱스 제거
-21. `collect_stale_fragments` — 검증 주기 초과 파편 목록 수집, results.stale_fragments에 기록
-22. `purge_stale_reflections`: topic='session_reflect' 파편 중 type별 최신 5개만 보존, 30일 경과 + importance < 0.55인 나머지 삭제(1회 최대 30건)
-23. `gc_search_events` — 오래된 검색 이벤트 GC
+3. `expired_delete`: 5가지 복합 GC 조건. (a) utility_score < 0.15 + 비활성 60일, (b) fact/decision 고립 파편, (c) 하위 호환 조건(importance < 0.1, 90일), (d) 해결된 error 파편, (e) NULL type 파편. gracePeriod 7일 이내 파편 보호. 분할 자식이 남은 원본은 보존. `is_anchor=true`·`permanent` 제외. 구현은 `FragmentGC.deleteExpired` 하나이며 보관 시간이 지난 작업 기억 행(`source=wm-fallback`, 생성 24시간 경과)을 먼저 지우고, 후보를 `utility_score` 오름차순 100건 청크로 반복해 지운다. 주기당 상한(`MEMENTO_GC_MAX_DELETE_PER_CYCLE`, 기본 4000), 시간 예산(`MEMENTO_GC_TIME_BUDGET_MS`, 기본 60000), 후보 소진 중 먼저 닿는 곳에서 멈춘다. 청크는 id 오름차순 잠금 문장과 잠근 행 삭제 문장을 한 트랜잭션(잠금 대기 3초)으로 실행한다. 정리 직후 남은 후보 수를 `memento_gc_backlog` 게이지에 기록한다. `MEMENTO_GC_THROUGHPUT=off`이면 주기당 50건을 한 문장으로 지운다 지운 행은 forget과 같은 정리(`cleanupDeletedRows`)를 거친다. 다른 파편 `linked_to`의 참조, 사례 요약 사본(`[삭제됨]`으로 치환), 출처로 가진 묶음 요약, 서버 기록 모순 해소 파편, Redis 색인을 지우고, 단계가 실패하면 `memento_delete_cleanup_failures_total{step}`을 올린다
+4. `dead_reference_sweep`: `linked_to`에 남은 없는 파편 id를 지운다. id 순으로 500건씩 최대 40묶음을 훑고 묶음마다 대상 행을 id 순으로 잠그며 남은 참조의 순서는 유지한다. 지운 참조 수를 `memento_dead_references_swept_total`에 더한다
+5. `orphan_copy_sweep`: 원본 파편이 없는데 남은 case_events 요약을 `[삭제됨]`으로 바꾼다(`purgeOrphanCaseSummaries`). 삭제 뒤 정리가 실패한 경우를 메운다
+6. `gc_preview` — type별 GC 후보 카운트 조회. results.gcCandidatesByType에 Map으로 기록
+7. `split_long_fragments` — 길이 초과 파편 분할
+8. `merge_duplicates` — content_hash 기준 중복 병합. 그룹 키는 `(key_id, workspace, content_hash)`. master 키(key_id IS NULL) 파편은 자동 병합 대상에서 제외. SQL GROUP BY 이후 scope mismatch 어설션 재검증으로 cross-tenant 병합 차단
+9. `semantic_dedup` — topic·workspace·key_id 묶음 벡터를 한 번 읽어 모든 쌍의 코사인을 메모리에서 계산하고, 파편마다 정확 top-3 중 cosine >= 0.92 쌍을 게이트를 거쳐 병합한다. 생존자는 (created_at, id)가 큰 쪽이다. 단계 시간이 `DEDUP_TIME_BUDGET_MS`를 넘으면 남은 topic은 다음 주기로 넘긴다
+10. `compress_old_fragments` — 장기 미접근·저중요도 파편 topic별 그룹핑 후 KNN 압축
+11. `embeddings_backfill` — embedding이 NULL인 파편 비동기 임베딩 생성
+12. `retro_link` — GraphLinker.retroLink()로 고립 파편(임베딩 있음, 링크 없음) 최대 20건 소급 자동 링크
+13. `utility_score_update`: `importance * (1 + ln(max(access_count,1))) / age_months^0.3` 공식 갱신. 저장값이 실제로 바뀌는 행만 id 오름차순 묶음으로 기록하며 `MEMENTO_UTILITY_MIN_DELTA`가 0보다 크면 저장값과의 차이가 그 값 이하인 행도 다시 쓰지 않는다
+14. `requeue_high_ema` — ema_activation>0.3 AND importance<0.4 파편을 MemoryEvaluator 재평가 큐에 등록
+15. `promote_anchors` — access_count >= 10 + importance >= 0.8 파편을 `is_anchor=true`로 승격. `MEMENTO_AUTO_PROMOTE_ANCHORS=false`이면 이 stage만 `disabled_by_config` 사유로 건너뛴다(기본 true).
+16. `detect_contradictions`: 3단계 하이브리드 모순 탐지. pgvector cosine > 0.85 후보 추출 → mDeBERTa NLI → Gemini CLI 에스컬레이션. 모순이면 `contradicts` 링크를 걸고 오래된 쪽의 importance를 절반으로 낮춘 뒤 `superseded_by`로 닫는다. 오래된 쪽이 앵커면 닫지 않는다. 해소 기록은 `contradiction_audit` topic에 남기며 이 topic은 모순·대체 탐지 대상에서 빠진다. 기록 함수는 `MemoryManager`가 `MemoryConsolidator`에 주입한 `rememberAudit` 콜백이며 `ContradictionDetector`는 facade를 import하지 않는다. 콜백이 없거나 기록에 실패해도 해소 결과는 유지된다. 결과는 `nliResolvedDirectly`, `nliSkippedAsNonContra`로 분리 반환
+17. `detect_supersessions`: 임베딩 유사도 0.7~0.85 구간 파편 쌍에 대해 Gemini CLI로 대체 관계 판단. GraphLinker는 유사도만으로 대체 관계를 만들지 않고 0.7 초과 후보를 `related`로만 잇는다. 파편 대체는 이 판정과 remember의 명시 `supersedes` 인자로만 일어난다
+18. `build_digests`: topic별 유효 파편이 5개 이상인 묶음의 시간선과 preference 파편 2개 이상인 묶음의 선호 목록을 규칙으로 만들어 `fragment_digest`(migration-066)에 둔다. LLM을 부르지 않는다. 출처 id와 content_hash로 만든 해시가 같으면 다시 쓰지 않고, 이번 주기에 다시 쓰지 않았으며 출처가 하나라도 유효하지 않은 요약은 지운다. 한 주기에 최근 활동 순 200개 묶음까지 다룬다. `MEMENTO_DIGEST=off`이면 건너뛴다
+19. `process_pending_contradictions` — Gemini CLI 가용 시 Redis pending 큐에서 최대 10건 꺼내 재판정
+20. `feedback_report` — tool_feedback/task_feedback 집계 리포트 생성. 무관 판정이 1건 이상이면 원인(not_stored/search_miss/scope_leak/topic_mismatch/other/미보고) 분포 표를 덧붙이고, 작업 레벨 통계에는 outcome 분포·outcome 보고 세션 수·human 판정 세션 수·미충족 요구사항 보유 세션 수를 포함한다. outcome 미보고가 있으면 과대 해석 경고를, 성공 비율 100%인데 미보고가 보고보다 많으면 자기보고 편향 주의 문구를 남긴다
+21. `feedback_calibration` — 최근 7일 tool_feedback을 세션별로 집계한 뒤 `feedbackFactor(allRelevant, allSufficient)` 순수함수(lib/memory/consolidate/feedbackFactor.js)로 importance 보정 계수를 결정한다. POSITIVE(allRelevant=true AND allSufficient=true): ×1.1, MIXED(allRelevant=true AND allSufficient=false): ×0.95, NEGATIVE(allRelevant=false): ×0.85. `is_anchor=true` 제외, 클리핑 [0.05, 1.0]
+22. `prune_keyword_indexes` — Redis 고아 키워드 인덱스 제거
+23. `collect_stale_fragments` — 검증 주기 초과 파편 목록 수집, results.stale_fragments에 기록
+24. `purge_stale_reflections`: topic='session_reflect' 파편 중 type별 최신 5개만 보존, 30일 경과 + importance < 0.55인 나머지 삭제(1회 최대 30건). 지운 행은 `expired_delete`와 같은 정리를 거친다
+25. `gc_search_events` — 오래된 검색 이벤트 GC
 
 ### compressOldFragments (KNN 배치 병렬화)
 
@@ -603,13 +605,12 @@ architecture.md의 Symbolic Memory Layer 섹션이 전체 설계를 다룬다. �
 
 ### PolicyRules
 
-`lib/symbolic/PolicyRules.js`. 6개 predicate를 순수 동기 함수로 구현한다:
+`lib/symbolic/PolicyRules.js`. 5개 predicate를 순수 동기 함수로 구현한다:
 1. `decisionHasRationale`: decision 타입에서 `linked_to >= 2` 또는 `RATIONALE_REGEX` 매칭
 2. `errorHasResolutionPath`: error 타입에서 `CAUSE_FIX_REGEX` 매칭 또는 `resolution_status` 존재
 3. `procedureHasStepMarkers`: procedure 타입에서 `STEP_MARKER_REGEX` 매칭
 4. `caseIdHasResolutionStatus`: case_id 보유 파편이 `resolution_status` 누락
-5. `assertionNotContradictory`: `assertion_status`가 동시에 verified이면서 rejected인 경우
-6. `fragmentHasWorkspace`: workspace가 명시값·키 default 어느 쪽으로도 해석되지 않는 경우
+5. `fragmentHasWorkspace`: workspace가 명시값·키 default 어느 쪽으로도 해석되지 않는 경우
 
 `check(fragment)` 반환: `[{ rule, severity, detail, ruleVersion }]`. DB 조회 없음, 순수 JS 동기.
 

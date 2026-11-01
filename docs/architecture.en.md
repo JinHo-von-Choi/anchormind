@@ -1594,33 +1594,35 @@ FragmentSearch focuses solely on pipeline result generation; side effects are ex
 
 `lib/memory/consolidate/MemoryConsolidator.js`. The stage list is declared as a `stageDefs[]` array with `TOTAL_STAGES = stageDefs.length` computed automatically. Adding a new stage requires only pushing one entry; progress calculation and emit are reflected automatically.
 
-Current 23 stages (in order):
+Current 25 stages (in order):
 
 | # | name | Description |
 |---|---|---|
 | 1 | ttl_transition | TTL tier transition |
 | 2 | importance_decay | Importance decay |
 | 3 | expired_delete | Expired fragment deletion |
-| 4 | gc_preview | GC candidate preview |
-| 5 | split_long_fragments | Long fragment splitting |
-| 6 | merge_duplicates | Duplicate merge (GROUP BY key_id, workspace, content_hash) |
-| 7 | semantic_dedup | Semantic deduplication |
-| 8 | compress_old_fragments | Old fragment compression |
-| 9 | embeddings_backfill | Embedding backfill |
-| 10 | retro_link | Retroactive linking |
-| 11 | utility_score_update | utility_score refresh |
-| 12 | requeue_high_ema | Re-queue high-EMA low-quality fragments |
-| 13 | promote_anchors | Anchor promotion |
-| 14 | detect_contradictions | Contradiction detection |
-| 15 | detect_supersessions | Supersede relation detection |
-| 16 | build_digests | Build topic timeline and preference profile digests (`MEMENTO_DIGEST`) |
-| 17 | process_pending_contradictions | Pending contradiction processing |
-| 18 | feedback_report | Feedback report generation |
-| 19 | feedback_calibration | Feedback-based calibration |
-| 20 | prune_keyword_indexes | Keyword index cleanup |
-| 21 | collect_stale_fragments | Stale fragment collection |
-| 22 | purge_stale_reflections | Stale reflect purge |
-| 23 | gc_search_events | Search event GC |
+| 4 | dead_reference_sweep | Remove ids of missing fragments from `linked_to` |
+| 5 | orphan_copy_sweep | Replace case summary copies of deleted fragments |
+| 6 | gc_preview | GC candidate preview |
+| 7 | split_long_fragments | Long fragment splitting |
+| 8 | merge_duplicates | Duplicate merge (GROUP BY key_id, workspace, content_hash) |
+| 9 | semantic_dedup | Semantic deduplication |
+| 10 | compress_old_fragments | Old fragment compression |
+| 11 | embeddings_backfill | Embedding backfill |
+| 12 | retro_link | Retroactive linking |
+| 13 | utility_score_update | utility_score refresh |
+| 14 | requeue_high_ema | Re-queue high-EMA low-quality fragments |
+| 15 | promote_anchors | Anchor promotion |
+| 16 | detect_contradictions | Contradiction detection |
+| 17 | detect_supersessions | Supersede relation detection |
+| 18 | build_digests | Build topic timeline and preference profile digests (`MEMENTO_DIGEST`) |
+| 19 | process_pending_contradictions | Pending contradiction processing |
+| 20 | feedback_report | Feedback report generation |
+| 21 | feedback_calibration | Feedback-based calibration |
+| 22 | prune_keyword_indexes | Keyword index cleanup |
+| 23 | collect_stale_fragments | Stale fragment collection |
+| 24 | purge_stale_reflections | Stale reflect purge |
+| 25 | gc_search_events | Search event GC |
 
 ## batchPool / Primary Pool Split
 
