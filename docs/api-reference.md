@@ -1112,7 +1112,7 @@ violations 있는 경우 (soft gate — 저장됨):
 | topic | string | - | 해당 주제의 파편 전체 삭제 |
 | force | boolean | - | permanent 파편도 강제 삭제 (기본 false) |
 | agentId | string | - | 에이전트 ID |
-| dryRun | boolean | - | true 설정 시 실제 삭제 없이 삭제 대상 파편 정보와 연결 링크 수를 반환. |
+| dryRun | boolean | - | true면 지우지 않고 미리 본다. 응답은 아래 dryRun 응답을 본다. |
 
 ### 응답 형태
 
@@ -1127,6 +1127,17 @@ violations 있는 경우 (soft gate — 저장됨):
 세 번째 경우는 페이로드의 `success`가 true인데 `error` 키가 함께 실리고, 그 키 때문에 MCP 봉투가 `isError: true`로 뒤집힌다. 이미 삭제된 대상을 재시도로 다시 지우면 이 응답을 받으므로, 클라이언트는 삭제 실패로 오인하지 않도록 `deleted` 값을 함께 봐야 한다.
 
 `purged`는 삭제 연쇄의 영수증이다(`MEMENTO_FORGET_CASCADE=on`, 기본). 파편 삭제와 같은 트랜잭션에서 `case_summaries`는 지운 파편을 출처로 한 `case_events` 요약을 `[삭제됨]`으로 바꾼 수, `audit_fragments`는 지운 파편을 가리키던 서버 기록 모순 해소 파편을 함께 지운 수(`deleted`에는 세지 않는다), `digests`는 지운 파편을 출처로 가진 묶음 요약(`fragment_digest`)을 지운 수다. 삭제 단계까지 간 응답(대상이 없는 topic 삭제 포함)에 실리고, id 대상이 없거나 권한이 없거나 permanent 보호로 끝난 응답에는 없다. `off`이면 `purged`가 없다.
+
+topic 삭제도 permanent 계층 파편은 force 없이 지우지 않고 `protected`로 센다.
+
+### dryRun 응답
+
+`dryRun=true`는 id와 topic 어느 쪽으로 지정해도 지우지 않는다.
+
+- id: `{success: true, dryRun: true, simulated: {fragment, linked_count, would_delete, reason}}`
+- topic: `{success: true, dryRun: true, simulated: {topic, would_delete, protected, linked_count, fragment_ids, purged}}`. 실제 삭제와 같은 규칙으로 대상을 고른다. `would_delete`는 지울 파편 수, `protected`는 소유하지 않거나 permanent 보호로 남는 파편 수, `linked_count`는 지울 파편들의 `linked_to` 수 합계다. `purged`는 삭제 연쇄로 함께 정리될 예상 건수이며 `MEMENTO_FORGET_CASCADE=off`이면 없다.
+
+dryRun 응답은 감사 이벤트를 남기지 않는다.
 
 ---
 

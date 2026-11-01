@@ -167,7 +167,8 @@ function makeRememberer(frag = { id: "f1", key_id: "k1", ttl_tier: "warm", keywo
     delete           : mock.fn(async () => true),
     deleteMany       : mock.fn(async ids => ids.length),
     searchByTopic    : mock.fn(async () => []),
-    deleteWithCascade: mock.fn(async ids => ({ deleted: ids.length, purged: { case_summaries: 2, audit_fragments: 1 } }))
+    deleteWithCascade: mock.fn(async ids => ({ deleted: ids.length, purged: { case_summaries: 2, audit_fragments: 1 } })),
+    previewCascade   : mock.fn(async () => ({ case_summaries: 2, audit_fragments: 1, digests: 1 }))
   };
   const index = { deindex: mock.fn(async () => {}) };
   return { rememberer: new MemoryRememberer({ store, index }), store, index };
@@ -220,6 +221,28 @@ describe("MemoryRememberer.forget 삭제 연쇄", () => {
     assert.deepEqual(res.purged, { case_summaries: 2, audit_fragments: 1, digests: 0 });
     assert.deepEqual(store.deleteWithCascade.mock.calls[0].arguments[0], ["f1", "f4"]);
     assert.equal(store.deleteMany.mock.calls.length, 0);
+  });
+
+  it("topic dryRun은 지우지 않고 실제 삭제와 같은 대상과 연쇄 예상 건수를 돌려준다", async () => {
+    delete process.env.MEMENTO_FORGET_CASCADE;
+    const { rememberer, store, index } = makeRememberer();
+    store.searchByTopic = mock.fn(async () => [
+      { id: "f1", key_id: "k1", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact", linked_to: ["x", "y"] },
+      { id: "f2", key_id: "k9", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact" },
+      { id: "f3", key_id: "k1", ttl_tier: "permanent", keywords: [], topic: "ops", type: "fact" }
+    ]);
+    const res = await rememberer.forget({ topic: "ops", dryRun: true, _keyId: "k1", agentId: "a1" });
+
+    assert.equal(res.dryRun, true);
+    assert.deepEqual(res.simulated, {
+      topic: "ops", would_delete: 1, protected: 2, linked_count: 2, fragment_ids: ["f1"],
+      purged: { case_summaries: 2, audit_fragments: 1, digests: 1 }
+    });
+    assert.equal(store.searchByTopic.mock.calls[0].arguments[1].withTtlTier, true);
+    assert.deepEqual(store.previewCascade.mock.calls[0].arguments, [["f1"], "a1"]);
+    assert.equal(store.deleteWithCascade.mock.calls.length, 0);
+    assert.equal(store.deleteMany.mock.calls.length, 0);
+    assert.equal(index.deindex.mock.calls.length, 0);
   });
 
   it("삭제하지 않은 조기 응답(권한 없음, permanent 보호)은 그대로다", async () => {

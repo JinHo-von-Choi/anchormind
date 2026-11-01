@@ -114,6 +114,17 @@ describe("amend, forget, link", () => {
     assert.deepEqual(recorded[1].target, { type: "fragment", id: "frag-5" });
   });
 
+  it("forget은 dryRun을 줬어도 처리기가 실제로 지웠으면 감사 이벤트를 남기고, 미리보기 응답이면 남기지 않는다", async () => {
+    manager.forget = async () => ({ deleted: 3, protected: 0 });
+    await tool_forget(args({ topic: "old-notes", dryRun: true }));
+    assert.deepEqual(actions(), ["memory.forget"]);
+    assert.equal(recorded[0].detail.deleted, 3);
+
+    manager.forget = async () => ({ dryRun: true, simulated: { would_delete: 3 } });
+    await tool_forget(args({ topic: "old-notes", dryRun: true }));
+    assert.equal(recorded.length, 1);
+  });
+
   it("link는 출발 파편을 대상으로, 도착 파편과 관계를 detail로 남긴다", async () => {
     manager.link = async () => ({ linkId: 9 });
     await tool_link(args({ fromId: "frag-6", toId: "frag-7", relationType: "resolved_by" }));

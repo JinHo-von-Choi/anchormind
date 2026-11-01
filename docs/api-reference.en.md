@@ -1095,7 +1095,7 @@ Delete fragment memory. Either id or topic is required. Permanent-tier fragments
 | topic | string | - | Delete all fragments with the given topic |
 | force | boolean | - | Force-delete permanent fragments (default false) |
 | agentId | string | - | Agent ID |
-| dryRun | boolean | - | When true, returns target fragment info and connected link count without actually deleting. |
+| dryRun | boolean | - | When true, previews without deleting. See the dryRun response below. |
 
 ### Response shapes
 
@@ -1110,6 +1110,17 @@ The call result falls into one of three cases.
 In the third case the payload reports `success: true` while carrying an `error` key, and that key flips the MCP envelope to `isError: true`. Retrying a delete that already succeeded lands here, so clients should read `deleted` rather than treating the envelope as authoritative.
 
 `purged` is the deletion cascade receipt (`MEMENTO_FORGET_CASCADE=on`, the default). In the same transaction as the fragment deletion, `case_summaries` counts the `case_events` summaries of the deleted fragments that were replaced with `[삭제됨]`, `audit_fragments` counts the server-written contradiction resolution records that pointed at a deleted fragment and were deleted with it (they are not counted in `deleted`), and `digests` counts the digests (`fragment_digest`) that had a deleted fragment as a source and were deleted. It appears on responses that reached the deletion step (a topic delete with no targets included), and not on responses that ended because the id target is missing, not permitted or permanent-protected. With `off` the response has no `purged`.
+
+A topic delete also keeps permanent-tier fragments unless `force` is set, and counts them in `protected`.
+
+### dryRun response
+
+`dryRun=true` deletes nothing, whether the target is given by id or by topic.
+
+- id: `{success: true, dryRun: true, simulated: {fragment, linked_count, would_delete, reason}}`
+- topic: `{success: true, dryRun: true, simulated: {topic, would_delete, protected, linked_count, fragment_ids, purged}}`. Targets are chosen by the same rules as the real delete. `would_delete` is the number of fragments that would be deleted, `protected` the number kept because they are not owned or are permanent-protected, and `linked_count` the total `linked_to` entries of the fragments to delete. `purged` is the expected cascade cleanup and is absent with `MEMENTO_FORGET_CASCADE=off`.
+
+dryRun responses record no audit event.
 
 ---
 
