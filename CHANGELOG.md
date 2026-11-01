@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [6.10.0] - 2026-11-01
+
 ### Added
 
 - 배경 작업 지표가 생겼다. `memento_link_writes_total{producer,relation}`, `memento_link_write_duration_seconds{producer}`(링크 쓰기), `memento_background_task_duration_seconds{task}`(GraphLinker, TemporalLinker), `memento_tier_transitions_total{transition}`(계층 조정 규칙별 변경 수), `memento_link_cycle_blocked_total{source}`(순환 검사로 만들지 않은 링크 수)다. 라벨과 의미는 [monitoring](docs/operations/monitoring.md#배경-작업-지표)에 있다.
