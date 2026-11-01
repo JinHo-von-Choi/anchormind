@@ -175,8 +175,6 @@ describe("PolicyRules.check — caseIdHasResolutionStatus", () => {
 
 });
 
-});
-
 describe("PolicyRules.check — 엣지 케이스", () => {
 
   const rules = new PolicyRules();

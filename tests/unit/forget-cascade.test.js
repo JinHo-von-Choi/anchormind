@@ -121,7 +121,7 @@ describe("잠금 문장과 연쇄 문장", () => {
 describe("FragmentWriter.deleteWithCascade", () => {
   beforeEach(() => { dbCalls = []; lockedRows = []; deindexed.length = 0; });
 
-  it("잠금 트랜잭션에서 지운 뒤 지운 id 전체의 링크와 linked_to를 정리하고 모순 해소 기록의 색인을 지운다", async () => {
+  it("잠금 트랜잭션에서 지운 뒤 지운 id 전체의 링크와 linked_to를 정리하고 지운 행 전체의 색인을 지운다", async () => {
     lockedRows = [
       { id: "a1", keywords: ["k"], topic: CONTRADICTION_AUDIT_TOPIC, type: "decision", key_id: null, scrubbed: 2 },
       { id: "t1", keywords: [],    topic: "ops",                     type: "fact",     key_id: "k1", scrubbed: 2 }
@@ -139,7 +139,8 @@ describe("FragmentWriter.deleteWithCascade", () => {
     assert.deepEqual(links.params, [["a1", "t1"]]);
     assert.deepEqual(unlink.opts.lock.params, [["a1", "t1"]]);
     assert.ok(dbCalls.indexOf(links) > 0 && dbCalls.indexOf(unlink) > 0, "정리는 삭제 뒤에 한다");
-    assert.deepEqual(deindexed.map(r => r.id), ["a1"]);
+    /** 색인은 삭제 계층이 실제로 지운 행(대상과 해소 기록) 모두를 지운다. forget 처리기는 색인을 직접 지우지 않는다. */
+    assert.deepEqual(deindexed.map(r => r.id), ["a1", "t1"]);
   });
 
   it("잠근 행이 없으면 정리 문장을 실행하지 않는다", async () => {
@@ -191,7 +192,8 @@ describe("MemoryRememberer.forget 삭제 연쇄", () => {
     assert.deepEqual(res.purged, { case_summaries: 2, audit_fragments: 1, digests: 0 });
     assert.equal(store.delete.mock.calls.length, 0);
     assert.deepEqual(store.deleteWithCascade.mock.calls[0].arguments, [["f1"], "a1", "k1"]);
-    assert.equal(index.deindex.mock.calls.length, 1);
+    /** 색인은 삭제 계층이 지운 행만 지운다. 지우기 전에 색인을 지우면 삭제가 실패한 행의 색인만 사라진다. */
+    assert.equal(index.deindex.mock.calls.length, 0);
   });
 
   it("off는 store.delete로 지우고 영수증을 싣지 않는다", async () => {

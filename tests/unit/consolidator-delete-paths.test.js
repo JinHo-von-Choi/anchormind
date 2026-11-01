@@ -18,7 +18,7 @@ const ROOT = path.resolve(import.meta.dirname, "../..");
 const read = (rel) => readFileSync(path.join(ROOT, rel), "utf8");
 
 describe("통합과 GC 삭제 경로", () => {
-  it("폐기와 삭제를 하는 모듈은 deindexRows 를 쓴다", () => {
+  it("폐기와 삭제를 하는 모듈은 deindexRows 또는 그것을 부르는 공통 삭제 정리(cleanupDeletedRows)를 쓴다", () => {
     for (const rel of [
       "lib/memory/consolidate/ConsolidatorGC.js",
       "lib/memory/consolidate/SemanticDedup.js",
@@ -26,7 +26,7 @@ describe("통합과 GC 삭제 경로", () => {
       "lib/memory/write/ConflictResolver.js",
       "lib/memory/link/GraphLinker.js"
     ]) {
-      assert.match(read(rel), /deindexRows/, rel);
+      assert.match(read(rel), /deindexRows|cleanupDeletedRows/, rel);
     }
   });
 

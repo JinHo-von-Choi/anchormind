@@ -26,7 +26,6 @@
 - 만료 삭제, reflect 정리, 정확 중복 병합, 단건·묶음 삭제, 에이전트 전체 삭제가 forget과 같은 정리를 거친다. 지운 파편을 가리키는 다른 파편의 `linked_to`, 사례 요약 사본, 묶음 요약, 서버 기록 모순 해소 파편, Redis 색인을 지운다. 이전에는 forget만 정리해, 정리 주기가 지운 파편의 id가 다른 파편 `linked_to`에 남고(허브 승격과 recall 응답의 `linked_to`가 그 id를 셌다) 지운 본문의 요약 사본이 남았다. 정확 중복 병합은 지우는 파편의 링크를 남는 파편으로 옮긴다.
 - 그룹 키의 topic `forget`이 다른 멤버의 파편을 Redis 색인에서만 지우고 행은 남기던 문제를 고쳤다. 삭제는 그 파편을 쓴 키만 하며(amend와 같은 규칙), topic 대상도 쓴 키의 파편만 고른다. id로 다른 키 파편을 지우려 하면 `No permission to delete this fragment`가 돌아온다.
 - 링크 자동 생성(GraphLinker), batch_remember의 색인·임베딩 대기열 적재, reflect의 milestone 연결이 실패를 기록하지 않고 삼키던 것을 경고 로그로 남긴다. GraphLinker는 그사이 지워진 파편(외래 키 위반)만 조용히 건너뛴다.
-- milestone 사례 이벤트는 원본 파편이 아직 있을 때만 그 행을 잠근 채 넣는다. 조회와 삽입 사이에 지워진 파편의 요약 사본이 남을 수 있었다.
 - 구조상 발동할 수 없던 정책 규칙 `assertionNotContradictory`(없는 열 `assertion_rejected`를 봤다)를 지웠다.
 - Redis 대기열 길이(`getQueueLength`)가 넣고 꺼내는 키(`queue:<이름>`)와 다른 키를 읽어 항상 0이던 문제를 고쳤다. 품질 평가 대기열의 넘침 처리가 한 번도 동작하지 않았다.
 - 품질 평가 대기열이 상한을 넘으면 오래된 작업을 지연 목록으로 옮겨 나중에 평가한다. 예전 처리는 버리면서 `quality_verified=false`로 표시해, 그 파편은 다시 평가되지 않고 importance 0.8 이상 승격이 영구히 막혔다.

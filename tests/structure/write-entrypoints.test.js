@@ -113,8 +113,6 @@ const ALLOWED_SEMANTIC_CALLS = Object.freeze({
     "승인 목록 CLI의 agent_id 공유 전환이다. 의미 열을 넘기지 않고 이력 보관 트랜잭션이 필요해 update를 쓴다",
   "lib/memory/processors/MemoryLinker.js::link":
     "resolved_by 링크 대상 error 파편의 importance만 낮춘다. 의미 열을 넘기지 않는다",
-  "lib/memory/signals/MemoryEvaluator.js::_dropOverflow":
-    "평가 대기열에서 밀려난 파편의 quality_verified만 기록한다",
   "lib/memory/signals/MemoryEvaluator.js::evaluate":
     "평가 결과의 importance와 품질 열만 기록하고 검증 시각을 갱신한다",
   "lib/memory/write/RememberPostProcessor.js::_extractSymbolicClaims":
