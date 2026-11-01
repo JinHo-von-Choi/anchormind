@@ -62,8 +62,15 @@ function init() {
   setAppEnterHandler(openApp);
   /** 마스터 키는 메모리에만 둔다. sessionStorage에 남아 있는 키는 지운다. */
   sessionStorage.removeItem("adminKey");
-  const urlKey = new URLSearchParams(window.location.search).get("key");
+  const params = new URLSearchParams(window.location.search);
+  const urlKey = params.get("key");
   if (urlKey && !state.masterKey) state.masterKey = urlKey;
+  /** 주소에 남은 키는 브라우저 기록과 화면 공유로 새므로 읽은 즉시 지운다. */
+  if (params.has("key")) {
+    params.delete("key");
+    const query = params.toString();
+    history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+  }
 
   if (state.masterKey) {
     api("/auth", { method: "POST", body: { key: state.masterKey } })

@@ -4,8 +4,21 @@
 
 ### Changed
 
+- `amend`가 중복 때문에 수정하지 않았을 때 `code: "duplicate"`를 싣는다. `merged: true`는 이전 응답과의 호환을 위해 같이 싣지만 병합은 하지 않는다. `supersedes`는 효과가 없으며 지정하면 `validation_warnings`에 `supersedesIgnored`를 싣는다.
+- `forget` 스키마에 `workspace`, `reflect` 스키마에 `caseId`를 넣었다. 처리기는 이미 이 값을 읽고 있었다.
+- recall `contextText`, tool_feedback의 링크 weight 갱신 설명이 `ENABLE_SPREADING_ACTIVATION`, `ENABLE_RECONSOLIDATION`이 켜진 서버에서만 동작한다고 적는다. 결과 0건 제안(`empty_result_no_context`)은 SpreadingActivation이 켜진 서버에서만 contextText를 권한다.
 - context의 `active_errors` 힌트가 해결 표시(`resolution_status=resolved` 또는 reflect가 붙이는 `[해결됨]` 접두사)가 있는 error 파편을 미해결로 세지 않는다. 이전에는 reflect가 남긴 해결 기록까지 forget하라고 안내했다. 해결된 에러는 원인과 해결을 procedure로 남긴 뒤 forget하도록 서버 안내문, forget 도구 설명, SKILL.md, API 문서의 순서를 바꿨다.
 - `forget` 도구 설명과 SKILL.md가 permanent 계층이 되는 조건(preference, 저장할 때 요청한 importance 0.8 이상, 주기 정리의 승격), topic 삭제가 한 번에 200건까지 지우고 permanent를 남긴다는 점, permanent인 error 파편을 지울 때 `force=true`가 필요하다는 점을 안내한다. SKILL.md의 dryRun 응답 형식 설명을 실제 응답에 맞췄다.
+
+### Fixed
+
+- `remember`, `amend`, `link`, `forget`이 boolean이 아닌 `dryRun`(예: `"true"`)을 거부한다. 인자 검증이 `warn`·`off`인 서버에서 이런 값이 들어오면 실제로 쓰면서 감사 이벤트를 남기지 않았다.
+- `amend` 미리보기(`dryRun=true`)가 멱등 기록을 남기지 않는다. 같은 `idempotencyKey`로 미리본 뒤 실제 수정을 부르면 수정 대신 미리보기 응답이 돌아왔다.
+- `reflect`가 `dryRun`을 받으면 저장하지 않고 거부한다.
+- 만료된 멱등 기록과 같은 키로 새 응답을 기록하면 덮어쓴다. 이전에는 만료 행이 남아 있으면 새 응답이 저장되지 않아 같은 키의 재호출이 매번 다시 실행됐다. 만료 행은 5분마다 지운다.
+- 이미 백필로 임베딩이 채워졌거나 지워진 파편의 임베딩 dead 항목을 5분마다 지운다. 남은 수는 `memento_embedding_dead_letters`로 낸다.
+- id로 `forget`하면 대체된(`valid_to`가 있는) 파편도 지운다. 이전에는 오류 없이 `deleted: 0`을 돌려줬다.
+- 관리 콘솔이 주소의 `?key=`로 받은 마스터 키를 읽은 즉시 주소에서 지운다.
 
 ## [6.10.0] - 2026-11-01
 

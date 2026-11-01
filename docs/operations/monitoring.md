@@ -123,6 +123,7 @@ outbox 게이지는 작업자를 돌리는 프로세스만 갱신한다. 작업�
 | 지표 | 라벨 | 의미 |
 |-|-|-|
 | `memento_gc_backlog` | 없음 | 정리 단계 `expired_delete`가 끝난 직후 센 남은 만료 후보 수(상한 100000에서 세기를 멈추는 근사값). 정리 주기(`CONSOLIDATE_INTERVAL_MS`, 기본 6시간)마다 갱신하며 첫 정리 전에는 0이다. 값이 주기마다 줄지 않고 쌓이면 `MEMENTO_GC_MAX_DELETE_PER_CYCLE`과 `MEMENTO_GC_TIME_BUDGET_MS`를 본다 |
+| `memento_embedding_dead_letters` | 없음 | 임베딩 재시도 한도를 넘긴 dead 항목 가운데, 파편 임베딩이 아직 비어 있어 남은 수. 임베딩 백필 주기(5분)에 dead 목록을 파편 상태와 맞춘 직후 센다. 파편이 지워졌거나 백필로 임베딩이 채워진 항목은 지운다. 값이 줄지 않으면 임베딩 제공자 오류를 본다 |
 
 ### 본문 어휘 채널 지표
 

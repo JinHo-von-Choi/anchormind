@@ -137,7 +137,7 @@ recall 호출
   - search_event_id=보관한_id
 ```
 
-이 누적이 fragment_links의 weight를 갱신하여 다음 recall이 더 정확해진다. Reconsolidation 사이클을 끊는 것은 기억 시스템을 정체시키는 행위다.
+`ENABLE_RECONSOLIDATION=true`인 서버에서는 이 누적이 fragment_links의 weight를 갱신해 다음 recall이 더 정확해진다. 꺼진 서버에서도 피드백은 검색 품질 집계(`tool_feedback`)에 남는다.
 
 ### Recall 회피 안티패턴
 
@@ -341,7 +341,7 @@ tools/list 응답이 mode의 excluded_tools 필터링 후 반환된다. get_skil
 
 4개 감지 규칙:
 - `repeat_query`: 최근 5분 내 동일 keyId에서 같은 keywords로 3회 이상 recall → `reconstruct_history` 또는 `graph_explore` 권유
-- `empty_result_no_context`: 결과 0건 + contextText 미전달 → SpreadingActivation 활용 권유 (`contextText` 추가)
+- `empty_result_no_context`: 결과 0건 + contextText 미전달 + `ENABLE_SPREADING_ACTIVATION=true` → `contextText` 추가 권유(꺼진 서버에서는 나오지 않는다)
 - `large_limit_no_budget`: limit ≥ 50 + tokenBudget 미지정 → `tokenBudget` 명시 권고
 - `no_type_filter_noisy`: type 미지정 + 소유 파편 100개 이상 → type 필터 권고
 
@@ -497,7 +497,7 @@ context 로드 후 행동:
 - error 파편을 확인하여 현재 작업과 관련된 과거 에러/해결책을 인지
 - procedure 파편을 확인하여 프로젝트별 빌드/배포/테스트 절차를 파악
 - 사용자가 언급하는 주제에 대해 recall로 추가 컨텍스트 검색
-- 오늘 할 작업 맥락을 contextText로 전달하면 관련 파편을 선제적으로 활성화 가능:
+- `ENABLE_SPREADING_ACTIVATION=true`인 서버에서는 오늘 할 작업 맥락을 contextText로 전달하면 관련 파편이 이후 recall에서 앞으로 온다:
   `recall(topic="프로젝트명", contextText="오늘 작업 주제 한 줄 요약")`
 
 ### 2. 작업 중 (능동적 기억 관리)
@@ -533,8 +533,8 @@ tool_feedback(
   search_event_id=_searchEventId
 )
 ```
-→ relevant=true: 링크 weight +0.2 (reinforce)
-→ relevant=false: 링크 weight -0.15 (decay), 반복 시 quarantine 가능
+→ (ENABLE_RECONSOLIDATION=true일 때) relevant=true: 링크 weight +0.2 (reinforce)
+→ (ENABLE_RECONSOLIDATION=true일 때) relevant=false: 링크 weight -0.15 (decay), 반복 시 quarantine 가능
 
 #### forget 시점
 - 에러를 완전히 해결한 직후, 원인과 해결을 procedure로 남긴 뒤 해당 error 파편 삭제(permanent이면 `force=true`)
@@ -645,8 +645,8 @@ remember(content="선호하는 코딩 스타일: ...", topic="preference", type=
   - includeContext=true   --> episode의 context_summary + 인접 파편 포함
 
 맥락 사전 활성화 (ENABLE_SPREADING_ACTIVATION=true 환경에서 권장):
-  - contextText="현재 대화 요약" 추가 → 검색 전 관련 파편 activation_score 선제 부스트
-  - 효과: 키워드에 직접 등장하지 않지만 맥락상 관련된 파편이 상위 랭크됨
+  - contextText="현재 대화 요약" 추가 → 관련 파편의 activation_score를 높인다. 활성화는 응답을 기다리지 않고 따로 돌므로 이번 결과가 아니라 이후 recall 순위에 반영된다
+  - 효과: 키워드에 직접 등장하지 않지만 맥락상 관련된 파편이 이후 recall에서 상위로 온다
   - 예: recall(keywords=["nginx"], contextText="SSL 인증서 갱신 중 오류 발생")
 ```
 
@@ -980,6 +980,7 @@ async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기�
 |------|------|------|------|
 | id | string | - | 삭제할 파편 ID |
 | topic | string | - | 이 주제의 파편을 한 번에 200건까지 삭제. force가 없으면 permanent는 남긴다 |
+| workspace | string | - | topic 삭제의 workspace 범위. 미지정 시 키의 default_workspace, 없으면 전역 파편만 |
 | force | boolean | - | permanent 계층 파편도 지운다. 기본 false. |
 | agentId | string | - | 에이전트 ID |
 | dryRun | boolean | - | true면 지우지 않고 미리 본다. id면 그 파편 정보와 연결 링크 수, topic이면 지울 파편 수와 id, 보호되는 파편 수, 연결 링크 수, 삭제 연쇄 예상 건수 |
@@ -1346,8 +1347,8 @@ TTL 계층은 상한을 적용하기 전에 요청한 importance로 정한다. �
 
 ### 1. 확산 활성화 — 맥락 연관 파편 선제 부스트
 
-`contextText`를 recall에 전달하면 검색 전 ACT-R 모델로 관련 파편의 activation_score를 미리 높인다.
-키워드 매칭에 등장하지 않아도 맥락상 관련된 파편이 상위로 올라온다.
+`ENABLE_SPREADING_ACTIVATION=true`인 서버에서 `contextText`를 recall에 전달하면 ACT-R 모델로 관련 파편의 activation_score를 높인다.
+활성화는 응답을 기다리지 않고 따로 돌므로, 키워드에 등장하지 않아도 맥락상 관련된 파편이 이후 recall에서 상위로 온다. 꺼진 서버에서는 효과가 없다.
 
 ```
 # 일반 recall (키워드만)
@@ -1371,7 +1372,7 @@ contextText 작성 팁:
 (ENABLE_RECONSOLIDATION=true 환경 필요)
 
 ```
-# 검색 결과가 유용했을 때 → fragment_links reinforce (+0.2)
+# 검색 결과가 유용했을 때 → fragment_links reinforce (+0.2, ENABLE_RECONSOLIDATION=true일 때)
 tool_feedback(
   tool_name="recall",
   relevant=true,
@@ -1380,7 +1381,7 @@ tool_feedback(
   search_event_id=12345
 )
 
-# 검색 결과가 무관했을 때 → fragment_links decay (-0.15)
+# 검색 결과가 무관했을 때 → fragment_links decay (-0.15, ENABLE_RECONSOLIDATION=true일 때)
 tool_feedback(
   tool_name="recall",
   relevant=false,

@@ -101,7 +101,7 @@ AnchorMind는 사실 기억(fact cache)에 맞다. 전후관계가 중요할 때
 
 `remember` / `amend` / `forget`의 성공 응답에는 일정 확률로 `_meta.hints`에 `feedback_sampled` 신호가 실린다. 힌트의 `args`를 그대로 `tool_feedback`에 넘겨 결과를 평가하면 된다(`MEMENTO_FEEDBACK_SAMPLING=false`로 비활성화).
 
-`remember` / `link` / `forget` / `amend`는 `dryRun: true` 파라미터를 받는다. 이 값을 쓰면 부작용 없이 예상 결과만 돌려준다. API 키 세션의 `POST /mcp` 응답에는 `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Resource: fragments` 헤더가 붙는다(파편 할당량 기준). master key이거나 할당량이 null이면 이 헤더는 생략된다. `recall`은 `fields` 배열로 반환 필드를 19개 화이트리스트 안에서 제한할 수 있다. `remember` / `batchRemember`는 `idempotencyKey` 파라미터로 같은 key_id 범위 안의 중복 저장을 막는다(최대 128자). `remember` / `batchRemember` 항목 / `amend`의 `content`가 4000자를 넘으면 JSON-RPC -32602 에러로 거부된다. 앞서 말한 파편 유형별 저장 절삭(1000자/300자)과는 별개로, 그보다 먼저 적용되는 수신 게이트다. `batchRemember`에서는 초과 항목만 실패하고 나머지 배치는 그대로 진행된다.
+`remember` / `link` / `forget` / `amend`는 `dryRun: true` 파라미터를 받는다. 이 값을 쓰면 부작용 없이 예상 결과만 돌려준다. API 키 세션의 `POST /mcp` 응답에는 `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Resource: fragments` 헤더가 붙는다(파편 할당량 기준). master key이거나 할당량이 null이면 이 헤더는 생략된다. `recall`은 `fields` 배열로 응답 파편의 키를 고를 수 있다. 기본 응답에 있는 키와 `keywords`, `valid_to`, `affect`, `ema_activation`를 고를 수 있고, 연결 파편 표지와 경고 필드는 `fields`와 관계없이 붙는다. 지원 키는 recall 스키마의 `fields` 설명에 있다. `remember` / `batchRemember`는 `idempotencyKey` 파라미터로 같은 key_id 범위 안의 중복 저장을 막는다(최대 128자). `remember` / `batchRemember` 항목 / `amend`의 `content`가 4000자를 넘으면 JSON-RPC -32602 에러로 거부된다. 앞서 말한 파편 유형별 저장 절삭(1000자/300자)과는 별개로, 그보다 먼저 적용되는 수신 게이트다. `batchRemember`에서는 초과 항목만 실패하고 나머지 배치는 그대로 진행된다.
 
 ## Symbolic Verification Layer
 

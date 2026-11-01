@@ -1095,21 +1095,24 @@ The permanent tier holds preference fragments, fragments stored with a requested
 |------|------|----------|-------------|
 | id | string | - | Fragment ID to delete |
 | topic | string | - | Delete up to 200 fragments of the given topic per call. Without force, permanent fragments are kept |
+| workspace | string | - | Workspace scope of a topic delete. Defaults to the key's default_workspace, or global (NULL) fragments only |
 | force | boolean | - | Also delete permanent-tier fragments (default false) |
 | agentId | string | - | Agent ID |
 | dryRun | boolean | - | When true, previews without deleting. See the dryRun response below. |
 
 ### Response shapes
 
-The call result falls into one of three cases.
+The call result falls into these cases.
 
 | Situation | Response | isError |
 |-|-|-|
 | Deleted | `{success: true, deleted: 1, protected: 0, purged: {case_summaries: 2, audit_fragments: 1, digests: 0}}` | false |
 | Permanent tier without `force` | `{success: true, deleted: 0, protected: 1, reason: "..."}` | false |
-| Target missing or not permitted | `{success: true, deleted: 0, error: "Fragment not found or no permission"}` | true |
+| Target already gone (including retries) | `{success: true, deleted: 0, protected: 0}` | false |
+| Fragment of another key | `{success: true, deleted: 0, protected: 0, error: "No permission to delete this fragment"}` | true |
+| Existence could not be checked | `{success: true, deleted: 0, protected: 0, error: "Fragment not found or no permission"}` | true |
 
-In the third case the payload reports `success: true` while carrying an `error` key, and that key flips the MCP envelope to `isError: true`. Retrying a delete that already succeeded lands here, so clients should read `deleted` rather than treating the envelope as authoritative.
+Retrying a delete that already succeeded returns `deleted: 0` with no error. A response carrying `error` flips the MCP envelope to `isError: true` even though the payload says `success: true`. Superseded fragments (with `valid_to` set) can also be deleted by id.
 
 `purged` is the deletion cascade receipt (`MEMENTO_FORGET_CASCADE=on`, the default). In the same transaction as the fragment deletion, `case_summaries` counts the `case_events` summaries of the deleted fragments that were replaced with `[삭제됨]`, `audit_fragments` counts the server-written contradiction resolution records that pointed at a deleted fragment and were deleted with it (they are not counted in `deleted`), and `digests` counts the digests (`fragment_digest`) that had a deleted fragment as a source and were deleted. It appears on responses that reached the deletion step (a topic delete with no targets included), and not on responses that ended because the id target is missing, not permitted or permanent-protected. With `off` the response has no `purged`.
 

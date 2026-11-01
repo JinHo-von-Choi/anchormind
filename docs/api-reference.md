@@ -1112,21 +1112,24 @@ permanent 계층은 preference 파편, 저장할 때 요청한 importance가 0.8
 |------|------|------|------|
 | id | string | - | 삭제할 파편 ID |
 | topic | string | - | 이 주제의 파편을 한 번에 200건까지 삭제. force가 없으면 permanent 파편은 남긴다 |
+| workspace | string | - | topic 삭제의 workspace 범위. 미지정 시 키의 default_workspace, 없으면 전역(NULL) 파편만 대상 |
 | force | boolean | - | permanent 파편도 강제 삭제 (기본 false) |
 | agentId | string | - | 에이전트 ID |
 | dryRun | boolean | - | true면 지우지 않고 미리 본다. 응답은 아래 dryRun 응답을 본다. |
 
 ### 응답 형태
 
-호출 결과는 세 가지로 갈린다.
+호출 결과는 다음과 같이 갈린다.
 
 | 상황 | 응답 | isError |
 |-|-|-|
 | 삭제 성공 | `{success: true, deleted: 1, protected: 0, purged: {case_summaries: 2, audit_fragments: 1, digests: 0}}` | false |
 | permanent 계층 파편에 force 미지정 | `{success: true, deleted: 0, protected: 1, reason: "permanent 파편은 force 옵션 필요"}` | false |
-| 대상이 없거나 접근 권한 없음 | `{success: true, deleted: 0, error: "Fragment not found or no permission"}` | true |
+| 대상이 이미 없음(재시도 포함) | `{success: true, deleted: 0, protected: 0}` | false |
+| 다른 키의 파편 | `{success: true, deleted: 0, protected: 0, error: "No permission to delete this fragment"}` | true |
+| 존재 여부를 확인하지 못함 | `{success: true, deleted: 0, protected: 0, error: "Fragment not found or no permission"}` | true |
 
-세 번째 경우는 페이로드의 `success`가 true인데 `error` 키가 함께 실리고, 그 키 때문에 MCP 봉투가 `isError: true`로 뒤집힌다. 이미 삭제된 대상을 재시도로 다시 지우면 이 응답을 받으므로, 클라이언트는 삭제 실패로 오인하지 않도록 `deleted` 값을 함께 봐야 한다.
+이미 지운 대상을 재시도로 다시 지우면 오류 없이 `deleted: 0`이 돌아온다. `error`가 실린 응답은 페이로드의 `success`가 true여도 MCP 봉투가 `isError: true`로 뒤집힌다. 대체된(`valid_to`가 있는) 파편도 id로 지울 수 있다.
 
 `purged`는 삭제 연쇄의 영수증이다(`MEMENTO_FORGET_CASCADE=on`, 기본). 파편 삭제와 같은 트랜잭션에서 `case_summaries`는 지운 파편을 출처로 한 `case_events` 요약을 `[삭제됨]`으로 바꾼 수, `audit_fragments`는 지운 파편을 가리키던 서버 기록 모순 해소 파편을 함께 지운 수(`deleted`에는 세지 않는다), `digests`는 지운 파편을 출처로 가진 묶음 요약(`fragment_digest`)을 지운 수다. 삭제 단계까지 간 응답(대상이 없는 topic 삭제 포함)에 실리고, id 대상이 없거나 권한이 없거나 permanent 보호로 끝난 응답에는 없다. `off`이면 `purged`가 없다.
 

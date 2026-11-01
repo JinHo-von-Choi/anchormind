@@ -115,7 +115,7 @@ describe("RecallSuggestionEngine", { concurrency: false }, () => {
 
   /** ── 규칙 2: empty_result_no_context ── */
   describe("empty_result_no_context", () => {
-    it("fragments 0개 + contextText 없음 → empty_result_no_context 반환", async () => {
+    it("fragments 0개 + contextText 없음 + SpreadingActivation 켜짐 → empty_result_no_context 반환", async () => {
       /** search_events 빈 배열 → repeat_query 미매칭
        *  → fragments=0 && contextText 없음 → 매칭 */
       const engine = createEngine([[]]); // 빈 events 배열
@@ -123,12 +123,32 @@ describe("RecallSuggestionEngine", { concurrency: false }, () => {
       const params = { _keyId: "key-1", keywords: ["nginx"] };
       const result = { fragments: [] };
 
-      const suggestion = await engine.suggest(params, result);
+      const saved = process.env.ENABLE_SPREADING_ACTIVATION;
+      process.env.ENABLE_SPREADING_ACTIVATION = "true";
+      let suggestion;
+      try {
+        suggestion = await engine.suggest(params, result);
+      } finally {
+        if (saved === undefined) delete process.env.ENABLE_SPREADING_ACTIVATION;
+        else process.env.ENABLE_SPREADING_ACTIVATION = saved;
+      }
 
       assert.ok(suggestion !== null);
       assert.strictEqual(suggestion.code, "empty_result_no_context");
       assert.strictEqual(suggestion.recommendedTool, "recall");
       assert.ok("contextText" in suggestion.recommendedArgs);
+    });
+
+    it("SpreadingActivation이 꺼져 있으면 효과 없는 contextText를 권하지 않는다", async () => {
+      const engine = createEngine([[], countRow(5)]);
+      const saved  = process.env.ENABLE_SPREADING_ACTIVATION;
+      delete process.env.ENABLE_SPREADING_ACTIVATION;
+      try {
+        const suggestion = await engine.suggest({ _keyId: "key-1", keywords: ["nginx"] }, { fragments: [] });
+        assert.strictEqual(suggestion, null);
+      } finally {
+        if (saved !== undefined) process.env.ENABLE_SPREADING_ACTIVATION = saved;
+      }
     });
 
     it("contextText 있으면 empty_result_no_context 아님", async () => {
