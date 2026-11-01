@@ -15,7 +15,8 @@ mock.module("../../lib/memory/write/FragmentFactory.js", {
     countTokens: (text) => {
       counted.push(text);
       return text.length;
-    }
+    },
+    countTokenPieces: () => 0
   }
 });
 
