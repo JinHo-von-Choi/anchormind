@@ -1582,7 +1582,7 @@ curl -si -X POST https://anchormind.example.com/mcp \
 
 - Session start -- Call `context()` to load core memories. Preferences, error patterns, and procedures are restored. If unreflected sessions exist, a hint is displayed.
 - During work -- Save important decisions, errors, and procedures with `remember()`. Similar fragments are automatically linked at storage time. Use `recall()` to search past experience when needed. After resolving an error, first record the cause and the resolution with `remember(type="procedure")`, then clean up the error fragment with `forget()` (`force=true` if it is permanent). Deleting the error fragment also deletes its links.
-- Session end -- Use `reflect()` to persist session content as structured fragments. Even without manual invocation, AutoReflect runs automatically on session end/expiration.
+- Session end -- Use `reflect()` to persist session content as structured fragments. Even without manual invocation, AutoReflect runs automatically on session end/expiration. Automatic summaries are stored under the session's API key, in the single workspace the session requested if there was exactly one, otherwise in the key's default workspace. Sessions of inactive keys or keys without write permission are not summarized.
 
 ---
 

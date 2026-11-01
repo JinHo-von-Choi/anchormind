@@ -26,6 +26,7 @@ import {
   MIN_SESSION_DURATION_MS,
   autoReflect,
   GEMINI_TIMEOUT_MS,
+  reflectStorageScope,
 } from "../../lib/memory/processors/AutoReflect.js";
 
 /* ── Phase 6 회귀: Gemini timeout 30s 검증 ── */
@@ -212,4 +213,21 @@ describe("_buildReflectPrompts — 보완 케이스", () => {
     assert.ok(userPrompt.includes("없음") || userPrompt.includes("도구 사용"));
   });
 
+});
+
+/* ── 저장 범위: 자동 요약이 세션 키와 workspace로 저장된다 ── */
+describe("reflectStorageScope", () => {
+  it("세션 키와 키 기본 workspace를 넘기고, 요청 workspace가 하나면 그 workspace에 저장한다", () => {
+    assert.deepEqual(reflectStorageScope({ keyId: "k1", workspace: "default-ws" }, { workspaces: ["proj-a"] }),
+      { _keyId: "k1", _defaultWorkspace: "default-ws", workspace: "proj-a" });
+  });
+
+  it("여러 workspace를 쓴 세션은 키 기본 workspace에 둔다", () => {
+    assert.deepEqual(reflectStorageScope({ keyId: "k1", workspace: "default-ws" }, { workspaces: ["a", "b"] }),
+      { _keyId: "k1", _defaultWorkspace: "default-ws" });
+  });
+
+  it("master 세션은 키 없이 저장한다", () => {
+    assert.deepEqual(reflectStorageScope({}, {}), { _keyId: null, _defaultWorkspace: null });
+  });
 });

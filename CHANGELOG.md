@@ -29,6 +29,7 @@
 - 구조상 발동할 수 없던 정책 규칙 `assertionNotContradictory`(없는 열 `assertion_rejected`를 봤다)를 지웠다.
 - Redis 대기열 길이(`getQueueLength`)가 넣고 꺼내는 키(`queue:<이름>`)와 다른 키를 읽어 항상 0이던 문제를 고쳤다. 품질 평가 대기열의 넘침 처리가 한 번도 동작하지 않았다.
 - 품질 평가 대기열이 상한을 넘으면 오래된 작업을 지연 목록으로 옮겨 나중에 평가한다. 예전 처리는 버리면서 `quality_verified=false`로 표시해, 그 파편은 다시 평가되지 않고 importance 0.8 이상 승격이 영구히 막혔다.
+- 자동 reflect(AutoReflect)가 세션의 API 키로 요약을 저장한다. 세션 요청이 workspace를 하나만 썼으면 그 workspace에, 아니면 키 기본 workspace에 저장한다. 이전에는 키와 workspace를 넘기지 않아 모든 사용자의 자동 요약이 master 소유 전역 파편이 됐다. 그래서 사용자는 다음 세션의 context에서 자기 요약을 받지 못했고 master의 context에는 모든 사용자의 요약이 섞였다. 비활성이거나 쓰기 권한이 없는 키의 세션은 요약하지 않는다.
 
 ## [6.10.0] - 2026-11-01
 
