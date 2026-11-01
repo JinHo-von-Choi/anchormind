@@ -54,6 +54,17 @@ describe("EmbeddingCache", () => {
     }
   });
 
+  it("Redis가 4의 배수가 아닌 위치에서 시작하는 Buffer를 돌려줘도 벡터를 복원한다", async () => {
+    /** ioredis는 큰 응답을 공유 메모리의 임의 위치에 담아 돌려준다(운영에서 byteOffset 7). */
+    const f32    = new Float32Array(sampleVec);
+    const pool   = Buffer.alloc(f32.byteLength + 7);
+    Buffer.from(f32.buffer).copy(pool, 7);
+    const redis  = { status: "ready", getBuffer: mock.fn(async () => pool.subarray(7)) };
+    const result = await new EmbeddingCache({ redis }).get("q");
+    assert.ok(Array.isArray(result));
+    for (let i = 0; i < sampleVec.length; i++) assert.ok(Math.abs(result[i] - sampleVec[i]) < 1e-6);
+  });
+
   it("동일 텍스트는 동일 키를 생성한다", () => {
     const cache = new EmbeddingCache();
     const k1    = cache._key("hello world");
