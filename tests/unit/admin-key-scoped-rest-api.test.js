@@ -186,6 +186,9 @@ describe("GET /memory/graph", () => {
     assert.equal(res.statusCode, 200);
     assert.equal(JSON.parse(res.body).nodes.length, 2);
     assert.equal(JSON.parse(res.body).edges_truncated, false);
+    /** 노드 상한은 1000이며 적용한 값을 응답에 싣는다 */
+    assert.equal(JSON.parse(res.body).limit, 1000);
+    assert.equal(queryCalls.find(call => call.sql.includes("embedding IS NOT NULL")).params.at(-1), 1000);
     const edgeCall = queryCalls.find(call => call.sql.includes("fragment_links"));
     assert.match(edgeCall.sql, /from_id = ANY\(\$1\) AND to_id = ANY\(\$1\)/);
     assert.match(edgeCall.sql, /ORDER BY weight DESC NULLS LAST/);

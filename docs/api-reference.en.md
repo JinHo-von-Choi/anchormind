@@ -79,7 +79,7 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | GET | /v1/internal/model/nothing/logs/files | Log file list (with sizes) |
 | GET | /v1/internal/model/nothing/logs/read | Log content viewing (file, tail, level, search parameters) |
 | GET | /v1/internal/model/nothing/logs/stats | Log statistics (per-level counts, recent errors, disk usage) |
-| GET | /v1/internal/model/nothing/memory/graph?topic=&limit= | Knowledge graph data (nodes + edges) |
+| GET | /v1/internal/model/nothing/memory/graph?topic=&limit= | Knowledge graph data (nodes + edges). `limit` is 10-1000 (default 50); the response `limit` carries the applied value |
 | GET | /v1/internal/model/nothing/export?key_id=&topic= | Fragment JSON Lines stream export (format version 2, with links and optional history). See "Export and import" below |
 | POST | /v1/internal/model/nothing/import | Fragment import (JSON body or an export file as is). See "Export and import" below |
 | GET | /v1/internal/model/nothing/audit | Audit record list (newest first). See "Audit" below |

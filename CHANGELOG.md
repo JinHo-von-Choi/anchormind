@@ -4,6 +4,7 @@
 
 ### Changed
 
+- 관리 API `/memory/graph`의 노드 상한이 10000에서 관리 콘솔과 같은 1000으로 바뀌었다. 10000건 응답은 약 3초, 10MB였다. 응답에 실제로 적용한 `limit`을 싣는다.
 - 정리 주기에 `dead_reference_sweep`(linked_to의 없는 파편 id 제거)과 `orphan_copy_sweep`(원본 없는 사례 요약 사본 치환) 단계를 더했다. 삭제 뒤 정리 실패는 `memento_delete_cleanup_failures_total{step}`, 정리 주기가 지운 참조 수는 `memento_dead_references_swept_total`로 낸다.
 - `amend`가 중복 때문에 수정하지 않았을 때 `code: "duplicate"`를 싣는다. `merged: true`는 이전 응답과의 호환을 위해 같이 싣지만 병합은 하지 않는다. `supersedes`는 효과가 없으며 지정하면 `validation_warnings`에 `supersedesIgnored`를 싣는다.
 - `forget` 스키마에 `workspace`, `reflect` 스키마에 `caseId`를 넣었다. 처리기는 이미 이 값을 읽고 있었다.

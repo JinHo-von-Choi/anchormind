@@ -82,7 +82,7 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | GET | /v1/internal/model/nothing/logs/files | 로그 파일 목록 (크기 포함) |
 | GET | /v1/internal/model/nothing/logs/read | 로그 내용 조회 (file, tail, level, search 파라미터) |
 | GET | /v1/internal/model/nothing/logs/stats | 로그 통계 (레벨별 카운트, 최근 에러, 디스크 사용량) |
-| GET | /v1/internal/model/nothing/memory/graph?topic=&limit= | 지식 그래프 데이터 (nodes + edges) |
+| GET | /v1/internal/model/nothing/memory/graph?topic=&limit= | 지식 그래프 데이터 (nodes + edges). `limit`는 10~1000(기본 50)이고, 응답의 `limit`에 실제로 적용한 값을 싣는다 |
 | GET | /v1/internal/model/nothing/export?key_id=&topic= | 파편 JSON Lines 스트림 내보내기(형식 버전 2, 링크와 선택 이력 포함). 아래 「내보내기와 가져오기」 참조 |
 | POST | /v1/internal/model/nothing/import | 파편 가져오기(JSON 본문 또는 export 파일 그대로). 아래 「내보내기와 가져오기」 참조 |
 | GET | /v1/internal/model/nothing/audit | 감사 기록 목록(최근 순). 아래 「감사」 참조 |
