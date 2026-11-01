@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `forget` 도구 설명과 SKILL.md가 permanent 계층이 되는 조건(preference, 저장할 때 요청한 importance 0.8 이상, 주기 정리의 승격), topic 삭제가 한 번에 200건까지 지우고 permanent를 남긴다는 점, permanent인 error 파편을 지울 때 `force=true`가 필요하다는 점을 안내한다. SKILL.md의 dryRun 응답 형식 설명을 실제 응답에 맞췄다.
+
 ## [6.10.0] - 2026-11-01
 
 ### Added

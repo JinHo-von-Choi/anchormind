@@ -176,7 +176,7 @@ recall 호출
 
 ### forget 의무 호출 상황
 
-- 에러를 완전히 해결한 직후: 해당 error 파편 삭제.
+- 에러를 완전히 해결한 직후: 해당 error 파편 삭제. importance 0.8로 저장한 error 파편은 permanent라 `force=true`를 함께 준다(아래 "permanent 계층과 forget").
 - 사용자가 "잊어", "지워" 언급 시: 즉시 삭제.
 
 ### 세션 종료 시
@@ -223,7 +223,16 @@ remember / link / forget / amend 4개 도구에서 실제 저장 없이 예상 �
 { "tool": "remember", "arguments": { "content": "테스트", "type": "fact", "dryRun": true } }
 ```
 
-응답에 `"simulated": true` 필드가 포함되며 DB에 어떤 변경도 발생하지 않는다.
+응답은 `{"dryRun": true, "simulated": {...}}`이며 DB와 작업 기억에 어떤 변경도 발생하지 않는다. `simulated`에 담기는 내용은 도구마다 다르다.
+
+| 도구 | simulated |
+|-|-|
+| remember | `fragment`(예상 파편, `ttl_tier` 포함), `conflicts`, `validation_warnings`, `quota`. `scope=session`이면 `scope: "session"` |
+| link | `fromId`, `toId`, `relationType`, `would_link`, `ownership_ok` |
+| forget | id 지정: `fragment`, `linked_count`, `would_delete`, `reason`. topic 지정: `would_delete`(건수), `protected`, `linked_count`, `fragment_ids`, `purged` |
+| amend | `would_be_fragment`, `validation_warnings` |
+
+batch_remember와 memory_consolidate는 dryRun을 지원하지 않는다. dryRun 값을 주면 실행하지 않고 거부한다.
 
 #### X-RateLimit 헤더
 
@@ -528,7 +537,7 @@ tool_feedback(
 → relevant=false: 링크 weight -0.15 (decay), 반복 시 quarantine 가능
 
 #### forget 시점
-- 에러를 완전히 해결한 직후 해당 error 파편 삭제
+- 에러를 완전히 해결한 직후 해당 error 파편 삭제(permanent이면 `force=true`)
 - 사용자가 명시적으로 요청 시
 
 #### link 활용
@@ -970,10 +979,22 @@ async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기�
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | id | string | - | 삭제할 파편 ID |
-| topic | string | - | 해당 주제 전체 삭제 |
-| force | boolean | - | permanent 파편 강제 삭제. 기본 false. |
+| topic | string | - | 이 주제의 파편을 한 번에 200건까지 삭제. force가 없으면 permanent는 남긴다 |
+| force | boolean | - | permanent 계층 파편도 지운다. 기본 false. |
 | agentId | string | - | 에이전트 ID |
-| dryRun | boolean | - | true 시 실제 삭제 없이 삭제 대상 파편 정보와 연결 링크 수만 반환 |
+| dryRun | boolean | - | true면 지우지 않고 미리 본다. id면 그 파편 정보와 연결 링크 수, topic이면 지울 파편 수와 id, 보호되는 파편 수, 연결 링크 수, 삭제 연쇄 예상 건수 |
+
+#### permanent 계층과 forget
+
+force 없이는 permanent 계층 파편을 지우지 않는다. id로 지정하면 `{deleted: 0, protected: 1}`이 돌아온다. 다음 파편이 permanent다.
+
+- preference 파편
+- 저장할 때 요청한 importance가 0.8 이상인 파편. 유형별 상한(error, procedure는 0.6) 때문에 importance가 낮게 저장돼도 계층은 permanent다
+- 주기 정리에서 `linked_to`가 5개 이상이 된 허브 파편과, importance 0.8 이상이면서 품질 조건을 통과한 파편
+
+파편의 계층은 remember 응답과 forget dryRun 응답의 `ttl_tier`로 확인한다. 앵커(isAnchor=true)는 따로 보호하지 않고 계층으로만 판정한다.
+
+topic으로 지정하면 한 번에 200건까지 지운다. force가 없으면 permanent 파편은 남기고 지울 수 있는 파편부터 고르며, `protected`는 topic 전체의 permanent 파편 수다. 지울 파편이 더 남았으면 다시 호출하고, permanent까지 지우려면 `force=true`를 준다. id와 topic을 함께 주면 id 대상을 먼저 지운 뒤 topic 대상을 지운다.
 
 타 테넌트(다른 API 키) 소유 파편을 삭제 시도하면 `"Fragment not found or no permission"` 오류가 반환된다. master key는 전체 파편에 접근 가능하다.
 
@@ -1292,6 +1313,8 @@ git 설치본에서 `UPDATE_REQUIRE_SIGNED_TAG=true`(기본 `false`)이면 `inst
 | relation | 0.5 | 0.7 | 관계 기록 |
 
 코드 기준(`lib/memory/write/FragmentWriter.js` `MAX_INITIAL_IMPORTANCE`): `isAnchor=true`이면 상한 제거. content 20자 미만이면 최대 0.2로 추가 제한.
+
+TTL 계층은 상한을 적용하기 전에 요청한 importance로 정한다. 그래서 error나 procedure를 importance 0.8로 저장하면 importance는 0.6이지만 계층은 permanent이고, 지울 때 `force=true`가 필요하다.
 
 ## 기억 저장 규칙
 
@@ -1636,7 +1659,7 @@ recall 시 신뢰도 기반 판단:
   └─ remember(type="error", importance=0.8) 즉시 저장
 
 에러 해결 완료
-  └─ forget(id=해당 error 파편 ID)
+  └─ forget(id=해당 error 파편 ID, force=true) — importance 0.8로 저장한 error는 permanent
   └─ remember(type="procedure", importance=0.8) — 해결책 저장
   └─ link(fromId=에러파편, toId=해결파편, relationType="resolved_by") — 이미 forget 전이라면
 

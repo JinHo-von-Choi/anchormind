@@ -1104,12 +1104,14 @@ violations 있는 경우 (soft gate — 저장됨):
 
 파편 기억 삭제. id 또는 topic 중 하나는 필수. permanent 계층 파편은 force 옵션이 필요.
 
+permanent 계층은 preference 파편, 저장할 때 요청한 importance가 0.8 이상인 파편, 주기 정리에서 permanent로 승격된 파편(`linked_to` 5개 이상인 허브, 품질 조건을 통과한 importance 0.8 이상 파편)이다. 계층은 유형별 importance 상한을 적용하기 전의 요청 값으로 정하므로, error나 procedure를 importance 0.8로 저장하면 importance는 0.6이지만 계층은 permanent다. 파편의 계층은 remember 응답과 forget dryRun 응답의 `ttl_tier`로 확인한다. 앵커는 따로 보호하지 않고 계층으로만 판정한다.
+
 ### 파라미터
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | id | string | - | 삭제할 파편 ID |
-| topic | string | - | 해당 주제의 파편 전체 삭제 |
+| topic | string | - | 이 주제의 파편을 한 번에 200건까지 삭제. force가 없으면 permanent 파편은 남긴다 |
 | force | boolean | - | permanent 파편도 강제 삭제 (기본 false) |
 | agentId | string | - | 에이전트 ID |
 | dryRun | boolean | - | true면 지우지 않고 미리 본다. 응답은 아래 dryRun 응답을 본다. |

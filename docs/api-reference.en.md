@@ -1087,13 +1087,15 @@ The response is `{ success: true, jobId, status }`. `status` is the job state ob
 
 Delete fragment memory. Either id or topic is required. Permanent-tier fragments require the force option.
 
+The permanent tier holds preference fragments, fragments stored with a requested importance of 0.8 or more, and fragments the periodic consolidation promotes (hubs with 5 or more `linked_to` entries, and importance>=0.8 fragments that pass the quality check). The tier is set from the requested importance before the per-type importance cap applies, so an error or procedure stored with importance 0.8 keeps importance 0.6 but is permanent. The `ttl_tier` in the remember response and in the forget dryRun response shows the tier. Anchors get no separate protection; only the tier is checked.
+
 ### Parameters
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | id | string | - | Fragment ID to delete |
-| topic | string | - | Delete all fragments with the given topic |
-| force | boolean | - | Force-delete permanent fragments (default false) |
+| topic | string | - | Delete up to 200 fragments of the given topic per call. Without force, permanent fragments are kept |
+| force | boolean | - | Also delete permanent-tier fragments (default false) |
 | agentId | string | - | Agent ID |
 | dryRun | boolean | - | When true, previews without deleting. See the dryRun response below. |
 
