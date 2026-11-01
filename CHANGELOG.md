@@ -19,6 +19,8 @@
 - 이미 백필로 임베딩이 채워졌거나 지워진 파편의 임베딩 dead 항목을 5분마다 지운다. 남은 수는 `memento_embedding_dead_letters`로 낸다.
 - id로 `forget`하면 대체된(`valid_to`가 있는) 파편도 지운다. 이전에는 오류 없이 `deleted: 0`을 돌려줬다.
 - 관리 콘솔이 주소의 `?key=`로 받은 마스터 키를 읽은 즉시 주소에서 지운다.
+- `affect` 필터를 준 recall에서 L1 보충 조회로 가져온 파편이 모두 빠지던 문제를 고쳤다. 보충 조회(`getByIds`)와 단건 조회가 `affect`를 읽지 않았고, 보충 조회는 `key_id`도 읽지 않아 `includeKeyName`의 값이 비었다.
+- `remember`가 소유권 검사에서 떨어진 `linkedTo` id를 `linked_to`에 저장하지 않는다. 링크는 만들지 않으면서 배열에는 없는 파편이나 다른 키 파편의 id가 남았다.
 
 ## [6.10.0] - 2026-11-01
 
