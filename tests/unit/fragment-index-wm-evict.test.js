@@ -115,7 +115,9 @@ describe("FragmentIndex.evictWorkingMemoryItems", () => {
       id: "wm-scope", content: "synthetic", type: "fact",
       agent_id: "default", key_id: "key-a", workspace: "workspace-a"
     });
-    const [item] = await idx.getWorkingMemory("session-scope");
+    const [item] = await idx.getWorkingMemory("session-scope", "key-a");
+    /** 같은 세션 id라도 다른 키의 작업 기억은 보이지 않는다 */
+    assert.deepEqual(await idx.getWorkingMemory("session-scope", "key-b"), []);
     assert.equal(item.agent_id, "default");
     assert.equal(item.key_id, "key-a");
     assert.equal(item.workspace, "workspace-a");

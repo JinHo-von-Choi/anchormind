@@ -33,11 +33,12 @@ const MARKERS   = new Set([CAP_PUBLIC, CAP_AUTHENTICATED]);
 /** 라우트 표 밖의 관리 모듈(선언, 저장소, 도우미) */
 const NON_ROUTE_MODULES = new Set([
   "admin-route-table", "admin-audit-actions", "capabilities", "AdminAuthz", "ScopeFilter", "admin-auth",
-  "admin-login-guard", "admin-metrics", "ApiKeyStore", "OAuthClientStore", "key-policy", "key-state-cache",
+  "admin-login-guard", "admin-metrics", "ApiKeyStore", "OAuthClientStore", "key-policy",
   "admin-principal", "admin-redact", "AdminUserStore", "admin-password", "admin-totp", "admin-seal",
   "admin-session-policy", "admin-user-rules", "ApiKeyLifecycleStore", "key-cidr", "admin-key-filter", "key-lifecycle", "key-lifecycle-limits",
   "key-material", "key-schema-state", "ReviewStore", "admin-handler-registry", "ToolCallUsage",
-  "fragment-write-rejection", "FragmentHealth"
+  "fragment-write-rejection", "FragmentHealth", "group-access", "stats-aggregates", "RetentionPolicyStore",
+  "WorkspaceAliasStore"
 ]);
 
 const sampleOf = (p) => p.split("/").map((seg) => (seg.startsWith(":") ? SAMPLE : seg)).join("/");

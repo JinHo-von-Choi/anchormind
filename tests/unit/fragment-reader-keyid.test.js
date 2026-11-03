@@ -130,9 +130,6 @@ describe("MemoryManager — keyId 격리 통합 (mock store)", () => {
       return frag;
     });
 
-    /** 존재하지만 접근 불가한 상태를 대역으로 재현한다. */
-    mm.store.probeAccess = mock.fn(async () => ({ exists: true, accessible: false }));
-
     /** deindex가 호출되면 안 됨 */
     const deindexCalled = [];
     mm.index = {
@@ -146,8 +143,8 @@ describe("MemoryManager — keyId 격리 통합 (mock store)", () => {
       _groupKeyIds  : ["key-B"]
     });
 
-    assert.strictEqual(result.error, "No permission to delete this fragment",
-      `에러 메시지 불일치: ${result.error}`);
+    /** 읽을 수 없는 다른 키 파편은 없는 파편과 같은 응답이다(응답이 다르면 존재 여부가 드러난다) */
+    assert.strictEqual(result.error, undefined, `존재를 드러내는 오류: ${result.error}`);
     assert.strictEqual(result.deleted, 0);
     assert.strictEqual(deindexCalled.length, 0, "권한 없는 파편의 deindex가 호출되었다");
   });

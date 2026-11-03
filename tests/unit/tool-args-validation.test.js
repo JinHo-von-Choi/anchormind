@@ -23,7 +23,7 @@ mock.module("../../lib/tools/db.js", {
 
 const { validateToolArgs, applyTrustedToolContext } = await import("../../lib/jsonrpc.js");
 const { default: logger }       = await import("../../lib/logger.js");
-const { getSymbolicHardGate }   = await import("../../lib/admin/ApiKeyStore.js");
+const { getSymbolicHardGate }   = await import("../../lib/keys/policy.js");
 
 const SAVED_MODE          = process.env.MEMENTO_TOOL_ARGS_VALIDATION;
 const SAVED_ALLOW_UNKNOWN = process.env.MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN;
@@ -67,6 +67,16 @@ describe("validateToolArgs (enforce)", () => {
     process.env.MEMENTO_TOOL_ARGS_VALIDATION     = "enforce";
     process.env.MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN  = "true";
     assert.doesNotThrow(() => validateToolArgs("recall", { keywords: ["a"], query: "x" }));
+  });
+
+  it("허용해도 스키마 밖 인자를 도구와 필드별로 센다", async () => {
+    process.env.MEMENTO_TOOL_ARGS_VALIDATION     = "enforce";
+    process.env.MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN  = "true";
+    const { toolArgsUnknownTotal } = await import("../../lib/metrics.js");
+    const count = async () => ((await toolArgsUnknownTotal.get()).values.find(v => v.labels.tool === "recall" && v.labels.field === "groupKeyIds")?.value ?? 0);
+    const before = await count();
+    validateToolArgs("recall", { keywords: ["a"], groupKeyIds: ["k"] });
+    assert.equal(await count(), before + 1);
   });
 
   it("유효한 호출은 통과한다", () => {

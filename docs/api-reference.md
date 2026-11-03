@@ -47,17 +47,26 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | PUT | /v1/internal/model/nothing/keys/:id/daily-limit | API 키 일일 호출 제한 변경. 마스터 키 인증 필요 |
 | PUT | /v1/internal/model/nothing/keys/:id/permissions | API 키 권한 변경. 허용 값은 POST와 같다(`read`, `write` 중 하나 이상, 선택 표지 권한 `trusted_origin`, `anchor`, `review_off`, `review_all`). 빈 배열과 표지 권한만 있는 배열은 400이다. `anchor`가 있는 키만 앵커를 지정할 수 있다(`MEMENTO_ANCHOR_PERMISSION`). `trusted_origin`이 있는 키는 remember의 `origin` 주장으로 신뢰 등급 3까지 쓸 수 있고, 없는 키는 2가 상한이다(`MEMENTO_PROVENANCE`). 검토 방식 표지 `review_off`, `review_all`은 둘 중 하나만 둘 수 있고 둘 다 있으면 400이다(`MEMENTO_REVIEW_QUEUE`). 변경 전후 권한을 감사 로그에 남긴다 |
 | PUT | /v1/internal/model/nothing/keys/:id/fragment-limit | API 키 파편 할당량 변경 |
+| GET | /v1/internal/model/nothing/keys/:id/access | 이 키의 그룹 접근. `readableKeyIds`(읽을 수 있는 다른 키), `groupGrants`(받은 link, amend, forget 대상 키), `groupShareScopes`(공유 workspace 제한이 있는 키와 그 목록), `sharedReads`(질의 `days` 1~90, 기본 7일 동안 다른 키의 recall 결과에 이 키 파편이 들어간 기록: 읽은 키, recall 수, 파편 수, 마지막 시각) |
+| GET | /v1/internal/model/nothing/keys/:id/retention | 보존 정책 목록(`workspace` null은 키 전체, `max_age_days`) |
+| PUT | /v1/internal/model/nothing/keys/:id/retention | 보존 정책 설정. `{ workspace: string|null, max_age_days: 1~36500|null }`(null은 삭제). 정리 주기의 `retention_expire` 단계가 created_at이 이 일수보다 오래된 파편을 지운다. workspace 정책이 키 전체 정책보다 우선하고 앵커는 지우지 않는다 |
+| GET | /v1/internal/model/nothing/keys/:id/workspace-aliases | workspace 별칭 목록 |
+| PUT | /v1/internal/model/nothing/keys/:id/workspace-aliases | 별칭 설정. `{ alias, workspace|null }`(null은 삭제). 별칭으로 들어온 요청을 정식 이름으로 바꿔 처리한다. 정식 이름이 다른 별칭이거나 별칭이 다른 별칭의 정식 이름이면 400 |
+| GET | /v1/internal/model/nothing/workspace-aliases/suggestions | 별칭 후보. 경로형 workspace 가운데 마지막 조각과 같은 일반 workspace가 같은 키에 이미 있는 것. 질의 `key_id`로 키 하나만 볼 수 있다 |
 | PATCH | /v1/internal/model/nothing/keys/:id/workspace | API 키의 default_workspace 변경. `{ workspace: "name" }` 또는 `{ workspace: null }` (null=해제) |
 | PATCH | /v1/internal/model/nothing/keys/:id/policy | API 키 정책 열 변경. 본문은 `default_mode`, `allowed_workspaces`, `symbolic_hard_gate`, `egress_policy` 중 하나 이상. 아래 절 참조 |
 | DELETE | /v1/internal/model/nothing/keys/:id | API 키 삭제(성공 204). 저장된 파편이나 재통합 이력이 있는 키는 삭제하지 않고 409 `key_in_use`를 돌려준다(`MEMENTO_API_KEY_DELETE_GUARD=false`면 확인 생략). 비활성화나 삭제 시 이 프로세스의 그 키 세션이 즉시 닫힌다 |
 | GET | /v1/internal/model/nothing/review | 검토 대기 파편 목록(오래된 순). 질의 `key_id`(`master`는 마스터 키가 쓴 것), `limit`(1~200, 기본 50), `cursor`(앞 응답의 `nextCursor`). 항목은 `id`, `key_id`, `key_name`, `agent_id`, `workspace`, `type`, `topic`, `content_preview`(500자), `review_reasons`, `origin`, `trust_tier`, `is_anchor`, `created_at`, `auto_reject_at`(만든 지 30일). 잘못된 값은 400과 `field` |
 | POST | /v1/internal/model/nothing/review/:id/approve | 검토 대기 파편 승인. 본문 `note`(500자 이하, 민감 정보는 가려서 저장), `idempotencyKey`(또는 `Idempotency-Key` 헤더, 1~128자 `[A-Za-z0-9._:-]`), `applyAnchor`(불리언). `review_state`를 `approved`로 바꾼다. 보류한 앵커 지정 요청(`anchor_requested`)은 결정 시점 판정(쓰기 경로와 같은 규칙: 키 권한 목록의 `anchor` 또는 `admin`과 `MEMENTO_ANCHOR_LIMIT_PER_KEY` 미만의 살아 있는 앵커 수, 마스터 키 허용, `MEMENTO_ANCHOR_PERMISSION=off`이면 허용)을 통과할 때만 적용하고, 무권한 앵커 요청(`anchor_unauthorized`)은 `applyAnchor: true`일 때만 상한을 확인해 적용하며, `applyAnchor: false`이면 적용하지 않는다. 응답 `decisionId`, `fragmentId`, `decision`, `reviewer`, `keyId`, `decidedAt`, `replayed`(같은 멱등 키의 재요청이면 true, 동시 재요청 포함), `anchorApplied`, `anchorReason`(`not_requested`, `permitted`, `master`, `permission`, `limit`, `permission_off`, `explicit`, `explicit_required`, `declined`). 없는 파편 404, 검토 대기가 아닌 파편 409(`state`), 다른 결정에 쓰인 멱등 키 409(`field: idempotencyKey`) |
 | POST | /v1/internal/model/nothing/review/:id/reject | 검토 대기 파편 거절. 본문과 응답은 승인과 같다. `review_state`를 `rejected`로 바꾸고 `valid_to`를 설정해 만료 파편으로 만든다. 결정은 `memory_review_decisions`에 남고 감사 기록 `admin review_decision` 한 줄이 남는다 |
-| GET | /v1/internal/model/nothing/groups | 키 그룹 목록 |
+| GET | /v1/internal/model/nothing/groups | 키 그룹 목록(멤버 수, `fragment_limit`, 상한이 있으면 멤버 전체 파편 수 `fragment_count`). 그룹 범위 관리자는 자기 그룹만 본다 |
 | POST | /v1/internal/model/nothing/groups | 키 그룹 생성 |
 | DELETE | /v1/internal/model/nothing/groups/:id | 키 그룹 삭제 |
 | GET | /v1/internal/model/nothing/groups/:id/members | 그룹 멤버 목록 |
-| POST | /v1/internal/model/nothing/groups/:id/members | 키를 그룹에 추가 |
+| POST | /v1/internal/model/nothing/groups/:id/members | 키를 그룹에 추가(`{ key_id, permissions?, shared_workspaces? }`, `shared_workspaces` 생략은 전체 공유) |
+| PATCH | /v1/internal/model/nothing/groups/:gid/members/:kid | 멤버 권한과 공유 workspace 변경(`{ permissions?, shared_workspaces? }`, 하나 이상) |
+| GET | /v1/internal/model/nothing/groups/:id/effective-access | 멤버 쌍(읽는 키, 대상 키)별 실제 권한 표: `read`, `link`, `amend`, `forget`, 대상 키의 `sharedWorkspaces` |
+| PUT | /v1/internal/model/nothing/groups/:id/fragment-limit | 그룹 파편 상한 변경(`{ fragment_limit: integer|null }`). 멤버 키 전체의 살아 있는 파편 수보다 작으면 400 `limit_below_usage`. 상한에 이르면 멤버 키의 저장이 `fragment_limit_exceeded`(`scope: "group"`)로 거부된다 |
 | DELETE | /v1/internal/model/nothing/groups/:gid/members/:kid | 그룹에서 키 제거 |
 | GET | /v1/internal/model/nothing/memory/overview | 메모리 전체 현황 (유형/토픽 분포, 품질 미검증, superseded, 최근 활동) |
 | GET | /v1/internal/model/nothing/memory/search-events?days=N | 검색 이벤트 분석 (총 검색 수, 실패 쿼리, 피드백 통계) |
@@ -100,6 +109,10 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | PUT | /v1/internal/model/nothing/admin-users/:id/roles | 역할 바인딩 교체 `{ roles: [{ role, workspace? }] }` |
 | POST | /v1/internal/model/nothing/admin-users/:id/totp-reset | TOTP와 복구 코드 초기화, 세션 폐기 |
 | DELETE | /v1/internal/model/nothing/admin-users/:id/sessions | 계정의 모든 세션 폐기 |
+
+키 그룹 멤버 권한: 멤버 행마다 `permissions` 배열(`read`, `share`, `link`, `amend`, `forget`)을 둔다. 기본은 `["read", "share", "link"]`이다. 키 A는 함께 속한 그룹에서 A가 `read`, B가 `share`를 가지면 B의 파편을 읽는다(recall, context, graph_explore, fragment_history, reconstruct_history, search_traces 모두 같다). `link`, `amend`, `forget`은 그렇게 읽을 수 있는 다른 멤버 파편에 대한 link 도구, amend, id 지정 forget을 허용한다. topic 지정 forget은 권한과 무관하게 자기 파편만 지운다. 멤버 목록(`GET .../members`)은 각 멤버의 `permissions`와 `updated_at`을 싣는다. 모르는 권한 이름은 400 `invalid_group_permissions`, 멤버가 아닌 키의 `PATCH`는 404다. 응답은 `{ keyId, groupId, permissions, previous }`이고 감사 이벤트 `admin.group.member_permissions`의 detail에 `previous`와 `permissions`가 남는다. 그룹이 아닌 키끼리는 workspace 이름이 같아도 서로의 파편을 읽지 못한다.
+
+공유 workspace: 멤버 행의 `shared_workspaces`(NULL은 전체)는 그 멤버의 `share`가 열어 주는 workspace다. 목록이 있으면 다른 멤버는 요청 workspace(명시 `workspace`, 없으면 키 기본 workspace)가 목록 안일 때만 그 멤버의 그 workspace와 전역 파편을 읽고, id로 집는 amend, forget, link도 같은 범위에서만 된다. 두 그룹에서 범위가 다르면 합치고, 한 그룹이라도 전체 공유면 제한이 없다. recall 순위에서 다른 키가 쓴 공유 파편은 점수에 0.9를 곱하고(`ranking.sharedFragmentFactor`), `amend` 권한을 받은 다른 키가 본문을 고친 파편은 `trust_tier`가 한 단계 내려간다(최저 1, 등급 1은 context의 ANCHOR와 CORE에서 빠진다).
 
 ### 내보내기와 가져오기
 
@@ -282,7 +295,7 @@ X-RateLimit-Resource: fragments
 - 권한 레벨은 세 가지다: `read`(recall/context 등), `write`(remember/forget/amend 등), `admin`(memory_consolidate/apply_update 등). `admin` 권한만으로 master 전용 도구를 우회할 수는 없다.
 - 권한이 없는 도구를 호출하면 JSON-RPC 오류 `-32001`이 반환되며 `message`에 사유(`Permission denied: '<도구>' requires '<레벨>' permission`)가 담긴다. master 전용 도구(memory_stats, memory_consolidate, check_update, apply_update)를 일반 키로 호출하면 `-32001`과 `Permission denied: '<도구>' requires master authentication`이 반환되며, 이 도구들은 일반 키의 tools/list에도 나타나지 않는다.
 - API 키에 `allowed_workspaces`가 있으면 읽기 도구(recall, context, graph_explore, fragment_history, reconstruct_history, search_traces)와 resources/read는 목록의 workspace와 전역(workspace 없음) 파편만 읽는다. 판정 대상은 요청의 effective workspace(명시 `workspace`, 없으면 키 기본 workspace, 둘 다 없으면 전역)이다. `MEMENTO_WORKSPACE_READ_AUTHZ=enforce`에서 목록 밖 요청은 처리되지 않고 `-32001`과 `Permission denied: the requested workspace is outside the key's allowed_workspaces`(키 기본 workspace가 목록 밖이면 `the key's default workspace is outside ...`, 목록 조회 실패면 `... could not be determined`)로 끝난다. 기본 `warn`은 요청을 처리하고 `memento_workspace_read_authz_total{outcome="would_deny"}`와 경고 로그만 남긴다.
-- 타 테넌트(다른 API 키)가 소유한 파편에 forget/amend/link 요청 시 `"Fragment not found or no permission"` 에러가 반환된다. SQL 레벨에서 `key_id` 조건으로 격리되므로 존재 여부조차 노출되지 않는다.
+- 읽을 수 없는 다른 API 키의 파편에 amend/link를 요청하면 `"Fragment not found or no permission"` 에러가 반환되고, forget은 없는 파편과 같이 `deleted: 0`을 돌려준다. SQL 레벨에서 `key_id` 조건으로 격리되므로 존재 여부조차 노출되지 않는다.
 
 보호된 리소스에 인증 없이 접근하면 `401 Unauthorized`와 함께 `WWW-Authenticate: Bearer resource_metadata="</.well-known/oauth-protected-resource URL>"` 헤더가 반환된다.
 
@@ -321,7 +334,7 @@ X-Memento-Mode: recall-only
 
 세션 ID는 `MCP-Session-Id` 헤더로 보낸다. `MEMENTO_SESSION_ID_POLICY`(`warn`, `enforce`, 기본 `warn`)는 쿼리스트링으로 받은 세션 ID와 서버 발급 형식(UUID)이 아닌 ID의 자동 복구를 다룬다. `warn`은 경고 로그를 남기고 정상 처리하며, `enforce`는 쿼리 ID에 400, UUID가 아닌 ID의 복구에 404를 돌려준다. 헤더로 보낸 UUID 세션과 `/message?sessionId=`는 영향이 없다.
 
-API 키로 연 세션은 사용할 때 키 상태를 `MEMENTO_SESSION_KEY_RECHECK_MS`(기본 30000ms, `0`이면 끔) 주기로 다시 읽는다. 비활성 또는 삭제된 키의 세션은 닫히고 404 `Session not found`(JSON-RPC `-32000`)를 받으며, 권한 변경은 열린 세션에 반영된다. 관리 API로 키를 비활성화하거나 삭제하면 이 프로세스의 그 키 세션이 즉시 닫힌다. API 키 저장소 조회 실패로 인증을 판정하지 못한 `initialize`와 세션 자동 복구는 기본 401로 응답하고, `MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS=503`이면 `Retry-After: 10`과 함께 503으로 응답한다. 같은 IP에서 `initialize`를 반복하면 IP 한도를 넘는 요청은 429와 `Retry-After`를 받는다.
+API 키로 연 세션은 사용할 때 키 상태를 `MEMENTO_SESSION_KEY_RECHECK_MS`(기본 30000ms, `0`이면 끔) 주기로 다시 읽는다. 비활성 또는 삭제된 키의 세션은 닫히고 404 `Session not found`(JSON-RPC `-32000`)를 받으며, 권한, 기본 workspace, 그룹 멤버십과 멤버 권한의 변경은 열린 세션에 반영된다. 재확인을 끄면(`0`) 그룹 멤버십과 멤버 권한은 세션을 만들 때의 값을 쓰고, 다른 멤버 파편에 대한 쓰기 권한은 멤버 권한이 생기기 전처럼 읽을 수 있는 멤버 파편에 링크만 허용한다(amend, forget 위임은 적용되지 않는다). 관리 API로 키를 비활성화하거나 삭제하면 이 프로세스의 그 키 세션이 즉시 닫힌다. API 키 저장소 조회 실패로 인증을 판정하지 못한 `initialize`와 세션 자동 복구는 기본 401로 응답하고, `MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS=503`이면 `Retry-After: 10`과 함께 503으로 응답한다. 같은 IP에서 `initialize`를 반복하면 IP 한도를 넘는 요청은 429와 `Retry-After`를 받는다.
 
 세션 세그먼트가 활성화된 경우(`MEMENTO_SESSION_SEGMENT`, 기본 true), 파편의 `session_id`는 전송계층 `Mcp-Session-Id`가 아니라 유휴·수명 기준으로 회전하는 파생 ID `{전송세션ID}#{seq}` 형식일 수 있다. 회전이 발생하면 직전 세그먼트가 자동 reflect된다.
 
@@ -1125,8 +1138,8 @@ permanent 계층은 preference 파편, 저장할 때 요청한 importance가 0.8
 | 삭제 성공 | `{success: true, deleted: 1, protected: 0, purged: {case_summaries: 2, audit_fragments: 1, digests: 0}}` | false |
 | permanent 계층 파편에 force 미지정 | `{success: true, deleted: 0, protected: 1, reason: "permanent 파편은 force 옵션 필요"}` | false |
 | 대상이 이미 없음(재시도 포함) | `{success: true, deleted: 0, protected: 0}` | false |
-| 다른 키의 파편 | `{success: true, deleted: 0, protected: 0, error: "No permission to delete this fragment"}` | true |
-| 존재 여부를 확인하지 못함 | `{success: true, deleted: 0, protected: 0, error: "Fragment not found or no permission"}` | true |
+| 이 키가 읽을 수 없는 다른 키의 파편 | `{success: true, deleted: 0, protected: 0}`(없는 파편과 같아 존재 여부가 드러나지 않는다) | false |
+| 그룹에서 읽을 수 있지만 `forget` 권한이 없는 다른 멤버의 파편 | `{success: true, deleted: 0, protected: 0, error: "No permission to delete this fragment"}` | true |
 
 이미 지운 대상을 재시도로 다시 지우면 오류 없이 `deleted: 0`이 돌아온다. `error`가 실린 응답은 페이로드의 `success`가 true여도 MCP 봉투가 `isError: true`로 뒤집힌다. 대체된(`valid_to`가 있는) 파편도 id로 지울 수 있다.
 

@@ -23,7 +23,10 @@ const {
 const {
   renderGroupKpiRow,
   renderGroupTable,
-  renderGroupInspector
+  renderGroupInspector,
+  togglePermission,
+  groupLimitLabel,
+  parseGroupLimitInput
 } = await import("../../assets/admin/modules/groups.js");
 
 const { state } = await import("../../assets/admin/modules/state.js");
@@ -205,5 +208,33 @@ describe("renderGroupInspector", () => {
     const texts = buttons.map(b => b.textContent);
     assert.ok(texts.includes("ADD MEMBER"));
     assert.ok(texts.includes("DELETE GROUP"));
+  });
+
+  test("멤버 행에 권한 버튼 다섯 개가 있고 켜진 권한만 눌린 상태다", () => {
+    const group  = { id: "g1", name: "G", member_count: 1 };
+    const panel  = renderGroupInspector(group, [{ id: "k1", name: "K", key_prefix: "mmcp_", permissions: ["read", "amend"] }]);
+    const perms  = flatQuery(panel, "button").filter(b => b.dataset?.memberPerm);
+    assert.deepEqual(perms.map(b => b.textContent), ["read", "share", "link", "amend", "forget"]);
+    assert.deepEqual(perms.filter(b => b.getAttribute("aria-pressed") === "true").map(b => b.textContent), ["read", "amend"]);
+  });
+
+  test("권한 전환은 정해진 순서를 지키고 권한 열이 없는 멤버는 기본 권한에서 시작한다", () => {
+    assert.deepEqual(togglePermission(["read", "amend"], "share"), ["read", "share", "amend"]);
+    assert.deepEqual(togglePermission(undefined, "link"), ["read", "share"]);
+  });
+});
+
+describe("그룹 파편 상한 입력과 표시", () => {
+  test("빈 값은 상한 없음, 취소는 변경 없음, 정수가 아니면 거부 대상이다", () => {
+    assert.equal(parseGroupLimitInput(""), null);
+    assert.equal(parseGroupLimitInput(" 120 "), 120);
+    assert.equal(parseGroupLimitInput(null), undefined);
+    assert.ok(Number.isNaN(parseGroupLimitInput("-1")));
+    assert.ok(Number.isNaN(parseGroupLimitInput("1.5")));
+  });
+
+  test("상한이 있으면 멤버 전체 파편 수와 함께 보여 준다", () => {
+    assert.equal(groupLimitLabel({ fragment_limit: null }), "Fragment limit: none");
+    assert.match(groupLimitLabel({ fragment_limit: 1000, fragment_count: 250 }), /Fragments 250 \/ 1,000/);
   });
 });

@@ -15,26 +15,62 @@ import { fmtDate }   from "./format.js";
 import { showToast } from "./ui.js";
 
 /**
- * 역할 입력("owner, viewer@team-a")을 바인딩 목록으로 바꾼다.
+ * 바인딩 범위 입력("g:<그룹 id>", "g:<그룹 id>/<workspace>", 또는 workspace)을 나눈다. workspace만 쓰면 서버가
+ * 그룹 범위가 필요하다고 거부한다.
+ *
+ * @param {string} scope
+ * @returns {{ group_id: string|null, workspace: string|null }}
+ */
+function parseScope(scope) {
+  if (!scope.startsWith("g:")) return { group_id: null, workspace: scope || null };
+  const rest  = scope.slice(2);
+  const slash = rest.indexOf("/");
+  return slash < 0
+    ? { group_id: rest.trim() || null, workspace: null }
+    : { group_id: rest.slice(0, slash).trim() || null, workspace: rest.slice(slash + 1).trim() || null };
+}
+
+/**
+ * 역할 입력("owner, viewer@g:<그룹 id>, reviewer@g:<그룹 id>/team-a")을 바인딩 목록으로 바꾼다.
  *
  * @param {string} text
- * @returns {Array<{ role: string, workspace: string|null }>}
+ * @returns {Array<{ role: string, group_id: string|null, workspace: string|null }>}
  */
 export function parseRolesInput(text) {
   return String(text || "").split(",").map((s) => s.trim()).filter(Boolean).map((item) => {
     const at = item.indexOf("@");
-    return at < 0 ? { role: item, workspace: null } : { role: item.slice(0, at).trim(), workspace: item.slice(at + 1).trim() || null };
+    return at < 0
+      ? { role: item, group_id: null, workspace: null }
+      : { role: item.slice(0, at).trim(), ...parseScope(item.slice(at + 1).trim()) };
   });
 }
 
 /**
- * 바인딩 목록의 표시 문자열.
+ * 바인딩 목록의 입력 형식 문자열(parseRolesInput의 역).
  *
- * @param {Array<{ role: string, workspace: string|null }>} roles
+ * @param {Array<{ role: string, group_id?: string|null, workspace: string|null }>} roles
  * @returns {string}
  */
-export function rolesLabel(roles) {
-  return (roles || []).map((b) => (b.workspace ? `${b.role}@${b.workspace}` : b.role)).join(", ");
+export function rolesInput(roles) {
+  return (roles || []).map((b) => {
+    if (!b.group_id) return b.workspace ? `${b.role}@${b.workspace}` : b.role;
+    return `${b.role}@g:${b.group_id}${b.workspace ? `/${b.workspace}` : ""}`;
+  }).join(", ");
+}
+
+/**
+ * 바인딩 목록의 표시 문자열. 그룹은 알면 이름으로 보인다.
+ *
+ * @param {Array<{ role: string, group_id?: string|null, workspace: string|null }>} roles
+ * @param {Array<{ id: string, name: string }>} [groups]
+ * @returns {string}
+ */
+export function rolesLabel(roles, groups = []) {
+  const nameOf = (id) => groups.find((g) => g.id === id)?.name ?? id;
+  return (roles || []).map((b) => {
+    const scope = [b.group_id ? `group ${nameOf(b.group_id)}` : null, b.workspace].filter(Boolean).join(" / ");
+    return scope ? `${b.role}@${scope}` : b.role;
+  }).join(", ");
 }
 
 /**
@@ -87,7 +123,7 @@ function rowActions(container, user) {
   const cell = el("td", "");
   const base = `/admin-users/${encodeURIComponent(user.id)}`;
   cell.appendChild(button("ROLES", () => {
-    const next = globalThis.prompt?.("roles (예: owner, viewer@team-a)", rolesLabel(user.roles));
+    const next = globalThis.prompt?.("roles (예: owner, viewer@g:<그룹 id>, reviewer@g:<그룹 id>/team-a)", rolesInput(user.roles));
     if (next) act(container, `${base}/roles`, { method: "PUT", body: { roles: parseRolesInput(next) } }, "roles updated");
   }));
   const nextStatus = user.status === "active" ? "disabled" : "active";
@@ -112,7 +148,7 @@ function usersTable(container, users) {
   for (const u of users) {
     const tr = el("tr", "");
     tr.appendChild(el("td", "", u.username));
-    tr.appendChild(el("td", "", rolesLabel(u.roles)));
+    tr.appendChild(el("td", "", rolesLabel(u.roles, state.groups ?? [])));
     tr.appendChild(el("td", "", u.status));
     tr.appendChild(el("td", "", u.totpEnabled ? "on" : "off"));
     tr.appendChild(el("td", "", u.lastLoginAt ? fmtDate(u.lastLoginAt) : "-"));
@@ -129,7 +165,7 @@ function createForm(container, empty) {
   const wrap     = el("div", "space-y-2");
   const username = field("text", "USERNAME");
   const password = field("password", "PASSWORD (12+)");
-  const roles    = field("text", "ROLES (owner, viewer@team-a)");
+  const roles    = field("text", "ROLES (owner, viewer@g:<그룹 id>, reviewer@g:<그룹 id>/team-a)");
   wrap.appendChild(el("div", "text-xs uppercase", empty ? "첫 owner 만들기(마스터 키 로그인 필요)" : "계정 만들기"));
   wrap.appendChild(username);
   wrap.appendChild(password);
@@ -151,8 +187,13 @@ function createForm(container, empty) {
  */
 export async function renderAdminUsers(container) {
   const ctx = beginRender();
-  const res = await api("/admin-users", { signal: ctx.signal });
+  const [res, groupsRes] = await Promise.all([
+    api("/admin-users", { signal: ctx.signal }),
+    api("/groups", { signal: ctx.signal })
+  ]);
   if (!ctx.isCurrent()) return;
+  /** 역할 표시에서 그룹 id 대신 이름을 쓴다. 그룹 목록을 못 읽으면 id를 그대로 보인다. */
+  if (groupsRes?.ok) state.groups = groupsRes.data ?? [];
   container.textContent = "";
   const wrap = el("div", "space-y-6");
   wrap.appendChild(el("h2", "text-lg font-bold", "관리자 계정"));

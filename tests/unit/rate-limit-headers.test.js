@@ -23,6 +23,8 @@ describe("QuotaChecker.getUsage", () => {
     const mockClient = {
       query: mock.fn(async (sql) => {
         if (sql === "BEGIN" || sql === "COMMIT" || sql.startsWith("SET LOCAL")) return { rows: [] };
+        /** 키가 속한 상한 있는 그룹(그룹 할당량)은 없다 */
+        if (sql.includes("api_key_groups")) return { rows: [] };
         if (sql.includes("fragment_limit")) return { rows: [{ fragment_limit: 100 }] };
         if (sql.includes("COUNT")) return { rows: [{ count: 40 }] };
         return { rows: [] };
@@ -45,6 +47,8 @@ describe("QuotaChecker.getUsage", () => {
     const mockClient = {
       query: mock.fn(async (sql) => {
         if (sql === "BEGIN" || sql === "COMMIT" || sql.startsWith("SET LOCAL")) return { rows: [] };
+        /** 키가 속한 상한 있는 그룹(그룹 할당량)은 없다 */
+        if (sql.includes("api_key_groups")) return { rows: [] };
         if (sql.includes("fragment_limit")) return { rows: [{ fragment_limit: null }] };
         return { rows: [] };
       }),
@@ -67,6 +71,8 @@ describe("QuotaChecker.getUsage", () => {
     const mockClient = {
       query: mock.fn(async (sql) => {
         if (sql === "BEGIN" || sql === "COMMIT" || sql.startsWith("SET LOCAL")) return { rows: [] };
+        /** 키가 속한 상한 있는 그룹(그룹 할당량)은 없다 */
+        if (sql.includes("api_key_groups")) return { rows: [] };
         if (sql.includes("fragment_limit")) return { rows: [{ fragment_limit: 50 }] };
         if (sql.includes("COUNT")) return { rows: [{ count: 10 }] };
         return { rows: [] };

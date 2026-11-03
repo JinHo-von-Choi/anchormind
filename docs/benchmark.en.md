@@ -268,6 +268,16 @@ Unlike LongMemEval-S, which requires an external dataset and a separate harness,
 
 There are two measurement modes. `isolated` keeps only the seeded goldset fragments as candidates, so results are identical between runs. `corpus` competes against production fragments to show how recall behaves in a real haystack.
 
+### Temporal goldset and isolation leak probe
+
+`tests/fixtures/recall-goldset-temporal.jsonl` holds 8 time-phrased queries and 8 distractors. Query entries set their seeding time with `mention_days_ago`, and distractors (`distractor: true`, no query) record a different value of the same subject at another time. The set checks, for example, that "the port changed recently" finds the change from 3 days ago rather than the default recorded 90 days ago. Six queries also pass `time_range` (for example `{"from": "7일 전", "basis": "event"}`) as the recall `timeRange`; two keep the time phrase in the query text only.
+
+`--isolation-probe` stores the goldset texts once more under a second harness key with the same agentId and the same workspace name. Any of those fragments in the evaluated key's recall results is counted in `metrics.isolation.violations`. A workspace is a name inside a key, so another key's fragments must stay invisible even under the same name, and the count must always be 0. A `--baseline` comparison treats any violation as a regression with no tolerance.
+
+```bash
+node bin/memento.js benchmark --goldset tests/fixtures/recall-goldset-temporal.jsonl --isolation-probe
+```
+
 ### Reproduction
 
 The goldset and the baselines ship together in the repository, so the same numbers can be produced without external assets.

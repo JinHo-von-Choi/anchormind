@@ -24,7 +24,7 @@ mock.module("../../lib/logger.js", {
 const { authorizeWorkspaceRead, authorizeModePreset } = await import("../../lib/memory/read/WorkspaceReadAuthz.js");
 const { workspaceReadAuthzTotal }                     = await import("../../lib/memory/read/read-authz-metrics.js");
 const { WorkspaceReadDeniedError, WORKSPACE_READ_TOOLS } = await import("../../lib/memory/read/workspace-read-policy.js");
-const { WORKSPACE_LOOKUP_FAILED }                     = await import("../../lib/admin/ApiKeyStore.js");
+const { WORKSPACE_LOOKUP_FAILED }                     = await import("../../lib/keys/policy.js");
 
 /** 카운터의 라벨 조합 하나의 현재 값 */
 async function count(surface, reason, outcome) {

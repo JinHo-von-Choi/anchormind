@@ -31,7 +31,9 @@ const ALLOWED = {
   "admin/ApiKeyStore.js": 2, // 키 삭제 전 그 키의 파편 수(닫힌 파편 포함)를 키 행 잠금과 같은 트랜잭션에서 센다
   "admin/admin-keys.js": 1,
   "admin/admin-memory.js": 13, // 모순 결정은 링크·결정과 파편 만료를 한 트랜잭션에서 잠그고, replay·과거 시점 투영은 관리 범위로 읽는다
-  "admin/admin-routes.js": 2,
+  "admin/admin-routes.js": 1,
+  "admin/WorkspaceAliasStore.js": 5, // 운영자 workspace 병합 도구: 별칭 후보 집계, 병합 대상 행 잠금과 중복 판정(EXISTS), 중복 닫기, 이름 바꾸기를 한 트랜잭션에서 한다. 한 키 범위의 일회성 정리라 데이터 계층 객체에 두지 않는다
+  "admin/stats-aggregates.js": 1, // /stats의 상위 topic 집계. 콘솔 갱신마다 다시 세지 않게 짧게 재사용하는 집계 모듈에 둔다
   "admin/FragmentHealth.js": 1, // /stats와 /memory/anomalies의 파편 상태 개수를 관리 범위로 한 문장에서 센다
   "admin/ReviewStore.js": 7, // 검토 대기 목록, 잠금 순서용 결정 대상 사전 조회, 결정 대상 행 잠금과 승인, 거절 상태 변경, 자동 거절의 잠금과 갱신. 결정 기록 표와 같은 트랜잭션에 쓰므로 데이터 계층 객체를 거치지 않는다
   "admin/ScopeFilter.js": 1, // fragment_links 범위 술어가 양 끝 파편의 workspace를 보는 EXISTS 부분 질의다. 관리 SQL의 술어 조각이며 질의를 실행하지 않는다
@@ -44,17 +46,18 @@ const ALLOWED = {
   "memory/consolidate/ConsolidatorGC.js": 12,
   "memory/consolidate/DigestBuilder.js": 5, // 정리 주기의 묶음 요약 생성: topic 묶음과 선호 묶음 선별, 묶음별 파편 조회, 출처가 닫힌 요약 판정. 묶음 집계와 요약 표 쓰기를 한 단계에 두어 FragmentReader에 일회성 집계 질의를 늘리지 않는다
   "memory/consolidate/FragmentGC.js": 11,
-  "memory/consolidate/MemoryConsolidator.js": 18,
+  "memory/consolidate/RetentionGC.js": 2, // 보존 기간 삭제: 정책별 후보 CTE와 id 순 잠금 문장. FragmentGC의 만료 삭제와 같은 청크 규칙을 쓴다
+  "memory/consolidate/MemoryConsolidator.js": 13,
   "memory/consolidate/MorphemeBackfill.js": 2,
-  "memory/consolidate/SemanticDedup.js": 8, // topic·묶음 선별과 묶음 벡터 적재, 병합은 잠금, 폐기, linked_to, 합산을 한 트랜잭션 클라이언트로 쓴다
+  "memory/consolidate/SemanticDedup.js": 6, // topic·묶음 선별과 묶음 벡터 적재, 병합은 잠금, 폐기, 합산을 한 트랜잭션 클라이언트로 쓴다
   "memory/consolidate/UtilityBaseline.js": 1,
   "memory/consolidate/idOrderedUpdate.js": 3, // id 순 묶음 갱신은 잠금 CTE와 갱신 문장을, 재개형 백필의 후보 id 조회는 같은 조건식을 함께 쓴다
   "memory/embedding/EmbeddingWorker.js": 5, // 배치 저장은 id 순 잠금 CTE와 갱신 문장을 함께 쓴다
   "memory/embedding/SegmentEmbeddingWorker.js": 3, // 구간 생성 대상 한 건 조회, 저장 트랜잭션의 부모 행 잠금과 content_hash 재확인(FOR KEY SHARE, 낡은 작업이 쓰지 못하게), 최근 생성분 중 구간이 없는 파편 복구 스캔
   "memory/embedding/SyntheticQueryWorker.js": 4, // 생성 결과 INSERT도 원문 content_hash를 같은 문장에서 대조해 오래된 파생 자료 저장을 막는다
   "memory/link/ContradictionDetector.js": 12,
-  "memory/link/GraphLinker.js": 11,
-  "memory/link/LinkStore.js": 9, // 가져온 링크의 양 끝 linked_to 갱신은 id 순 잠금 CTE와 갱신 문장을 함께 쓴다
+  "memory/link/GraphLinker.js": 6,
+  "memory/link/LinkStore.js": 3,
   "memory/link/TemporalLinker.js": 1,
   "memory/processors/EpisodeContinuityService.js": 1,
   "memory/processors/MemoryRecaller.js": 1,
@@ -62,7 +65,8 @@ const ALLOWED = {
   "memory/read/AnchorBudgetLoader.js": 1, // 앵커 지정 판정(WriteGate anchor 단계)이 쓰는 같은 키, 같은 workspace의 주입 상위 앵커 조회. WriteGate는 DB를 가져오지 않으므로 서버 의존성(serverAnchorDeps)으로 주입되는 한 문장이다
   "memory/CaseEventStore.js": 1,
   "memory/read/ContextBuilder.js": 1,
-  "memory/read/FragmentReader.js": 18, // recall 예산 선택 토큰, 모순 감사 등급, Hot Cache 본문·검토 버전 재검증
+  "memory/read/FragmentReader.js": 17,
+  "memory/read/FragmentStateLoader.js": 1, // recall 근거 판정이 이미 범위를 통과한 결과 파편 id의 저장 어휘 토큰을 한 번에 읽는다(본문 재토큰화 대신) // recall 예산 선택 토큰, 모순 감사 등급, Hot Cache 본문·검토 버전 재검증
   "memory/read/HistoryReconstructor.js": 1,
   "memory/read/GraphNeighborSearch.js": 2, // 그래프 이웃의 양방향 링크마다 파편을 기본 키로 한 번 조회한다. 파편 조건을 링크 조인에 섞으면 플래너가 키 전체 파편을 훑는 해시 조인을 고르므로 OFFSET 0 하위 질의로 분리한다
   "memory/read/LinkedFragmentLoader.js": 1, // linked 미리보기는 정렬된 링크 순서대로 파편을 하나씩 조회해 조건을 통과한 3건에서 멈춘다. 링크와 파편을 한 번에 조인해 정렬하면 시드의 링크 수만큼 파편을 조회한다
@@ -75,7 +79,7 @@ const ALLOWED = {
   "memory/read/StitchSourceLoader.js": 1,
   "memory/read/SyntheticQuerySearch.js": 1,
   "memory/read/TopicResolver.js": 1,
-  "memory/read/quotaQueries.js": 1,
+  "memory/read/quotaQueries.js": 2, // 할당량 회계: 키 파편 수와 그룹 멤버 전체 파편 수. 잠금 트랜잭션 안에서 세므로 실행기를 인자로 받는다
   "memory/signals/CaseRewardBackprop.js": 1,
   "memory/signals/RecallBenchmark.js": 2, // 임베딩 누락 계수와 --no-seed 기존 스코프 content_hash 대응
   "memory/signals/SpreadingActivation.js": 2,

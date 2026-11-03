@@ -2,6 +2,49 @@
 
 ## [Unreleased]
 
+### Added
+
+- 키 그룹 멤버마다 권한을 둔다(`read`, `share`, `link`, `amend`, `forget`, 기본 `read`, `share`, `link`). 키 A는 함께 속한 그룹에서 A가 `read`, B가 `share`를 가질 때 B의 파편을 읽고, `link`, `amend`, `forget`을 받으면 읽을 수 있는 다른 멤버 파편에 링크를 걸거나 고치거나 id 지정으로 지운다. 위임 수정은 이력의 `amended_by`에 `<agentId>@key:<수정한 키 id>`를 남기고, topic 지정 forget은 자기 파편만 지운다. 기존 멤버는 기본 권한을 받으므로 동작이 같다(migration-073).
+- 그룹 멤버의 `shared_workspaces`로 `share`가 열어 주는 workspace를 정한다(NULL은 전체). 목록이 있으면 다른 멤버는 요청 workspace가 목록 안일 때만 그 멤버의 파편(그 workspace와 전역 파편)을 읽고, id로 집는 amend, forget, link도 같은 범위에서만 된다.
+- 관리 API: `PATCH /groups/:gid/members/:kid`(권한과 `shared_workspaces`, 감사 이벤트 `admin.group.member_permissions`에 이전 값과 새 값), `GET /groups/:id/effective-access`(멤버 쌍별 실제 권한 표), `GET /keys/:id/access`(이 키가 읽을 수 있는 키, 받은 쓰기 권한, 공유 workspace 제한, 최근 며칠 동안 다른 키의 recall 결과에 이 키 파편이 들어간 기록), `PUT /groups/:id/fragment-limit`, `GET/PUT /keys/:id/retention`, `GET/PUT /keys/:id/workspace-aliases`, `GET /workspace-aliases/suggestions`.
+- 그룹 파편 상한(`api_key_groups.fragment_limit`, migration-077). 멤버 키 전체의 살아 있는 파편 수가 상한에 이르면 멤버 키의 저장(remember, batch_remember)을 `fragment_limit_exceeded`(`scope: "group"`)로 거부한다. 키 상한과 함께 적용되고 남은 수가 적은 쪽이 먼저 걸린다. 같은 그룹의 두 멤버가 동시에 저장해도 상한을 넘지 않는다.
+- 키·workspace별 보존 기간(`key_retention_policies`, migration-078). 정리 주기의 `retention_expire` 단계가 created_at이 정한 일수보다 오래된 파편을 지운다. workspace 정책이 키 전체 정책보다 우선하고 앵커는 지우지 않는다.
+- 키별 workspace 별칭(`key_workspace_aliases`, migration-079). 별칭으로 들어온 요청(읽기, 쓰기, 일괄 저장 항목)을 정식 이름으로 바꾼 뒤 처리한다. 별칭 사슬은 거부한다.
+- 관리 콘솔: 그룹 화면에 멤버별 권한 버튼, 공유 workspace(`SHARES`), 실효 권한 표(`EFFECTIVE ACCESS`), 그룹 파편 상한. 키 화면에 그룹 접근 카드(읽을 수 있는 키, 다른 키가 읽은 기록)와 보존 정책 카드. 관리자 계정의 역할 바인딩은 `역할@g:<그룹 id>/<workspace>` 형식으로 그룹 범위를 받는다.
+- CLI: `memento-mcp group`(list, create, delete, members, add, set, remove, limit, `--permissions`, `--shared-workspaces`), `memento-mcp workspace`(suggest, aliases, alias, merge), `memento-mcp export --group <id|이름>`. 바꾸는 명령은 관리 API와 같은 감사 이벤트를 남기고, Redis가 켜져 있으면 실행 중인 서버에 바뀐 키를 알린다.
+- `memento-mcp benchmark`: 골드셋 항목의 `mention_days_ago`(적재 시각), `distractor`(질의 없이 적재만 하는 방해 항목), `time_range`(recall timeRange)를 받는다. 시간 질의 골드셋 `tests/fixtures/recall-goldset-temporal.jsonl`을 더했다. `--isolation-probe`는 같은 저장문을 다른 하네스 키의 같은 workspace 이름에 한 벌 더 적재하고 결과에 섞인 수를 `metrics.isolation.violations`로 낸다. 위반이 있으면 `--baseline` 비교가 퇴행으로 판정한다.
+- 설정: `EMBEDDING_STORAGE`(vector, halfvec), `MEMENTO_VECTOR_PREWARM_MINUTES`(HNSW 색인 pg_prewarm 주기, 기본 10), `MEMENTO_ADMIN_STATS_CACHE_MS`(관리 콘솔 /stats 집계 재사용, 기본 60000), `MEMENTO_EMBEDDING_MEMORY_CACHE_SIZE`(질의 임베딩 프로세스 메모리 캐시, 기본 512), `MEMENTO_QUALITY_EXCLUDE_KEY_IDS`(검색 품질 집계에서 뺄 키). 지표 `memento_tool_args_unknown_total`(스키마 밖 도구 인자, 허용 모드에서도 센다).
+
+### Changed
+
+- `forget`이 읽을 수 없거나 권한이 없는 파편 id에 `No permission` 대신 `deleted: 0`, `protected: 0`을 돌려준다. 다른 키 파편의 존재 여부가 응답으로 드러나지 않는다.
+- 다른 키가 쓴 그룹 공유 파편은 recall 순위 점수에 0.9를 곱한다(`ranking.sharedFragmentFactor`). 그룹에서 amend 권한을 받은 다른 키가 본문을 고치면 그 파편의 `trust_tier`를 한 단계 낮춘다(최저 1). 등급 1은 context의 ANCHOR와 CORE 주입에서 빠진다.
+- 자동 링크(함께 회상 co_retrieved, 시간 temporal, 연관 proactive)는 같은 소유 키 파편끼리, 또는 link 권한을 받은 멤버 파편과만 만든다. 마스터 세션의 자동 링크가 키 경계를 넘지 않는다.
+- 세션별 Redis 키(작업 기억, seen, 세션 파편 목록)를 키 id로 나눈다. 다른 키가 같은 세션 id를 보내도 그 세션의 기록과 섞이지 않는다. 키 이름공간이 없던 기존 항목도 계속 읽는다.
+- `remember`의 자동 링크를 응답 뒤에 처리한다. 종료 절차와 벤치마크는 끝날 때까지 기다린다.
+- 링크 쓰기가 `(from, to)` 순으로 정렬한 upsert 한 문장이다. 파편 행의 `linked_to`를 갱신하지 않고 권고 잠금도 쓰지 않는다. `linked_to`는 저장할 때 선언한 링크 대상만 담고, 실제 링크는 `fragment_links`가 기준이다. 정리 주기의 허브 판정과 GC 연결 수는 `fragment_links`에서 센다. 내보내기 형식 2는 `linked_to`를 싣고 가져오기가 되살린다.
+- recall의 근거 판정이 저장된 `content_tokens`의 어휘를 쓴다. 결과마다 본문을 다시 형태소 분석하지 않는다(결과 30건에 60~80ms의 이벤트 루프 점유가 사라진다).
+- 관리 콘솔 /stats의 DB 집계를 판정 범위별로 `MEMENTO_ADMIN_STATS_CACHE_MS` 동안 재사용하고, 동시에 들어온 요청은 진행 중인 집계 하나를 기다린다.
+- 질의 임베딩을 Redis 앞의 프로세스 메모리 LRU에 둔다. 같은 세션의 반복 질의와, remember 충돌 탐지가 만든 본문 임베딩을 임베딩 작업자가 다시 만드는 경우가 Redis 왕복 없이 맞는다. Redis가 꺼져 있어도 동작한다.
+- `EMBEDDING_STORAGE=halfvec`이면 임베딩 열을 halfvec으로 만들고, 같은 차원의 vector 열은 `scripts/post-migrate-flexible-embedding-dims.js`가 값을 그대로 옮겨 바꾼다. 기동 검사는 저장 형식 불일치를 따로 알린다.
+- 관리자 계정의 workspace 바인딩은 그룹 범위가 있을 때만 받는다(migration-074). 그룹 범위 관리자는 그 그룹 멤버 키의 파편, 사용량, 감사 기록만 보고 다른 키의 같은 이름 workspace는 보지 않는다. 그룹 범위 없는 기존 workspace 바인딩은 판정에서 무시한다.
+- 키 상태와 키 정책 캐시(hard gate, allowed_workspaces, 외부 전송 정책, workspace 별칭, 할당량 사용량) 무효화를 `lib/keys/invalidation.js` 한 곳에서 하고, Redis가 켜져 있으면 `memento-mcp:key-invalidate` 채널로 다른 서버 프로세스에 알린다. 키 정책 조회는 `lib/keys/policy.js`로 옮겼다.
+- 행 수준 보안 정책(migration-080)이 키 목록(`app.current_key_ids`)을 받는다. 키 격리 절(`lib/memory/keyScope.js`)이 넣은 키 id를 질의마다 이 설정으로 넘기므로, `FORCE ROW LEVEL SECURITY`와 별도 런타임 계정을 쓰는 배포에서 그룹 공유 읽기가 정책을 통과한다. 표 소유자로 접속하는 기존 배포는 동작이 같다.
+- 검색 품질 집계(관리 콘솔 /stats의 검색 관측, 경로별 성능)가 `MEMENTO_QUALITY_EXCLUDE_KEY_IDS`의 키를 뺀다.
+- 쓰이지 않던 `fragments`의 `(valid_from)`, `(agent_id, valid_from)` 색인을 지운다(migration-075). `search_events`의 autovacuum 임계값을 5%로 낮춘다(migration-076).
+- 시험 컨테이너의 포트를 `MEMENTO_TEST_DB_PORT`로 바꿀 수 있다.
+
+### Fixed
+
+- 열린 MCP 세션(streamable, legacy SSE)과 훅 인증 캐시가 그룹 멤버십, 멤버 권한, 공유 workspace, 키 기본 workspace를 다시 읽는다. 이전에는 세션을 만들 때의 값을 세션 수명(기본 30일) 동안 써서, 그룹에서 뺀 키의 파편을 열린 세션이 계속 읽었고 기본 workspace를 바꿔도 이전 workspace에 저장했다. 이제 키 상태 재확인 주기(`MEMENTO_SESSION_KEY_RECHECK_MS`, 기본 30초) 안에 반영되고, 관리 API로 바꾸면 그룹 멤버 전원의 캐시를 바로 비운다. 그룹 접근 조회가 실패해도 키 상태 재확인은 계속된다.
+- 정리 주기의 그래프 링크 작업이 같은 키가 같은 본문을 다른 workspace에 저장한 파편을 중복으로 보고 만료시키지 않는다. 중복 판정은 같은 workspace 안에서만 한다.
+- `amend`가 클라이언트가 보낸 `groupKeyIds` 인자를 읽기 범위로 쓰지 않는다. 서버가 세션에서 넣은 값만 쓴다.
+- 같은 `case_id`를 다른 키가 써도 사례 이벤트의 `sequence_no`가 키마다 0부터 이어진다. 이전에는 키를 가리지 않고 번호를 매겨 다른 키의 이벤트 수가 번호 간격으로 드러났다.
+- `memento-mcp benchmark`의 정리가 같은 agentId로 저장된 다른 키나 workspace의 파편을 지우지 않는다. 적재한 키와 workspace의 파편만 지운다.
+- 작업 기억 행의 조회, 비우기, 예산 정리가 키 범위 안에서만 한다. 같은 세션 id를 쓰는 다른 키의 작업 기억 행을 지우지 않는다.
+- 종료 절차가 처리 중인 HTTP 요청(SSE 구독 제외)과 reflect 뒤의 episode milestone 연결이 끝난 뒤 DB 풀을 닫는다. 이전에는 종료 중 `Cannot use a pool after calling end on the pool` 경고가 났다.
+- OAuth 토큰 만료 연장 실패, 작업 기억 Redis 삭제 실패, 유휴 세션 reflect 실패를 경고 로그로 남긴다.
+
 ## [7.0.0] - 2026-11-01
 
 ### Changed

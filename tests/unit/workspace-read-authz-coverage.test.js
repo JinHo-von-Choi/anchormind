@@ -34,9 +34,9 @@ process.env.MEMENTO_TOOL_ARGS_VALIDATION = "off";
 /** 키별 allowed_workspaces 대역 */
 const ALLOWED = { "key-limited": ["ws-a"], "key-open": null };
 
-const realKeys = await import("../../lib/admin/ApiKeyStore.js");
-mock.module("../../lib/admin/ApiKeyStore.js", {
-  namedExports: { ...realKeys, getAllowedWorkspaces: async (keyId) => ALLOWED[keyId] ?? null }
+const realPolicy = await import("../../lib/keys/policy.js");
+mock.module("../../lib/keys/policy.js", {
+  namedExports: { ...realPolicy, getAllowedWorkspaces: async (keyId) => ALLOWED[keyId] ?? null }
 });
 
 /** 도구 처리기 대역: 호출된 도구 이름을 남기고 빈 성공을 돌려준다 */

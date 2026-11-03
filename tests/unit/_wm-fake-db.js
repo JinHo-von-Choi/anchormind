@@ -57,11 +57,15 @@ export function createFakeWmDb() {
       const n = rows.filter(r => r.source === source && r.valid_to !== null && r.key_id === keyId).length;
       return { rows: [{ n }], rowCount: 1 };
     }
+    /** 세션 질의의 키 조건(keyScopeNullable: key_id IS NOT DISTINCT FROM $n)을 그대로 적용한다 */
+    const keyParam = /session_id = \$1/.test(sql) ? sql.match(/key_id IS NOT DISTINCT FROM \$(\d+)/) : null;
+    const keyOk    = (r) => !keyParam || r.key_id === params[Number(keyParam[1]) - 1];
+
     if (/^\s*SELECT/i.test(sql)) {
       const [sessionId, source, cutoff] = params;
       const found = rows
         .filter(r => r.session_id === sessionId && r.source === source
-          && r.valid_to !== null && r.created_at.getTime() > Date.parse(cutoff))
+          && r.valid_to !== null && r.created_at.getTime() > Date.parse(cutoff) && keyOk(r))
         .sort((a, b) => a.created_at - b.created_at || (a.id < b.id ? -1 : 1));
       return { rows: found.map(r => ({ ...r })), rowCount: found.length };
     }
@@ -70,7 +74,10 @@ export function createFakeWmDb() {
     if (/id = ANY/.test(sql)) {
       const [sessionId, source, ids] = params;
       doomed = rows.filter(r => r.session_id === sessionId && r.source === source
-        && r.valid_to !== null && ids.includes(r.id));
+        && r.valid_to !== null && ids.includes(r.id) && keyOk(r));
+    } else if (keyParam) {
+      const [sessionId, source] = params;
+      doomed = rows.filter(r => r.session_id === sessionId && r.source === source && r.valid_to !== null && keyOk(r));
     } else if (/IS NOT DISTINCT FROM/.test(sql)) {
       const [source, keyId, limit] = params;
       doomed = rows

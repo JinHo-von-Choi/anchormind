@@ -10,6 +10,8 @@ import { api }                           from "./api.js";
 import { showToast, showModal, closeModal } from "./ui.js";
 import { fmt, fmtDate, loadingHtml }     from "./format.js";
 import { renderKeyLifecycleCard, secretOnceDisplay } from "./key-lifecycle.js";
+import { renderKeyAccessCard }       from "./key-access.js";
+import { renderKeyRetentionCard }    from "./key-retention.js";
 
 export function renderKeyKpiRow(keys) {
   const total    = keys.length;
@@ -692,6 +694,8 @@ export function renderKeyInspector(key, container) {
   panel.appendChild(idCard);
   panel.appendChild(renderKeyPolicyCard(key, container));
   panel.appendChild(renderKeyLifecycleCard(key, () => renderKeys(container)));
+  panel.appendChild(renderKeyAccessCard(key, state.keys));
+  panel.appendChild(renderKeyRetentionCard(key));
 
   /* Assigned Groups */
   const groupsSection = document.createElement("div");

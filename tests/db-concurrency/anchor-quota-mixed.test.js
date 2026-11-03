@@ -24,7 +24,8 @@ const {
 await prepareLaneDatabase();
 
 const { shutdownPool, getPrimaryPool }   = await import("../../lib/tools/db.js");
-const { createApiKey, getAnchorState }   = await import("../../lib/admin/ApiKeyStore.js");
+const { createApiKey }                   = await import("../../lib/admin/ApiKeyStore.js");
+const { getAnchorState }                 = await import("../../lib/keys/policy.js");
 const { WriteGate, WRITE_ENTRIES }       = await import("../../lib/memory/write/WriteGate.js");
 const { FragmentWriter }                 = await import("../../lib/memory/write/FragmentWriter.js");
 const { FragmentFactory }                = await import("../../lib/memory/write/FragmentFactory.js");

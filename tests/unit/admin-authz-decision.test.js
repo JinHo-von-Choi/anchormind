@@ -62,7 +62,11 @@ const PLAN_TABLE   = {
 const planCell = (cap, role) => PLAN_TABLE[cap].split(" ")[PRESET_ORDER.indexOf(role)];
 
 /** 프리셋 하나를 전역으로 바인딩한 관리자 주체 */
-const roleOf = (role, workspace = null) => ({ kind: "admin_session", id: `s-${role}`, bindings: [{ role, workspace }] });
+/** workspace를 주면 그룹 g-a(멤버 k-1)에 묶은 workspace 바인딩이다. 그룹 없는 workspace 바인딩은 능력을 주지 않는다. */
+const groupBinding = (role, workspace) => ({ role, workspace, group_id: "g-a", key_ids: ["k-1"] });
+const roleOf = (role, workspace = null) => ({
+  kind: "admin_session", id: `s-${role}`, bindings: [workspace === null ? { role, workspace } : groupBinding(role, workspace)]
+});
 
 /** 프리셋 x 능력 교차표. 칸은 허용이면 방식, 거부면 "-" */
 function crossTable(caps) {
@@ -239,14 +243,50 @@ describe("결정 표 단계", () => {
     const global = decide(p, "mem.read");
     assert.equal(global.allowed, false);
     assert.equal(global.deniedAt, "workspace");
-    assert.deepEqual(decide(p, "mem.read", { workspace: "ws-a" }).range, { all: false, workspaces: ["ws-a"] });
+    assert.deepEqual(decide(p, "mem.read", { workspace: "ws-a" }).range, { all: false, cells: [{ workspace: "ws-a", keyIds: ["k-1"] }] });
+    /** 질의 범위도 그 그룹 멤버 키의 그 workspace로 좁힌다 */
+    assert.deepEqual(decide(p, "mem.read", { workspace: "ws-a" }).scope, { all: false, cells: [{ workspace: "ws-a", keyIds: ["k-1"] }] });
   });
 
-  it("범위는 그 능력을 주는 바인딩의 workspace만 합친다", () => {
-    const p = { kind: "admin_session", id: "s", bindings: [{ role: "reviewer", workspace: "ws-a" }, { role: "viewer", workspace: "ws-b" }] };
+  it("범위는 그 능력을 주는 바인딩의 셀만 합친다", () => {
+    const p = { kind: "admin_session", id: "s", bindings: [groupBinding("reviewer", "ws-a"), groupBinding("viewer", "ws-b")] };
     assert.equal(decide(p, "review.decide", { workspace: "ws-b" }).allowed, false);
     assert.equal(decide(p, "mem.read", { workspace: "ws-b" }).allowed, true);
-    assert.deepEqual(decide(p, "mem.read", { workspace: "ws-a" }).range.workspaces.sort(), ["ws-a", "ws-b"]);
+    assert.deepEqual(decide(p, "mem.read", { workspace: "ws-a" }).range.cells.map((c) => c.workspace).sort(), ["ws-a", "ws-b"]);
+  });
+
+  it("그룹 없는 workspace 바인딩은 같은 이름을 쓰는 모든 키를 열므로 능력을 주지 않는다", () => {
+    const legacy = { kind: "admin_session", id: "s-legacy", bindings: [{ role: "viewer", workspace: "ws-a" }] };
+    const d = decide(legacy, "mem.read", { workspace: "ws-a" });
+    assert.equal(d.allowed, false);
+    assert.equal(d.deniedAt, "capability");
+  });
+
+  it("그룹 바인딩(workspace 없음)은 기억 조회 라우트의 전역 대상을 그룹 멤버 키로 허용하고 전역 라우트는 거부한다", () => {
+    const p = { kind: "admin_session", id: "s-g", bindings: [{ role: "admin", workspace: null, group_id: "g-a", key_ids: ["k-1", "k-2"] }] };
+    const memory = decide(p, "mem.read", { keyScoped: true });
+    assert.equal(memory.allowed, true);
+    assert.deepEqual(memory.scope, { all: false, cells: [{ workspace: null, keyIds: ["k-1", "k-2"] }] });
+    /** 키 관리처럼 범위 종류가 global인 라우트는 keyScoped가 아니므로 전체 범위를 요구한다 */
+    assert.equal(decide(p, "key.manage").allowed, false);
+    assert.equal(decide(p, "key.policy").allowed, false);
+  });
+
+  it("그룹 라우트는 그 그룹에 묶인 바인딩이나 전체 범위만 허용한다", () => {
+    const p = { kind: "admin_session", id: "s-g", bindings: [{ role: "admin", workspace: null, group_id: "g-a", key_ids: ["k-1"] }] };
+    assert.equal(decide(p, "key.manage", { group: "g-a" }).allowed, true);
+    const other = decide(p, "key.manage", { group: "g-b" });
+    assert.equal(other.allowed, false);
+    assert.equal(other.reason, "group_out_of_range");
+    assert.deepEqual(decide(p, "key.manage", { group: "*" }).scope.groups, ["g-a"]);
+    assert.equal(decide(roleOf("admin"), "key.manage", { group: "g-b" }).scope.all, true);
+  });
+
+  it("그룹에 묶인 넓은 방식은 질의 범위를 그 그룹으로 좁혀 다른 키 파편을 가림 없이 보여 주지 않는다", () => {
+    const p = { kind: "admin_session", id: "s-mix", bindings: [{ role: "auditor", workspace: null }, groupBinding("viewer", "ws-a")] };
+    const d = decide(p, "mem.read", { workspace: "ws-a", keyScoped: true });
+    assert.equal(d.redact, false);
+    assert.deepEqual(d.scope, { all: false, cells: [{ workspace: "ws-a", keyIds: ["k-1"] }] });
   });
 
   it("범위 행이 하나라도 있으면 행에 없는 (능력, workspace) 조합은 거부한다", () => {

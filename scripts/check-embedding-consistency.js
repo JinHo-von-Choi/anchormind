@@ -16,7 +16,7 @@
 
 import { pathToFileURL }                                      from "node:url";
 import { getPrimaryPool }                                     from "../lib/tools/db.js";
-import { EMBEDDING_DIMENSIONS, EMBEDDING_PROVIDER, EMBEDDING_MODEL } from "../lib/config.js";
+import { EMBEDDING_DIMENSIONS, EMBEDDING_PROVIDER, EMBEDDING_MODEL, EMBEDDING_STORAGE } from "../lib/config.js";
 import { getSchedulerRegistry } from "../lib/scheduler-registry.js";
 import { NOT_WM_ROW } from "../lib/memory/WorkingMemorySql.js";
 import { resolveEmbeddingColumnSpec, embeddingColumnMismatch, fetchEmbeddingColumn }
@@ -25,10 +25,34 @@ import { resolveEmbeddingColumnSpec, embeddingColumnMismatch, fetchEmbeddingColu
 const TABLES           = ["fragments", "morpheme_dict", "fragment_synthetic_query", "fragment_segment"];
 const SCHEMA_FOR_CHECK = "agent_memory";
 
+/**
+ * 불일치 목록과 해결 방법을 표준 오류로 알린다. 저장 형식만 다르면 열 변환 절차를 안내한다.
+ *
+ * @param {Array<{ table: string, dbDim: unknown, dbType?: string, reason?: string }>} mismatches
+ * @param {{ colType: string }} spec
+ */
+function reportMismatches(mismatches, spec) {
+  console.error("\n[embedding-consistency] 임베딩 열과 설정이 맞지 않습니다:");
+  for (const m of mismatches) {
+    const type = m.dbType ? `${m.dbType}(${m.dbDim})` : `${m.dbDim}d`;
+    console.error(`  - ${m.table}: DB=${type}, config=${spec.colType}${m.reason === "type_mismatch" ? " (저장 형식 불일치)" : ""}`);
+  }
+  console.error(`\nconfig: provider=${EMBEDDING_PROVIDER}, model=${EMBEDDING_MODEL}, dims=${EMBEDDING_DIMENSIONS}, storage=${EMBEDDING_STORAGE}`);
+  console.error("\n해결 방법:");
+  if (mismatches.every((m) => m.reason === "type_mismatch")) {
+    console.error("  저장 형식만 다릅니다. EMBEDDING_STORAGE를 DB 열 형식에 맞추거나,");
+    console.error("  node scripts/post-migrate-flexible-embedding-dims.js 로 열을 설정 형식으로 바꾸세요(값은 그대로 옮깁니다).");
+  } else {
+    console.error("  1. 이전 provider로 복구");
+    console.error("  2. EMBEDDING_DIMENSIONS=N npm run migrate-007 실행 + node scripts/backfill-embeddings.js");
+  }
+  console.error("\n데이터 혼합 방지를 위해 기동을 중단합니다.\n");
+}
+
 export async function checkEmbeddingConsistency() {
   const pool      = getPrimaryPool();
   const mismatches = [];
-  const spec       = resolveEmbeddingColumnSpec(EMBEDDING_DIMENSIONS);
+  const spec       = resolveEmbeddingColumnSpec(EMBEDDING_DIMENSIONS, EMBEDDING_STORAGE);
 
   for (const table of TABLES) {
     /** 1차: 선언 차원 검사 (pg_attribute.atttypmod). 데이터가 전량 NULL이어도
@@ -41,7 +65,9 @@ export async function checkEmbeddingConsistency() {
         mismatches.push({
           table,
           dbDim    : current.declaredDim ?? `${current.udtName}(무차원)`,
-          configDim: EMBEDDING_DIMENSIONS
+          configDim: EMBEDDING_DIMENSIONS,
+          dbType   : current.udtName,
+          reason   : mismatch.reason
         });
         continue;
       }
@@ -67,15 +93,7 @@ export async function checkEmbeddingConsistency() {
   }
 
   if (mismatches.length > 0) {
-    console.error("\n[embedding-consistency] 차원 불일치 발견:");
-    for (const m of mismatches) {
-      console.error(`  - ${m.table}: DB=${m.dbDim}d, config=${m.configDim}d`);
-    }
-    console.error(`\nconfig: provider=${EMBEDDING_PROVIDER}, model=${EMBEDDING_MODEL}, dims=${EMBEDDING_DIMENSIONS}`);
-    console.error("\n해결 방법:");
-    console.error("  1. 이전 provider로 복구");
-    console.error("  2. EMBEDDING_DIMENSIONS=N npm run migrate-007 실행 + node scripts/backfill-embeddings.js");
-    console.error("\n데이터 혼합 방지를 위해 기동을 중단합니다.\n");
+    reportMismatches(mismatches, spec);
     return false;
   }
 

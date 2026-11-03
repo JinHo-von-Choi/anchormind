@@ -1,9 +1,13 @@
-import { describe, it, mock } from "node:test";
+import { describe, it, mock, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { EmbeddingCache } from "../../lib/memory/embedding/EmbeddingCache.js";
+import { EmbeddingCache, resetEmbeddingMemoryCache } from "../../lib/memory/embedding/EmbeddingCache.js";
 
 describe("EmbeddingCache", () => {
   const sampleVec = [0.1, 0.2, 0.3, 0.4, 0.5];
+
+  /** 이 묶음은 Redis 계층을 본다. 메모리 캐시는 아래 묶음에서 본다. */
+  before(() => { process.env.MEMENTO_EMBEDDING_MEMORY_CACHE_SIZE = "0"; });
+  after(() => { delete process.env.MEMENTO_EMBEDDING_MEMORY_CACHE_SIZE; });
 
   it("redis가 null이면 get은 항상 null 반환", async () => {
     const cache  = new EmbeddingCache({ redis: null });
@@ -113,5 +117,45 @@ describe("EmbeddingCache", () => {
     const cache = new EmbeddingCache({ redis });
     assert.doesNotThrow(() => cache.set("query", [1.0]));
     await new Promise(r => setTimeout(r, 10));
+  });
+});
+
+describe("EmbeddingCache 메모리 캐시", () => {
+  const vec = [0.25, 0.5, 0.75];
+
+  before(() => { process.env.MEMENTO_EMBEDDING_MEMORY_CACHE_SIZE = "2"; });
+  after(() => { delete process.env.MEMENTO_EMBEDDING_MEMORY_CACHE_SIZE; resetEmbeddingMemoryCache(); });
+  beforeEach(() => resetEmbeddingMemoryCache());
+
+  it("Redis가 꺼져 있어도 같은 프로세스 안에서는 맞고, 받은 배열을 고쳐도 캐시는 그대로다", async () => {
+    const cache = new EmbeddingCache({ redis: { status: "stub" } });
+    cache.set("q", vec);
+    const first = await cache.get("q");
+    assert.deepEqual(first, vec);
+    first[0] = 9;
+    assert.deepEqual(await new EmbeddingCache({ redis: null }).get("q"), vec);
+  });
+
+  it("맞으면 Redis를 부르지 않고, Redis에서 읽은 벡터는 메모리에 남긴다", async () => {
+    const buf   = Buffer.from(new Float32Array(vec).buffer);
+    const redis = { status: "ready", getBuffer: mock.fn(async () => buf), set: mock.fn(async () => "OK") };
+    const cache = new EmbeddingCache({ redis });
+    assert.deepEqual(await cache.get("from-redis"), vec);
+    assert.deepEqual(await cache.get("from-redis"), vec);
+    assert.equal(redis.getBuffer.mock.calls.length, 1);
+  });
+
+  it("크기를 넘으면 가장 오래 안 쓴 항목부터 빼고, 보존 시간이 지나면 버린다", async () => {
+    const cache = new EmbeddingCache({ redis: null });
+    cache.set("a", vec);
+    cache.set("b", vec);
+    await cache.get("a");
+    cache.set("c", vec);
+    assert.equal(await cache.get("b"), null);
+    assert.deepEqual(await cache.get("a"), vec);
+
+    const short = new EmbeddingCache({ redis: null, ttlSeconds: 0 });
+    short.set("d", vec);
+    assert.equal(await short.get("d"), null);
   });
 });

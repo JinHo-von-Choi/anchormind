@@ -52,6 +52,7 @@ import { recordHttpRequest, setAnchorAutoPromotionEnabled } from "./lib/metrics.
 
 /** 스케줄러 */
 import { startSchedulers } from "./lib/scheduler.js";
+import { startKeyInvalidationSubscriber, stopKeyInvalidationSubscriber } from "./lib/keys/invalidation.js";
 
 /** Reranker 사전 로드 */
 import { preloadReranker } from "./lib/memory/read/Reranker.js";
@@ -59,7 +60,7 @@ import { preloadReranker } from "./lib/memory/read/Reranker.js";
 /** 형태소 분석기 워밍업 */
 import { warmup as warmupMorpheme } from "./lib/memory/embedding/MorphemeTokenizer.js";
 import { logInfo, logWarn, logError } from "./lib/logger.js";
-import { installProcessGuards, createShutdownGuard } from "./lib/process-guards.js";
+import { installProcessGuards, createShutdownGuard, createRequestTracker } from "./lib/process-guards.js";
 
 /** 임베딩 차원 일관성 검증 */
 import { checkEmbeddingConsistency } from "./scripts/check-embedding-consistency.js";
@@ -125,7 +126,10 @@ const IP_LIMITED_OAUTH_POSTS = new Map([
 /**
  * HTTP 서버
  */
-const server = http.createServer(async (req, res) => {
+/** 종료 절차가 DB 풀을 닫기 전에 처리 중인 요청이 끝나기를 기다린다. */
+const requestTracker = createRequestTracker();
+
+const server = http.createServer(requestTracker.wrap(async (req, res) => {
   const startTime = process.hrtime.bigint();
 
   applyBaseResponseHeaders(res);
@@ -301,7 +305,7 @@ const server = http.createServer(async (req, res) => {
 
   const duration = Number(process.hrtime.bigint() - startTime) / 1e9;
   recordHttpRequest(req.method, "__not_found__", 404, duration);
-});
+}));
 
 server.keepAliveTimeout = envInt("KEEP_ALIVE_TIMEOUT_MS", 75000, { min: 0 });
 server.headersTimeout   = envInt("HEADERS_TIMEOUT_MS", 76000, { min: 0 });
@@ -389,6 +393,8 @@ server.listen(PORT, () => {
 
   const embeddingWorkerRef = { current: null };
   startSchedulers({ globalEmbeddingWorkerRef: embeddingWorkerRef });
+  /** 다른 프로세스(서버, CLI)가 바꾼 키의 캐시를 바로 지운다. 실패해도 재확인 주기로 반영되므로 기동을 막지 않는다. */
+  void startKeyInvalidationSubscriber();
   setWorkerRefs({ embeddingWorkerRef });
 
   /** Reranker 사전 로드 (비차단 — 실패해도 서버 시작 중단 없음) */
@@ -415,8 +421,14 @@ async function gracefulShutdown(signal, { exitCode = 0 } = {}) {
     console.log("[Shutdown] HTTP server closed");
   });
 
-  /** 2. 진행 중 워커 완료 대기 (최대 30초) */
+  /** 2. 진행 중 워커와 처리 중인 요청 완료 대기 (최대 30초) */
   const drainPromises = [];
+
+  if (requestTracker.inFlight() > 0) {
+    drainPromises.push(requestTracker.waitIdle(DRAIN_TIMEOUT_MS).then((idle) => {
+      if (!idle) console.log(`[Shutdown] ${requestTracker.inFlight()} request(s) still running after drain timeout`);
+    }));
+  }
 
   /** 기동한 폴링 워커는 스스로 레지스트리에 등록되어 있다. 일괄 배수한다. */
   drainPromises.push(...drainAllWorkers());
@@ -469,6 +481,7 @@ async function gracefulShutdown(signal, { exitCode = 0 } = {}) {
   }
 
   /** 4. DB/Redis 연결 종료 */
+  await stopKeyInvalidationSubscriber();
   await shutdownPool();
 
   await saveAccessStats(LOG_DIR);

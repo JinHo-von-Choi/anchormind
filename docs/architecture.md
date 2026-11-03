@@ -206,7 +206,8 @@ lib/handlers/
 └── oauth-handler.js   OAuth 5개 엔드포인트 (ServerMetadata, ResourceMetadata, Register, Authorize, Token)
 
 lib/admin/
-├── ApiKeyStore.js     API 키 CRUD, 그룹 CRUD, 인증 검증 (SHA-256 해시 저장, 원시 키 단 1회 반환). `getGroupKeyIds(keyId)` — keyId 소속 그룹의 모든 키 ID 배열 반환 (null 입력 시 null 즉시 반환, DB 쿼리 없음)
+├── ApiKeyStore.js     API 키 CRUD, 그룹 CRUD, 인증 검증 (SHA-256 해시 저장, 원시 키 단 1회 반환). `getGroupKeyIds(keyId)` — keyId가 읽을 수 있는 키 ID 배열(자기 키와 그룹 권한으로 읽게 된 키) 반환 (null 입력 시 null 즉시 반환, DB 쿼리 없음)
+├── group-access.js    키 그룹 접근 판정(읽을 수 있는 키 목록, 다른 멤버 파편에 대한 link·amend·forget 권한)과 멤버 권한 저장. 권한 규칙은 `lib/memory/groupGrants.js`
 ├── OAuthClientStore.js OAuth 클라이언트 CRUD (client_id/secret 검증, redirect_uri 화이트리스트)
 ├── admin-routes.js    Admin HTTP 디스패처 (UI, 이미지, 정적 파일, REST API 라우팅)
 ├── admin-auth.js      Admin 인증 라우트 (POST /auth, 세션 쿠키 발급)
@@ -355,6 +356,7 @@ lib/cli/
 ├── hook.js             Claude Code, Codex 훅 실행체(`anchormind hook <event> --client <name>`, 원격 서버 전용, `.env`를 읽지 않는다)
 ├── init.js             Claude Code, Codex 플러그인 생성(`anchormind init --target claude|codex`, 기본 dry-run)
 ├── admin.js            관리자 계정 비상 복구(`anchormind admin recover`, 명시한 접속 대상만 쓴다)
+├── group.js            키 그룹과 멤버 권한 관리(`group list|create|delete|members|add|set|remove`)
 ├── audit.js            감사 해시 체인 검증 (`audit verify`, 끊기면 종료 코드 1)
 ├── export.js           파편 JSONL 백업
 ├── import.js           JSONL 파편 복원
@@ -523,9 +525,9 @@ SSE 스트림은 주기적 heartbeat(`: ping\n\n`)으로 연결 상태를 감시
 `SIGTERM`, `SIGINT`는 `createShutdownGuard`가 한 번만 처리하며 이후 신호는 기록만 한다. 절차는 다음 순서다.
 
 1. HTTP 서버가 새 연결 수신을 멈춘다.
-2. 워커 레지스트리(`lib/memory/workers/registry.js`)에 등록된 폴링 워커와 형태소 등록 작업을 최대 30초 동안 배수한다. `PollingWorker.start`가 성공한 워커는 스스로 등록하므로 `BatchRememberWorker`, `EmbeddingWorker` 같은 워커가 종료 경로에 이름으로 나열되지 않는다.
+2. 처리 중인 HTTP 요청(SSE 구독 제외), 워커 레지스트리(`lib/memory/workers/registry.js`)에 등록된 폴링 워커, 응답 뒤 작업(형태소 등록, 자동 링크, 교훈 cue, episode milestone 연결)을 최대 30초 동안 배수한다. `PollingWorker.start`가 성공한 워커는 스스로 등록하므로 `BatchRememberWorker`, `EmbeddingWorker` 같은 워커가 종료 경로에 이름으로 나열되지 않는다.
 3. 활성 세션을 auto-reflect와 함께 닫는다. Redis 세션은 남겨 재시작 뒤 복원할 수 있다.
-4. DB 연결 풀을 닫고 접근 통계를 저장한 뒤 종료 코드 0으로 끝난다.
+4. 키 캐시 무효화 구독을 닫고 DB 연결 풀을 닫은 뒤 접근 통계를 저장하고 종료 코드 0으로 끝난다.
 
 `MEMENTO_SHUTDOWN_DEADLINE_MS`(기본 60000, 0은 상한 없음) 안에 절차가 끝나지 않으면 종료 코드 1로 강제 종료한다. 처리되지 않은 예외는 같은 절차를 종료 코드 1로 실행하며 35초 뒤 강제 종료 타이머가 걸린다.
 
@@ -869,7 +871,7 @@ fragment_links의 weight/confidence 변경 이력을 기록하는 감사 테이�
 
 ### Row-Level Security
 
-fragments와 fragment_links에 RLS가 켜져 있다(migration-045). fragments 정책 `fragment_isolation_policy`는 `app.current_agent_id`(에이전트 축)와, 값이 있을 때만 `app.current_key_id`(키 축)를 본다. fragment_links 정책은 from_id 파편의 접근 가능성을 따른다. 다만 DB 수준 격리는 활성 상태가 아니다. 애플리케이션 계정이 표 소유자이고 `FORCE ROW LEVEL SECURITY`가 없어 정책이 런타임 질의에 적용되지 않으며, 다수 경로가 세션 변수를 설정하지 않고 직접 질의한다. 키 간 격리는 애플리케이션 질의 필터(`lib/memory/keyScope.js`)가 담당한다. DB 격리를 세우는 절차는 `docs/operations/row-level-security.md`에 있다.
+fragments와 fragment_links에 RLS가 켜져 있다(migration-045, 키 목록은 migration-080). fragments 정책 `fragment_isolation_policy`는 `app.current_agent_id`(에이전트 축)와, 값이 있을 때만 키 범위(`app.current_key_ids` 목록, 종전 단일 값 `app.current_key_id`)를 본다. 키 격리 절을 만드는 `lib/memory/keyScope.js`의 도우미가 절에 넣은 키 id를 바인딩 배열에도 적고(`lib/tools/key-scope-ids.js`), `queryWithAgentVector`가 질의마다 그 목록을 `app.current_key_ids`로 넘긴다. 그래서 그룹 공유 읽기(자기 키와 읽을 수 있는 멤버 키)가 정책과 같은 범위가 된다. fragment_links 정책은 from_id 파편의 접근 가능성을 따른다. 다만 DB 수준 격리는 활성 상태가 아니다. 애플리케이션 계정이 표 소유자이고 `FORCE ROW LEVEL SECURITY`가 없어 정책이 런타임 질의에 적용되지 않으며, 일부 경로(관리 API의 직접 질의 등)는 세션 변수를 설정하지 않는다. 키 간 격리는 애플리케이션 질의 필터가 담당한다. DB 격리를 세우는 절차는 `docs/operations/row-level-security.md`에 있다.
 
 ```sql
 CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
@@ -880,8 +882,10 @@ CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
             OR current_setting('app.current_agent_id', true) IN ('system', 'admin')
         )
         AND (
-            COALESCE(current_setting('app.current_key_id', true), '') = ''
-            OR key_id IS NOT DISTINCT FROM current_setting('app.current_key_id', true)
+            (COALESCE(current_setting('app.current_key_id', true), '') = ''
+             AND COALESCE(current_setting('app.current_key_ids', true), '') = '')
+            OR key_id = NULLIF(current_setting('app.current_key_id', true), '')
+            OR key_id = ANY(string_to_array(NULLIF(current_setting('app.current_key_ids', true), ''), ','))
             OR current_setting('app.current_agent_id', true) IN ('system', 'admin')
         )
     );
@@ -906,6 +910,10 @@ CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
 **우선순위**: MCP 도구에서 명시적 `workspace` 파라미터 > 키의 `default_workspace` > NULL(전역).
 
 **설정 방법**: Admin SPA의 키 편집 화면에서 `default_workspace`를 설정하거나, `PATCH /v1/internal/model/nothing/keys/:id/workspace`로 변경한다.
+
+**별칭**: 키마다 workspace 별칭(`key_workspace_aliases`)을 둘 수 있다. `jsonrpc.handleToolsCall`이 신뢰 맥락을 붙이기 전에 인자의 workspace(일괄 저장은 항목마다)가 별칭이면 정식 이름으로 바꾸므로(`lib/keys/workspace-alias.js`), 허가 판정, 그룹 공유 workspace 판정, 저장과 읽기가 모두 정식 이름을 쓴다. workspace 이름은 키 안의 이름일 뿐이라, 다른 키의 같은 이름 workspace는 어느 경로로도 보이지 않는다.
+
+**보존 기간**: 키 전체 또는 키의 workspace 하나에 최대 보존 일수를 둘 수 있다(`key_retention_policies`). 정리 주기의 `retention_expire` 단계(`lib/memory/consolidate/RetentionGC.js`)가 만료 삭제와 같은 청크 규칙으로 지우고, 앵커는 남긴다.
 
 **사용 시나리오**:
 - 개발자가 여러 프로젝트를 같은 Claude Code 세션에서 전환할 때 (`workspace: "memento-mcp"`, `workspace: "docs-mcp"`)
@@ -961,9 +969,9 @@ MCP 클라이언트는 RFC 8414/RFC 7591/RFC 7636 기반 OAuth 2.0 흐름으로 
 
 | 레이어 | 격리 기준 | 동작 |
 |--------|----------|------|
-| RLS (Row-Level Security) | `agent_id`, `key_id` | 정책은 걸려 있으나 표 소유자 계정에는 적용되지 않아 비활성. 세션 변수 `app.current_agent_id`와 (설정된 경우) `app.current_key_id` 기준. `default` 에이전트와 `system`/`admin` 세션 공통 접근 허용 |
+| RLS (Row-Level Security) | `agent_id`, `key_id` | 정책은 걸려 있으나 표 소유자 계정에는 적용되지 않아 비활성. 세션 변수 `app.current_agent_id`와 (설정된 경우) 키 목록 `app.current_key_ids`, 단일 키 `app.current_key_id` 기준. `default` 에이전트와 `system`/`admin` 세션 공통 접근 허용 |
 | key_id 격리 | `key_id` 컬럼 | master key: `key_id = NULL` (전체 접근), API key: `key_id = <해당 키 ID>` (자기 소유 파편만) |
-| 그룹 격리 | `groupKeyIds` 배열 | 동일 그룹 소속 키들 간 파편 공유. `COALESCE(group_id, api_keys.id)` 를 effective_key_id로 사용 |
+| 그룹 공유 | `groupKeyIds` 배열 | 같은 그룹에서 `read`인 키가 `share`인 멤버의 파편을 읽는다. 멤버의 `shared_workspaces`가 있으면 요청 workspace가 목록 안일 때만이다 |
 
 **key_id 격리 원칙**:
 - `keyId = null` (master): WHERE 절에 key_id 조건 생략 → 전체 파편 접근
@@ -1028,21 +1036,28 @@ Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + 
 
 ### API 키 그룹
 
-같은 그룹에 속한 API 키들은 동일한 파편 격리 범위를 공유한다. 여러 에이전트(Claude Code, Codex, Gemini 등)가 하나의 프로젝트 기억을 공유할 때 사용한다.
+같은 그룹의 키는 멤버마다 정한 권한만큼 서로의 파편을 읽고 다룬다. 여러 에이전트(Claude Code, Codex, Gemini 등)가 하나의 프로젝트 기억을 공유할 때 사용한다.
 
-- N:M 매핑: 한 키가 복수 그룹에 소속 가능 (`api_key_group_members` 테이블)
-- 격리 해상도: 인증 시 `COALESCE(group_id, api_keys.id)`를 effective_key_id로 사용
-- 그룹 미소속 키: 기존 동작 유지 (자체 id로 격리)
+- N:M 매핑: 한 키가 여러 그룹에 속할 수 있다(`api_key_group_members`). 멤버 행은 권한(`read`, `share`, `link`, `amend`, `forget`)과 공유 workspace 목록(`shared_workspaces`, NULL은 전체)을 가진다.
+- 읽기 범위: 키 A는 함께 속한 그룹에서 A가 `read`, B가 `share`를 가질 때 B의 파편을 읽는다. 인증과 키 상태 재확인이 그룹 접근(`groupAccessFromRows`, `lib/memory/groupGrants.js`)을 읽어 세션에 `groupKeyIds`, `groupGrants`, `groupShareScopes`로 싣고, 요청마다 요청 workspace가 공유 목록 밖인 멤버를 읽기 범위에서 뺀다.
+- 쓰기: `link`, `amend`, `forget`을 받은 멤버만 읽을 수 있는 다른 멤버 파편을 다룬다. 자동 링크는 같은 소유 키 파편끼리, 또는 link 권한을 받은 멤버 파편과만 만든다.
+- 출처: 다른 키 공유 파편은 recall 순위 점수에 `ranking.sharedFragmentFactor`(0.9)를 곱하고, 위임 amend로 본문이 바뀐 파편은 `trust_tier`가 한 단계 내려간다.
+- 상한: 그룹에 `fragment_limit`을 두면 멤버 키 전체의 살아 있는 파편 수로 저장을 막는다. 키 행과 그룹 행을 이 순서로 잠그고 판정하므로(`lockQuota`, `lib/memory/read/quotaQueries.js`) 동시 저장에서도 넘지 않는다.
+- 캐시: 키 상태와 키 정책 캐시는 `lib/keys/`에 있고, 관리 API와 CLI의 변경은 `lib/keys/invalidation.js`가 이 프로세스에서 지운 뒤 Redis `memento-mcp:key-invalidate` 채널로 다른 프로세스에 알린다.
+- 그룹 미소속 키: 자기 파편만 읽는다.
 
 Admin REST 엔드포인트:
 
 | Method | Path | 설명 |
 |--------|------|------|
-| GET | `.../groups` | 그룹 목록 (key_count 포함) |
+| GET | `.../groups` | 그룹 목록 (멤버 수, 파편 상한과 사용량) |
 | POST | `.../groups` | 그룹 생성 (`{ name, description? }`) |
 | DELETE | `.../groups/:id` | 그룹 삭제 (멤버십 CASCADE) |
-| GET | `.../groups/:id/members` | 그룹 소속 키 목록 |
-| POST | `.../groups/:id/members` | 키를 그룹에 추가 (`{ key_id }`) |
+| GET | `.../groups/:id/members` | 그룹 소속 키 목록 (권한, 공유 workspace) |
+| POST | `.../groups/:id/members` | 키를 그룹에 추가 (`{ key_id, permissions?, shared_workspaces? }`) |
+| PATCH | `.../groups/:gid/members/:kid` | 멤버 권한과 공유 workspace 변경 |
+| GET | `.../groups/:id/effective-access` | 멤버 쌍별 실제 권한 표 |
+| PUT | `.../groups/:id/fragment-limit` | 그룹 파편 상한 |
 | DELETE | `.../groups/:gid/members/:kid` | 키를 그룹에서 제거 |
 | GET | `.../memory/overview` | 메모리 전체 현황 (유형/토픽 분포, 품질 미검증, superseded, 최근 활동) |
 | GET | `.../memory/search-events?days=N` | 검색 이벤트 분석 (총 검색 수, 실패 쿼리, 피드백 통계) |

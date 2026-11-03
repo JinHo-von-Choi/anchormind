@@ -15,7 +15,7 @@ mock.module("../../lib/tools/db.js", {
 
 const { validateApiKeyById, validateApiKeyFromDB, getKeyAuthState } = await import("../../lib/admin/ApiKeyStore.js");
 const { register }                                                  = await import("../../lib/metrics.js");
-const { getCachedKeyState, invalidateKeyState, isKeyStateRevoked }  = await import("../../lib/admin/key-state-cache.js");
+const { getCachedKeyState, invalidateKeyState, isKeyStateRevoked }  = await import("../../lib/keys/key-state-cache.js");
 
 async function storeErrors(operation) {
   const values = (await register.getSingleMetric("mcp_auth_store_errors_total").get()).values;

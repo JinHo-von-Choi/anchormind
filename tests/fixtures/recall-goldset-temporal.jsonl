@@ -1,0 +1,16 @@
+{"id": "tq-01", "query_class": "temporal", "store": "Grafana 대시보드 컨테이너의 내부 포트를 3300으로 바꿨다.", "mention_days_ago": 3, "query": "최근에 바꾼 Grafana 포트가 몇 번이지", "time_range": {"from": "7일 전", "basis": "event"}, "type": "fact"}
+{"id": "tq-01-d", "distractor": true, "store": "Grafana 대시보드 컨테이너의 내부 포트는 기본값 3000을 쓴다.", "mention_days_ago": 90, "type": "fact"}
+{"id": "tq-02", "query_class": "temporal", "store": "결제 서비스의 요청 제한을 분당 600건으로 정했다.", "mention_days_ago": 120, "query": "넉 달 전쯤 정한 결제 요청 제한", "time_range": {"from": "150일 전", "to": "90일 전", "basis": "event"}, "type": "decision"}
+{"id": "tq-02-d", "distractor": true, "store": "결제 서비스의 요청 제한을 분당 1200건으로 올렸다.", "mention_days_ago": 2, "type": "decision"}
+{"id": "tq-03", "query_class": "temporal", "store": "주간 백업 보존 기간을 14일에서 30일로 늘렸다.", "mention_days_ago": 10, "query": "열흘쯤 전에 바꾼 백업 보존 기간", "time_range": {"from": "20일 전", "to": "5일 전", "basis": "event"}, "type": "fact"}
+{"id": "tq-03-d", "distractor": true, "store": "주간 백업 보존 기간은 7일이었다.", "mention_days_ago": 200, "type": "fact"}
+{"id": "tq-04", "query_class": "temporal", "store": "검색 서버의 HNSW ef_search 값을 40에서 80으로 올렸다.", "mention_days_ago": 60, "query": "두 달 전에 조정한 ef_search 값", "time_range": {"from": "75일 전", "to": "45일 전", "basis": "event"}, "type": "fact"}
+{"id": "tq-04-d", "distractor": true, "store": "검색 서버의 HNSW ef_search 값을 80에서 120으로 다시 올렸다.", "mention_days_ago": 1, "type": "fact"}
+{"id": "tq-05", "query_class": "temporal", "store": "로그 수집기를 fluentd에서 vector로 교체했다.", "mention_days_ago": 30, "query": "한 달 전에 로그 수집기를 뭘로 바꿨지", "time_range": {"from": "40일 전", "to": "20일 전", "basis": "event"}, "type": "decision"}
+{"id": "tq-05-d", "distractor": true, "store": "로그 수집기 vector의 버퍼를 디스크 방식으로 바꿨다.", "mention_days_ago": 4, "type": "fact"}
+{"id": "tq-06", "query_class": "temporal", "store": "사내 위키의 세션 만료 시간을 8시간으로 줄였다.", "mention_days_ago": 5, "query": "이번 주에 줄인 위키 세션 만료 시간", "time_range": {"from": "7일 전", "basis": "event"}, "type": "fact"}
+{"id": "tq-06-d", "distractor": true, "store": "사내 위키의 세션 만료 시간은 24시간이다.", "mention_days_ago": 300, "type": "fact"}
+{"id": "tq-07", "query_class": "temporal", "store": "CI 러너의 동시 작업 수를 4개에서 8개로 늘렸다.", "mention_days_ago": 45, "query": "한 달 반 전에 늘린 CI 동시 작업 수", "type": "fact"}
+{"id": "tq-07-d", "distractor": true, "store": "CI 러너의 동시 작업 수를 8개에서 6개로 줄였다.", "mention_days_ago": 3, "type": "fact"}
+{"id": "tq-08", "query_class": "temporal", "store": "메일 발송 큐의 재시도 간격을 5분으로 정했다.", "mention_days_ago": 1, "query": "어제 정한 메일 재시도 간격", "type": "decision"}
+{"id": "tq-08-d", "distractor": true, "store": "메일 발송 큐의 재시도 간격은 원래 1분이었다.", "mention_days_ago": 180, "type": "decision"}

@@ -27,9 +27,12 @@ mock.module("../../lib/admin/ApiKeyStore.js", {
     ...realKeys,
     validateApiKeyFromDB: async (token) => (token === KEY_TOKEN
       ? { valid: true, keyId: KEY_ID, name: "reader", permissions: ["read"], groupKeyIds: [KEY_ID] }
-      : { valid: false }),
-    getAllowedWorkspaces: async () => ["ws-a"]
+      : { valid: false })
   }
+});
+const realPolicy = await import("../../lib/keys/policy.js");
+mock.module("../../lib/keys/policy.js", {
+  namedExports: { ...realPolicy, getAllowedWorkspaces: async () => ["ws-a"] }
 });
 
 const { handleAdminApi }             = await import("../../lib/admin/admin-routes.js");
@@ -71,7 +74,7 @@ describe("GET /me", () => {
     assert.ok(!text.includes(KEY_TOKEN));
     const body = JSON.parse(text);
     assert.deepEqual(body.principal, { kind: "api_key", id: KEY_ID, roles: ["service"] });
-    assert.deepEqual(body.capabilities, [{ cap: "mem.read", mode: "S", range: { all: false, workspaces: ["ws-a"] } }]);
+    assert.deepEqual(body.capabilities, [{ cap: "mem.read", mode: "S", range: { all: false, cells: [{ workspace: "ws-a", keyIds: null }] } }]);
   });
 
   it("키가 아닌 Bearer는 401이다", async () => {

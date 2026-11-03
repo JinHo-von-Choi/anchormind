@@ -202,7 +202,8 @@ lib/handlers/
 +-- oauth-handler.js   OAuth 5 endpoints (ServerMetadata, ResourceMetadata, Register, Authorize, Token)
 
 lib/admin/
-+-- ApiKeyStore.js     API key CRUD, group CRUD, authentication verification (SHA-256 hash storage, raw key returned once only). `getGroupKeyIds(keyId)` -- returns array of all key IDs in keyId's group (null input returns null immediately, no DB query)
++-- ApiKeyStore.js     API key CRUD, group CRUD, authentication verification (SHA-256 hash storage, raw key returned once only). `getGroupKeyIds(keyId)` -- returns the key IDs keyId can read (its own key and keys readable through group permissions; null input returns null immediately, no DB query)
++-- group-access.js    Key group access decisions (readable key list, link/amend/forget permissions on other members' fragments) and member permission storage. Permission rules live in `lib/memory/groupGrants.js`
 +-- OAuthClientStore.js OAuth client CRUD (client_id/secret validation, redirect_uri whitelist)
 +-- admin-routes.js    Admin HTTP dispatcher (routes UI, images, static files, REST API)
 +-- admin-auth.js      Admin auth routes (POST /auth, session cookie issuance)
@@ -351,6 +352,7 @@ lib/cli/
 +-- hook.js             Claude Code and Codex hook runner (`anchormind hook <event> --client <name>`, remote server only, does not read `.env`)
 +-- init.js             Claude Code and Codex plugin generation (`anchormind init --target claude|codex`, dry-run by default)
 +-- admin.js            Emergency recovery for admin accounts (`anchormind admin recover`, uses only the explicit connection target)
++-- group.js            Key group and member permission management (`group list|create|delete|members|add|set|remove`)
 +-- audit.js            Audit hash chain verification (`audit verify`, exit code 1 when broken)
 +-- export.js           Fragment JSONL backup
 +-- import.js           Fragment JSONL restore
@@ -519,9 +521,9 @@ SSE streams are monitored via periodic heartbeats (`: ping\n\n`).
 `SIGTERM` and `SIGINT` are handled once by `createShutdownGuard`; later signals are only logged. The procedure runs in this order.
 
 1. The HTTP server stops accepting new connections.
-2. Polling workers registered in the worker registry (`lib/memory/workers/registry.js`) and pending morpheme registration work are drained for up to 30 seconds. A worker whose `PollingWorker.start` succeeded registers itself, so workers such as `BatchRememberWorker` and `EmbeddingWorker` are not listed by name in the shutdown path.
+2. In-flight HTTP requests (SSE subscriptions excluded), polling workers registered in the worker registry (`lib/memory/workers/registry.js`) and the work that runs after a response (morpheme registration, autolink, lesson cues, episode milestone links) are drained for up to 30 seconds. A worker whose `PollingWorker.start` succeeded registers itself, so workers such as `BatchRememberWorker` and `EmbeddingWorker` are not listed by name in the shutdown path.
 3. Active sessions are closed with auto-reflect. Redis sessions are kept so they can be restored after a restart.
-4. The DB connection pool is closed, access statistics are saved, and the process exits with code 0.
+4. The key cache invalidation subscription and the DB connection pool are closed, access statistics are saved, and the process exits with code 0.
 
 If the procedure does not finish within `MEMENTO_SHUTDOWN_DEADLINE_MS` (default 60000, 0 means no cap), the process is forced to exit with code 1. An uncaught exception runs the same procedure with exit code 1 and arms a 35-second forced-exit timer.
 
@@ -865,7 +867,7 @@ Stores retry responses for write tools that create no fragment (`amend`, `tool_f
 
 ### Row-Level Security
 
-RLS is enabled on fragments and fragment_links (migration-045). The fragments policy `fragment_isolation_policy` checks `app.current_agent_id` (agent axis) and, only when set, `app.current_key_id` (key axis). The fragment_links policy follows access to the from_id fragment. Database-level isolation is not active, however. The application account owns the table and `FORCE ROW LEVEL SECURITY` is not set, so the policy does not apply to runtime queries, and many paths query directly without setting the session variable. Isolation between keys is performed by the application query filter (`lib/memory/keyScope.js`). The procedure for establishing database-level isolation is in `docs/operations/row-level-security.md`.
+RLS is enabled on fragments and fragment_links (migration-045, key list in migration-080). The fragments policy `fragment_isolation_policy` checks `app.current_agent_id` (agent axis) and, only when set, the key range (the list `app.current_key_ids` and the earlier single value `app.current_key_id`). The key isolation helpers in `lib/memory/keyScope.js` also record the key ids they put into a clause on the bind array (`lib/tools/key-scope-ids.js`), and `queryWithAgentVector` passes that list as `app.current_key_ids` on every query, so group reads (own key plus readable member keys) match the policy. The fragment_links policy follows access to the from_id fragment. Database-level isolation is not active, however. The application account owns the table and `FORCE ROW LEVEL SECURITY` is not set, so the policy does not apply to runtime queries, and some paths (direct admin API queries, for example) do not set the session variables. Isolation between keys is performed by the application query filter. The procedure for establishing database-level isolation is in `docs/operations/row-level-security.md`.
 
 ```sql
 CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
@@ -876,8 +878,10 @@ CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
             OR current_setting('app.current_agent_id', true) IN ('system', 'admin')
         )
         AND (
-            COALESCE(current_setting('app.current_key_id', true), '') = ''
-            OR key_id IS NOT DISTINCT FROM current_setting('app.current_key_id', true)
+            (COALESCE(current_setting('app.current_key_id', true), '') = ''
+             AND COALESCE(current_setting('app.current_key_ids', true), '') = '')
+            OR key_id = NULLIF(current_setting('app.current_key_id', true), '')
+            OR key_id = ANY(string_to_array(NULLIF(current_setting('app.current_key_ids', true), ''), ','))
             OR current_setting('app.current_agent_id', true) IN ('system', 'admin')
         )
     );
@@ -904,6 +908,10 @@ The `fragments.workspace` column provides an additional isolation layer within t
 **Priority**: Explicit `workspace` parameter in MCP tool call > key's `default_workspace` > NULL (global).
 
 **Configuration**: Set `default_workspace` in the Admin SPA key editor, or use `PATCH /v1/internal/model/nothing/keys/:id/workspace`.
+
+**Aliases**: each key may have workspace aliases (`key_workspace_aliases`). Before the trusted context is attached, `jsonrpc.handleToolsCall` replaces an argument workspace (each item for batch writes) that is an alias with its workspace (`lib/keys/workspace-alias.js`), so permission checks, group shared-workspace checks, writes and reads all use the canonical name. A workspace is only a name inside a key; another key's workspace with the same name is never visible through any path.
+
+**Retention**: a maximum age in days can be set for a whole key or one of its workspaces (`key_retention_policies`). The `retention_expire` consolidation stage (`lib/memory/consolidate/RetentionGC.js`) deletes with the same chunk rules as expiry deletion and keeps anchors.
 
 **Use cases**:
 - Developer switching between projects in the same session (`workspace: "memento-mcp"`, `workspace: "docs-mcp"`)
@@ -957,9 +965,9 @@ Memory isolation is composed of three layers. The layers that operate today are 
 
 | Layer | Isolation Key | Behavior |
 |-------|--------------|----------|
-| RLS (Row-Level Security) | `agent_id`, `key_id` | Policy is defined but inactive because it does not apply to the table owner account. Uses session variables `app.current_agent_id` and, when set, `app.current_key_id`. Shared access for the `default` agent and `system`/`admin` sessions |
+| RLS (Row-Level Security) | `agent_id`, `key_id` | Policy is defined but inactive because it does not apply to the table owner account. Uses session variables `app.current_agent_id` and, when set, the key list `app.current_key_ids` and the single key `app.current_key_id`. Shared access for the `default` agent and `system`/`admin` sessions |
 | key_id isolation | `key_id` column | master key: `key_id = NULL` (full access), API key: `key_id = <that key's ID>` (own fragments only) |
-| Group isolation | `groupKeyIds` array | Fragments shared among keys in the same group. `COALESCE(group_id, api_keys.id)` used as effective_key_id |
+| Group sharing | `groupKeyIds` array | A key with `read` reads the fragments of members with `share` in the same group; with a member's `shared_workspaces`, only when the request workspace is in that list |
 
 **key_id isolation principles**:
 - `keyId = null` (master): key_id condition omitted from WHERE clause -> full fragment access
@@ -1024,21 +1032,28 @@ Operates as browser-native ESM without a bundler. `admin.js` is the entry point 
 
 ### API Key Groups
 
-API keys in the same group share an identical fragment isolation scope. Use this when multiple agents (Claude Code, Codex, Gemini, etc.) need to share a single project's memory.
+Keys in the same group read and handle each other's fragments as far as the per-member rights allow. Use this when multiple agents (Claude Code, Codex, Gemini, etc.) share a single project's memory.
 
-- N:M mapping: A key can belong to multiple groups (`api_key_group_members` table)
-- Isolation granularity: `COALESCE(group_id, api_keys.id)` is used as the effective_key_id during authentication
-- Keys without a group: Existing behavior preserved (isolated by their own id)
+- N:M mapping: a key can belong to several groups (`api_key_group_members`). A member row carries rights (`read`, `share`, `link`, `amend`, `forget`) and a shared workspace list (`shared_workspaces`, NULL means all).
+- Read range: key A reads B's fragments when, in a group they share, A has `read` and B has `share`. Authentication and the key state recheck load the group access (`groupAccessFromRows`, `lib/memory/groupGrants.js`) into the session as `groupKeyIds`, `groupGrants` and `groupShareScopes`, and each request drops members whose shared list does not include the request workspace.
+- Writes: only members granted `link`, `amend` or `forget` handle other members' readable fragments. Automatic links are made between fragments of the same owner key, or with fragments of members granted link.
+- Provenance: a shared fragment of another key has its recall score multiplied by `ranking.sharedFragmentFactor` (0.9), and a fragment whose content was changed through a delegated amend drops one `trust_tier`.
+- Limit: a group `fragment_limit` caps the live fragments of all member keys. The key row and the group rows are locked in that order before the check (`lockQuota`, `lib/memory/read/quotaQueries.js`), so concurrent writes do not exceed it.
+- Caches: key state and key policy caches live in `lib/keys/`; changes from the admin API or the CLI are cleared in this process by `lib/keys/invalidation.js` and announced to other processes on the Redis channel `memento-mcp:key-invalidate`.
+- Keys without a group read only their own fragments.
 
 Admin REST endpoints:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `.../groups` | Group list (includes key_count) |
+| GET | `.../groups` | Group list (member count, fragment limit and usage) |
 | POST | `.../groups` | Create group (`{ name, description? }`) |
 | DELETE | `.../groups/:id` | Delete group (membership CASCADE) |
-| GET | `.../groups/:id/members` | List keys in a group |
-| POST | `.../groups/:id/members` | Add a key to a group (`{ key_id }`) |
+| GET | `.../groups/:id/members` | List keys in a group (rights, shared workspaces) |
+| POST | `.../groups/:id/members` | Add a key to a group (`{ key_id, permissions?, shared_workspaces? }`) |
+| PATCH | `.../groups/:gid/members/:kid` | Change member rights and shared workspaces |
+| GET | `.../groups/:id/effective-access` | Actual rights per member pair |
+| PUT | `.../groups/:id/fragment-limit` | Group fragment limit |
 | DELETE | `.../groups/:gid/members/:kid` | Remove a key from a group |
 | GET | `.../memory/overview` | Memory overview (type/topic distribution, quality unverified, superseded, recent activity) |
 | GET | `.../memory/search-events?days=N` | Search event analysis (total searches, failed queries, feedback stats) |

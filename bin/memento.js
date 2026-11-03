@@ -11,7 +11,7 @@
  * 업데이트 확인을 수행하며, UPDATE_CHECK_DISABLED=true 로 비활성화할 수 있다.
  *
  * 지원 커맨드: serve, migrate, cleanup, backfill, stats, health, recall, remember,
- * inspect, update, export, import, completion, session, benchmark, anchor-scope, hook, init, audit, admin.
+ * inspect, update, export, import, completion, session, benchmark, anchor-scope, hook, init, audit, admin, group, workspace.
  */
 import { parseArgs } from '../lib/cli/parseArgs.js';
 import { resolveHookRemote } from '../lib/cli/_remoteSettings.js';
@@ -49,10 +49,12 @@ const COMMANDS = {
   init:       () => import('../lib/cli/init.js'),
   audit:      () => import('../lib/cli/audit.js'),
   admin:      () => import('../lib/cli/admin.js'),
+  group:      () => import('../lib/cli/group.js'),
+  workspace:  () => import('../lib/cli/workspace.js'),
 };
 
 /** 원격 모드를 지원하지 않는 로컬 전용 명령 목록 */
-const LOCAL_ONLY_COMMANDS = new Set(["serve", "migrate", "cleanup", "backfill", "health", "update", "export", "import", "benchmark", "anchor-scope", "audit", "admin"]);
+const LOCAL_ONLY_COMMANDS = new Set(["serve", "migrate", "cleanup", "backfill", "health", "update", "export", "import", "benchmark", "anchor-scope", "audit", "admin", "group", "workspace"]);
 
 /**
  * hook 명령의 서버 주소와 키. 프로세스 환경 변수만 읽는다(.env 파일은 읽지 않는다). Claude Code 플러그인
@@ -107,6 +109,8 @@ function printUsage() {
     '  init --target <claude|codex>     Create the Claude Code/Codex plugin (default: dry-run, --write)',
     '  audit verify [--from-seq N]      Verify the audit hash chain (exit 1 when broken)',
     '  admin recover [--user NAME]      Revoke admin sessions, reset TOTP (local DB, --confirm)',
+    '  group <list|create|delete|members|add|set|remove|limit>  Manage key groups, member permissions and group limits',
+    '  workspace <suggest|aliases|alias|merge>  Manage workspace aliases and merge split workspaces',
     '',
     'Options:',
     '  --help                      Show this help message',
@@ -116,7 +120,7 @@ function printUsage() {
     '  --timeout <ms>              원격 요청 타임아웃 밀리초 (default: 30000)',
     '',
     'Remote-capable commands: recall, remember, stats, inspect, session',
-    'Local-only commands: serve, migrate, cleanup, backfill, health, update, export, import, benchmark, anchor-scope, audit, admin',
+    'Local-only commands: serve, migrate, cleanup, backfill, health, update, export, import, benchmark, anchor-scope, audit, admin, group, workspace',
   ];
   console.log(lines.join('\n'));
 }

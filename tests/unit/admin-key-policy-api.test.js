@@ -68,7 +68,7 @@ const {
   invalidateHardGateCache,
   invalidateAllowedWorkspacesCache,
   invalidateEgressPolicyCache
-} = await import("../../lib/admin/ApiKeyStore.js");
+} = await import("../../lib/keys/policy.js");
 const ADMIN_BASE = "/v1/internal/model/nothing";
 
 function fakeRes() {

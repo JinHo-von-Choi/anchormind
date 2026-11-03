@@ -169,6 +169,16 @@ LongMemEval-S가 외부 데이터셋과 별도 하네스를 요구하는 것과 
 
 측정 모드는 둘이다. `isolated`는 적재한 골드셋 파편만 후보로 두어 회차 간 결과가 동일하고, `corpus`는 운영 파편과 경쟁시켜 실제 건초더미에서의 체감을 본다.
 
+### 시간 질의 골드셋과 격리 누출 탐지
+
+`tests/fixtures/recall-goldset-temporal.jsonl`은 시간 표현 질의 8건과 방해 항목 8건으로 이루어진다. 질의 항목은 `mention_days_ago`로 적재 시각을 정하고, 방해 항목(`distractor: true`, 질의 없음)은 같은 주제의 다른 값을 다른 시점에 기록한다. 그래서 "최근에 바꾼 포트"를 물었을 때 90일 전의 기본값이 아니라 3일 전의 변경을 찾는지를 본다. 질의 6건은 `time_range`(예: `{"from": "7일 전", "basis": "event"}`)를 recall `timeRange`로 함께 넘기고, 2건은 시간 표현을 질의 문장에만 둔다.
+
+`--isolation-probe`는 골드셋 저장문을 다른 하네스 키의 같은 agentId, 같은 workspace 이름에 한 벌 더 적재한다. 평가 키의 recall 결과에 그 파편이 하나라도 섞이면 `metrics.isolation.violations`에 센다. workspace는 키 안의 이름이므로 이름이 같아도 다른 키의 파편은 보이지 않아야 하고, 위반 수는 언제나 0이어야 한다. `--baseline` 비교는 위반이 하나라도 있으면 허용 폭 없이 퇴행으로 판정한다.
+
+```bash
+node bin/memento.js benchmark --goldset tests/fixtures/recall-goldset-temporal.jsonl --isolation-probe
+```
+
 ### 재현 절차
 
 저장소에 골드셋과 기준선이 함께 있으므로 외부 자산 없이 같은 수치를 낼 수 있다.

@@ -166,19 +166,20 @@ describe("세션과 항목 격리", () => {
     assert.deepEqual(dbRef.fake.rows.map(r => r.id).sort(), ["other-id", "perm-id"]);
   });
 
-  it("세션 삭제는 그 세션의 작업 기억 행만 지운다", async () => {
+  it("세션 삭제는 그 세션, 그 키의 작업 기억 행만 지운다", async () => {
     seed({ session: "sess-a" });
     seed({ session: "sess-a" });
+    const other = seed({ session: "sess-a", key: "key-2" });
     const b = seed({ session: "sess-b" });
-    assert.equal(await clearWorkingMemoryRows("sess-a"), 2);
-    assert.deepEqual(dbRef.fake.rows.map(r => r.id), [b]);
+    assert.equal(await clearWorkingMemoryRows("sess-a", null), 2);
+    assert.deepEqual(dbRef.fake.rows.map(r => r.id), [other, b]);
   });
 
-  it("항목은 key_id와 agent_id를 그대로 실어 호출자가 키 격리를 적용할 수 있다", async () => {
+  it("같은 세션 id를 쓰는 다른 키의 행은 읽지 않는다", async () => {
     seed({ session: "sess-a", key: "key-1" });
     seed({ session: "sess-a", key: "key-2" });
-    const items = await listWorkingMemoryRows("sess-a", { now: T0 + HOUR });
-    assert.deepEqual(items.map(i => i.key_id).sort(), ["key-1", "key-2"]);
+    const items = await listWorkingMemoryRows("sess-a", { now: T0 + HOUR, keyId: "key-1" });
+    assert.deepEqual(items.map(i => i.key_id), ["key-1"]);
     assert.ok(items.every(i => i.agent_id === "default"));
   });
 

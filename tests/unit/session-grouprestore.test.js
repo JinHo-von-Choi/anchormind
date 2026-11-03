@@ -48,8 +48,10 @@ const { getGroupKeyIds } = await import(
  * ──────────────────────────────────────────────────────────────── */
 
 describe("getGroupKeyIds — ApiKeyStore export", () => {
-  it("pg가 12 row 반환 시 12개 keyId 배열 반환", async () => {
-    const rows = Array.from({ length: 12 }, (_, i) => ({ key_id: `k${i + 1}` }));
+  it("읽을 수 있는 멤버 11명이면 자기 키를 앞에 둔 12개 keyId 배열 반환", async () => {
+    const rows = Array.from({ length: 11 }, (_, i) => ({ key_id: `k${i + 2}`, can_read: true }));
+    /** 같은 그룹이어도 read·share가 맞지 않는 멤버는 빠진다 */
+    rows.push({ key_id: "k-private", can_read: false });
     mockQuery.mock.resetCalls();
     mockQuery.mock.mockImplementationOnce(async () => ({ rows }));
 
@@ -57,7 +59,7 @@ describe("getGroupKeyIds — ApiKeyStore export", () => {
 
     assert.strictEqual(Array.isArray(result), true);
     assert.strictEqual(result.length, 12);
-    assert.deepStrictEqual(result, rows.map(r => r.key_id));
+    assert.deepStrictEqual(result, ["K1", ...rows.filter(r => r.can_read).map(r => r.key_id)]);
 
     assert.strictEqual(mockQuery.mock.callCount(), 1);
     const [sql, params] = mockQuery.mock.calls[0].arguments;

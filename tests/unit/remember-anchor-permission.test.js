@@ -20,7 +20,7 @@ mock.module("../../lib/memory/MemoryManager.js", {
 const { MemoryRememberer }      = await import("../../lib/memory/processors/MemoryRememberer.js");
 const { FragmentFactory }       = await import("../../lib/memory/write/FragmentFactory.js");
 const { SERVER_ANCHOR_DEPS }    = await import("../../lib/memory/write/serverAnchorDeps.js");
-const { getAnchorState }        = await import("../../lib/admin/ApiKeyStore.js");
+const { getAnchorState }        = await import("../../lib/keys/policy.js");
 const { auditAnchorDecision }   = await import("../../lib/memory/write/anchorAudit.js");
 const { handleMemory }          = await import("../../lib/admin/admin-memory.js");
 const { requireCapability, masterPrincipal } = await import("../../lib/admin/AdminAuthz.js");
@@ -78,7 +78,7 @@ beforeEach(() => { process.env.MEMENTO_REMEMBER_ATOMIC = "false"; });
 afterEach(() => { delete process.env.MEMENTO_ANCHOR_PERMISSION; });
 
 describe("서버 앵커 의존성", () => {
-  it("서버 앵커 의존성은 ApiKeyStore 조회와 감사 기록 함수다", () => {
+  it("서버 앵커 의존성은 키 정책 조회와 감사 기록 함수다", () => {
     assert.equal(SERVER_ANCHOR_DEPS.getAnchorState, getAnchorState);
     assert.equal(SERVER_ANCHOR_DEPS.auditAnchor, auditAnchorDecision);
   });

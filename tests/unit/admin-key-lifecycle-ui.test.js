@@ -95,7 +95,8 @@ describe("단추의 요청", () => {
   beforeEach(() => {
     calls = [];
     global.fetch = async (url, options) => {
-      calls.push({ url, options });
+      /** 인스펙터의 다른 카드(그룹 접근, 보존 정책)가 그릴 때 읽는 GET은 세지 않는다 */
+      if ((options?.method ?? "GET") !== "GET") calls.push({ url, options });
       return { ok: false, status: 400, headers: { get: () => "application/json" }, json: async () => ({ error: "rejected" }) };
     };
   });

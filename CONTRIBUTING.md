@@ -5,6 +5,7 @@
 1. Clone the repository
 2. `cp .env.example .env` and configure
 3. Start PostgreSQL with pgvector: `docker-compose -f docker-compose.test.yml up -d`
+   (port 35433 by default; set `MEMENTO_TEST_DB_PORT` to publish it on another port, then run the DB tests with `POSTGRES_PORT=<port> DB_LANE_SERVER_ALLOW=localhost:<port>`)
 4. `npm install`
 5. `npm run migrate`
 6. `npm test`

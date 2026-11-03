@@ -16,6 +16,8 @@ function makeConnect(fragmentLimit, count) {
   return mock.fn(async () => ({
     query: mock.fn(async (sql) => {
       if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK" || sql.startsWith("SET LOCAL")) return { rows: [] };
+      /** 키가 속한 상한 있는 그룹(그룹 할당량)은 없다 */
+      if (sql.includes("api_key_groups")) return { rows: [] };
       if (sql.includes("COUNT"))          return { rows: [{ count }] };
       if (sql.includes("FOR UPDATE"))     return { rows: [{ fragment_limit: fragmentLimit }] };
       if (sql.includes("fragment_limit")) return { rows: [{ fragment_limit: fragmentLimit }] };

@@ -1,12 +1,13 @@
 /**
- * 링크 일괄 생성의 linked_to 정합 시험
+ * 링크 일괄 생성 시험
  *
  * 작성자: 최진호
  * 작성일: 2026-10-03
+ * 수정일: 2026-11-04 (링크 쓰기가 파편 행의 linked_to를 갱신하지 않는다)
  *
- * createLinks에 서로 겹치지 않는 쌍 여러 개를 넘기면 각 파편의 linked_to에는
- * 자기 쌍의 상대만 더해져야 한다. fragment_links 행도 쌍과 같아야 한다. 배치 쓰기도 단건과 같이
- * 더 구체적인 기존 관계를 자동 관계로 덮지 않는다.
+ * createLinks에 쌍 여러 개를 넘기면 fragment_links 행이 쌍과 같아야 하고, 파편 행(linked_to)은 바뀌지 않아야
+ * 한다. 같은 파편 쌍을 여러 연결이 동시에 써도 한 행으로 합쳐진다. 배치 쓰기도 단건과 같이 더 구체적인 기존
+ * 관계를 자동 관계로 덮지 않는다.
  */
 
 import { describe, it, after } from "node:test";
@@ -33,10 +34,11 @@ after(async () => {
   }
 });
 
-describe("LinkStore.createLinks linked_to", () => {
-  it("각 파편의 linked_to에는 자기 쌍의 상대만 들어간다", async () => {
+describe("LinkStore.createLinks", () => {
+  it("fragment_links 행은 쌍과 같고 파편 행의 linked_to는 바뀌지 않는다", async () => {
     const [e1, e2, e3] = await seedFragments(topic, 3, "error");
     const [d1, d2, d3] = await seedFragments(topic, 3, "decision");
+    await directQuery(`UPDATE ${SCHEMA}.fragments SET linked_to = ARRAY[$2::text] WHERE id = $1`, [e1, d3]);
     const pairs = [
       { fromId: e1, toId: d1, relationType: "caused_by" },
       { fromId: e2, toId: d2, relationType: "caused_by" },
@@ -46,15 +48,12 @@ describe("LinkStore.createLinks linked_to", () => {
     await new LinkStore().createLinks(pairs, "default");
 
     const { rows } = await directQuery(
-      `SELECT id, COALESCE(linked_to, '{}') AS linked_to FROM ${SCHEMA}.fragments
-        WHERE id = ANY($1::text[])`,
+      `SELECT id, COALESCE(linked_to, '{}') AS linked_to FROM ${SCHEMA}.fragments WHERE id = ANY($1::text[])`,
       [[e1, e2, e3, d1, d2, d3]]
     );
-    const linked = Object.fromEntries(rows.map(r => [r.id, [...r.linked_to].sort()]));
-    for (const { fromId, toId } of pairs) {
-      assert.deepEqual(linked[fromId], [toId], `from ${fromId}`);
-      assert.deepEqual(linked[toId], [fromId], `to ${toId}`);
-    }
+    const linked = Object.fromEntries(rows.map(r => [r.id, [...r.linked_to]]));
+    assert.deepEqual(linked[e1], [d3], "저장 때 선언한 linked_to만 남는다");
+    for (const id of [e2, e3, d1, d2, d3]) assert.deepEqual(linked[id], [], id);
 
     const links = await directQuery(
       `SELECT from_id, to_id FROM ${SCHEMA}.fragment_links WHERE from_id = ANY($1::text[])`,
@@ -66,17 +65,16 @@ describe("LinkStore.createLinks linked_to", () => {
     );
   });
 
-  it("이미 있던 linked_to 값은 유지되고 중복 없이 합쳐진다", async () => {
-    const [a, b, c] = await seedFragments(topic, 3);
-    await directQuery(`UPDATE ${SCHEMA}.fragments SET linked_to = ARRAY[$2::text] WHERE id = $1`, [a, c]);
-
-    await new LinkStore().createLinks([{ fromId: a, toId: b, relationType: "related" }], "default");
-    await new LinkStore().createLinks([{ fromId: a, toId: b, relationType: "related" }], "default");
-
+  it("같은 쌍을 여러 연결이 동시에 써도 한 행으로 합쳐지고 교착이 없다", async () => {
+    const ids = await seedFragments(topic, 4);
+    const pairs = [];
+    for (const a of ids) for (const b of ids) if (a !== b) pairs.push({ fromId: a, toId: b, relationType: "related" });
+    const store = new LinkStore();
+    await Promise.all(Array.from({ length: 6 }, (_, i) => store.createLinks(i % 2 ? pairs : [...pairs].reverse(), "default")));
     const { rows } = await directQuery(
-      `SELECT linked_to FROM ${SCHEMA}.fragments WHERE id = $1`, [a]
+      `SELECT count(*)::int AS n FROM ${SCHEMA}.fragment_links WHERE from_id = ANY($1::text[]) AND to_id = ANY($1::text[])`, [ids]
     );
-    assert.deepEqual([...rows[0].linked_to].sort(), [b, c].sort());
+    assert.equal(rows[0].n, pairs.length);
   });
 
   it("배치 쓰기도 더 구체적인 기존 관계를 덮지 않고 weight는 큰 값을 남긴다", async () => {

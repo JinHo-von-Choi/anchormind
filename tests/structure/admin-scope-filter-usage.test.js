@@ -29,9 +29,12 @@ import { scopeViolations } from "./_admin-checks.js";
  * ApiKeyStore.js는 키 저장소다. 파편 질의는 키 삭제 보호와 키별 파편 수 집계이며 key_id로 한정되고,
  * 호출하는 관리 라우트(key.manage, 전역 범위)는 판정 범위가 전체일 때만 열린다. ScopeFilter.js는 술어 생성기 자신이다.
  * ReviewStore.js는 검토 대기열 저장소다. 호출하는 /review 라우트(review.decide)는 라우트 표에서 전역 범위라
- * 판정 범위가 전체일 때만 열린다.
+ * 판정 범위가 전체일 때만 열린다. group-access.js는 그룹 멤버 권한 저장소다. 파편 본문을 범위 없이 읽지 않고,
+ * 공유 읽기 기록은 대상 키 id로 한정한다. stats-aggregates.js는 /stats의 집계 도우미이며 그 라우트가 부르기 전에
+ * 전체 범위 가드(requireFullScope)를 통과시킨다. WorkspaceAliasStore.js의 파편 질의(별칭 후보 집계, 병합)는 한 키의
+ * key_id로 한정되고, 후보 집계를 부르는 /workspace-aliases/suggestions 라우트는 전역 범위이며 병합은 CLI 전용이다.
  */
-const EXEMPT = new Set(["ApiKeyStore.js", "ScopeFilter.js", "ReviewStore.js"]);
+const EXEMPT = new Set(["ApiKeyStore.js", "ScopeFilter.js", "ReviewStore.js", "group-access.js", "stats-aggregates.js", "WorkspaceAliasStore.js"]);
 
 const ADMIN_DIR  = path.join(ROOT, "lib", "admin");
 const adminFiles = readdirSync(ADMIN_DIR).filter((f) => f.endsWith(".js") && !EXEMPT.has(f));

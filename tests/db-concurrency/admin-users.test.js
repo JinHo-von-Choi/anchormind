@@ -174,7 +174,8 @@ describe("세션 폐기 연쇄", () => {
   it("역할 변경, 비활성화는 그 계정의 세션을 모두 폐기하고 삭제는 세션과 바인딩을 지운다", async () => {
     const { userId } = await userWithSessions(3);
     await store.createUser({ username: "o2", norm: "o2", passwordHash: HASH, bindings: [{ role: "owner", workspace: null }], createdBy: "t" });
-    const roles = await store.setRoles(userId, [{ role: "owner", workspace: null }, { role: "viewer", workspace: "w" }], { createdBy: "t" });
+    const { rows: [grp] } = await client.query(`INSERT INTO agent_memory.api_key_groups (name) VALUES ($1) RETURNING id`, [`lane-g-${Date.now()}`]);
+    const roles = await store.setRoles(userId, [{ role: "owner", workspace: null }, { role: "viewer", group_id: grp.id, workspace: "w" }], { createdBy: "t" });
     assert.equal(roles.revokedSessions, 3);
     await store.insertSession(newSessionValues({ userId, now: Date.now() }).row);
     assert.equal((await store.updateUser(userId, { status: "disabled" })).revokedSessions, 1);
@@ -182,6 +183,16 @@ describe("세션 폐기 연쇄", () => {
     const { rows } = await client.query(`SELECT (SELECT count(*) FROM agent_memory.admin_sessions WHERE user_id = $1)::int AS s,
       (SELECT count(*) FROM agent_memory.admin_role_bindings WHERE user_id = $1)::int AS b`, [userId]);
     assert.deepEqual(rows[0], { s: 0, b: 0 });
+  });
+
+  it("그룹 없는 workspace 바인딩은 저장하지 못하고, 없는 그룹은 group_not_found다", async () => {
+    const { userId } = await userWithSessions(0);
+    /** 마지막 owner 보호에 걸리지 않게 owner를 하나 더 둔다 */
+    await store.createUser({ username: "o4", norm: "o4", passwordHash: HASH, bindings: [{ role: "owner", workspace: null }], createdBy: "t" });
+    await assert.rejects(store.setRoles(userId, [{ role: "viewer", group_id: null, workspace: "w" }], { createdBy: "t" }),
+      (e) => e.code === "23514");
+    await assert.rejects(store.setRoles(userId, [{ role: "viewer", group_id: "no-such-group", workspace: null }], { createdBy: "t" }),
+      (e) => e.code === "group_not_found");
   });
 
   it("비상 복구는 모든 계정의 세션을 폐기하고 TOTP를 초기화하며 감사 이벤트를 outbox에 남긴다", async () => {
