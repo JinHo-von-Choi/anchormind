@@ -305,7 +305,7 @@ const server = http.createServer(requestTracker.wrap(async (req, res) => {
 
   const duration = Number(process.hrtime.bigint() - startTime) / 1e9;
   recordHttpRequest(req.method, "__not_found__", 404, duration);
-}));
+}, (message, err) => logError(message, err)));
 
 server.keepAliveTimeout = envInt("KEEP_ALIVE_TIMEOUT_MS", 75000, { min: 0 });
 server.headersTimeout   = envInt("HEADERS_TIMEOUT_MS", 76000, { min: 0 });
