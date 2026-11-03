@@ -34,7 +34,11 @@ function fakeRes() {
 }
 
 const sampleOf = (p) => p.split("/").map((seg) => (seg.startsWith(":") ? SAMPLE : seg)).join("/");
-const session  = (role, workspace = null) => ({ kind: "admin_session", id: `s-${role}`, bindings: [{ role, workspace }] });
+/** workspace를 주면 그룹 g-a(멤버 k-1)에 묶은 workspace 바인딩이다. */
+const groupBinding = (role, workspace) => ({ role, workspace, group_id: "g-a", key_ids: ["k-1"] });
+const session  = (role, workspace = null) => ({
+  kind: "admin_session", id: `s-${role}`, bindings: [workspace === null ? { role, workspace } : groupBinding(role, workspace)]
+});
 
 /** 라우트 하나를 판정한다. */
 function authorize(principal, method, subPath, query = "") {
@@ -115,7 +119,7 @@ describe("authorizeAdminRoute", () => {
     assert.equal(JSON.parse(global.res.body).deniedAt, "workspace");
     const scoped = authorize(p, "GET", "/memory/fragments", "workspace=ws-a");
     assert.equal(scoped.ok, true);
-    assert.deepEqual(adminScopeOf(scoped.req), { all: false, workspaces: ["ws-a"] });
+    assert.deepEqual(adminScopeOf(scoped.req), { all: false, cells: [{ workspace: "ws-a", keyIds: ["k-1"] }] });
     assert.equal(authorize(p, "GET", "/memory/fragments", "workspace=ws-b").ok, false);
   });
 
@@ -169,12 +173,12 @@ describe("authorizeAdminRoute", () => {
 });
 
 describe("마스킹 방식과 질의 범위는 대상을 덮는 바인딩에서 정한다", () => {
-  const mixed = { kind: "admin_session", id: "s-mixed", bindings: [{ role: "viewer", workspace: "ws-a" }, { role: "auditor", workspace: null }] };
+  const mixed = { kind: "admin_session", id: "s-mixed", bindings: [groupBinding("viewer", "ws-a"), { role: "auditor", workspace: null }] };
 
-  it("대상 workspace를 덮는 W 바인딩이 있으면 마스킹하지 않고 질의 범위는 그 workspace 하나다", () => {
+  it("대상 workspace를 덮는 W 바인딩이 있으면 마스킹하지 않고 질의 범위는 그 바인딩의 그룹 키와 workspace다", () => {
     const d = decide(mixed, "mem.read", { workspace: "ws-a" });
     assert.equal(d.redact, false);
-    assert.deepEqual(d.scope, { all: false, workspaces: ["ws-a"] });
+    assert.deepEqual(d.scope, { all: false, cells: [{ workspace: "ws-a", keyIds: ["k-1"] }] });
   });
 
   it("다른 workspace와 전역 대상은 전역 auditor 바인딩만 덮으므로 마스킹이다", () => {
@@ -190,7 +194,7 @@ describe("마스킹 방식과 질의 범위는 대상을 덮는 바인딩에서 
     b.res.end(JSON.stringify({ items: [{ id: "x", content: "clear b" }] }));
     assert.ok(!b.res.body.includes("clear b"));
     const a = authorize(mixed, "GET", "/memory/fragments", "workspace=ws-a");
-    assert.deepEqual(adminScopeOf(a.req), { all: false, workspaces: ["ws-a"] });
+    assert.deepEqual(adminScopeOf(a.req), { all: false, cells: [{ workspace: "ws-a", keyIds: ["k-1"] }] });
   });
 
   it("owner는 workspace 매개변수가 있어도 질의 범위가 전체다", () => {

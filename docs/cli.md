@@ -52,7 +52,7 @@ node bin/memento.js stats
 
 ### local-only (원격 접속 불가)
 
-`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`, `audit`, `admin` 는 직접 DB / 프로세스에 접근하는 명령이므로 `--remote` 플래그와 함께 사용하면 에러를 반환한다.
+`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`, `audit`, `admin`, `group`, `workspace` 는 직접 DB / 프로세스에 접근하는 명령이므로 `--remote` 플래그와 함께 사용하면 에러를 반환한다.
 
 ### 원격 지원
 
@@ -88,6 +88,8 @@ node bin/memento.js stats
 | `init --target <claude\|codex>` | Claude Code, Codex 플러그인을 로컬 마켓플레이스로 생성 (기본 dry-run, `--write`로 쓰기) | 해당 없음 |
 | `audit verify [--from-seq N] [--max-rows N]` | 감사 해시 체인 검증 (끊기면 종료 코드 1) | 아니오 |
 | `admin recover [--user NAME] [--confirm]` | 관리자 계정 비상 복구(전체 세션 폐기, TOTP 초기화, 명시 접속 대상) | 아니오 |
+| `group <sub>` | 키 그룹, 멤버 권한, 그룹 파편 상한 관리(list, create, delete, members, add, set, remove, limit) | 아니오 |
+| `workspace <sub>` | 키별 workspace 별칭과 병합(suggest, aliases, alias, merge) | 아니오 |
 
 ---
 
@@ -398,11 +400,12 @@ node bin/memento.js update --help
 node bin/memento.js export --topic memento-mcp --type fact > out.jsonl
 node bin/memento.js export --since 2026-04-01 --output backup.jsonl
 node bin/memento.js export --key <key_id> --limit 500
+node bin/memento.js export --group team-a --output team-a.jsonl
 node bin/memento.js export --include-versions --output full.jsonl
 node bin/memento.js export --format-version 1 --output legacy.jsonl
 ```
 
-주요 옵션: `--topic`, `--type`, `--since <ISO>`, `--limit <n>`, `--output <FILE>`, `--format-version <1|2>`, `--no-links`(링크 줄 제외), `--include-versions`(수정 이력 줄 추가), `--json` (배열 출력).
+주요 옵션: `--key <key_id>`, `--group <id|이름>`(그룹 멤버 키 전체의 파편, `--key`와 함께 쓸 수 없다. 멤버가 없으면 파편 줄이 없다), `--topic`, `--type`, `--since <ISO>`, `--limit <n>`, `--output <FILE>`, `--format-version <1|2>`, `--no-links`(링크 줄 제외), `--include-versions`(수정 이력 줄 추가), `--json` (배열 출력).
 
 - 파편은 id 순 묶음으로 읽어 줄 단위로 쓴다.
 - 링크는 양 끝이 모두 내보낸 파편이고 삭제되지 않은 것만 싣는다. `--topic`, `--type`, `--since`, `--limit`으로 범위를 좁히면 범위 밖 파편과 이어진 링크는 빠진다.
@@ -548,6 +551,52 @@ anchormind admin recover --url postgres://memento@db.internal:5432/memento --con
 | `--user <username>` | TOTP와 복구 코드를 초기화할 계정. 없는 계정이면 아무것도 바꾸지 않고 종료 코드 1 |
 | `--confirm` | 실제로 적용한다 |
 | `--json` | 결과(`revokedSessions`, `userId`, `outboxId`)를 JSON으로 출력한다 |
+
+### group
+
+API 키 그룹과 멤버 권한을 관리한다. 서버와 같은 DB 설정(`.env`)으로 붙는 로컬 전용 명령이다. `<group>`과 `<key>`에는 id나 이름을 쓴다. 이름이 여러 개와 맞으면 거부하므로 id를 쓴다. 바꾸는 명령은 관리 API와 같은 이름의 감사 이벤트(`admin.group.create`, `admin.group.delete`, `admin.group.member_add`, `admin.group.member_permissions`, `admin.group.member_remove`, `admin.group.fragment_limit_update`)를 detail `channel: "cli"`로 outbox에 남긴다. Redis가 켜져 있으면 바뀐 멤버 키를 실행 중인 서버에 바로 알리고, 아니면 서버가 키 상태 재확인 주기(`MEMENTO_SESSION_KEY_RECHECK_MS`, 기본 30초) 안에 열린 세션에도 반영한다.
+
+```bash
+memento-mcp group list
+memento-mcp group create team-a --description "A팀 에이전트"
+memento-mcp group add team-a codex-key                         # 기본 권한 read,share,link
+memento-mcp group add team-a reviewer-key --permissions read   # 읽기만, 자기 파편은 내보이지 않음
+memento-mcp group set team-a lead-key --permissions read,share,link,amend,forget
+memento-mcp group members team-a
+memento-mcp group set team-a codex-key --shared-workspaces proj-a,proj-b   # share가 이 두 workspace만 연다
+memento-mcp group set team-a codex-key --shared-workspaces all             # 다시 전체 공유
+memento-mcp group limit team-a 50000                           # 멤버 키 전체의 파편 상한
+memento-mcp group limit team-a none
+memento-mcp group remove team-a codex-key
+memento-mcp group delete team-a --confirm                      # 멤버십만 지우고 키와 파편은 남긴다
+```
+
+| 권한 | 뜻 |
+|-|-|
+| `read` | 같은 그룹에서 `share`를 가진 다른 멤버의 파편을 읽는다 |
+| `share` | 이 키의 파편을 같은 그룹에서 `read`를 가진 멤버가 읽게 한다 |
+| `link` | 읽을 수 있는 다른 멤버의 파편에 링크를 건다 |
+| `amend` | 읽을 수 있는 다른 멤버의 파편을 고친다 |
+| `forget` | 읽을 수 있는 다른 멤버의 파편을 id 지정으로 지운다(topic 일괄 삭제는 자기 파편만) |
+
+`--permissions`에 모르는 이름이 있으면 아무것도 바꾸지 않고 종료 코드 1로 끝난다. `--json`이면 결과를 JSON으로 출력한다.
+
+`--shared-workspaces`는 이 멤버의 `share`가 여는 workspace 목록이다(`all`은 전체). 목록이 있으면 다른 멤버는 요청 workspace가 목록 안일 때만 이 멤버의 그 workspace와 전역 파편을 읽는다. `limit`은 멤버 키 전체의 살아 있는 파편 수에 상한을 둔다. 상한에 이르면 멤버 키의 저장이 `fragment_limit_exceeded`로 거부되며, 현재 파편 수보다 낮게는 정할 수 없다.
+
+### workspace
+
+같은 프로젝트가 `/home/u/jobs/proj`와 `proj`처럼 여러 이름으로 갈라진 workspace를 키 안에서 하나로 모은다. 로컬 전용이며 `<key>`에는 id나 이름을 쓴다. 별칭을 두면 그 이름으로 들어온 요청(읽기, 쓰기, 일괄 저장 항목)을 정식 이름으로 바꿔 처리하고, 이미 별칭 이름으로 저장된 파편은 `merge`로 옮긴다. 경로의 마지막 조각을 자동으로 쓰지 않는 이유는 서로 다른 경로가 같은 조각으로 끝나는 경우(임시 작업 디렉터리의 `worktree` 등)가 많아서다.
+
+```bash
+memento-mcp workspace suggest                                 # 경로형 workspace와 같은 이름의 일반 workspace가 있는 후보
+memento-mcp workspace alias codex-key /home/u/jobs/proj proj   # 요청 이름 바꾸기
+memento-mcp workspace aliases codex-key
+memento-mcp workspace merge codex-key /home/u/jobs/proj proj   # 옮길 수와 닫을 중복 수만 센다
+memento-mcp workspace merge codex-key /home/u/jobs/proj proj --confirm
+memento-mcp workspace alias codex-key /home/u/jobs/proj none   # 별칭 삭제
+```
+
+`merge`는 키 하나의 `<from>` 파편(닫힌 행 포함)을 `<to>`로 옮긴다. `<to>`에 같은 본문이 이미 있는 파편은 옮기지 않고 `<from>`에 둔 채 닫는다. 바꾸는 명령은 감사 이벤트 `admin.key.workspace_alias_update`, `admin.key.workspace_merge`를 남긴다.
 
 ---
 
@@ -708,7 +757,11 @@ node bin/memento.js benchmark --save-baseline scripts/baseline-recall.json
 node bin/memento.js benchmark --baseline scripts/baseline-recall.json
 ```
 
-주요 옵션: `--goldset <path>`(기본 `tests/fixtures/recall-goldset.jsonl`), `--baseline <path>`, `--save-baseline <path>`, `--limit <n>`, `--repeat <n>`, `--synthetic`, `--page-size <n>`, `--key-scope isolated|corpus`, `--agent-id <id>`(기본 `benchmark-harness`), `--workspace <name>`(기본 `__benchmark__`), `--no-seed`, `--no-cleanup`, `--format table|json`.
+주요 옵션: `--goldset <path>`(기본 `tests/fixtures/recall-goldset.jsonl`), `--baseline <path>`, `--save-baseline <path>`, `--limit <n>`, `--repeat <n>`, `--synthetic`, `--page-size <n>`, `--key-scope isolated|corpus`, `--agent-id <id>`(기본 `benchmark-harness`), `--workspace <name>`(기본 `__benchmark__`), `--age-spread <days>`, `--isolation-probe`, `--no-seed`, `--no-cleanup`, `--format table|json`.
+
+골드셋 항목은 `mention_days_ago`(적재 시각을 그 일수 전으로), `distractor: true`(질의 없이 적재만 하는 방해 항목), `time_range`(recall `timeRange`)를 가질 수 있다. 시간 질의 골드셋 `tests/fixtures/recall-goldset-temporal.jsonl`은 같은 주제를 다른 시점에 기록한 방해 항목과 함께 시간 표현 질의 8건을 잰다.
+
+`--isolation-probe`는 같은 저장문을 다른 하네스 키(`benchmark-harness-key-isolation-probe`)의 같은 agentId, 같은 workspace 이름에 한 벌 더 적재하고, 평가 키의 recall 결과에 그 파편이 섞인 수를 `metrics.isolation.violations`로 낸다. workspace는 키 안의 이름이므로 이 값은 언제나 0이어야 하고, 0이 아니면 `--baseline` 비교가 퇴행으로 판정한다(`isolated` 모드에서만 동작).
 
 실행 전에 대상 DB(host, port, database)를 표준 에러에 한 줄로 출력한다. 임베딩된 파편이 0건인 실행(`--no-seed` 포함)은 `--save-baseline`을 거부한다. 기준선 파일에는 임베딩 provider, 모델, 차원이 함께 기록되고, `--baseline` 비교에서 모델이나 차원이 다르면 경고한다. `isolated` 모드는 격리 키 `benchmark-harness-key`(상태 `inactive`) 행을 `api_keys`에 한 번 만든다.
 

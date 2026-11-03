@@ -32,10 +32,14 @@ const LIB  = path.resolve(HERE, "..", "..", "lib");
  */
 const ALLOWED = {
   /** 고정 위치 파라미터로 격리를 박은 질의와 격리가 아닌 회계·멤버십 질의 */
-  "admin/ApiKeyStore.js": 4, // 키 삭제 전 그 키의 파편, 재공고화 이력 수를 세는 회계 질의 2곳
+  "admin/ApiKeyStore.js": 3, // 키 삭제 전 그 키의 파편, 재공고화 이력 수를 세는 회계 질의 2곳, 그룹 멤버 행 삭제
+  "admin/RetentionPolicyStore.js": 3, // 보존 정책 표(key_retention_policies)를 그 키 한 개로 읽고 고치는 관리 질의. 기억 격리 조건이 아니다
+  "admin/WorkspaceAliasStore.js": 5, // 별칭 표를 그 키로 읽고 고치는 질의 3곳, 별칭 후보 집계와 병합 대상을 한 키로 고르는 운영 도구 질의 2곳
+  "keys/policy.js": 1, // workspace 별칭 표를 그 키로 읽는 정책 조회. 기억 격리 조건이 아니다
   "admin/ApiKeyLifecycleStore.js": 2,
   "admin/ToolCallUsage.js": 1, // 키별 사용량 회계(api_key_usage)를 그 키 한 개로 읽는다. 기억 격리 조건이 아니다 // 회전과 폐기가 api_key_secrets 행을 그 키로 고르는 갱신 2곳(기억 격리 조건이 아님)
   "admin/admin-keys.js": 1,
+  "admin/group-access.js": 5, // 그룹 멤버 행을 요청 키(m1.key_id)와 대상 멤버(key_id)로 고르는 멤버십 질의, 키별 공유 읽기 감사(그 키 소유 파편을 읽은 다른 키). 파편 격리 조건이 아니다
   "memory/CaseEventStore.js": 2,
   "memory/consolidate/MemoryConsolidator.js": 3,
   "memory/consolidate/DigestBuilder.js": 1, // 묶음 요약 생성이 GROUP BY로 고른 묶음의 키 값을 고정 위치($1)로 다시 고른다. 접근 격리가 아니라 같은 묶음 재조회다 // linked_to 교체는 잠금 문장과 갱신 문장이 같은 키 조건을 고정 위치로 쓴다
@@ -43,7 +47,7 @@ const ALLOWED = {
   "memory/read/FragmentReader.js": 1,
   "memory/read/GraphNeighborSearch.js": 1,
   "memory/read/RecallSuggestionEngine.js": 2,
-  "memory/read/quotaQueries.js": 1,
+  "memory/read/quotaQueries.js": 2, // 할당량 회계: 키 자신의 파편 수, 키가 속한 그룹 멤버십 행
   "memory/signals/SearchParamAdaptor.js": 1,
   "memory/write/FragmentWriter.js": 4,
   "symbolic/ClaimStore.js": 4,

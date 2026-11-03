@@ -4,7 +4,7 @@
  * 작성자: 최진호
  * 작성일: 2026-10-03
  *
- * 문서가 말하는 키 관리 라우트가 admin-keys.js 라우트 표에 있는지, 표의 키 라우트가
+ * 문서가 말하는 키 관리 라우트가 admin-keys.js, admin-key-policies.js 라우트 표에 있는지, 표의 키 라우트가
  * 라우트 문서(ko, en)에 모두 오르는지, 정책 편집을 설명하는 문서가 서로 같은 한도와
  * 같은 경로를 쓰는지 본다. 문서 문장 전체는 고정하지 않는다.
  */
@@ -25,7 +25,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 const BASE = "/v1/internal/model/nothing";
 const read = (rel) => readFileSync(path.join(ROOT, rel), "utf8");
 
-const ROUTES_SRC = read("lib/admin/admin-keys.js");
+/** 키 라우트는 admin-keys.js와 admin-key-policies.js(보존 정책, workspace 별칭) 두 라우트 표에 있다. */
+const ROUTES_SRC = read("lib/admin/admin-keys.js") + read("lib/admin/admin-key-policies.js");
 const ROUTE_LINE = /\{\s*method:\s*"([A-Z]+)",\s*match:\s*(exact|regex)\((?:new RegExp\()?`([^`]+)`\)?\),\s*handler:\s*(\w+)\s*\}/g;
 
 /** 라우트 표에서 /keys 아래 항목을 읽어 판정 함수와 `:id` 표기 경로를 만든다. */

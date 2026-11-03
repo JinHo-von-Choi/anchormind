@@ -7,7 +7,7 @@
 
 ## 현재 상태
 
-`agent_memory.fragments`와 `agent_memory.fragment_links`에 행 수준 보안이 켜져 있고 격리 정책이 걸려 있다(migration-045). 다만 `FORCE ROW LEVEL SECURITY`는 적용하지 않았다.
+`agent_memory.fragments`와 `agent_memory.fragment_links`에 행 수준 보안이 켜져 있고 격리 정책이 걸려 있다(migration-045, 키 목록은 migration-080). 다만 `FORCE ROW LEVEL SECURITY`는 적용하지 않았다.
 
 PostgreSQL은 표 소유자에게 정책을 적용하지 않는다. 애플리케이션이 표 소유자 계정으로 접속하는 배포에서는 정책이 걸려 있어도 런타임 질의에 아무 영향이 없다. 즉 지금 키 간 격리를 실제로 지키는 것은 애플리케이션 질의 필터(`lib/memory/keyScope.js`) 한 겹이다.
 
@@ -20,11 +20,11 @@ DB를 두 번째 방어선으로 세우려면 아래 절차가 필요하다. 이
 | 축 | 세션 변수 | 동작 |
 |-|-|-|
 | 에이전트 | `app.current_agent_id` | 값이 일치하거나 행이 `default`이면 허용. `system`과 `admin`은 전체 허용 |
-| API 키 | `app.current_key_id` | 값이 비어 있으면 키 범위 없음으로 보고 종전대로 동작. 값이 있으면 그 키 소유 행만 허용 |
+| API 키 | `app.current_key_ids`, `app.current_key_id` | 둘 다 비어 있으면 키 범위 없음으로 보고 종전대로 동작. 값이 있으면 목록(쉼표로 잇는다) 안의 키 소유 행만 허용. 키 없는(마스터) 행은 허용하지 않는다 |
 
-두 변수는 `lib/tools/db.js`의 `queryWithAgentVector`가 설정한다. 키 값은 호출부가 `opts.keyId`로 넘길 때만 채워진다.
+변수는 `lib/tools/db.js`의 `queryWithAgentVector`가 설정한다. `app.current_key_ids`는 질의의 키 격리 절이 넣은 키 목록이다. `lib/memory/keyScope.js`의 도우미(`keyScopeClause`, `keyScopeScalar`, `keyScopeGroup`, `keyScopeNullable`, `keyScopeNullableIndexed`, `keyScopeCondition`)가 절에 넣은 키 id를 바인딩 배열의 기호 속성에 적고(`lib/tools/key-scope-ids.js`), `queryWithAgentVector`가 그 목록을 넘긴다. 그룹 공유 읽기는 자기 키와 읽을 수 있는 멤버 키가 모두 목록에 들어가므로 정책을 통과한다.
 
-이 설계 때문에 `opts.keyId`를 넘기지 않는 기존 호출부는 FORCE를 켜도 키 축 필터를 받지 않는다. DB 격리를 온전히 얻으려면 키 범위가 있는 모든 질의가 `opts.keyId`를 넘기도록 먼저 정리해야 한다.
+키 격리 도우미를 쓰지 않는 질의(직접 쓴 SQL 조건, `pool.query`로 바로 보내는 관리 API 질의)와 바인딩 배열을 펼쳐 새로 만든 질의는 키 목록이 비어 FORCE를 켜도 키 축 필터를 받지 않는다. 에이전트 축은 모든 `queryWithAgentVector` 질의에 걸리지만, `pool.query`로 바로 보내는 질의는 `app.current_agent_id`가 없어 `default` 에이전트 행만 보게 된다. FORCE 전에 3단계의 전 경로 검증이 필요한 이유다.
 
 ---
 
@@ -45,12 +45,18 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA agent_memory
 
 `.env`의 `POSTGRES_USER`를 이 계정으로 바꾼다. 마이그레이션은 종전 소유자 계정으로 계속 실행한다.
 
-### 2. 키 범위 전달 정리
+### 2. 키 범위 전달 확인
 
-키 범위가 있는 질의가 `opts.keyId`를 넘기는지 확인한다. 넘기지 않는 질의는 FORCE 적용 후에도 DB 수준 키 격리를 받지 못한다.
+정책 자체는 `tests/db-concurrency/rls-key-list.test.js`가 FORCE와 소유자 아닌 역할(NOBYPASSRLS)로 검증한다. 키 목록 안의 키 파편만 보이는지, 목록이 비면 키 축을 보지 않는지, system 주체는 전체를 보는지, 목록 밖 키의 행은 쓸 수 없는지, 키 격리 절의 키 목록이 `app.current_key_ids`로 넘어가는지 본다.
 
 ```
-grep -rn "queryWithAgentVector" lib/ --include=*.js | wc -l
+DOTENV_CONFIG_PATH=.env.test REDIS_ENABLED=false node --experimental-test-module-mocks --test tests/db-concurrency/rls-key-list.test.js
+```
+
+키 격리 도우미를 쓰지 않는 질의는 다음으로 찾는다.
+
+```
+grep -rn "pool.query\|\.query(" lib/admin lib/memory --include=*.js | grep -i fragments
 ```
 
 ### 3. 스테이징 검증

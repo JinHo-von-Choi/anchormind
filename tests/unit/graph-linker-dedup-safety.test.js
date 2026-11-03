@@ -57,7 +57,8 @@ beforeEach(() => {
     topic: "batch-canary",
     type: "fact",
     created_at: "2026-09-09T05:25:43.875Z",
-    key_id: "key-web"
+    key_id: "key-web",
+    workspace: "ws-a"
   };
   duplicateRow = {
     id: "frag-a",
@@ -79,15 +80,26 @@ test("high semantic similarity does not retire distinct batch memories", async (
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /Near-duplicate detected/);
   /** 중복 판정은 같은 key 범위의 이전 파편에서만 고르고, 링크 후보도 같은 key 범위에서 고른다. */
-  assert.match(scoredQuery.sql, /AND f\.key_id = \$4/);
-  assert.match(scoredQuery.sql, /similarity >= 0\.90 AND \(created_at < \$3::timestamptz/);
+  assert.match(scoredQuery.sql, /AND f\.key_id = \$5/);
+  assert.match(scoredQuery.sql, /similarity >= 0\.90 AND same_workspace AND \(created_at < \$3::timestamptz/);
   assert.match(scoredQuery.sql, /similarity > 0\.7/);
   assert.deepEqual(scoredQuery.params, [
     "frag-b",
     "batch-canary",
     "2026-09-09T05:25:43.875Z",
+    "ws-a",
     "key-web"
   ]);
+});
+
+test("the duplicate verdict compares only rows in the same workspace", async () => {
+  await new GraphLinker().linkFragment("frag-b", "system", null, []);
+
+  /** 같은 본문을 다른 workspace에 둔 파편은 중복 판정 대상이 아니다. 전역(NULL)끼리는 같은 workspace로 본다. */
+  assert.match(scoredQuery.sql, /f\.workspace IS NOT DISTINCT FROM \$4::text AS same_workspace/);
+  sourceRow.workspace = null;
+  await new GraphLinker().linkFragment("frag-b", "system", null, []);
+  assert.equal(scoredQuery.params[3], null);
 });
 
 test("retired rows are excluded from the source, dedup, and candidate lookups", async () => {
@@ -103,7 +115,7 @@ test("a source without key_id compares only against rows without key_id", async 
   await new GraphLinker().linkFragment("frag-b", "system", null, []);
 
   assert.match(scoredQuery.sql, /AND f\.key_id IS NULL/);
-  assert.equal(scoredQuery.params.length, 3);
+  assert.equal(scoredQuery.params.length, 4);
 });
 
 test("an older byte-identical memory remains the winner", async () => {

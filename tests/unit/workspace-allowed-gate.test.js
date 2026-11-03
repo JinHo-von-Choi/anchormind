@@ -5,7 +5,7 @@
  * 작성일: 2026-08-15
  *
  * 3개 관심사:
- * 1. ApiKeyStore.getAllowedWorkspaces / checkWorkspaceAllowed 순수 로직
+ * 1. keys/policy.getAllowedWorkspaces / checkWorkspaceAllowed 순수 로직
  * 2. MemoryRememberer._runPolicyGate — workspaceNotAllowed는 hard gate 대상에서 항상 제외
  * 3. MemoryRememberer._runPolicyGate — fragmentHasWorkspace는 MEMENTO_WORKSPACE_GATE=true일 때만 hard gate 대상
  */
@@ -38,9 +38,9 @@ const {
   checkWorkspaceAllowed,
   WORKSPACE_LOOKUP_FAILED,
   invalidateAllowedWorkspacesCache
-} = await import("../../lib/admin/ApiKeyStore.js");
+} = await import("../../lib/keys/policy.js");
 
-describe("ApiKeyStore.getAllowedWorkspaces", () => {
+describe("keys/policy.getAllowedWorkspaces", () => {
 
   beforeEach(() => {
     mockQuery.mock.resetCalls();
@@ -100,7 +100,7 @@ describe("ApiKeyStore.getAllowedWorkspaces", () => {
 
 });
 
-describe("ApiKeyStore.checkWorkspaceAllowed", () => {
+describe("keys/policy.checkWorkspaceAllowed", () => {
 
   beforeEach(() => {
     mockQuery.mock.resetCalls();

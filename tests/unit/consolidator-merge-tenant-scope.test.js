@@ -61,7 +61,8 @@ describe("_mergeDuplicates — tenant/workspace scope 회귀 가드", () => {
 
   it("linked_to UPDATE에 key_id 조건이 포함된다", () => {
     const updates = body.match(/UPDATE[\s\S]*?WHERE[\s\S]*?(?=`)/g) || [];
-    assert.ok(updates.length >= 2, "두 개 이상의 UPDATE 문이 있어야 한다");
+    /** 남은 linked_to 갱신은 다른 파편이 선언한 링크 대상의 교체 하나다 */
+    assert.ok(updates.length >= 1, "linked_to 교체 UPDATE가 있어야 한다");
     for (const upd of updates) {
       assert.match(
         upd,

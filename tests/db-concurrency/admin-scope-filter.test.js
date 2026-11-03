@@ -32,7 +32,8 @@ const TAG    = `scope${Date.now().toString(36)}`;
 const KEY_ID = `${TAG}-key`;
 const WS_A   = `${TAG}-ws-a`;
 const WS_B   = `${TAG}-ws-b`;
-const IDS    = { a: `${TAG}-a`, b: `${TAG}-b`, a2: `${TAG}-a2` };
+const OTHER  = `${TAG}-other-key`;
+const IDS    = { a: `${TAG}-a`, b: `${TAG}-b`, a2: `${TAG}-a2`, foreign: `${TAG}-foreign` };
 
 let client;
 
@@ -45,13 +46,16 @@ function fakeRes() {
   };
 }
 
-/** 주체 종류별 요청. owner, reviewer(WS_A 바인딩), none(판정 없음) */
+/**
+ * 주체 종류별 요청. owner, reviewer(KEY_ID 하나를 멤버로 둔 그룹에 묶은 WS_A 바인딩), none(판정 없음).
+ * 같은 이름 WS_A를 쓰는 다른 키(OTHER)의 파편은 reviewer 범위 밖이다.
+ */
 function requestFor(kind, pathname, cap, workspace = null) {
   const req = { method: "GET", url: pathname, headers: {} };
   const res = fakeRes();
   const principal = kind === "owner"
     ? masterPrincipal()
-    : { kind: "admin_session", id: "lane-reviewer", bindings: [{ role: "reviewer", workspace: WS_A }] };
+    : { kind: "admin_session", id: "lane-reviewer", bindings: [{ role: "reviewer", workspace: WS_A, group_id: `${TAG}-grp`, key_ids: [KEY_ID] }] };
   if (kind !== "none") assert.ok(requireCapability(req, res, { principal, cap, workspace }), `${kind} ${cap}`);
   return { req, res, url: new URL(`http://localhost${pathname}`) };
 }
@@ -64,24 +68,27 @@ async function memoryGet(kind, sub, query = "") {
   return res.body ? JSON.parse(res.body) : null;
 }
 
-async function insertFragment(id, workspace) {
+async function insertFragment(id, workspace, keyId = KEY_ID) {
   await client.query(
     `INSERT INTO agent_memory.fragments
        (id, content, topic, keywords, type, content_hash, key_id, workspace, embedding, valid_from, created_at)
      VALUES ($1, $2, $3, ARRAY[$3]::text[], 'fact', md5($1), $4, $5, NULL, NOW(), NOW())`,
-    [id, `범위 검사 본문 ${id} 충분히 길게 적는다`, TAG, KEY_ID, workspace]
+    [id, `범위 검사 본문 ${id} 충분히 길게 적는다`, TAG, keyId, workspace]
   );
 }
 
 before(async () => {
   client = new pg.Client(directClientConfig());
   await client.connect();
-  await client.query(
-    `INSERT INTO agent_memory.api_keys (id, name, key_hash, key_prefix, permissions, status, daily_limit, created_at, symbolic_hard_gate)
-     VALUES ($1, $1, md5($1), 'mmcp_x', ARRAY['read']::text[], 'active', 100, NOW(), false)`,
-    [KEY_ID]
-  );
+  for (const id of [KEY_ID, OTHER]) {
+    await client.query(
+      `INSERT INTO agent_memory.api_keys (id, name, key_hash, key_prefix, permissions, status, daily_limit, created_at, symbolic_hard_gate)
+       VALUES ($1, $1, md5($1), 'mmcp_x', ARRAY['read']::text[], 'active', 100, NOW(), false)`,
+      [id]
+    );
+  }
   await insertFragment(IDS.a, WS_A);
+  await insertFragment(IDS.foreign, WS_A, OTHER);
   await insertFragment(IDS.b, WS_B);
   await insertFragment(IDS.a2, WS_A);
   await client.query(
@@ -103,9 +110,9 @@ after(async () => {
 const ids = (items) => items.map((f) => f.id).filter((id) => id.startsWith(TAG)).sort();
 
 describe("파편 목록과 상세", () => {
-  it("owner는 두 workspace를, WS_A 바인딩은 WS_A만, 판정 없는 요청은 아무것도 보지 못한다", async () => {
+  it("owner는 모든 키를, 그룹 WS_A 바인딩은 그룹 키의 WS_A만(같은 이름의 다른 키 제외), 판정 없는 요청은 아무것도 보지 못한다", async () => {
     const query = `?topic=${TAG}`;
-    assert.deepEqual(ids((await memoryGet("owner", "/fragments", query)).items), [IDS.a, IDS.a2, IDS.b].sort());
+    assert.deepEqual(ids((await memoryGet("owner", "/fragments", query)).items), [IDS.a, IDS.a2, IDS.b, IDS.foreign].sort());
     const scoped = await memoryGet("reviewer", "/fragments", `${query}&workspace=${WS_A}`);
     assert.deepEqual(ids(scoped.items), [IDS.a, IDS.a2].sort());
     assert.equal(scoped.total, 2);
@@ -131,7 +138,7 @@ describe("집계와 키 수치", () => {
     const owner  = await memoryGet("owner", "/overview");
     const scoped = await memoryGet("reviewer", "/overview", `?workspace=${WS_A}`);
     const none   = await memoryGet("none", "/overview");
-    assert.ok(owner.totalFragments >= 3);
+    assert.ok(owner.totalFragments >= 4);
     assert.equal(scoped.byTopic.find((t) => t.topic === TAG)?.count, 2);
     assert.equal(none.totalFragments, 0);
     assert.equal(none.supersededCount, 0);

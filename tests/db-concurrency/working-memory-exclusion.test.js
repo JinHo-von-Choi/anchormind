@@ -15,6 +15,8 @@ import pg                              from "pg";
 const ADMIN_KEY = "lane-admin-key-0123456789abcdef0123456789";
 process.env.MEMENTO_ACCESS_KEY  = ADMIN_KEY;
 process.env.EMBEDDING_BASE_URL  = "http://127.0.0.1:9";
+/** 행을 넣기 전과 뒤의 /stats를 견주므로 집계 캐시를 끈다. */
+process.env.MEMENTO_ADMIN_STATS_CACHE_MS = "0";
 
 const { prepareLaneDatabase, dropLaneDatabase, directClientConfig } = await import("./_harness.js");
 

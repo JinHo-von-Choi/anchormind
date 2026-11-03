@@ -11,7 +11,7 @@
 import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
-import { isKeyStateRevoked } from "../../lib/admin/key-state-cache.js";
+import { isKeyStateRevoked } from "../../lib/keys/key-state-cache.js";
 
 const NOW    = Date.parse("2026-10-03T12:00:00Z");
 const active = { exists: true, status: "active", permissions: ["read"] };

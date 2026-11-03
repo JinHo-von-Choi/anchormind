@@ -22,11 +22,20 @@ describe("scopePredicate", () => {
     assert.deepEqual(params, ["x"]);
   });
 
-  it("workspace 목록은 다음 바인딩 번호의 ANY 비교다", () => {
+  it("셀은 workspace와 같은 별칭의 key_id 조건을 AND로, 셀끼리는 OR로 잇는다", () => {
+    const params = ["x"];
+    const sql    = scopePredicate(params, "f.workspace", { all: false, cells: [
+      { workspace: "ws-a", keyIds: ["k-1", "k-2"] }, { workspace: null, keyIds: ["k-3"] }, { workspace: "ws-c", keyIds: [] }
+    ] });
+    assert.equal(sql, "((f.workspace = $2 AND f.key_id = ANY($3::text[])) OR (f.key_id = ANY($4::text[])) OR FALSE)");
+    assert.deepEqual(params, ["x", "ws-a", ["k-1", "k-2"], ["k-3"]]);
+  });
+
+  it("workspace 목록(예전 형식)은 키 제한 없는 셀이다", () => {
     const params = ["a", "b"];
     const sql    = scopePredicate(params, "f.workspace", { all: false, workspaces: ["ws-a", "ws-b"] });
-    assert.equal(sql, "f.workspace = ANY($3::text[])");
-    assert.deepEqual(params[2], ["ws-a", "ws-b"]);
+    assert.equal(sql, "((f.workspace = $3) OR (f.workspace = $4))");
+    assert.deepEqual(params.slice(2), ["ws-a", "ws-b"]);
   });
 
   it("범위 입력이 없거나 형식이 틀리면 FALSE이고 바인딩을 더하지 않는다", () => {
@@ -59,8 +68,8 @@ describe("scopePredicate", () => {
 describe("scopedQuery", () => {
   it("술어를 질의 조립 함수에 넘기고 [질의, 바인딩]을 돌려준다", () => {
     const [text, values] = scopedQuery("workspace", { all: false, workspaces: ["ws-a"] }, (ws) => `SELECT 1 WHERE ${ws}`);
-    assert.equal(text, "SELECT 1 WHERE workspace = ANY($1::text[])");
-    assert.deepEqual(values, [["ws-a"]]);
+    assert.equal(text, "SELECT 1 WHERE ((workspace = $1))");
+    assert.deepEqual(values, ["ws-a"]);
   });
 
   it("범위가 없으면 FALSE 술어와 빈 바인딩이다", () => {

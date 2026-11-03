@@ -43,6 +43,8 @@ assets/admin/
     ├── audit.js        # 감사 로그
     ├── admin-users.js  # 관리자 계정
     ├── key-lifecycle.js # API 키 수명 카드
+    ├── key-access.js   # API 키 그룹 접근 카드
+    ├── key-retention.js # API 키 보존 정책 카드
     ├── memory.js       # 메모리 운영
     ├── review.js       # 검토 대기
     ├── conflicts.js    # 모순 처리
@@ -142,12 +144,14 @@ PERMISSIONS의 REVIEW_OFF와 REVIEW_ALL은 검토 대기열 방식 표지다(`ME
   - RESTRICT WORKSPACES -- `allowed_workspaces` 허가 목록. 체크를 끄면 제한 없음(NULL)이다. 체크하고 한 줄에 하나씩 workspace를 입력한다. 목록 밖 workspace 주장은 `workspaceNotAllowed` 경고가 되고, `MEMENTO_WORKSPACE_GATE=true`이며 hard gate가 켜진 키에서만 저장이 거부된다. 읽기(recall, context 등과 resources/read)는 목록의 workspace와 전역 파편으로 제한되며, `MEMENTO_WORKSPACE_READ_AUTHZ=warn`(기본)에서는 목록 밖 읽기를 기록만 하고 `enforce`에서 거부한다. workspace가 없는 쓰기는 항상 통과한다. 체크하고 목록을 비우면 모든 workspace 주장이 허가 집합 밖으로 판정되며, 저장 전에 단추가 확인 상태로 바뀌어 한 번 더 누르게 한다. 항목은 최대 64개, 항목당 128자이며 앞뒤 공백과 제어 문자는 받지 않는다.
   - DEFAULT WORKSPACE -- `default_workspace`. 호출이 workspace를 지정하지 않을 때 쓰는 값이다. 이 칸은 SAVE POLICY와 따로 옆의 SAVE로 저장하며 `PATCH /v1/internal/model/nothing/keys/:id/workspace`로 보낸다. 비우고 저장하면 해제되어 workspace 없는 호출이 전역 범위로 저장된다.
   - SYMBOLIC HARD GATE -- `symbolic_hard_gate`. 켜면 PolicyRules 위반 또는 고신뢰 민감 정보 탐지(`sensitive.*`) 파편의 `remember`가 거부된다(`-32003`).
-  - hard gate와 workspace 허가 변경은 이 프로세스의 조회 캐시를 비우지만, 변경 시점에 이미 진행 중이던 조회가 이전 값을 캐시에 쓸 수 있다. 그 항목은 TTL 30초 안에 만료되므로 늦어도 약 30초 안에 적용된다. 다른 인스턴스도 같다.
+  - hard gate와 workspace 허가 변경은 이 프로세스의 조회 캐시를 비우고, Redis가 켜져 있으면 다른 인스턴스에도 알린다. 변경 시점에 이미 진행 중이던 조회가 이전 값을 캐시에 쓸 수 있는데, 그 항목은 TTL 30초 안에 만료되므로 늦어도 약 30초 안에 적용된다.
 - LIFECYCLE -- 키 수명 카드. 변경은 모두 감사 이벤트로 남는다(`admin.key.lifecycle_update`, `admin.key.rotate`, `admin.key.revoke`, `admin.key.access_review`).
   - EXPIRES AT, OWNER, KIND, DESCRIPTION, RESTRICT ADDRESSES -- SAVE LIFECYCLE로 바뀐 필드만 `PATCH /v1/internal/model/nothing/keys/:id`에 보낸다. 만료 시각은 `Z` 또는 오프셋이 있는 ISO 8601(예: `2027-01-01T00:00:00Z`)이며 비우면 무기한이다. 다른 표기는 보내지 않는다. 허용 대역 목록은 `TRUST_PROXY_HOPS`가 설정된 서버에서만 저장된다. RESTRICT ADDRESSES를 켜고 한 줄에 하나씩 IPv4/IPv6 대역을 넣으면 그 대역 밖 주소의 인증과 세션 요청을 거부한다. 체크를 끄면 제한 없음, 체크하고 비우면 모든 주소 거부다.
   - ROTATE KEY -- 두 번 눌러 확정한다. 새 원시 키를 만들어 한 번만 보여 준다. ROTATION OVERLAP(시간)을 비우면 `MEMENTO_KEY_ROTATION_GRACE_HOURS`(기본 24) 동안 이전 키도 새 요청을 인증한다. 겹침이 끝나면 그보다 먼저 만든 이 키의 세션과 OAuth 토큰은 다음 사용 때 끝나고 클라이언트는 새 키로 다시 인증한다. 0을 넣으면 이전 키와 열린 세션이 바로 끝난다.
   - REVOKE PERMANENTLY -- 사유를 넣고 두 번 눌러 키와 모든 비밀을 폐기한다. 되돌릴 수 없고, 폐기한 키는 다시 활성화할 수 없다. 그 키의 세션은 바로 닫힌다.
   - SIGN ACCESS REVIEW -- 접근 검토 시각과 행위자를 남긴다.
+- GROUP ACCESS -- 이 키가 그룹으로 읽을 수 있는 다른 키와, 키마다 받은 쓰기 권한(link, amend, forget)과 공유 workspace 제한을 보여 준다. 아래에는 최근 7일 동안 다른 키의 recall 결과에 이 키의 파편이 들어간 기록(읽은 키, recall 수, 파편 수, 마지막 시각)이 있다. 자료는 `GET /v1/internal/model/nothing/keys/:id/access`다.
+- RETENTION -- 보존 정책 목록. SET POLICY에 `일수`(키 전체), `workspace=일수`(그 workspace만), `workspace=` 또는 `*=`(정책 삭제)를 넣는다. 정리 주기가 created_at이 그 일수보다 오래된 파편을 지우며 앵커는 남긴다. 변경은 감사 이벤트 `admin.key.retention_update`로 남는다.
 - 소속 그룹 관리:
   - ADD GROUP 버튼을 클릭하면 모달이 열리며 그룹을 선택할 수 있다.
   - Groups Directory 섹션의 각 그룹 행에 ASSIGN 버튼이 표시되며, 클릭 시 해당 키를 그룹에 추가한다.
@@ -161,7 +165,7 @@ PERMISSIONS의 REVIEW_OFF와 REVIEW_ALL은 검토 대기열 방식 표지다(`ME
 
 ### 3. 그룹
 
-API 키를 논리적 단위로 묶어 관리한다. 같은 그룹의 키들은 서로의 기억에 접근할 수 있다.
+API 키를 논리적 단위로 묶어 관리한다. 같은 그룹의 키가 서로의 파편을 어디까지 읽고 다룰 수 있는지는 멤버마다 정하는 권한으로 정해진다.
 
 상단 KPI 4장: 그룹 수, 전체 멤버 수, 빈 그룹 수, 미소속 키 수.
 
@@ -173,8 +177,26 @@ API 키를 논리적 단위로 묶어 관리한다. 같은 그룹의 키들은 �
 3. 생성 후 API 키를 멤버로 추가
 
 멤버 관리:
-- 우측 패널에서 ASSIGN 버튼으로 키 추가
-- 멤버 옆 X 버튼으로 제거
+- 우측 패널의 ADD MEMBER로 키를 고르고 권한을 체크해 추가한다. 기본은 READ, SHARE, LINK다.
+- 멤버 행 아래의 권한 버튼(READ, SHARE, LINK, AMEND, FORGET)을 누르면 그 권한이 켜지거나 꺼진다. 켜진 권한은 강조해 표시된다.
+- 멤버 행의 SHARES를 누르면 이 멤버의 SHARE가 여는 workspace를 쉼표로 적는다. `all`은 전체, 빈 값은 어떤 workspace도 열지 않는다. 목록이 있으면 다른 멤버는 요청 workspace가 목록 안일 때만 이 멤버의 그 workspace와 전역 파편을 읽는다.
+- 멤버 행의 REMOVE로 그룹에서 뺀다.
+- EFFECTIVE ACCESS를 누르면 멤버 쌍(읽는 키, 대상 키)마다 실제로 가능한 READ, LINK, AMEND, FORGET과 대상의 공유 workspace를 표로 보여 준다.
+- 그룹 카드의 Change Limit으로 그룹 파편 상한을 정한다. 멤버 키 전체의 살아 있는 파편 수가 상한에 이르면 멤버 키의 저장이 거부된다. 현재 파편 수보다 낮게는 정할 수 없고, 비우면 상한이 없다. 변경은 감사 이벤트 `admin.group.fragment_limit_update`로 남는다.
+
+멤버 권한:
+
+| 권한 | 뜻 |
+|-|-|
+| READ | 같은 그룹에서 SHARE를 가진 다른 멤버의 파편을 읽는다 |
+| SHARE | 이 키의 파편을 같은 그룹에서 READ를 가진 멤버가 읽게 한다 |
+| LINK | 읽을 수 있는 다른 멤버의 파편에 link 도구로 링크를 건다 |
+| AMEND | 읽을 수 있는 다른 멤버의 파편을 amend로 고친다. 이력의 `amended_by`에 `<agentId>@key:<수정한 키 id>`가 남는다 |
+| FORGET | 읽을 수 있는 다른 멤버의 파편을 id 지정 forget으로 지운다. topic 일괄 삭제는 자기 파편만 지운다 |
+
+예를 들어 SHARE를 끈 멤버는 다른 멤버의 파편은 읽지만 자기 파편은 내보이지 않고, READ를 끈 멤버는 자기 파편만 읽는다. 키 A가 키 B에 대해 갖는 권한은 두 키가 함께 속한 그룹마다 따로 판정해 합친다.
+
+멤버십과 권한 변경은 열린 세션에도 반영된다. 이 프로세스에서 바꾸면 다음 요청부터 반영되고, 다른 인스턴스나 CLI에서 바꾸면 Redis가 켜져 있을 때는 알림으로 바로, 아니면 키 상태 재확인 주기(`MEMENTO_SESSION_KEY_RECHECK_MS`, 기본 30000ms) 안에 반영된다. 변경은 감사 이벤트 `admin.group.member_add`, `admin.group.member_permissions`(이전 권한과 새 권한), `admin.group.member_remove`로 남는다.
 
 ---
 
@@ -316,9 +338,9 @@ API 키를 논리적 단위로 묶어 관리한다. 같은 그룹의 키들은 �
 
 사이드바의 관리자 계정 메뉴(감사 로그 아래)는 계정을 관리한다. 능력 `admin_user.manage`가 필요하며 owner 역할만 가진다.
 
-- 표 -- USERNAME, ROLES(`owner`, `viewer@team-a`처럼 역할과 workspace), STATUS(`active`, `disabled`), TOTP(`on`, `off`), LAST LOGIN. 비밀번호 해시와 TOTP 비밀은 어느 화면에도 나오지 않는다.
+- 표 -- USERNAME, ROLES(`owner`, `viewer@g:<그룹 id>`, `reviewer@g:<그룹 id>/team-a`처럼 역할, 그룹 범위, workspace), STATUS(`active`, `disabled`), TOTP(`on`, `off`), LAST LOGIN. 비밀번호 해시와 TOTP 비밀은 어느 화면에도 나오지 않는다.
 - 행 단추 -- ROLES(역할 바인딩 교체), DISABLE과 ENABLE, RESET TOTP(TOTP와 복구 코드를 초기화하고 그 계정의 세션을 폐기), REVOKE SESSIONS(계정의 모든 세션 폐기), DELETE(확인 뒤 삭제). 활성 owner가 하나뿐이면 그 계정의 삭제, 비활성화, owner 제거는 409 `last_owner`로 거절된다.
-- 만들기 -- USERNAME, PASSWORD(12자 이상), ROLES(쉼표로 구분)를 넣고 CREATE를 누른다. 계정이 0개이면 BOOTSTRAP OWNER 양식이 나오며 첫 owner는 마스터 키로 로그인한 상태에서만 만들 수 있다.
+- 만들기 -- USERNAME, PASSWORD(12자 이상), ROLES(쉼표로 구분)를 넣고 CREATE를 누른다. workspace 바인딩은 그룹 범위와 함께만 받는다(`역할@g:<그룹 id>/<workspace>`). 그룹 범위 관리자는 그 그룹 멤버 키의 파편, 사용량, 감사 기록만 보고, 다른 키에 같은 이름의 workspace가 있어도 보지 않는다. owner는 전역 바인딩만 받는다. 계정이 0개이면 BOOTSTRAP OWNER 양식이 나오며 첫 owner는 마스터 키로 로그인한 상태에서만 만들 수 있다.
 - 모든 변경은 감사 로그의 `admin.user.*` 행위로 남는다. 계정 세션이 TOTP 코드를 잃었을 때의 비상 복구는 서버 호스트에서 `anchormind admin recover --confirm`을 쓴다([cli.md](cli.md)).
 - 권한 확인 -- 능력 이름(예: `mem.write`)과 workspace를 넣으면 지금 로그인한 주체가 그 능력을 가졌는지와 단계별 근거를 보여 준다(`GET /me/explain`). 입력 후보는 지금 가진 능력이다.
 

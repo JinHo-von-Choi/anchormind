@@ -156,9 +156,13 @@ describe("열 목록 관계", () => {
     for (const list of [V1_FRAGMENT_COLUMNS, V2_FRAGMENT_COLUMNS, LINK_COLUMNS, VERSION_COLUMNS]) {
       assert.equal(new Set(list).size, list.length);
     }
-    for (const internal of ["embedding", "linked_to", "ema_activation", "last_decay_at", "morpheme_indexed"]) {
+    for (const internal of ["embedding", "ema_activation", "last_decay_at", "morpheme_indexed"]) {
       assert.ok(!V2_FRAGMENT_COLUMNS.includes(internal), internal);
     }
+  });
+
+  it("버전 2는 저장 때 선언한 링크 대상(linked_to)을 싣는다", () => {
+    assert.ok(V2_FRAGMENT_COLUMNS.includes("linked_to"));
   });
 
   it("버전 2는 키, 범위, 시각, 본문 해시 열을 싣는다", () => {

@@ -60,6 +60,8 @@ export const MEMORY_CONFIG = {
     /** keywords-only 정확 일치 가산. semantic 최대 기여(semanticWeight)보다 크게 잡아
      *  유사도 분포가 극단적인 임베딩 환경에서도 정확 히트의 우위를 보장한다. */
     exactKeywordBoost: 0.35,
+    /** 다른 키가 쓴 그룹 공유 파편의 순위 점수 배율(출처 기반 신뢰). 같은 근거라면 내 키 파편이 앞선다. */
+    sharedFragmentFactor: 0.9,
     /** 절단 슬롯 보장: exact 히트는 budget의 exactSlotShare까지, L3kw supplement는
      *  semanticSlotShare까지 우선 확보한다(둘 다 무제한 아님 — 일반 키워드 독점 방지). */
     exactSlotShare: 0.5,

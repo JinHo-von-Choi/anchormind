@@ -36,7 +36,7 @@ const {
 const {
   rotateApiKey, revokeApiKey, updateKeyLifecycle
 } = await import("../../lib/admin/ApiKeyLifecycleStore.js");
-const { isKeyStateRevoked } = await import("../../lib/admin/key-state-cache.js");
+const { isKeyStateRevoked } = await import("../../lib/keys/key-state-cache.js");
 const { validateApiKeyById } = await import("../../lib/admin/ApiKeyStore.js");
 const { isAccessRetired }    = await import("../../lib/admin/key-lifecycle.js");
 const { resetLifecycleSchemaState } = await import("../../lib/admin/key-schema-state.js");

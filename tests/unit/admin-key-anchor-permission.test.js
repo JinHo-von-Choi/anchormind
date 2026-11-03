@@ -48,7 +48,7 @@ mock.module("../../lib/logging/audit.js", {
 });
 
 const { handleKeys }          = await import("../../lib/admin/admin-keys.js");
-const { getAnchorState }      = await import("../../lib/admin/ApiKeyStore.js");
+const { getAnchorState }      = await import("../../lib/keys/policy.js");
 const { auditAnchorDecision, formatAnchorAuditDetails } = await import("../../lib/memory/write/anchorAudit.js");
 const {
   KEY_PERMISSION_VALUES,

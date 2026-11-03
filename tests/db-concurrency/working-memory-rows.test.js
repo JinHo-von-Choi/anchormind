@@ -350,12 +350,17 @@ describe("세션 ID를 공유하는 다른 키", () => {
   });
 
   it("한 키의 종합 결과를 evict해도 다른 키의 행은 그대로다", async () => {
-    const { session, k1, ids } = await seedShared();
+    const { session, k1, k2, ids } = await seedShared();
     const index  = new FragmentIndex();
     const linker = new SessionLinker(new FragmentStore(), index);
     const groups = await linker.consolidateSessionFragments(session, "default", k1);
-    await index.evictWorkingMemoryItems(session, groups.flatMap(g => g.wmItemIds));
-    const left = (await wm.listWorkingMemoryRows(session)).map(i => i.id).sort();
+    /** 다른 키의 id를 넘겨도 그 키 범위 밖 행은 지우지 않는다 */
+    await index.evictWorkingMemoryItems(session, [...groups.flatMap(g => g.wmItemIds), ids.k2, ids.master], k1);
+    const left = [
+      ...(await wm.listWorkingMemoryRows(session, { keyId: k1 })),
+      ...(await wm.listWorkingMemoryRows(session, { keyId: k2 })),
+      ...(await wm.listWorkingMemoryRows(session, { keyId: null }))
+    ].map(i => i.id).sort();
     assert.deepEqual(left, [ids.k2, ids.master].sort());
   });
 });

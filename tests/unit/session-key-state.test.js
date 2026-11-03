@@ -33,7 +33,7 @@ mock.module("../../lib/admin/ApiKeyStore.js", {
 const { handleMcpPost }                                = await import("../../lib/handlers/mcp-handler.js");
 const { handleKeys }                                   = await import("../../lib/admin/admin-keys.js");
 const { createStreamableSession, streamableSessions }  = await import("../../lib/sessions.js");
-const { invalidateKeyState }                           = await import("../../lib/admin/key-state-cache.js");
+const { invalidateKeyState }                           = await import("../../lib/keys/key-state-cache.js");
 const { ADMIN_BASE }                                   = await import("../../lib/admin/admin-auth.js");
 
 const allowAll = { allow: () => true };
@@ -118,6 +118,19 @@ describe("권한 반영과 조회 실패", () => {
     keyStates.set(KEY_ID, { exists: true, status: "active", permissions: ["read", "write"] });
     assert.equal((await listTools(sid)).status, 200);
     assert.deepEqual(streamableSessions.get(sid).permissions, ["read", "write"]);
+  });
+
+  it("그룹에서 빠진 키와 바뀐 기본 workspace를 열린 세션에 반영한다", async () => {
+    const other = "7a1e0000-0000-4000-8000-000000000009";
+    const sid   = await createStreamableSession(true, KEY_ID, [KEY_ID, other], ["read"], "old-ws", null, false);
+    keyStates.set(KEY_ID, {
+      exists: true, status: "active", permissions: ["read"], defaultWorkspace: "new-ws",
+      groupKeyIds: [KEY_ID], groupGrants: { link: [], amend: [], forget: [] }
+    });
+    assert.equal((await listTools(sid)).status, 200);
+    /** 세션 수명(기본 30일) 동안 만들 때의 그룹을 쓰면 빠진 키의 파편을 계속 읽는다 */
+    assert.deepEqual(streamableSessions.get(sid).groupKeyIds, [KEY_ID]);
+    assert.equal(streamableSessions.get(sid).defaultWorkspace, "new-ws");
   });
 
   it("키 상태 조회가 실패하면 저장된 identity로 세션을 유지한다", async () => {

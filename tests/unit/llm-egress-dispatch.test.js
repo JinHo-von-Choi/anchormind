@@ -54,7 +54,7 @@ mock.module("../../lib/logger.js", {
     redactString   : (value) => value
   }
 });
-mock.module("../../lib/admin/ApiKeyStore.js", {
+mock.module("../../lib/keys/policy.js", {
   namedExports: { getEgressPolicy: async (keyId) => policies.get(keyId) ?? null }
 });
 mock.module("../../lib/tools/db.js", {

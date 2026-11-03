@@ -164,7 +164,6 @@ describe("FragmentWriter.deleteWithCascade", () => {
 function makeRememberer(frag = { id: "f1", key_id: "k1", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact" }) {
   const store = {
     getById          : mock.fn(async () => frag),
-    probeAccess      : mock.fn(async () => ({ exists: false, accessible: false })),
     delete           : mock.fn(async () => true),
     deleteMany       : mock.fn(async ids => ids.length),
     searchByTopic    : mock.fn(async () => []),
@@ -264,13 +263,11 @@ describe("MemoryRememberer.forget 삭제 연쇄", () => {
     assert.equal(store.delete.mock.calls.length, 0);
   });
 
-  it("삭제하지 않은 조기 응답(권한 없음, permanent 보호)은 그대로다", async () => {
+  it("삭제하지 않은 조기 응답(보이지 않음, permanent 보호)은 그대로다", async () => {
     delete process.env.MEMENTO_FORGET_CASCADE;
     const missing = makeRememberer(null);
-    missing.store.probeAccess = mock.fn(async () => ({ exists: true, accessible: false }));
     const denied = await missing.rememberer.forget({ id: "f1", _keyId: "k2" });
-    assert.equal(denied.error, "No permission to delete this fragment");
-    assert.equal(Object.hasOwn(denied, "purged"), false);
+    assert.deepEqual(denied, { deleted: 0, protected: 0 });
 
     const kept = makeRememberer({ id: "f1", key_id: "k1", ttl_tier: "permanent", keywords: [], topic: "ops", type: "fact" });
     const prot = await kept.rememberer.forget({ id: "f1", _keyId: "k1" });

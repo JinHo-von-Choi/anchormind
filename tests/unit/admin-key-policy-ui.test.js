@@ -99,7 +99,8 @@ describe("저장 단추의 요청", () => {
     calls = [];
     reply = { ok: false, status: 400, body: { error: "rejected" } };
     global.fetch = async (url, options) => {
-      calls.push({ url, options });
+      /** 인스펙터의 다른 카드(그룹 접근, 보존 정책)가 그릴 때 읽는 GET은 세지 않는다 */
+      if ((options?.method ?? "GET") !== "GET") calls.push({ url, options });
       return { ok: reply.ok, status: reply.status, headers: { get: () => "application/json" }, json: async () => reply.body };
     };
   });
@@ -143,7 +144,8 @@ describe("편집 목록에 없는 저장된 mode", () => {
   beforeEach(() => {
     calls = [];
     global.fetch = async (url, options) => {
-      calls.push({ url, options });
+      /** 인스펙터의 다른 카드(그룹 접근, 보존 정책)가 그릴 때 읽는 GET은 세지 않는다 */
+      if ((options?.method ?? "GET") !== "GET") calls.push({ url, options });
       return { ok: false, status: 400, headers: { get: () => "application/json" }, json: async () => ({ error: "rejected" }) };
     };
   });
@@ -198,7 +200,8 @@ describe("빈 allowed_workspaces 저장 확인", () => {
   beforeEach(() => {
     calls = [];
     global.fetch = async (url, options) => {
-      calls.push({ url, options });
+      /** 인스펙터의 다른 카드(그룹 접근, 보존 정책)가 그릴 때 읽는 GET은 세지 않는다 */
+      if ((options?.method ?? "GET") !== "GET") calls.push({ url, options });
       return { ok: false, status: 400, headers: { get: () => "application/json" }, json: async () => ({ error: "rejected" }) };
     };
   });

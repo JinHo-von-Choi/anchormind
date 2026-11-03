@@ -56,6 +56,8 @@ const ALLOWED_SEMANTIC_SQL = Object.freeze({
     "운영자가 실행하는 일회성 백필. reflect 파편의 키워드를 저장된 본문에서 다시 추출한다",
   "scripts/backfill-reflect-workspace.js::main":
     "운영자가 실행하는 일회성 백필. workspace 없는 파편에 topic 또는 본문이 가리키는 workspace를 적는다",
+  "lib/admin/WorkspaceAliasStore.js::mergeWorkspace":
+    "운영자가 CLI(workspace merge --confirm)로 실행하는 병합. 한 키 안에서 workspace 이름만 정식 이름으로 바꾸고 본문은 건드리지 않는다",
   "scripts/measure/recall-scale.mjs::seedTo":
     "로컬 일회용 DB에만 붙는 지연 측정. 합성 파편 수만 건을 한 문장으로 채운다(끝나면 지운다)"
 });

@@ -10,6 +10,113 @@ import { api }                           from "./api.js";
 import { showToast, showModal, closeModal } from "./ui.js";
 import { fmt, fmtDate, loadingHtml }     from "./format.js";
 
+/** 그룹 멤버 권한(lib/memory/groupGrants.js와 같은 이름과 순서) */
+export const MEMBER_PERMISSIONS = ["read", "share", "link", "amend", "forget"];
+export const DEFAULT_MEMBER_PERMISSIONS = ["read", "share", "link"];
+
+/** 권한 버튼의 설명 */
+export const MEMBER_PERMISSION_HELP = {
+  read  : "Read fragments of members that have SHARE",
+  share : "Let members that have READ see this key's fragments",
+  link  : "Link fragments of other members this key can read",
+  amend : "Amend fragments of other members this key can read",
+  forget: "Forget fragments of other members this key can read (by id only)"
+};
+
+/**
+ * 멤버 권한 버튼 줄. 켜진 권한은 강조해 표시하고, 누르면 그 권한을 켜거나 끈다.
+ *
+ * @param {{ id: string, permissions?: string[] }} member
+ * @returns {HTMLElement}
+ */
+export function renderMemberPermissions(member) {
+  const current = Array.isArray(member.permissions) ? member.permissions : DEFAULT_MEMBER_PERMISSIONS;
+  const line = document.createElement("div");
+  line.className = "flex gap-1 mt-1";
+  MEMBER_PERMISSIONS.forEach(p => {
+    const on  = current.includes(p);
+    const btn = document.createElement("button");
+    btn.className = "text-[9px] font-mono uppercase px-1 border " + (on ? "border-secondary/40 text-secondary" : "border-white/10 text-slate-600");
+    btn.textContent = p;
+    btn.title = MEMBER_PERMISSION_HELP[p];
+    btn.dataset.memberPerm = p;
+    btn.dataset.memberKey  = member.id;
+    btn.setAttribute("aria-pressed", String(on));
+    line.appendChild(btn);
+  });
+  return line;
+}
+
+/**
+ * 공유 workspace 표시. null은 전체다.
+ *
+ * @param {string[]|null|undefined} list
+ * @returns {string}
+ */
+export function sharedWorkspacesLabel(list) {
+  if (!Array.isArray(list)) return "all workspaces";
+  return list.length === 0 ? "no workspace" : list.join(", ");
+}
+
+/**
+ * 공유 workspace 입력("all", 빈 값, 쉼표 목록)을 API 값으로 바꾼다. "all"은 전체(null), 빈 값은 공유 안 함([])이다.
+ *
+ * @param {string|null} text
+ * @returns {string[]|null|undefined} 취소면 undefined
+ */
+export function parseSharedWorkspacesInput(text) {
+  if (text === null || text === undefined) return undefined;
+  const trimmed = String(text).trim();
+  if (trimmed.toLowerCase() === "all") return null;
+  return trimmed.split(",").map((w) => w.trim()).filter(Boolean);
+}
+
+/**
+ * 실효 권한 표. 행은 (읽는 키, 대상 키)이고 칸은 READ, LINK, AMEND, FORGET과 공유 workspace다.
+ *
+ * @param {Array<{ from: string, to: string, read: boolean, link: boolean, amend: boolean, forget: boolean, sharedWorkspaces: string[]|null }>} rows
+ * @param {Array<{ id: string, name: string }>} members
+ * @returns {HTMLElement}
+ */
+export function renderEffectiveAccess(rows, members) {
+  const nameOf = (id) => members.find((m) => m.id === id)?.name ?? id;
+  const table  = document.createElement("table");
+  table.className = "w-full text-left text-[10px] font-mono";
+  const head = document.createElement("tr");
+  ["KEY", "CAN ACCESS", "READ", "LINK", "AMEND", "FORGET", "WORKSPACES"].forEach((h) => {
+    const th = document.createElement("th");
+    th.className = "px-2 py-1 text-slate-400";
+    th.textContent = h;
+    head.appendChild(th);
+  });
+  table.appendChild(head);
+  rows.forEach((r) => {
+    const tr = document.createElement("tr");
+    const cells = [nameOf(r.from), nameOf(r.to), r.read, r.link, r.amend, r.forget, r.read ? sharedWorkspacesLabel(r.sharedWorkspaces) : "-"];
+    cells.forEach((v) => {
+      const td = document.createElement("td");
+      td.className = "px-2 py-1 " + (v === true ? "text-secondary" : v === false ? "text-slate-600" : "text-slate-300");
+      td.textContent = v === true ? "yes" : v === false ? "no" : String(v);
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+  });
+  return table;
+}
+
+/**
+ * 권한 하나를 켜거나 끈 목록.
+ *
+ * @param {string[]|undefined} current
+ * @param {string} perm
+ * @returns {string[]}
+ */
+export function togglePermission(current, perm) {
+  const base = Array.isArray(current) ? current : DEFAULT_MEMBER_PERMISSIONS;
+  const next = base.includes(perm) ? base.filter(p => p !== perm) : [...base, perm];
+  return MEMBER_PERMISSIONS.filter(p => next.includes(p));
+}
+
 export function renderGroupKpiRow(groups, keys) {
   const totalGroups  = groups.length;
   const totalMembers = groups.reduce((sum, g) => sum + (g.member_count ?? 0), 0);
@@ -201,6 +308,18 @@ export function renderGroupInspector(selected, members) {
   memberCount.className = "mt-2 text-[10px] font-mono text-slate-500 uppercase";
   memberCount.textContent = fmt(selected.member_count ?? 0) + " Members";
   idCard.appendChild(memberCount);
+  const limitRow = document.createElement("div");
+  limitRow.className = "mt-2 flex justify-between items-center";
+  const limitText = document.createElement("span");
+  limitText.className = "text-[10px] font-mono text-slate-400 uppercase";
+  limitText.textContent = groupLimitLabel(selected);
+  limitRow.appendChild(limitText);
+  const limitBtn = document.createElement("button");
+  limitBtn.className = "text-[9px] text-secondary font-bold uppercase hover:underline";
+  limitBtn.id = "group-limit-btn";
+  limitBtn.textContent = "Change Limit";
+  limitRow.appendChild(limitBtn);
+  idCard.appendChild(limitRow);
   panel.appendChild(idCard);
 
   /* Member List */
@@ -208,6 +327,10 @@ export function renderGroupInspector(selected, members) {
   membersLabel.className = "text-[10px] font-bold text-slate-400 tracking-widest uppercase mb-2 font-label";
   membersLabel.textContent = "MEMBERS";
   panel.appendChild(membersLabel);
+  const permHint = document.createElement("p");
+  permHint.className = "text-[10px] text-slate-500 -mt-1";
+  permHint.textContent = "A member reads another member's fragments when it has READ and the other has SHARE. SHARES limits which workspaces SHARE exposes. LINK, AMEND and FORGET apply to those readable fragments.";
+  panel.appendChild(permHint);
 
   const memberList = document.createElement("div");
   memberList.className = "space-y-1";
@@ -224,6 +347,13 @@ export function renderGroupInspector(selected, members) {
       mPrefix.className = "text-[10px] font-mono text-primary";
       mPrefix.textContent = m.key_prefix ?? "";
       left.appendChild(mPrefix);
+      left.appendChild(renderMemberPermissions(m));
+      const shared = document.createElement("button");
+      shared.className = "text-[9px] font-mono text-slate-400 hover:text-secondary mt-1";
+      shared.textContent = "SHARES: " + sharedWorkspacesLabel(m.shared_workspaces);
+      shared.title = "Workspaces this key exposes through SHARE (click to change)";
+      shared.dataset.memberShared = m.id;
+      left.appendChild(shared);
       row.appendChild(left);
       const rmBtn = document.createElement("button");
       rmBtn.className = "text-[9px] text-error font-bold uppercase";
@@ -239,6 +369,13 @@ export function renderGroupInspector(selected, members) {
     memberList.appendChild(empty);
   }
   panel.appendChild(memberList);
+
+  /* Effective access button */
+  const accessBtn = document.createElement("button");
+  accessBtn.className = "w-full py-2 border border-white/10 text-[10px] text-slate-400 uppercase hover:border-secondary/30 hover:text-secondary transition-all";
+  accessBtn.id = "effective-access-btn";
+  accessBtn.textContent = "EFFECTIVE ACCESS";
+  panel.appendChild(accessBtn);
 
   /* Add member button */
   const addMemberBtn = document.createElement("button");
@@ -258,6 +395,31 @@ export function renderGroupInspector(selected, members) {
   panel.appendChild(danger);
 
   return panel;
+}
+
+/**
+ * 그룹 파편 상한 표시. 상한이 있으면 멤버 키 전체의 현재 파편 수와 함께 쓴다.
+ *
+ * @param {{ fragment_limit?: number|null, fragment_count?: number|null }} group
+ * @returns {string}
+ */
+export function groupLimitLabel(group) {
+  return group.fragment_limit == null
+    ? "Fragment limit: none"
+    : `Fragments ${fmt(group.fragment_count ?? 0)} / ${fmt(group.fragment_limit)}`;
+}
+
+/**
+ * 상한 입력. 빈 값은 상한 없음(null), 취소는 undefined, 0 이상 정수가 아니면 NaN이다.
+ *
+ * @param {string|null|undefined} input
+ * @returns {number|null|undefined}
+ */
+export function parseGroupLimitInput(input) {
+  if (input === null || input === undefined) return undefined;
+  const text = String(input).trim();
+  if (text === "") return null;
+  return /^\d+$/.test(text) ? Number(text) : NaN;
 }
 
 /** 선택한 그룹과 주소 질의를 서로 옮긴다. */
@@ -361,16 +523,85 @@ export async function renderGroups(container) {
     g1.appendChild(sel);
     form.appendChild(g1);
 
+    const g2 = document.createElement("div");
+    g2.className = "form-group";
+    const l2 = document.createElement("label");
+    l2.className = "form-label";
+    l2.textContent = "PERMISSIONS";
+    g2.appendChild(l2);
+    MEMBER_PERMISSIONS.forEach(p => {
+      const item = document.createElement("label");
+      item.className = "flex items-center gap-2 text-xs text-slate-300";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.value = p;
+      box.dataset.newMemberPerm = p;
+      box.checked = DEFAULT_MEMBER_PERMISSIONS.includes(p);
+      item.appendChild(box);
+      item.appendChild(document.createTextNode(p.toUpperCase() + " — " + MEMBER_PERMISSION_HELP[p]));
+      g2.appendChild(item);
+    });
+    form.appendChild(g2);
+
     showModal("Add Member", form, [
       { id: "add", label: "ADD", cls: "btn-primary", handler: async () => {
         const keyId = document.getElementById("modal-member-key")?.value;
         if (!keyId) return;
-        await api("/groups/" + state.selectedGroupId + "/members", { method: "POST", body: { key_id: keyId } });
+        const permissions = [...document.querySelectorAll("[data-new-member-perm]")].filter(b => b.checked).map(b => b.value);
+        const res = await api("/groups/" + state.selectedGroupId + "/members", { method: "POST", body: { key_id: keyId, permissions } });
         closeModal();
-        showToast("Member added", "success");
-        renderGroups(container);
+        if (res.ok) { showToast("Member added", "success"); renderGroups(container); }
+        else showToast(res.data?.error ?? "Add failed", "error");
       }}
     ]);
+  });
+
+  /* Event: toggle member permission */
+  container.querySelectorAll("[data-member-perm]").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const member = members.find(m => m.id === btn.dataset.memberKey);
+      if (!member) return;
+      const permissions = togglePermission(member.permissions, btn.dataset.memberPerm);
+      const res = await api("/groups/" + state.selectedGroupId + "/members/" + member.id, { method: "PATCH", body: { permissions } });
+      if (res.ok) { showToast("Permissions updated", "success"); renderGroups(container); }
+      else showToast(res.data?.error ?? "Update failed", "error");
+    });
+  });
+
+  /* Event: change group fragment limit */
+  document.getElementById("group-limit-btn")?.addEventListener("click", async () => {
+    const selectedGroup = state.groups.find(g => g.id === state.selectedGroupId);
+    const current = selectedGroup?.fragment_limit != null ? String(selectedGroup.fragment_limit) : "";
+    const limit   = parseGroupLimitInput(globalThis.prompt?.("Group fragment limit for all member keys (empty for no limit)", current));
+    if (limit === undefined) return;
+    if (Number.isNaN(limit)) { showToast("Enter 0 or a positive integer, or leave empty", "warning"); return; }
+    const res = await api("/groups/" + state.selectedGroupId + "/fragment-limit", { method: "PUT", body: { fragment_limit: limit } });
+    if (res.ok) { showToast("Group limit updated", "success"); renderGroups(container); }
+    else if (res.data?.error === "limit_below_usage") showToast(`Members already hold ${res.data.used} fragments`, "warning");
+    else showToast(res.data?.error ?? "Update failed", "error");
+  });
+
+  /* Event: effective access */
+  document.getElementById("effective-access-btn")?.addEventListener("click", async () => {
+    const res = await api("/groups/" + state.selectedGroupId + "/effective-access");
+    if (!res.ok) { showToast(res.data?.error ?? "Load failed", "error"); return; }
+    showModal("Effective Access", renderEffectiveAccess(res.data ?? [], members), []);
+  });
+
+  /* Event: change shared workspaces */
+  container.querySelectorAll("[data-member-shared]").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const member = members.find(m => m.id === btn.dataset.memberShared);
+      if (!member) return;
+      const current = Array.isArray(member.shared_workspaces) ? member.shared_workspaces.join(", ") : "all";
+      const shared  = parseSharedWorkspacesInput(globalThis.prompt?.("Shared workspaces (comma list, 'all' for every workspace, empty for none)", current));
+      if (shared === undefined) return;
+      const res = await api("/groups/" + state.selectedGroupId + "/members/" + member.id, { method: "PATCH", body: { shared_workspaces: shared } });
+      if (res.ok) { showToast("Shared workspaces updated", "success"); renderGroups(container); }
+      else showToast(res.data?.error ?? "Update failed", "error");
+    });
   });
 
   /* Event: remove member */

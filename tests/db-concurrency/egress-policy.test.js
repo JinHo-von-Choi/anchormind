@@ -29,11 +29,8 @@ const { OutboxStore }                  = await import("../../lib/outbox/OutboxSt
 const { OutboxWorker }                 = await import("../../lib/outbox/OutboxWorker.js");
 const { SchedulerRegistry }            = await import("../../lib/scheduler-registry.js");
 const { registerEgressAuditHandler }   = await import("../../lib/llm/egress-audit-handler.js");
-const {
-  getEgressPolicy,
-  invalidateEgressPolicyCache,
-  updateKeyPolicy
-}                       = await import("../../lib/admin/ApiKeyStore.js");
+const { updateKeyPolicy }                         = await import("../../lib/admin/ApiKeyStore.js");
+const { getEgressPolicy, invalidateEgressPolicyCache } = await import("../../lib/keys/policy.js");
 const { openEgressGate, EGRESS_AUDIT_TOPIC } = await import("../../lib/llm/EgressGate.js");
 const { EgressSkippedError }                 = await import("../../lib/llm/EgressPolicy.js");
 

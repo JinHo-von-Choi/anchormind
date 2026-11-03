@@ -213,11 +213,24 @@ describe("id 조회와 세션 재확인 상태", () => {
   it("세션 재확인 상태에 폐기, 만료, 허용 대역, 회전 퇴역 시각이 실린다", async () => {
     const expires = new Date(Date.now() + 1000);
     const retired = new Date(Date.now() - 1000);
-    rowsFor = async () => ({ rows: [{ status: "active", permissions: ["read"], revoked_at: null, expires_at: expires, allowed_cidrs: ["192.0.2.0/24"], secret_retirements: [retired] }] });
+    rowsFor = async (sql) => (isGroups(sql) ? { rows: [] } : { rows: [{ status: "active", permissions: ["read"], default_workspace: "ws-a", revoked_at: null, expires_at: expires, allowed_cidrs: ["192.0.2.0/24"], secret_retirements: [retired] }] });
+    /** 기본 workspace와 그룹 접근도 실어 열린 세션이 키 설정과 그룹 변경을 따라가게 한다 */
     assert.deepEqual(await getKeyAuthState(KEY_ID), {
-      exists: true, status: "active", permissions: ["read"], revokedAt: null, expiresAt: expires, allowedCidrs: ["192.0.2.0/24"], secretRetirements: [retired]
+      exists: true, status: "active", permissions: ["read"], defaultWorkspace: "ws-a",
+      groupKeyIds: [KEY_ID], groupGrants: { link: [], amend: [], forget: [] }, groupShareScopes: {},
+      revokedAt: null, expiresAt: expires, allowedCidrs: ["192.0.2.0/24"], secretRetirements: [retired]
     });
     assert.match(sqls[0].sql, /api_key_secrets s WHERE s\.key_id = k\.id AND s\.key_hash <> k\.key_hash/);
+  });
+
+  it("그룹 조회가 실패해도 폐기 판정에 쓰는 키 상태는 돌려준다", async () => {
+    rowsFor = async (sql) => {
+      if (isGroups(sql)) throw new Error("group lookup failed");
+      return { rows: [{ status: "inactive", permissions: ["read"], default_workspace: null, revoked_at: null, expires_at: null, allowed_cidrs: null, secret_retirements: [] }] };
+    };
+    const state = await getKeyAuthState(KEY_ID);
+    assert.equal(state.status, "inactive");
+    assert.equal(Object.hasOwn(state, "groupKeyIds"), false);
   });
 });
 

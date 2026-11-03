@@ -21,6 +21,10 @@ describe("resolveEmbeddingColumnSpec", () => {
     assert.equal(resolveEmbeddingColumnSpec(384).colType, "vector(384)");
     assert.equal(resolveEmbeddingColumnSpec(3072).udtName, "halfvec");
     assert.equal(resolveEmbeddingColumnSpec(3072).opsType, "halfvec_cosine_ops");
+    /** EMBEDDING_STORAGE=halfvec이면 2000차원 이하도 halfvec이다 */
+    assert.equal(resolveEmbeddingColumnSpec(1024, "halfvec").colType, "halfvec(1024)");
+    assert.equal(resolveEmbeddingColumnSpec(1024, "halfvec").opsType, "halfvec_cosine_ops");
+    assert.equal(resolveEmbeddingColumnSpec(1024, "vector").colType, "vector(1024)");
   });
 });
 

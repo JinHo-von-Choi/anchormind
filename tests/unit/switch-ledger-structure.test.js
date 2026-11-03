@@ -28,7 +28,8 @@ const read = (rel) => readFileSync(path.join(ROOT, rel), "utf8");
 const NOT_A_SWITCH = new Map([
   ["MEMENTO_SEMANTIC_THRESHOLD_MODE",         "유사도 임계값을 적용하는 위치를 고르는 방식 선택이며 기능을 열고 닫지 않는다"],
   ["MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS",   "인증 저장소 장애 응답의 상태 코드 선택이며 기능을 열고 닫지 않는다"],
-  ["EMBEDDING_SUPPORTS_DIMS_PARAM",           "기본값이 임베딩 provider에서 정해지는 재정의 값이며 고정 기본값이 없다"]
+  ["EMBEDDING_SUPPORTS_DIMS_PARAM",           "기본값이 임베딩 provider에서 정해지는 재정의 값이며 고정 기본값이 없다"],
+  ["EMBEDDING_STORAGE",                       "임베딩 열의 저장 형식(vector, halfvec) 선택이며 기능을 열고 닫지 않는다. DB 열 형식과 같아야 기동한다"]
 ]);
 
 const WORD = (name) => new RegExp(`(?<![A-Z0-9_])${name}(?![A-Z0-9_])`);

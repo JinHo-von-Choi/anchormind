@@ -31,7 +31,7 @@ mock.module("../../lib/memory/processors/AutoReflect.js", { exports: { autoRefle
 
 const { handleLegacySsePost }                         = await import("../../lib/handlers/sse-handler.js");
 const { createLegacySseSession, getLegacySession }    = await import("../../lib/sessions.js");
-const { invalidateKeyState }                          = await import("../../lib/admin/key-state-cache.js");
+const { invalidateKeyState }                          = await import("../../lib/keys/key-state-cache.js");
 
 const KEY_ID = "550e8400-e29b-41d4-a716-4466554400a1";
 

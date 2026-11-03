@@ -36,9 +36,15 @@ describe("역할 바인딩", () => {
     assert.throws(() => normalizeRoleBindings([{ role: "__proto__" }]), (e) => e.reason === "unknown_role");
   });
 
-  it("문자열 역할은 전역 바인딩이고, 같은 (역할, workspace)는 하나로 합친다", () => {
-    assert.deepEqual(normalizeRoleBindings(["viewer", { role: "viewer" }, { role: "reviewer", workspace: "team-a" }]),
-      [{ role: "viewer", workspace: null }, { role: "reviewer", workspace: "team-a" }]);
+  it("문자열 역할은 전역 바인딩이고, 같은 (역할, 그룹, workspace)는 하나로 합친다", () => {
+    assert.deepEqual(normalizeRoleBindings(["viewer", { role: "viewer" }, { role: "reviewer", group_id: "g-1", workspace: "team-a" }, { role: "reviewer", groupId: "g-1", workspace: "team-a" }]),
+      [{ role: "viewer", group_id: null, workspace: null }, { role: "reviewer", group_id: "g-1", workspace: "team-a" }]);
+  });
+
+  it("workspace 바인딩은 그룹 범위가 있어야 하고 owner는 그룹에도 묶이지 않는다", () => {
+    assert.throws(() => normalizeRoleBindings([{ role: "viewer", workspace: "team-a" }]), (e) => e.reason === "workspace_requires_group");
+    assert.throws(() => normalizeRoleBindings([{ role: "owner", group_id: "g-1" }]), (e) => e.reason === "owner_must_be_global");
+    assert.throws(() => normalizeRoleBindings([{ role: "viewer", group_id: "g 1" }]), (e) => e.reason === "group_format");
   });
 
   it("owner는 전역 바인딩만 받는다", () => {

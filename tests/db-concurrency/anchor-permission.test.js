@@ -18,7 +18,8 @@ const { prepareLaneDatabase, dropLaneDatabase, directQuery, directClientConfig }
 await prepareLaneDatabase();
 
 const { shutdownPool }                                  = await import("../../lib/tools/db.js");
-const { createApiKey, getAnchorState, updatePermissions } = await import("../../lib/admin/ApiKeyStore.js");
+const { createApiKey, updatePermissions } = await import("../../lib/admin/ApiKeyStore.js");
+const { getAnchorState }                  = await import("../../lib/keys/policy.js");
 const { main: grantMain }                               = await import("../../scripts/grant-anchor-permission.js");
 
 after(async () => {

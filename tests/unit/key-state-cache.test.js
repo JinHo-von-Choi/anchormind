@@ -30,7 +30,7 @@ mock.module("../../lib/logger.js", {
   namedExports: { ...realLogger, logWarn: (...args) => { warns.push(args.join(" ")); } }
 });
 
-const { getCachedKeyState, invalidateKeyState, KEY_STATE_FAILURE_WINDOW_MS } = await import("../../lib/admin/key-state-cache.js");
+const { getCachedKeyState, invalidateKeyState, KEY_STATE_FAILURE_WINDOW_MS } = await import("../../lib/keys/key-state-cache.js");
 const { register }                                                           = await import("../../lib/metrics.js");
 
 async function recheckErrors() {

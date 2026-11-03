@@ -138,7 +138,8 @@ describe("addToWorkingMemory 반환값", () => {
   it("Redis에 넣으면 true이고 DB를 부르지 않는다", async () => {
     const stored = await new FragmentIndex().addToWorkingMemory("sess-1", wmFragment("a"));
     assert.equal(stored, true);
-    assert.equal(redisRef.current.lists.get("frag:wm:sess-1").length, 1);
+    /** 세션 키 앞에 키 이름공간(_g는 마스터)이 붙는다 */
+    assert.equal(redisRef.current.lists.get("frag:wm:_g:sess-1").length, 1);
     assert.equal(dbRef.fake.calls.length, 0);
   });
 
@@ -272,8 +273,8 @@ describe("조회, 제거, 삭제", () => {
     const index = new FragmentIndex();
     await index.addToWorkingMemory("sess-1", wmFragment("a"));
     insertFallbackRow(wmFragment("b"));
-    await index.clearWorkingMemory("sess-1");
-    assert.equal(redisRef.current.lists.has("frag:wm:sess-1"), false);
+    await index.clearWorkingMemory("sess-1", null);
+    assert.equal(redisRef.current.lists.has("frag:wm:_g:sess-1"), false);
     assert.equal(dbRef.fake.rows.length, 0);
   });
 

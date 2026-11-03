@@ -228,3 +228,26 @@ describe("동봉 골드셋 파일", () => {
     assert.equal(new Set(stores).size, stores.length);
   });
 });
+
+describe("시간 질의 골드셋과 격리 누출", () => {
+  test("방해 항목은 질의 없이 받고, 질의를 가지면 거부한다. mention_days_ago는 0 이상 정수다", () => {
+    assert.deepEqual(validateGoldsetEntry({ id: "d", distractor: true, store: "기록", mention_days_ago: 30 }, 0), []);
+    assert.equal(validateGoldsetEntry({ id: "d", distractor: true, store: "기록", query: "q" }, 0).length, 1);
+    assert.equal(validateGoldsetEntry({ id: "q", store: "a", query: "b", query_class: "temporal", mention_days_ago: -1 }, 0).length, 1);
+  });
+
+  test("시간 질의 골드셋은 형식이 맞고 질의 항목은 모두 temporal이다", () => {
+    const lines = readFileSync(path.join(repoRoot, "tests/fixtures/recall-goldset-temporal.jsonl"), "utf8").split("\n").filter(Boolean);
+    const set   = lines.map((l) => JSON.parse(l));
+    assert.deepEqual(validateGoldset(set), []);
+    assert.ok(set.filter((e) => !e.distractor).every((e) => e.query_class === "temporal"));
+  });
+
+  test("격리 위반이 하나라도 있으면 허용 폭과 상관없이 퇴행이다", () => {
+    const base = { offline_recall_at_1: 0.5, offline_recall_at_5: 0.8, offline_recall_at_10: 0.9, offline_mrr: 0.6 };
+    assert.equal(compareToBaseline(base, { ...base, isolation: { probes: 10, violations: 0 } }).regressed, false);
+    const bad = compareToBaseline(base, { ...base, isolation: { probes: 10, violations: 1 } });
+    assert.equal(bad.regressed, true);
+    assert.match(bad.reasons.join(" "), /isolation violations 1/);
+  });
+});

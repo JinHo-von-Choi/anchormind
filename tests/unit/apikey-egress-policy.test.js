@@ -14,7 +14,7 @@ mock.module("../../lib/tools/db.js", {
   exports: { getPrimaryPool: () => ({ query: (...args) => { calls.push(args); return queryImpl(...args); } }) }
 });
 
-const { getEgressPolicy, invalidateEgressPolicyCache } = await import("../../lib/admin/ApiKeyStore.js");
+const { getEgressPolicy, invalidateEgressPolicyCache } = await import("../../lib/keys/policy.js");
 
 const KEY = "550e8400-e29b-41d4-a716-446655440000";
 

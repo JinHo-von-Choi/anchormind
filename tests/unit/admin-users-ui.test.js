@@ -17,7 +17,7 @@ import { setupDom, flatQuery }      from "./admin-test-helper.js";
 
 setupDom();
 
-const { parseRolesInput, rolesLabel, errorLabel, renderAdminUsers } = await import("../../assets/admin/modules/admin-users.js");
+const { parseRolesInput, rolesLabel, rolesInput, errorLabel, renderAdminUsers } = await import("../../assets/admin/modules/admin-users.js");
 const { secondFactorFields, renderLogin, renderEnrollment } = await import("../../assets/admin/modules/auth.js");
 const { authHeaders, readCookie } = await import("../../assets/admin/modules/api.js");
 const { state } = await import("../../assets/admin/modules/state.js");
@@ -46,9 +46,15 @@ beforeEach(() => {
 
 describe("순수 함수", () => {
   it("역할 입력을 바인딩으로 바꾸고 다시 표시 문자열로 만든다", () => {
-    const roles = parseRolesInput(" owner, viewer@team-a ,, reviewer@ ");
-    assert.deepEqual(roles, [{ role: "owner", workspace: null }, { role: "viewer", workspace: "team-a" }, { role: "reviewer", workspace: null }]);
-    assert.equal(rolesLabel(roles), "owner, viewer@team-a, reviewer");
+    const roles = parseRolesInput(" owner, viewer@g:g-1 ,, reviewer@g:g-1/team-a, auditor@ ");
+    assert.deepEqual(roles, [
+      { role: "owner", group_id: null, workspace: null },
+      { role: "viewer", group_id: "g-1", workspace: null },
+      { role: "reviewer", group_id: "g-1", workspace: "team-a" },
+      { role: "auditor", group_id: null, workspace: null }
+    ]);
+    assert.equal(rolesLabel(roles, [{ id: "g-1", name: "team" }]), "owner, viewer@group team, reviewer@group team / team-a, auditor");
+    assert.equal(rolesInput(roles), "owner, viewer@g:g-1, reviewer@g:g-1/team-a, auditor");
   });
 
   it("6자리 숫자는 TOTP, 그 밖은 복구 코드, 빈 값은 필드 없음이다", () => {
