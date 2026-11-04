@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [7.1.0] - 2026-11-04
+
 ### Added
 
 - 키 그룹 멤버마다 권한을 정한다. 권한은 `read`, `share`, `link`, `amend`, `forget`이고 기본값은 `read`, `share`, `link`다. A가 `read`를, B가 `share`를 가지면 A는 B의 파편을 읽으며, `link`, `amend`, `forget`을 받으면 그 파편에 링크를 걸고 고치고 지울 수 있다. 기존 멤버는 기본 권한을 받으므로 동작이 그대로다(migration-073).
