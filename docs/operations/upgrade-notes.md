@@ -31,6 +31,7 @@
 | agent 범위 구분이 들어간 업데이트 (migration-047) | [아래 3번](#3-agent-범위-전환-migration-047) |
 | 임베딩 제공자, 모델, 차원을 바꿨다 | [아래 4번](#4-임베딩-제공자-모델-차원을-바꿨을-때) |
 | 행이 수백만 건인 운영 DB | [아래 5번](#5-행이-매우-많은-운영-db) |
+| 관리자 계정에 workspace 바인딩이 있다 (migration-074) | [아래 6번](#6-관리자-workspace-바인딩-migration-074) |
 
 ## 1. 앵커 권한, 관리자 계정, 본문 어휘 검색 (migration-053 ~ 060)
 
@@ -162,6 +163,8 @@ node scripts/check-embedding-consistency.js --record
 
 2000차원을 넘는 모델도 같은 스크립트로 맞출 수 있다. 예를 들어 Gemini `gemini-embedding-001`은 3072차원이다. 로컬 모델로 바꾸는 전체 절차는 [로컬 임베딩 가이드](../embedding-local.md)에 정리돼 있다.
 
+임베딩 열을 halfvec으로 저장하려면 `.env`에 `EMBEDDING_STORAGE=halfvec`을 두고 같은 스크립트를 실행한다. 차원이 그대로이면 스크립트가 기존 값을 halfvec으로 옮기므로 다시 임베딩하지 않는다. 변환하는 동안 표에 잠금이 걸리므로 쓰기가 적은 시간에 실행한다.
+
 ## 5. 행이 매우 많은 운영 DB
 
 migration-034 번들은 트랜잭션 안에서 `CREATE UNIQUE INDEX`를 실행한다. 표에 수백만 건 이상이 있고 잠금을 줄여야 한다면, `npm run migrate`를 실행하기 전에 아래 두 문을 직접 실행한다. 이미 색인이 있으면 마이그레이션은 해당 작업을 건너뛴다.
@@ -185,6 +188,19 @@ pg_repack --table=agent_memory.fragments --no-order <접속 옵션>
 ```
 
 효과는 `pg_stat_user_tables`의 `n_tup_hot_upd / n_tup_upd`로 본다.
+
+## 6. 관리자 workspace 바인딩 (migration-074)
+
+migration-074부터 관리자 계정의 workspace 바인딩은 그룹 범위와 함께 적어야 한다. 그룹 범위 없이 workspace만 적은 기존 바인딩은 남아 있지만 권한을 주지 않으므로, 그런 계정은 업그레이드 뒤에 해당 workspace를 볼 수 없다. 아래 질의로 대상 계정을 찾는다.
+
+```sql
+SELECT u.username, b.role, b.workspace
+  FROM agent_memory.admin_role_bindings b
+  JOIN agent_memory.admin_users u ON u.id = b.user_id
+ WHERE b.workspace IS NOT NULL AND b.group_id IS NULL;
+```
+
+찾은 계정은 관리 콘솔 관리자 계정 화면의 ROLES에서 `역할@g:<그룹 id>/<workspace>` 형식으로 바인딩을 다시 넣는다. 그룹이 없으면 먼저 그 workspace를 쓰는 키로 그룹을 만든다. 같은 일을 `PUT /v1/internal/model/nothing/admin-users/:id/roles`로도 할 수 있다.
 
 ## 마이그레이션 파일을 직접 다룰 때
 

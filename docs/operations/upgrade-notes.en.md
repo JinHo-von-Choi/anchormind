@@ -31,6 +31,7 @@ Most upgrades stop here. Only the cases below need extra work.
 | Update introduces agent scope (migration-047) | [Section 3](#3-agent-scope-switch-migration-047) |
 | You changed the embedding provider, model or dimension | [Section 4](#4-after-changing-the-embedding-provider-model-or-dimension) |
 | Production DB has millions of rows | [Section 5](#5-very-large-production-databases) |
+| Admin accounts have workspace bindings (migration-074) | [Section 6](#6-admin-workspace-bindings-migration-074) |
 
 ## 1. Anchor permission, admin accounts, body lexical search (migration-053 to 060)
 
@@ -162,6 +163,8 @@ node scripts/check-embedding-consistency.js --record
 
 Use the same script for models above 2000 dimensions, including Gemini `gemini-embedding-001` at 3072; for switching to a local model, follow the [local embedding guide](../embedding-local.md). No separate path is needed.
 
+To store the embedding column as halfvec, set `EMBEDDING_STORAGE=halfvec` in `.env` and run the same script. When the dimension stays the same, the script carries the existing values over to halfvec, so nothing is re-embedded. The table is locked during the conversion, so run it when writes are light.
+
 ## 5. Very large production databases
 
 The migration-034 bundle runs `CREATE UNIQUE INDEX` inside a transaction. This can lock busy tables. On tables with millions of rows, run these two statements by hand before `npm run migrate` to reduce locking; if the indexes already exist, the migration skips them.
@@ -185,6 +188,19 @@ pg_repack --table=agent_memory.fragments --no-order <connection options>
 ```
 
 Check the effect with `n_tup_hot_upd / n_tup_upd` in `pg_stat_user_tables`.
+
+## 6. Admin workspace bindings (migration-074)
+
+From migration-074, a workspace binding on an admin account must carry a group scope. Existing bindings that name only a workspace remain but grant nothing, so those accounts cannot see that workspace after the upgrade. Find them with the query below.
+
+```sql
+SELECT u.username, b.role, b.workspace
+  FROM agent_memory.admin_role_bindings b
+  JOIN agent_memory.admin_users u ON u.id = b.user_id
+ WHERE b.workspace IS NOT NULL AND b.group_id IS NULL;
+```
+
+For each account found, set the binding again under ROLES on the admin accounts screen of the admin console, in the form `role@g:<group id>/<workspace>`. If there is no group yet, first create one with the keys that use that workspace. The same change can be made with `PUT /v1/internal/model/nothing/admin-users/:id/roles`.
 
 ## Working with migration files directly
 

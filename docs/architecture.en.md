@@ -208,7 +208,6 @@ lib/admin/
 +-- admin-routes.js    Admin HTTP dispatcher (routes UI, images, static files, REST API)
 +-- admin-auth.js      Admin auth routes (POST /auth, session cookie issuance)
 +-- admin-login-guard.js Admin auth failure accumulation and per-account delay (delay applies only when `MEMENTO_ADMIN_AUTH_BACKOFF=on`)
-+-- key-state-cache.js API key state recheck cache used when a session is used (`MEMENTO_SESSION_KEY_RECHECK_MS`). Revoked or expired keys and addresses outside the allowed blocks also close the session
 +-- ApiKeyLifecycleStore.js Key rotation (with overlap), revocation, lifecycle column edits, access review signature. Rotation and revocation change api_keys and api_key_secrets together in one transaction that locks the key row
 +-- key-lifecycle.js   Key lifecycle decision (revoked, inactive, expired, secret row, limit, in that order), rotation overlap, validation of lifecycle edits and revoke reasons, request address fingerprint
 +-- key-lifecycle-limits.js Defaults and bounds of the key lifecycle settings (shared by config.js and key-lifecycle.js)
@@ -242,6 +241,13 @@ lib/admin/
 +-- admin-sessions.js  Session management routes
 +-- admin-logs.js      Log viewing routes
 +-- admin-export.js    Fragment export/import routes (export, import)
+
+lib/keys/
++-- key-state-cache.js API key state recheck cache used when a session is used (`MEMENTO_SESSION_KEY_RECHECK_MS`). Revoked or expired keys and addresses outside the allowed blocks also close the session
++-- key-identity.js    Rules that update a session's permissions, default workspace, and group access from the rechecked key state (shared by streamable, legacy SSE, and hook auth)
++-- policy.js          Key policy cache (symbolic hard gate, allowed_workspaces, external transfer policy, workspace aliases)
++-- workspace-alias.js Rewrites a workspace alias in tool arguments to its canonical name
++-- invalidation.js    Key cache invalidation. Clears this process's caches and notifies other processes on the Redis `memento-mcp:key-invalidate` channel
 
 assets/admin/
 +-- index.html         Admin SPA app shell (login form + container)
@@ -353,6 +359,7 @@ lib/cli/
 +-- init.js             Claude Code and Codex plugin generation (`anchormind init --target claude|codex`, dry-run by default)
 +-- admin.js            Emergency recovery for admin accounts (`anchormind admin recover`, uses only the explicit connection target)
 +-- group.js            Key group and member permission management (`group list|create|delete|members|add|set|remove`)
++-- workspace.js        Per-key workspace aliases and merge (`workspace suggest|aliases|alias|merge`)
 +-- audit.js            Audit hash chain verification (`audit verify`, exit code 1 when broken)
 +-- export.js           Fragment JSONL backup
 +-- import.js           Fragment JSONL restore
@@ -521,9 +528,9 @@ SSE streams are monitored via periodic heartbeats (`: ping\n\n`).
 `SIGTERM` and `SIGINT` are handled once by `createShutdownGuard`; later signals are only logged. The procedure runs in this order.
 
 1. The HTTP server stops accepting new connections.
-2. In-flight HTTP requests (SSE subscriptions excluded), polling workers registered in the worker registry (`lib/memory/workers/registry.js`) and the work that runs after a response (morpheme registration, autolink, lesson cues, episode milestone links) are drained for up to 30 seconds. A worker whose `PollingWorker.start` succeeded registers itself, so workers such as `BatchRememberWorker` and `EmbeddingWorker` are not listed by name in the shutdown path.
+2. The server waits up to 30 seconds for in-flight HTTP requests (SSE subscriptions excluded), polling workers (`lib/memory/workers/registry.js`), and the work that runs after a response: morpheme registration, autolink, lesson cues, and episode milestone links. A worker whose `PollingWorker.start` succeeded registers itself, so the shutdown path does not name workers individually.
 3. Active sessions are closed with auto-reflect. Redis sessions are kept so they can be restored after a restart.
-4. The key cache invalidation subscription and the DB connection pool are closed, access statistics are saved, and the process exits with code 0.
+4. The server closes the key cache invalidation subscription and the DB connection pool, saves access statistics, and exits with code 0.
 
 If the procedure does not finish within `MEMENTO_SHUTDOWN_DEADLINE_MS` (default 60000, 0 means no cap), the process is forced to exit with code 1. An uncaught exception runs the same procedure with exit code 1 and arms a 35-second forced-exit timer.
 
@@ -867,7 +874,7 @@ Stores retry responses for write tools that create no fragment (`amend`, `tool_f
 
 ### Row-Level Security
 
-RLS is enabled on fragments and fragment_links (migration-045, key list in migration-080). The fragments policy `fragment_isolation_policy` checks `app.current_agent_id` (agent axis) and, only when set, the key range (the list `app.current_key_ids` and the earlier single value `app.current_key_id`). The key isolation helpers in `lib/memory/keyScope.js` also record the key ids they put into a clause on the bind array (`lib/tools/key-scope-ids.js`), and `queryWithAgentVector` passes that list as `app.current_key_ids` on every query, so group reads (own key plus readable member keys) match the policy. The fragment_links policy follows access to the from_id fragment. Database-level isolation is not active, however. The application account owns the table and `FORCE ROW LEVEL SECURITY` is not set, so the policy does not apply to runtime queries, and some paths (direct admin API queries, for example) do not set the session variables. Isolation between keys is performed by the application query filter. The procedure for establishing database-level isolation is in `docs/operations/row-level-security.md`.
+RLS is enabled on fragments and fragment_links (migration-045, key list in migration-080). The fragments policy `fragment_isolation_policy` checks the agent axis `app.current_agent_id`. When a key range is set, it also checks the key list `app.current_key_ids` or the single value `app.current_key_id`. The key range is set when the query is built. `lib/memory/keyScope.js` records the key ids it puts into an isolation clause on the bind array (`lib/tools/key-scope-ids.js`), and `queryWithAgentVector` passes that list as `app.current_key_ids` on every query. Group reads, which cover the caller's key and the readable member keys, therefore use the same range as the policy. The fragment_links policy follows whether the from_id fragment is readable. The application account owns the table and `FORCE ROW LEVEL SECURITY` is not set, so key isolation for runtime queries is enforced by the query filter. The procedure for turning on database-level isolation is in `docs/operations/row-level-security.md`.
 
 ```sql
 CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
@@ -909,9 +916,9 @@ The `fragments.workspace` column provides an additional isolation layer within t
 
 **Configuration**: Set `default_workspace` in the Admin SPA key editor, or use `PATCH /v1/internal/model/nothing/keys/:id/workspace`.
 
-**Aliases**: each key may have workspace aliases (`key_workspace_aliases`). Before the trusted context is attached, `jsonrpc.handleToolsCall` replaces an argument workspace (each item for batch writes) that is an alias with its workspace (`lib/keys/workspace-alias.js`), so permission checks, group shared-workspace checks, writes and reads all use the canonical name. A workspace is only a name inside a key; another key's workspace with the same name is never visible through any path.
+**Aliases**: each key may have workspace aliases (`key_workspace_aliases`). Before attaching the trusted context, `jsonrpc.handleToolsCall` checks whether the argument workspace is an alias and replaces it with the canonical name (`lib/keys/workspace-alias.js`); batch writes are rewritten per item. Permission checks, group shared-workspace checks, writes, and reads therefore all use the canonical name. A workspace name only has meaning inside one key, so another key's workspace with the same name is not visible.
 
-**Retention**: a maximum age in days can be set for a whole key or one of its workspaces (`key_retention_policies`). The `retention_expire` consolidation stage (`lib/memory/consolidate/RetentionGC.js`) deletes with the same chunk rules as expiry deletion and keeps anchors.
+**Retention**: a maximum age in days can be set for a whole key or for one of its workspaces (`key_retention_policies`). The `retention_expire` consolidation stage (`lib/memory/consolidate/RetentionGC.js`) deletes older fragments with the same chunk rules as expiry deletion and keeps anchors.
 
 **Use cases**:
 - Developer switching between projects in the same session (`workspace: "memento-mcp"`, `workspace: "docs-mcp"`)
@@ -1032,15 +1039,15 @@ Operates as browser-native ESM without a bundler. `admin.js` is the entry point 
 
 ### API Key Groups
 
-Keys in the same group read and handle each other's fragments as far as the per-member rights allow. Use this when multiple agents (Claude Code, Codex, Gemini, etc.) share a single project's memory.
+Keys in the same group read and handle each other's fragments as far as each member's rights allow. Create a group when several agents (Claude Code, Codex, Gemini, etc.) share one project's memory.
 
-- N:M mapping: a key can belong to several groups (`api_key_group_members`). A member row carries rights (`read`, `share`, `link`, `amend`, `forget`) and a shared workspace list (`shared_workspaces`, NULL means all).
-- Read range: key A reads B's fragments when, in a group they share, A has `read` and B has `share`. Authentication and the key state recheck load the group access (`groupAccessFromRows`, `lib/memory/groupGrants.js`) into the session as `groupKeyIds`, `groupGrants` and `groupShareScopes`, and each request drops members whose shared list does not include the request workspace.
-- Writes: only members granted `link`, `amend` or `forget` handle other members' readable fragments. Automatic links are made between fragments of the same owner key, or with fragments of members granted link.
-- Provenance: a shared fragment of another key has its recall score multiplied by `ranking.sharedFragmentFactor` (0.9), and a fragment whose content was changed through a delegated amend drops one `trust_tier`.
-- Limit: a group `fragment_limit` caps the live fragments of all member keys. The key row and the group rows are locked in that order before the check (`lockQuota`, `lib/memory/read/quotaQueries.js`), so concurrent writes do not exceed it.
-- Caches: key state and key policy caches live in `lib/keys/`; changes from the admin API or the CLI are cleared in this process by `lib/keys/invalidation.js` and announced to other processes on the Redis channel `memento-mcp:key-invalidate`.
-- Keys without a group read only their own fragments.
+- N:M mapping: a key can belong to several groups (`api_key_group_members`). A member row holds rights (`read`, `share`, `link`, `amend`, `forget`) and a shared workspace list (`shared_workspaces`, NULL means all).
+- Read range: in a group both keys belong to, A reads B's fragments when A has `read` and B has `share`. Group access is loaded at authentication and on the key state recheck (`groupAccessFromRows`, `lib/memory/groupGrants.js`), and the result is stored in the session as `groupKeyIds`, `groupGrants`, and `groupShareScopes`. On each request, members whose shared list does not include the request workspace are dropped from the read range.
+- Writes: to link, amend, or forget another member's fragment, the caller must be able to read it and must hold the matching `link`, `amend`, or `forget` right. Automatic links are made only between fragments of the same owner key, or with fragments of members granted `link`.
+- Provenance: a shared fragment written by another key has its recall score multiplied by `ranking.sharedFragmentFactor` (0.9), and a fragment whose content changed through a delegated amend drops one `trust_tier`.
+- Limit: a group `fragment_limit` blocks writes based on the live fragment count of all member keys. The key row and the group row are locked in that order before the check (`lockQuota`, `lib/memory/read/quotaQueries.js`), so concurrent writes cannot exceed the limit.
+- Caches: key state and key policy caches live in `lib/keys/`. When the admin API or the CLI changes a key, `lib/keys/invalidation.js` clears this process's caches and notifies other processes on the Redis channel `memento-mcp:key-invalidate`.
+- Keys not in a group read only their own fragments.
 
 Admin REST endpoints:
 

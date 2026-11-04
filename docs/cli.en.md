@@ -404,7 +404,7 @@ node bin/memento.js export --include-versions --output full.jsonl
 node bin/memento.js export --format-version 1 --output legacy.jsonl
 ```
 
-Main options: `--key <key_id>`, `--group <id|name>` (fragments of every member key of the group; cannot be combined with `--key`; a group without members exports no fragment lines), `--topic`, `--type`, `--since <ISO>`, `--limit <n>`, `--output <FILE>`, `--format-version <1|2>`, `--no-links` (leave out link lines), `--include-versions` (add amendment history lines), `--json` (emit array).
+Main options: `--key <key_id>`, `--group <id|name>` (fragments of every member key of the group; not combined with `--key`), `--topic`, `--type`, `--since <ISO>`, `--limit <n>`, `--output <FILE>`, `--format-version <1|2>`, `--no-links` (leave out link lines), `--include-versions` (add amendment history lines), `--json` (emit array).
 
 - Fragments are read in id ordered batches and written line by line.
 - Only links that are not deleted and whose two ends are both exported are written. Narrowing the scope with `--topic`, `--type`, `--since` or `--limit` drops links to fragments outside it.
@@ -555,7 +555,7 @@ anchormind admin recover --url postgres://memento@db.internal:5432/memento --con
 
 ### group
 
-Manages API key groups and member permissions. It is local only and connects with the server's database settings (`.env`). `<group>` and `<key>` accept an id or a name; a name that matches several entries is refused, so use the id. Commands that change something write the same audit events as the admin API (`admin.group.create`, `admin.group.delete`, `admin.group.member_add`, `admin.group.member_permissions`, `admin.group.member_remove`, `admin.group.fragment_limit_update`) to the outbox with detail `channel: "cli"`. With Redis enabled the changed member keys are announced to running servers at once; otherwise a running server applies the new group access to open sessions within the key state recheck interval (`MEMENTO_SESSION_KEY_RECHECK_MS`, 30 seconds by default).
+Manages API key groups and member permissions. It is local only and connects with the server's database settings (`.env`). `<group>` and `<key>` accept an id or a name; when a name matches several entries, use the id. Commands that change something write the same audit events as the admin API, with `channel: "cli"` in the detail. With Redis enabled the changed member keys are announced to running servers at once; otherwise the server applies the change within `MEMENTO_SESSION_KEY_RECHECK_MS` (30 seconds by default).
 
 ```bash
 memento-mcp group list
@@ -582,11 +582,17 @@ memento-mcp group delete team-a --confirm                      # removes members
 
 An unknown name in `--permissions` changes nothing and exits with code 1. `--json` prints the result as JSON.
 
-`--shared-workspaces` lists the workspaces this member's `share` opens (`all` means every workspace). With a list, other members read this member's fragments of a workspace and its global fragments only when their request workspace is in the list. `limit` caps the live fragments of all member keys; once reached, member keys' writes are refused with `fragment_limit_exceeded`, and the limit cannot be set below the current count.
+`--shared-workspaces` takes the workspaces this member shares, separated by commas; `all` shares everything. With a list, other members read this member's fragments only when they request one of those workspaces. `limit` caps the fragments of all member keys. Once it is reached, member keys' writes are refused with `fragment_limit_exceeded`, and the limit cannot be set below the current count.
+
+| Command | Audit event |
+|-|-|
+| `create`, `delete` | `admin.group.create`, `admin.group.delete` |
+| `add`, `set`, `remove` | `admin.group.member_add`, `admin.group.member_permissions`, `admin.group.member_remove` |
+| `limit` | `admin.group.fragment_limit_update` |
 
 ### workspace
 
-Brings together, inside one key, a workspace that split under several names such as `/home/u/jobs/proj` and `proj`. It is local only and `<key>` accepts an id or a name. An alias makes requests under that name (reads, writes, batch items) run under the workspace; fragments already stored under the alias name are moved with `merge`. The last path segment is not used automatically because different paths often end in the same segment (for example `worktree` in temporary work directories).
+Brings together, inside one key, a workspace that split under several names. It is local only and `<key>` accepts an id or a name. With an alias, requests for `/home/u/jobs/proj` are handled as `proj`. Fragments already stored under the alias name are moved with `merge`. `suggest` lists only paths whose name already exists as a workspace of the same key.
 
 ```bash
 memento-mcp workspace suggest                                 # path-like workspaces whose last segment is already a workspace of the key
@@ -597,7 +603,7 @@ memento-mcp workspace merge codex-key /home/u/jobs/proj proj --confirm
 memento-mcp workspace alias codex-key /home/u/jobs/proj none   # remove the alias
 ```
 
-`merge` moves one key's fragments under `<from>` (closed rows included) to `<to>`. A fragment whose content already exists under `<to>` is not moved; it stays under `<from>` and is closed. The commands write the audit events `admin.key.workspace_alias_update` and `admin.key.workspace_merge`.
+`merge` moves one key's fragments under `<from>`, closed rows included, to `<to>`. A fragment whose content already exists under `<to>` stays under `<from>` and is closed. The audit events are `admin.key.workspace_alias_update` and `admin.key.workspace_merge`.
 
 ---
 
@@ -760,9 +766,9 @@ node bin/memento.js benchmark --baseline scripts/baseline-recall.json
 
 Options: `--goldset <path>` (default `tests/fixtures/recall-goldset.jsonl`), `--baseline <path>`, `--save-baseline <path>`, `--limit <n>`, `--repeat <n>`, `--synthetic`, `--page-size <n>`, `--key-scope isolated|corpus`, `--agent-id <id>` (default `benchmark-harness`), `--workspace <name>` (default `__benchmark__`), `--age-spread <days>`, `--isolation-probe`, `--no-seed`, `--no-cleanup`, `--format table|json`.
 
-Goldset entries may carry `mention_days_ago` (seed the entry that many days in the past), `distractor: true` (seeded without a query) and `time_range` (recall `timeRange`). The temporal goldset `tests/fixtures/recall-goldset-temporal.jsonl` measures eight time-phrased queries against distractors recorded on the same subject at other times.
+Goldset entries may carry `mention_days_ago`, `distractor` and `time_range`. `mention_days_ago` seeds the entry that many days in the past, `distractor: true` seeds it without a query, and `time_range` is passed as the recall `timeRange`. The temporal goldset `tests/fixtures/recall-goldset-temporal.jsonl` has 8 queries and 8 distractors.
 
-`--isolation-probe` stores every goldset text once more under a second harness key (`benchmark-harness-key-isolation-probe`) with the same agentId and the same workspace name, and reports how many of those fragments appeared in the evaluated key's recall results as `metrics.isolation.violations`. A workspace is a name inside a key, so this must always be 0; a nonzero value makes a `--baseline` comparison a regression (`isolated` mode only).
+`--isolation-probe` stores the same texts once more under another harness key, with the same agentId and workspace name, and reports how many of them appear in the evaluated key's recall results as `metrics.isolation.violations`. The value is 0 when isolation holds; anything else makes a `--baseline` comparison a regression. It works in `isolated` mode only.
 
 Before seeding, one line with the target DB (host, port, database) is written to stderr. A run with zero embedded fragments (including `--no-seed`) is refused by `--save-baseline`. The baseline file records the embedding provider, model and dimensions, and a `--baseline` comparison warns when the model or dimensions differ. The `isolated` mode creates the isolation key `benchmark-harness-key` (status `inactive`) row in `api_keys` once.
 

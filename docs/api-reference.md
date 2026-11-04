@@ -110,9 +110,11 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | POST | /v1/internal/model/nothing/admin-users/:id/totp-reset | TOTP와 복구 코드 초기화, 세션 폐기 |
 | DELETE | /v1/internal/model/nothing/admin-users/:id/sessions | 계정의 모든 세션 폐기 |
 
-키 그룹 멤버 권한: 멤버 행마다 `permissions` 배열(`read`, `share`, `link`, `amend`, `forget`)을 둔다. 기본은 `["read", "share", "link"]`이다. 키 A는 함께 속한 그룹에서 A가 `read`, B가 `share`를 가지면 B의 파편을 읽는다(recall, context, graph_explore, fragment_history, reconstruct_history, search_traces 모두 같다). `link`, `amend`, `forget`은 그렇게 읽을 수 있는 다른 멤버 파편에 대한 link 도구, amend, id 지정 forget을 허용한다. topic 지정 forget은 권한과 무관하게 자기 파편만 지운다. 멤버 목록(`GET .../members`)은 각 멤버의 `permissions`와 `updated_at`을 싣는다. 모르는 권한 이름은 400 `invalid_group_permissions`, 멤버가 아닌 키의 `PATCH`는 404다. 응답은 `{ keyId, groupId, permissions, previous }`이고 감사 이벤트 `admin.group.member_permissions`의 detail에 `previous`와 `permissions`가 남는다. 그룹이 아닌 키끼리는 workspace 이름이 같아도 서로의 파편을 읽지 못한다.
+키 그룹 멤버 권한: 멤버마다 `permissions` 배열을 둔다. 값은 `read`, `share`, `link`, `amend`, `forget`이고 기본값은 `["read", "share", "link"]`다. 함께 속한 그룹에서 A가 `read`를, B가 `share`를 가지면 A는 B의 파편을 읽는다. recall과 context를 비롯한 읽기 도구가 모두 이 규칙을 따른다. `link`, `amend`, `forget`을 받으면 그렇게 읽을 수 있는 파편에 링크를 걸고, 고치고, id로 지울 수 있다. topic을 지정한 forget은 권한과 상관없이 자기 파편만 지운다. 멤버 목록(`GET .../members`)에는 멤버마다 `permissions`와 `updated_at`이 실린다. 모르는 권한 이름은 400 `invalid_group_permissions`, 멤버가 아닌 키에 대한 `PATCH`는 404로 답한다. 응답은 `{ keyId, groupId, permissions, previous }`다. 감사 이벤트 `admin.group.member_permissions`에도 바뀌기 전과 뒤의 권한이 남는다. 같은 그룹이 아닌 키끼리는 workspace 이름이 같아도 서로의 파편을 읽지 못한다.
 
-공유 workspace: 멤버 행의 `shared_workspaces`(NULL은 전체)는 그 멤버의 `share`가 열어 주는 workspace다. 목록이 있으면 다른 멤버는 요청 workspace(명시 `workspace`, 없으면 키 기본 workspace)가 목록 안일 때만 그 멤버의 그 workspace와 전역 파편을 읽고, id로 집는 amend, forget, link도 같은 범위에서만 된다. 두 그룹에서 범위가 다르면 합치고, 한 그룹이라도 전체 공유면 제한이 없다. recall 순위에서 다른 키가 쓴 공유 파편은 점수에 0.9를 곱하고(`ranking.sharedFragmentFactor`), `amend` 권한을 받은 다른 키가 본문을 고친 파편은 `trust_tier`가 한 단계 내려간다(최저 1, 등급 1은 context의 ANCHOR와 CORE에서 빠진다).
+공유 workspace: 멤버의 `shared_workspaces`는 그 멤버의 `share`가 열어 주는 workspace 목록이고, NULL이면 전체다. 목록이 있으면 다른 멤버는 요청 workspace가 목록 안일 때만 그 workspace와 전역 파편을 읽는다. 요청 workspace는 명시한 `workspace`이고, 없으면 키의 기본 workspace다. id로 집는 amend, forget, link도 같은 범위 안에서만 된다. 두 그룹의 범위가 다르면 합치고, 한 그룹이라도 전체를 공유하면 제한이 없다.
+
+다른 키의 공유 파편: recall 순위에서 점수에 0.9(`ranking.sharedFragmentFactor`)를 곱하므로 같은 내용이면 내 파편이 앞선다. `amend` 권한을 받은 다른 키가 본문을 고치면 그 파편의 `trust_tier`가 한 단계 내려가는데, 가장 낮게는 1이다. 등급 1인 파편은 context의 ANCHOR와 CORE에 들어가지 않는다.
 
 ### 내보내기와 가져오기
 
@@ -295,7 +297,7 @@ X-RateLimit-Resource: fragments
 - 권한 레벨은 세 가지다: `read`(recall/context 등), `write`(remember/forget/amend 등), `admin`(memory_consolidate/apply_update 등). `admin` 권한만으로 master 전용 도구를 우회할 수는 없다.
 - 권한이 없는 도구를 호출하면 JSON-RPC 오류 `-32001`이 반환되며 `message`에 사유(`Permission denied: '<도구>' requires '<레벨>' permission`)가 담긴다. master 전용 도구(memory_stats, memory_consolidate, check_update, apply_update)를 일반 키로 호출하면 `-32001`과 `Permission denied: '<도구>' requires master authentication`이 반환되며, 이 도구들은 일반 키의 tools/list에도 나타나지 않는다.
 - API 키에 `allowed_workspaces`가 있으면 읽기 도구(recall, context, graph_explore, fragment_history, reconstruct_history, search_traces)와 resources/read는 목록의 workspace와 전역(workspace 없음) 파편만 읽는다. 판정 대상은 요청의 effective workspace(명시 `workspace`, 없으면 키 기본 workspace, 둘 다 없으면 전역)이다. `MEMENTO_WORKSPACE_READ_AUTHZ=enforce`에서 목록 밖 요청은 처리되지 않고 `-32001`과 `Permission denied: the requested workspace is outside the key's allowed_workspaces`(키 기본 workspace가 목록 밖이면 `the key's default workspace is outside ...`, 목록 조회 실패면 `... could not be determined`)로 끝난다. 기본 `warn`은 요청을 처리하고 `memento_workspace_read_authz_total{outcome="would_deny"}`와 경고 로그만 남긴다.
-- 읽을 수 없는 다른 API 키의 파편에 amend/link를 요청하면 `"Fragment not found or no permission"` 에러가 반환되고, forget은 없는 파편과 같이 `deleted: 0`을 돌려준다. SQL 레벨에서 `key_id` 조건으로 격리되므로 존재 여부조차 노출되지 않는다.
+- 읽을 수 없는 다른 키의 파편을 amend나 link로 가리키면 `"Fragment not found or no permission"` 오류가 돌아온다. forget은 없는 파편과 같이 `deleted: 0`을 돌려준다. SQL에서 `key_id` 조건으로 걸러지므로 존재 여부도 드러나지 않는다.
 
 보호된 리소스에 인증 없이 접근하면 `401 Unauthorized`와 함께 `WWW-Authenticate: Bearer resource_metadata="</.well-known/oauth-protected-resource URL>"` 헤더가 반환된다.
 
@@ -334,7 +336,7 @@ X-Memento-Mode: recall-only
 
 세션 ID는 `MCP-Session-Id` 헤더로 보낸다. `MEMENTO_SESSION_ID_POLICY`(`warn`, `enforce`, 기본 `warn`)는 쿼리스트링으로 받은 세션 ID와 서버 발급 형식(UUID)이 아닌 ID의 자동 복구를 다룬다. `warn`은 경고 로그를 남기고 정상 처리하며, `enforce`는 쿼리 ID에 400, UUID가 아닌 ID의 복구에 404를 돌려준다. 헤더로 보낸 UUID 세션과 `/message?sessionId=`는 영향이 없다.
 
-API 키로 연 세션은 사용할 때 키 상태를 `MEMENTO_SESSION_KEY_RECHECK_MS`(기본 30000ms, `0`이면 끔) 주기로 다시 읽는다. 비활성 또는 삭제된 키의 세션은 닫히고 404 `Session not found`(JSON-RPC `-32000`)를 받으며, 권한, 기본 workspace, 그룹 멤버십과 멤버 권한의 변경은 열린 세션에 반영된다. 재확인을 끄면(`0`) 그룹 멤버십과 멤버 권한은 세션을 만들 때의 값을 쓰고, 다른 멤버 파편에 대한 쓰기 권한은 멤버 권한이 생기기 전처럼 읽을 수 있는 멤버 파편에 링크만 허용한다(amend, forget 위임은 적용되지 않는다). 관리 API로 키를 비활성화하거나 삭제하면 이 프로세스의 그 키 세션이 즉시 닫힌다. API 키 저장소 조회 실패로 인증을 판정하지 못한 `initialize`와 세션 자동 복구는 기본 401로 응답하고, `MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS=503`이면 `Retry-After: 10`과 함께 503으로 응답한다. 같은 IP에서 `initialize`를 반복하면 IP 한도를 넘는 요청은 429와 `Retry-After`를 받는다.
+API 키로 연 세션은 사용할 때 키 상태를 `MEMENTO_SESSION_KEY_RECHECK_MS`(기본 30000ms, `0`이면 끔) 주기로 다시 읽는다. 비활성 또는 삭제된 키의 세션은 닫히고 404 `Session not found`(JSON-RPC `-32000`)를 받으며, 권한, 기본 workspace, 그룹 멤버십과 멤버 권한의 변경은 열린 세션에 반영된다. 재확인을 끄면(`0`) 그룹 멤버십과 멤버 권한은 세션을 만들 때의 값을 쓰고, amend와 forget 위임이 적용되지 않아 다른 멤버 파편에는 링크만 걸 수 있다. 관리 API로 키를 비활성화하거나 삭제하면 이 프로세스의 그 키 세션이 즉시 닫힌다. API 키 저장소 조회 실패로 인증을 판정하지 못한 `initialize`와 세션 자동 복구는 기본 401로 응답하고, `MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS=503`이면 `Retry-After: 10`과 함께 503으로 응답한다. 같은 IP에서 `initialize`를 반복하면 IP 한도를 넘는 요청은 429와 `Retry-After`를 받는다.
 
 세션 세그먼트가 활성화된 경우(`MEMENTO_SESSION_SEGMENT`, 기본 true), 파편의 `session_id`는 전송계층 `Mcp-Session-Id`가 아니라 유휴·수명 기준으로 회전하는 파생 ID `{전송세션ID}#{seq}` 형식일 수 있다. 회전이 발생하면 직전 세그먼트가 자동 reflect된다.
 

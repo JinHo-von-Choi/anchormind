@@ -212,7 +212,6 @@ lib/admin/
 ├── admin-routes.js    Admin HTTP 디스패처 (UI, 이미지, 정적 파일, REST API 라우팅)
 ├── admin-auth.js      Admin 인증 라우트 (POST /auth, 세션 쿠키 발급)
 ├── admin-login-guard.js 관리 인증 실패 누적과 계정 단위 지연 (`MEMENTO_ADMIN_AUTH_BACKOFF=on`일 때만 지연 적용)
-├── key-state-cache.js 세션 사용 시 API 키 상태 재확인 캐시 (`MEMENTO_SESSION_KEY_RECHECK_MS`). 폐기, 만료, 허용 대역 밖 주소도 세션을 닫는다
 ├── ApiKeyLifecycleStore.js 키 회전(겹침), 폐기, 수명 열 편집, 접근 검토 서명. 회전과 폐기는 키 행을 잠근 한 트랜잭션에서 api_keys와 api_key_secrets를 함께 바꾼다
 ├── key-lifecycle.js   키 수명 판정(폐기, 비활성, 만료, 비밀 행, 한도 순), 회전 겹침, 수명 편집 값과 폐기 사유 검증, 요청 주소 지문
 ├── key-lifecycle-limits.js 키 수명 설정의 기본값과 상한(config.js와 key-lifecycle.js가 공유)
@@ -246,6 +245,13 @@ lib/admin/
 ├── admin-sessions.js  세션 관리 라우트
 ├── admin-logs.js      로그 조회 라우트
 └── admin-export.js    파편 내보내기/가져오기 라우트 (export, import)
+
+lib/keys/
+├── key-state-cache.js 세션 사용 시 API 키 상태 재확인 캐시 (`MEMENTO_SESSION_KEY_RECHECK_MS`). 폐기, 만료, 허용 대역 밖 주소도 세션을 닫는다
+├── key-identity.js    재확인한 키 상태로 세션의 권한, 기본 workspace, 그룹 접근을 바꾸는 규칙 (streamable, legacy SSE, 훅 인증 공용)
+├── policy.js          키 정책 캐시 (symbolic hard gate, allowed_workspaces, 외부 전송 정책, workspace 별칭)
+├── workspace-alias.js 도구 인자의 workspace 별칭을 정식 이름으로 바꾼다
+└── invalidation.js    키 캐시 무효화. 이 프로세스의 캐시를 지우고 Redis `memento-mcp:key-invalidate` 채널로 다른 프로세스에 알린다
 
 assets/admin/
 ├── index.html         Admin SPA app shell (로그인 폼 + 컨테이너)
@@ -357,6 +363,7 @@ lib/cli/
 ├── init.js             Claude Code, Codex 플러그인 생성(`anchormind init --target claude|codex`, 기본 dry-run)
 ├── admin.js            관리자 계정 비상 복구(`anchormind admin recover`, 명시한 접속 대상만 쓴다)
 ├── group.js            키 그룹과 멤버 권한 관리(`group list|create|delete|members|add|set|remove`)
+├── workspace.js        키별 workspace 별칭과 병합(`workspace suggest|aliases|alias|merge`)
 ├── audit.js            감사 해시 체인 검증 (`audit verify`, 끊기면 종료 코드 1)
 ├── export.js           파편 JSONL 백업
 ├── import.js           JSONL 파편 복원
@@ -525,9 +532,9 @@ SSE 스트림은 주기적 heartbeat(`: ping\n\n`)으로 연결 상태를 감시
 `SIGTERM`, `SIGINT`는 `createShutdownGuard`가 한 번만 처리하며 이후 신호는 기록만 한다. 절차는 다음 순서다.
 
 1. HTTP 서버가 새 연결 수신을 멈춘다.
-2. 처리 중인 HTTP 요청(SSE 구독 제외), 워커 레지스트리(`lib/memory/workers/registry.js`)에 등록된 폴링 워커, 응답 뒤 작업(형태소 등록, 자동 링크, 교훈 cue, episode milestone 연결)을 최대 30초 동안 배수한다. `PollingWorker.start`가 성공한 워커는 스스로 등록하므로 `BatchRememberWorker`, `EmbeddingWorker` 같은 워커가 종료 경로에 이름으로 나열되지 않는다.
+2. 처리 중인 HTTP 요청(SSE 구독 제외)과 폴링 워커(`lib/memory/workers/registry.js`), 응답 뒤에 도는 작업이 끝나기를 최대 30초 기다린다. 응답 뒤에 도는 작업은 형태소 등록, 자동 링크, 교훈 cue, episode milestone 연결이다. `PollingWorker.start`에 성공한 워커는 스스로 레지스트리에 등록하므로, 종료 경로에 워커 이름을 따로 적지 않는다.
 3. 활성 세션을 auto-reflect와 함께 닫는다. Redis 세션은 남겨 재시작 뒤 복원할 수 있다.
-4. 키 캐시 무효화 구독을 닫고 DB 연결 풀을 닫은 뒤 접근 통계를 저장하고 종료 코드 0으로 끝난다.
+4. 키 캐시 무효화 구독과 DB 연결 풀을 닫고, 접근 통계를 저장한 뒤 종료 코드 0으로 끝난다.
 
 `MEMENTO_SHUTDOWN_DEADLINE_MS`(기본 60000, 0은 상한 없음) 안에 절차가 끝나지 않으면 종료 코드 1로 강제 종료한다. 처리되지 않은 예외는 같은 절차를 종료 코드 1로 실행하며 35초 뒤 강제 종료 타이머가 걸린다.
 
@@ -871,7 +878,7 @@ fragment_links의 weight/confidence 변경 이력을 기록하는 감사 테이�
 
 ### Row-Level Security
 
-fragments와 fragment_links에 RLS가 켜져 있다(migration-045, 키 목록은 migration-080). fragments 정책 `fragment_isolation_policy`는 `app.current_agent_id`(에이전트 축)와, 값이 있을 때만 키 범위(`app.current_key_ids` 목록, 종전 단일 값 `app.current_key_id`)를 본다. 키 격리 절을 만드는 `lib/memory/keyScope.js`의 도우미가 절에 넣은 키 id를 바인딩 배열에도 적고(`lib/tools/key-scope-ids.js`), `queryWithAgentVector`가 질의마다 그 목록을 `app.current_key_ids`로 넘긴다. 그래서 그룹 공유 읽기(자기 키와 읽을 수 있는 멤버 키)가 정책과 같은 범위가 된다. fragment_links 정책은 from_id 파편의 접근 가능성을 따른다. 다만 DB 수준 격리는 활성 상태가 아니다. 애플리케이션 계정이 표 소유자이고 `FORCE ROW LEVEL SECURITY`가 없어 정책이 런타임 질의에 적용되지 않으며, 일부 경로(관리 API의 직접 질의 등)는 세션 변수를 설정하지 않는다. 키 간 격리는 애플리케이션 질의 필터가 담당한다. DB 격리를 세우는 절차는 `docs/operations/row-level-security.md`에 있다.
+fragments와 fragment_links에는 RLS가 켜져 있다(migration-045, 키 목록은 migration-080). fragments 정책 `fragment_isolation_policy`는 에이전트 축 `app.current_agent_id`를 본다. 키 범위가 설정되어 있으면 키 목록 `app.current_key_ids`나 단일 값 `app.current_key_id`도 본다. 키 범위는 질의를 만들 때 함께 정해진다. `lib/memory/keyScope.js`는 키 격리 절에 넣은 키 id를 바인딩 배열에도 적는다(`lib/tools/key-scope-ids.js`). 그러면 `queryWithAgentVector`가 질의마다 그 목록을 `app.current_key_ids`로 넘긴다. 그래서 자기 키와 읽을 수 있는 멤버 키를 함께 읽는 그룹 공유 질의도 정책과 같은 범위를 쓴다. fragment_links 정책은 from_id 파편을 읽을 수 있는지에 따른다. 애플리케이션 계정이 표 소유자이고 `FORCE ROW LEVEL SECURITY`가 없으므로 런타임 질의의 키 격리는 질의 필터가 맡는다. DB 수준 격리를 켜는 절차는 `docs/operations/row-level-security.md`에 있다.
 
 ```sql
 CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
@@ -911,9 +918,9 @@ CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
 
 **설정 방법**: Admin SPA의 키 편집 화면에서 `default_workspace`를 설정하거나, `PATCH /v1/internal/model/nothing/keys/:id/workspace`로 변경한다.
 
-**별칭**: 키마다 workspace 별칭(`key_workspace_aliases`)을 둘 수 있다. `jsonrpc.handleToolsCall`이 신뢰 맥락을 붙이기 전에 인자의 workspace(일괄 저장은 항목마다)가 별칭이면 정식 이름으로 바꾸므로(`lib/keys/workspace-alias.js`), 허가 판정, 그룹 공유 workspace 판정, 저장과 읽기가 모두 정식 이름을 쓴다. workspace 이름은 키 안의 이름일 뿐이라, 다른 키의 같은 이름 workspace는 어느 경로로도 보이지 않는다.
+**별칭**: 키마다 workspace 별칭(`key_workspace_aliases`)을 둘 수 있다. `jsonrpc.handleToolsCall`은 신뢰 맥락을 붙이기 전에 인자의 workspace가 별칭인지 보고, 별칭이면 정식 이름으로 바꾸며(`lib/keys/workspace-alias.js`), 일괄 저장은 항목마다 바꾼다. 그래서 허가 판정과 그룹 공유 workspace 판정, 저장과 읽기가 모두 정식 이름을 쓴다. workspace 이름은 키 안에서만 통하므로 다른 키의 같은 이름 workspace는 보이지 않는다.
 
-**보존 기간**: 키 전체 또는 키의 workspace 하나에 최대 보존 일수를 둘 수 있다(`key_retention_policies`). 정리 주기의 `retention_expire` 단계(`lib/memory/consolidate/RetentionGC.js`)가 만료 삭제와 같은 청크 규칙으로 지우고, 앵커는 남긴다.
+**보존 기간**: 키 전체나 키의 workspace 하나에 최대 보존 일수를 둘 수 있다(`key_retention_policies`). 정리 주기의 `retention_expire` 단계(`lib/memory/consolidate/RetentionGC.js`)가 오래된 파편을 만료 삭제와 같은 청크 규칙으로 지우고, 앵커는 남긴다.
 
 **사용 시나리오**:
 - 개발자가 여러 프로젝트를 같은 Claude Code 세션에서 전환할 때 (`workspace: "memento-mcp"`, `workspace: "docs-mcp"`)
@@ -1036,15 +1043,15 @@ Admin UI는 app shell 아키텍처로 구성된다 (`assets/admin/index.html` + 
 
 ### API 키 그룹
 
-같은 그룹의 키는 멤버마다 정한 권한만큼 서로의 파편을 읽고 다룬다. 여러 에이전트(Claude Code, Codex, Gemini 등)가 하나의 프로젝트 기억을 공유할 때 사용한다.
+같은 그룹의 키는 멤버마다 정한 권한만큼 서로의 파편을 읽고 다룬다. 여러 에이전트(Claude Code, Codex, Gemini 등)가 한 프로젝트의 기억을 함께 쓸 때 그룹을 만든다.
 
-- N:M 매핑: 한 키가 여러 그룹에 속할 수 있다(`api_key_group_members`). 멤버 행은 권한(`read`, `share`, `link`, `amend`, `forget`)과 공유 workspace 목록(`shared_workspaces`, NULL은 전체)을 가진다.
-- 읽기 범위: 키 A는 함께 속한 그룹에서 A가 `read`, B가 `share`를 가질 때 B의 파편을 읽는다. 인증과 키 상태 재확인이 그룹 접근(`groupAccessFromRows`, `lib/memory/groupGrants.js`)을 읽어 세션에 `groupKeyIds`, `groupGrants`, `groupShareScopes`로 싣고, 요청마다 요청 workspace가 공유 목록 밖인 멤버를 읽기 범위에서 뺀다.
-- 쓰기: `link`, `amend`, `forget`을 받은 멤버만 읽을 수 있는 다른 멤버 파편을 다룬다. 자동 링크는 같은 소유 키 파편끼리, 또는 link 권한을 받은 멤버 파편과만 만든다.
-- 출처: 다른 키 공유 파편은 recall 순위 점수에 `ranking.sharedFragmentFactor`(0.9)를 곱하고, 위임 amend로 본문이 바뀐 파편은 `trust_tier`가 한 단계 내려간다.
-- 상한: 그룹에 `fragment_limit`을 두면 멤버 키 전체의 살아 있는 파편 수로 저장을 막는다. 키 행과 그룹 행을 이 순서로 잠그고 판정하므로(`lockQuota`, `lib/memory/read/quotaQueries.js`) 동시 저장에서도 넘지 않는다.
-- 캐시: 키 상태와 키 정책 캐시는 `lib/keys/`에 있고, 관리 API와 CLI의 변경은 `lib/keys/invalidation.js`가 이 프로세스에서 지운 뒤 Redis `memento-mcp:key-invalidate` 채널로 다른 프로세스에 알린다.
-- 그룹 미소속 키: 자기 파편만 읽는다.
+- N:M 매핑: 한 키가 여러 그룹에 속할 수 있다(`api_key_group_members`). 멤버 행에는 권한(`read`, `share`, `link`, `amend`, `forget`)과 공유 workspace 목록(`shared_workspaces`, NULL이면 전체)이 있다.
+- 읽기 범위: 두 키가 함께 속한 그룹에서 A가 `read`를, B가 `share`를 가지면 A는 B의 파편을 읽는다. 그룹 접근은 인증과 키 상태 재확인 때 읽고(`groupAccessFromRows`, `lib/memory/groupGrants.js`), 읽은 결과는 세션에 `groupKeyIds`, `groupGrants`, `groupShareScopes`로 실린다. 요청이 들어오면 요청 workspace가 공유 목록 밖인 멤버는 읽기 범위에서 뺀다.
+- 쓰기: 다른 멤버의 파편에 링크를 걸거나 고치거나 지우려면 그 파편을 읽을 수 있어야 한다. 그리고 `link`, `amend`, `forget` 권한을 각각 받아야 한다. 자동 링크는 소유 키가 같은 파편끼리, 또는 `link` 권한을 받은 멤버의 파편과만 만든다.
+- 출처: 다른 키가 쓴 공유 파편은 recall 순위 점수에 `ranking.sharedFragmentFactor`(0.9)를 곱하고, 위임 amend로 본문이 바뀐 파편은 `trust_tier`가 한 단계 내려간다.
+- 상한: 그룹에 `fragment_limit`을 두면 멤버 키 전체의 살아 있는 파편 수로 저장을 막는다. 판정 전에 키 행과 그룹 행을 이 순서로 잠그므로(`lockQuota`, `lib/memory/read/quotaQueries.js`) 동시에 저장해도 상한을 넘지 않는다.
+- 캐시: 키 상태와 키 정책 캐시는 `lib/keys/`에 있다. 관리 API나 CLI가 키를 바꾸면 `lib/keys/invalidation.js`가 이 프로세스의 캐시를 지우고, Redis `memento-mcp:key-invalidate` 채널로 다른 프로세스에 알린다.
+- 그룹에 속하지 않은 키: 자기 파편만 읽는다.
 
 Admin REST 엔드포인트:
 
