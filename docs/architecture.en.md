@@ -1353,7 +1353,7 @@ ModeRegistry.resolve(mode)
 
 `lib/memory/read/RecallSuggestionEngine.js`. Analyzes recall call results and generates the `_suggestion` meta field.
 
-- Reuses the search_events table recorded by SearchEventRecorder
+- Counts recent calls per key and search conditions in process memory
 - Fail-open design: on internal engine error, falls back to `_suggestion: null` with no impact on the main search path
 - 3 detection rules: `repeat_query`, `empty_result_no_context`, `large_limit_no_budget`
 - `_suggestion` object: `{code, message, recommendedTool, recommendedArgs}` or null

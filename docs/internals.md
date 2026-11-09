@@ -751,11 +751,11 @@ MCP 2026-07-28 개정을 먼저 시도하는 클라이언트는 400 본문이 �
 
 | 규칙 코드 | 감지 조건 | 권장 도구 |
 |----------|---------|---------|
-| `repeat_query` | 5분 내 동일 keywords 유형 쿼리 3회 이상 | reconstruct_history 또는 graph_explore |
+| `repeat_query` | 같은 키가 5분 내 같은 검색 조건으로 3회 이상 호출 | reconstruct_history 또는 graph_explore |
 | `empty_result_no_context` | 결과 0건 + contextText 미제공 | recall (contextText 추가) |
 | `large_limit_no_budget` | limit >= 50 + tokenBudget 미지정 | recall (tokenBudget 지정) |
 
-`repeat_query` 규칙은 `search_events` 테이블에서 최근 5분 이벤트를 조회한다(`SearchEventRecorder`가 기록).
+`repeat_query` 규칙은 키와 검색 조건별 최근 5분 호출을 프로세스 메모리에서 센다. cursor 호출은 세지 않는다.
 
 ---
 

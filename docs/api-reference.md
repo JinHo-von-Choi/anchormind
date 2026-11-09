@@ -747,7 +747,7 @@ Agent 조회는 생략 시 `default`, 지정 시 해당 agent와 `default`를 �
 
 | code | 트리거 조건 | 권유 |
 |------|------------|------|
-| `repeat_query` | keywords 쿼리가 5분 이내 3회 이상 반복 (query_type이 keywords 또는 mixed인 search_events 기준) | 케이스 타임라인 조회 — `reconstruct_history`(상위 case_id 존재 시) 또는 `graph_explore` |
+| `repeat_query` | 같은 키가 같은 검색 조건(keywords, text, topic, type, workspace, caseId)으로 5분 이내 3회 이상 호출. keywords의 순서와 대소문자는 무시하고, cursor 호출은 세지 않으며, 서버 프로세스별로 센다 | 케이스 타임라인 조회 — `reconstruct_history`(상위 case_id 존재 시) 또는 `graph_explore` |
 | `empty_result_no_context` | 결과 0건이고 contextText가 없는 경우 | contextText 추가 |
 | `large_limit_no_budget` | `limit` 파라미터가 50 이상이고 tokenBudget 미지정인 경우. recall 스키마의 페이지 크기 파라미터는 `pageSize`이므로 현재 이 규칙은 발화하지 않는다 | tokenBudget 명시로 응답 크기 제어 |
 

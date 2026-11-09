@@ -730,7 +730,7 @@ When a shared key has no `default_workspace` and writes use an explicit workspac
 
 | code | Trigger condition | Recommendation |
 |------|-------------------|----------------|
-| `repeat_query` | A keywords query repeated 3+ times within 5 minutes (counted over search_events whose query_type is keywords or mixed) | Pull the case timeline — `reconstruct_history` when a dominant case_id exists, otherwise `graph_explore` |
+| `repeat_query` | The same key sends the same search conditions (keywords, text, topic, type, workspace, caseId) 3+ times within 5 minutes. Keyword order and case are ignored, cursor calls are not counted, and the count is per server process | Pull the case timeline — `reconstruct_history` when a dominant case_id exists, otherwise `graph_explore` |
 | `empty_result_no_context` | 0 results and contextText is absent | Add contextText |
 | `large_limit_no_budget` | A `limit` parameter of 50 or more with no tokenBudget. recall's page-size parameter is `pageSize`, so this rule does not fire in practice | Set tokenBudget explicitly to control response size |
 
