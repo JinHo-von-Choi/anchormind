@@ -81,12 +81,13 @@ after(async () => {
 async function insertTestFragments(count, type) {
   const ids = Array.from({ length: count }, () => crypto.randomUUID());
   for (const id of ids) {
+    const content = `${type}-content-${id.slice(0, 8)}`;
     await pool.query(
       `INSERT INTO ${SCHEMA}.fragments
-         (id, content, type, topic, importance, ttl_tier, agent_id, keywords)
-       VALUES ($1, $2, $3, $4, 0.5, 'warm', 'test', '{}')
+         (id, content, content_hash, type, topic, importance, ttl_tier, agent_id, keywords)
+       VALUES ($1, $2, $3, $4, $5, 0.5, 'warm', 'test', '{}')
        ON CONFLICT DO NOTHING`,
-      [id, `${type}-content-${id.slice(0, 8)}`, type, TEST_PREFIX]
+      [id, content, crypto.createHash("sha256").update(content).digest("hex"), type, TEST_PREFIX]
     );
   }
   return ids;
