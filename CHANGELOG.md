@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [7.3.0] - 2026-11-09
+
 ### Added
 
 - recall이 `limit`을 받는다. `pageSize`의 별칭이고 둘 다 주면 `pageSize`를 쓴다.
