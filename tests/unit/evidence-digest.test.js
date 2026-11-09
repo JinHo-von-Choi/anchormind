@@ -73,6 +73,12 @@ describe("근거 상태", () => {
     assert.deepEqual(out.uncovered_terms.sort(), ["sister", "venue"]);
   });
 
+  it("핵심 낱말이 하나뿐이어도 결과에 없으면 partial이다", () => {
+    const out = evidenceStatus([{ id: "a" }], ["wedding"], [["dog", "name"]]);
+    assert.equal(out.status, "partial");
+    assert.deepEqual(out.uncovered_terms, ["wedding"]);
+  });
+
   it("의문사와 기능어는 세지 않고 덮이면 supported", () => {
     const out = evidenceStatus([{ id: "a" }], ["what", "is", "dog", "name"], [["dog", "name", "max"]]);
     assert.equal(out.status, "supported");
