@@ -731,11 +731,11 @@ The engine injects a `_suggestion` field into the recall response as a non-invas
 
 | Rule Code | Detection Condition | Recommended Tool |
 |-----------|-------------------|-----------------|
-| `repeat_query` | Same keyword query type ≥3 times within 5 minutes | reconstruct_history or graph_explore |
+| `repeat_query` | Same key sends the same search conditions ≥3 times within 5 minutes | reconstruct_history or graph_explore |
 | `empty_result_no_context` | 0 results + no contextText | recall (add contextText) |
 | `large_limit_no_budget` | limit ≥ 50 + no tokenBudget | recall (add tokenBudget) |
 
-The `repeat_query` rule queries the `search_events` table for events in the past 5 minutes (written by `SearchEventRecorder`).
+The `repeat_query` rule counts calls per key and search conditions over the past 5 minutes in process memory. Cursor calls are not counted.
 
 ---
 
