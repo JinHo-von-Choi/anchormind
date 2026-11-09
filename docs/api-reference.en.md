@@ -658,6 +658,7 @@ ID lookups through `fragment_history` and `graph_explore` now apply workspace fi
 | contextText | string | - | Current conversation context text. Proactively activates related fragments (when ENABLE_SPREADING_ACTIVATION=true). |
 | cursor | string | - | Opaque pagination cursor. Pass the previous response's `nextCursor` to get the next page. The cursor carries hashed markers of the fragments already returned and the fixed `anchorTime`, so earlier fragments are not returned again even if the search candidates change between calls. Legacy offset cursors are still accepted. `tokenBudget` applies per page, and results that did not fit the previous page's budget move to the next page. The top-level `totalCount` (number of results reachable by following cursors; fragments that alone exceed `tokenBudget` are excluded), `nextCursor` (`null` when there is no next page), and `hasMore` describe the page state, and are also present in `format: "pack"` responses. caseMode returns the top `maxCases` cases (at most 10) at once, so its responses do not carry these three fields. |
 | pageSize | number | - | Default 20, max 50 |
+| limit | number | - | Alias of `pageSize`. `pageSize` wins when both are given |
 | agentId | string | - | Agent ID |
 | minImportance | number | - | Minimum importance filter (0-1). Only fragments with importance at or above this value are returned. |
 | isAnchor | boolean | - | Anchor filter. `true` returns anchors only, `false` returns non-anchors only, and omission returns both. |
@@ -732,9 +733,9 @@ When a shared key has no `default_workspace` and writes use an explicit workspac
 |------|-------------------|----------------|
 | `repeat_query` | The same key sends the same search conditions (keywords, text, topic, type, workspace, caseId) 3+ times within 5 minutes. Keyword order and case are ignored, cursor calls are not counted, and the count is per server process | Pull the case timeline — `reconstruct_history` when a dominant case_id exists, otherwise `graph_explore` |
 | `empty_result_no_context` | 0 results and contextText is absent | Add contextText |
-| `large_limit_no_budget` | A `limit` parameter of 50 or more with no tokenBudget. recall's page-size parameter is `pageSize`, so this rule does not fire in practice | Set tokenBudget explicitly to control response size |
+| `page_cut_by_budget` | A count (`pageSize`, `limit`) was given without tokenBudget and the budget returned fewer items than requested | Continue with `nextCursor` or raise tokenBudget |
 
-Rules are evaluated in the order above and only the first match is attached to `_meta.suggestion`. The field is omitted when nothing matches.
+Rules are evaluated in the order above and only the first match is attached to `_meta.suggestion`. The field is omitted when nothing matches. Arguments that are not in the schema and were not used are named in `_meta.ignored_args`.
 
 `explanation` (included only when `MEMENTO_SYMBOLIC_EXPLAIN=true`): Explains why the fragment was included in the search results, using up to 3 reason codes. The codes come from the search layers that found that fragment, so they differ per fragment.
 

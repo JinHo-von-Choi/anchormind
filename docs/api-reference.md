@@ -660,6 +660,7 @@ Agent 조회는 생략 시 `default`, 지정 시 해당 agent와 `default`를 �
 | contextText | string | - | 현재 대화 맥락 텍스트. 관련 파편을 선제적으로 활성화 (ENABLE_SPREADING_ACTIVATION=true 시). |
 | cursor | string | - | 불투명 페이지네이션 커서. 앞 응답의 `nextCursor`를 넣으면 다음 페이지를 받는다. 커서는 이미 돌려준 파편의 해시 표지와 고정 `anchorTime`을 담으므로, 호출 사이에 검색 후보가 달라져도 앞 페이지 파편이 다시 오지 않는다. 기존 offset 커서도 읽는다. `tokenBudget`은 페이지마다 적용되며, 앞 페이지의 예산에 들지 못한 결과는 다음 페이지로 넘어간다. 응답 최상위의 `totalCount`(끝까지 이어 받을 수 있는 결과 수. 혼자서도 `tokenBudget`을 넘는 파편은 빠진다), `nextCursor`(다음 페이지가 없으면 `null`), `hasMore`가 페이지 상태를 알려 주며 `format: "pack"` 응답에도 실린다. caseMode는 상위 `maxCases`개(최대 10) 사례를 한 번에 돌려주는 방식이라 이 세 필드가 없다. |
 | pageSize | number | - | 기본 20, 최대 50 |
+| limit | number | - | `pageSize`의 별칭. 둘 다 주면 `pageSize`를 쓴다 |
 | agentId | string | - | 에이전트 ID |
 | minImportance | number | - | 최소 중요도 필터 (0~1). 이 값 이상의 importance를 가진 파편만 반환. |
 | isAnchor | boolean | - | 앵커 필터. `true`는 앵커만, `false`는 비앵커만 반환하며 미지정 시 둘 다 반환. |
@@ -749,9 +750,9 @@ Agent 조회는 생략 시 `default`, 지정 시 해당 agent와 `default`를 �
 |------|------------|------|
 | `repeat_query` | 같은 키가 같은 검색 조건(keywords, text, topic, type, workspace, caseId)으로 5분 이내 3회 이상 호출. keywords의 순서와 대소문자는 무시하고, cursor 호출은 세지 않으며, 서버 프로세스별로 센다 | 케이스 타임라인 조회 — `reconstruct_history`(상위 case_id 존재 시) 또는 `graph_explore` |
 | `empty_result_no_context` | 결과 0건이고 contextText가 없는 경우 | contextText 추가 |
-| `large_limit_no_budget` | `limit` 파라미터가 50 이상이고 tokenBudget 미지정인 경우. recall 스키마의 페이지 크기 파라미터는 `pageSize`이므로 현재 이 규칙은 발화하지 않는다 | tokenBudget 명시로 응답 크기 제어 |
+| `page_cut_by_budget` | 건수(`pageSize`, `limit`)를 지정하고 tokenBudget은 지정하지 않았는데 예산 때문에 요청보다 적게 돌아온 경우 | `nextCursor`로 이어 읽기 또는 tokenBudget 증가 |
 
-규칙은 위 순서대로 평가되어 최초 1건만 `_meta.suggestion`에 실린다. 조건에 해당하지 않으면 필드는 생략된다.
+규칙은 위 순서대로 평가되어 최초 1건만 `_meta.suggestion`에 실린다. 조건에 해당하지 않으면 필드는 생략된다. 스키마에 없어 쓰지 않은 인자가 있으면 그 이름을 `_meta.ignored_args`에 싣는다.
 
 `explanation` (`MEMENTO_SYMBOLIC_EXPLAIN=true` 시에만 포함): 해당 파편이 검색 결과에 포함된 이유를 최대 3개 reason code로 설명한다. 코드는 그 파편을 찾은 검색 계층으로 정하므로 파편마다 다르다.
 

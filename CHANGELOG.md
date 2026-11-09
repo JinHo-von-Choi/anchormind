@@ -2,8 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- recall이 `limit`을 받는다. `pageSize`의 별칭이고 둘 다 주면 `pageSize`를 쓴다.
+- recall 응답의 `_meta.ignored_args`가 스키마에 없어 쓰지 않은 인자의 이름을 알려 준다.
+
+### Changed
+
+- recall의 `large_limit_no_budget` 제안을 `page_cut_by_budget`으로 바꿨다. 건수를 지정했고 `tokenBudget`을 지정하지 않았는데 예산 때문에 요청보다 적게 돌아왔을 때 나오고, `nextCursor`를 권한다.
+- 유사 중복은 파편별 경고 대신 5분 단위로 키와 topic별 합계를 남긴다.
+
 ### Fixed
 
+- 외부 NLI 호출이 실패하면 그 판정을 건너뛰지 않고 내장 모델로 처리하며, 외부 서비스가 복구되면 정리 주기에 외부 모드로 돌아간다. 외부 health 확인이 오류 응답을 정상으로 보지 않는다.
 - recall의 근거 상태가 핵심 낱말이 하나뿐인 질의에서도 판정된다. 전에는 낱말이 결과에 없어도 `supported`였다.
 - 근거 상태의 덮임 판정이 결과의 키워드도 본다. 키워드로 찾은 파편이 `partial`로 나오지 않는다.
 
