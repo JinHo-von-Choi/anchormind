@@ -433,7 +433,7 @@ async function gracefulShutdown(signal, { exitCode = 0 } = {}) {
   /** 기동한 폴링 워커는 스스로 레지스트리에 등록되어 있다. 일괄 배수한다. */
   drainPromises.push(...drainAllWorkers());
 
-  /** Phase 4: 형태소 등록 drain (미완료 morpheme fire-and-forget 작업 완료 대기) */
+  /** 요청이 응답 뒤에 남긴 형태소 등록, 자동 링크, 접근 기록 등의 완료 대기 */
   try {
     const { MemoryManager } = await import("./lib/memory/MemoryManager.js");
     drainPromises.push(MemoryManager.getInstance().drainMorpheme());
@@ -467,7 +467,7 @@ async function gracefulShutdown(signal, { exitCode = 0 } = {}) {
     await closeLegacySseSession(sessionId, { preserveRedis: true });
   }
 
-  /** 3-1. auto-reflect가 새로 남긴 형태소·교훈 cue 등록 대기 (최대 30초) */
+  /** 3-1. 처리 중이던 요청과 auto-reflect가 새로 남긴 응답 뒤 작업 대기 (최대 30초) */
   try {
     const { MemoryManager } = await import("./lib/memory/MemoryManager.js");
     let lateDrainTimer;
