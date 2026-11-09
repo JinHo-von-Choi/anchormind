@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [7.2.1] - 2026-11-09
+
 ### Changed
 
 - 런타임 의존성 `garu-ko`를 0.12.1로, `openai`를 7.50.0으로, 개발 의존성 `eslint`를 10.14.0으로 올렸다. `git pull` 뒤 `npm install`을 실행하고 서비스를 재시작한다.
