@@ -29,6 +29,7 @@ export function retentionLabel(p) {
  * @returns {{ workspace: string|null, max_age_days: number|null }|null|undefined}
  */
 export function parseRetentionInput(text) {
+  // iron-laws: ignore[IL-307] 취소하면 undefined를 돌려준다
   if (text === null || text === undefined) return undefined;
   const raw = String(text).trim();
   const eq  = raw.lastIndexOf("=");
@@ -36,6 +37,7 @@ export function parseRetentionInput(text) {
   const val = (eq >= 0 ? raw.slice(eq + 1) : raw).trim();
   const workspace = ws === "" || ws === "*" ? null : ws;
   if (val === "") return eq >= 0 ? { workspace, max_age_days: null } : null;
+  // iron-laws: ignore[IL-307] null은 형식 오류이고 호출부가 경고를 표시한다
   if (!/^\d+$/.test(val) || Number(val) < 1 || Number(val) > 36500) return null;
   return { workspace, max_age_days: Number(val) };
 }
