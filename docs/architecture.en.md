@@ -1355,7 +1355,7 @@ ModeRegistry.resolve(mode)
 
 - Reuses the search_events table recorded by SearchEventRecorder
 - Fail-open design: on internal engine error, falls back to `_suggestion: null` with no impact on the main search path
-- 4 detection rules: `repeat_query`, `empty_result_no_context`, `large_limit_no_budget`, `no_type_filter_noisy`
+- 3 detection rules: `repeat_query`, `empty_result_no_context`, `large_limit_no_budget`
 - `_suggestion` object: `{code, message, recommendedTool, recommendedArgs}` or null
 
 ### LocalTransformersEmbedder

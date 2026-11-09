@@ -1359,7 +1359,7 @@ ModeRegistry.resolve(mode)
 
 - SearchEventRecorder가 기록한 search_events 테이블을 재활용
 - fail-open 설계: 엔진 내부 오류 시 `_suggestion: null`로 폴백하여 주 검색 경로에 영향 없음
-- 4개 감지 규칙: `repeat_query`, `empty_result_no_context`, `large_limit_no_budget`, `no_type_filter_noisy`
+- 3개 감지 규칙: `repeat_query`, `empty_result_no_context`, `large_limit_no_budget`
 - `_suggestion` 객체: `{code, message, recommendedTool, recommendedArgs}` 또는 null
 
 ### LocalTransformersEmbedder

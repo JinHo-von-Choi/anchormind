@@ -734,9 +734,8 @@ The engine injects a `_suggestion` field into the recall response as a non-invas
 | `repeat_query` | Same keyword query type ≥3 times within 5 minutes | reconstruct_history or graph_explore |
 | `empty_result_no_context` | 0 results + no contextText | recall (add contextText) |
 | `large_limit_no_budget` | limit ≥ 50 + no tokenBudget | recall (add tokenBudget) |
-| `no_type_filter_noisy` | no type filter + total fragments > 100 | recall (add type filter) |
 
-The `repeat_query` rule queries the `search_events` table for events in the past 5 minutes (written by `SearchEventRecorder`). The `no_type_filter_noisy` rule counts `valid_to IS NULL` rows in the `fragments` table.
+The `repeat_query` rule queries the `search_events` table for events in the past 5 minutes (written by `SearchEventRecorder`).
 
 ---
 

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Removed
+
+- recall의 `_meta.suggestion`에서 `no_type_filter_noisy` 제안을 뺐다. `type` 파라미터는 그대로 쓴다.
+
 ## [7.2.0] - 2026-11-09
 
 ### Added

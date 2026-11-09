@@ -340,11 +340,10 @@ tools/list 응답이 mode의 excluded_tools 필터링 후 반환된다. get_skil
 
 필드: `{code, message, recommendedTool, recommendedArgs}`
 
-4개 감지 규칙:
+3개 감지 규칙:
 - `repeat_query`: 최근 5분 내 동일 keyId에서 같은 keywords로 3회 이상 recall → `reconstruct_history` 또는 `graph_explore` 권유
 - `empty_result_no_context`: 결과 0건 + contextText 미전달 + `ENABLE_SPREADING_ACTIVATION=true` → `contextText` 추가 권유(꺼진 서버에서는 나오지 않는다)
 - `large_limit_no_budget`: limit ≥ 50 + tokenBudget 미지정 → `tokenBudget` 명시 권고
-- `no_type_filter_noisy`: type 미지정 + 소유 파편 100개 이상 → type 필터 권고
 
 `_suggestion`이 있으면 다음 호출에서 `recommendedTool` + `recommendedArgs`를 검토하여 적용한다.
 
