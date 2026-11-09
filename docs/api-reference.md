@@ -752,7 +752,7 @@ Agent 조회는 생략 시 `default`, 지정 시 해당 agent와 `default`를 �
 | `empty_result_no_context` | 결과 0건이고 contextText가 없는 경우 | contextText 추가 |
 | `page_cut_by_budget` | 건수(`pageSize`, `limit`)를 지정하고 tokenBudget은 지정하지 않았는데 예산 때문에 요청보다 적게 돌아온 경우 | `nextCursor`로 이어 읽기 또는 tokenBudget 증가 |
 
-규칙은 위 순서대로 평가되어 최초 1건만 `_meta.suggestion`에 실린다. 조건에 해당하지 않으면 필드는 생략된다. 스키마에 없어 쓰지 않은 인자가 있으면 그 이름을 `_meta.ignored_args`에 싣는다.
+규칙은 위 순서대로 평가되어 최초 1건만 `_meta.suggestion`에 실린다. 조건에 해당하지 않으면 필드는 생략된다. 스키마에 없어 쓰지 않은 인자가 있으면 모든 도구가 응답의 `_meta.ignored_args`에 그 이름을 싣는다.
 
 `explanation` (`MEMENTO_SYMBOLIC_EXPLAIN=true` 시에만 포함): 해당 파편이 검색 결과에 포함된 이유를 최대 3개 reason code로 설명한다. 코드는 그 파편을 찾은 검색 계층으로 정하므로 파편마다 다르다.
 
