@@ -46,7 +46,6 @@ const ALLOWED = {
   "memory/link/ContradictionDetector.js": 2,
   "memory/read/FragmentReader.js": 1,
   "memory/read/GraphNeighborSearch.js": 1,
-  "memory/read/RecallSuggestionEngine.js": 2,
   "memory/read/quotaQueries.js": 2, // 할당량 회계: 키 자신의 파편 수, 키가 속한 그룹 멤버십 행
   "memory/signals/SearchParamAdaptor.js": 1,
   "memory/write/FragmentWriter.js": 4,
