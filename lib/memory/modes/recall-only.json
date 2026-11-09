@@ -1,7 +1,7 @@
 {
   "name": "recall-only",
   "description": "조회 전용 모드. 기억 저장·수정·삭제 불가.",
-  "excluded_tools": ["remember", "batch_remember", "amend", "forget", "link", "reflect", "memory_consolidate"],
+  "excluded_tools": ["remember", "batch_remember", "amend", "forget", "link", "unlink", "reflect", "memory_consolidate"],
   "fixed_tools": ["recall", "context", "reconstruct_history", "graph_explore", "fragment_history", "search_traces", "memory_stats"],
   "skill_guide_override": "현재 조회 전용 모드입니다. 기억 저장 시도는 도구 자체가 노출되지 않으므로 차단됩니다.",
   "requiresMaster": false

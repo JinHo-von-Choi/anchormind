@@ -2,7 +2,7 @@
   "name": "write-only",
   "description": "저장 전용 모드. CI/크론 잡용. 조회 도구는 노출되지 않음.",
   "excluded_tools": ["recall", "context", "reconstruct_history", "graph_explore", "fragment_history", "search_traces", "memory_stats"],
-  "fixed_tools": ["remember", "batch_remember", "reflect", "amend", "forget", "link"],
+  "fixed_tools": ["remember", "batch_remember", "reflect", "amend", "forget", "link", "unlink"],
   "skill_guide_override": "현재 저장 전용 모드입니다. CI/크론 잡 환경에서 기억 기록에 집중합니다. 조회 도구는 이 모드에서 노출되지 않습니다.",
   "requiresMaster": false
 }

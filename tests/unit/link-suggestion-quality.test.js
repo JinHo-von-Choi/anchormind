@@ -192,7 +192,7 @@ describe("relationHint", () => {
 describe("절차–오류 자동 연결 방향", () => {
   it("자동 연결도 오류에서 절차로 거는 resolved_by다", async () => {
     const calls = [];
-    const store = { async createLinks(pairs) { calls.push(...pairs); return []; }, async createLink() {}, async isReachable() { return false; } };
+    const store = { async createLinks(pairs) { calls.push(...pairs); return pairs.map(p => p.fromId); }, async createLink() {}, async isReachable() { return false; } };
     const l = new SessionLinker(store, null); l.wouldCreateCycle = async () => false;
     const e = { id: "e1", type: "error", keywords: ["a", "b"], content: "x", caseId: "c", sessionId: "s" };
     const p = { id: "p1", type: "procedure", keywords: ["a", "b"], content: "y", caseId: "c", sessionId: "s" };

@@ -1,7 +1,7 @@
 {
   "name": "audit",
   "description": "감사 모드. master key 전용. 통계·추적·재구성 도구 중심. 기억 저장 불가.",
-  "excluded_tools": ["remember", "batch_remember", "amend", "forget", "link", "reflect"],
+  "excluded_tools": ["remember", "batch_remember", "amend", "forget", "link", "unlink", "reflect"],
   "fixed_tools": ["memory_stats", "search_traces", "reconstruct_history", "memory_consolidate", "recall", "context", "graph_explore", "fragment_history"],
   "skill_guide_override": "현재 감사 모드입니다. master key 전용으로 전체 파편 통계 조회, 이벤트 추적, 히스토리 재구성, 메모리 정리 기능을 제공합니다. 기억 저장·수정·삭제는 이 모드에서 차단됩니다.",
   "requiresMaster": true

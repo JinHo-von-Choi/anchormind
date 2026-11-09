@@ -142,6 +142,7 @@ describe("dryRun: link", () => {
     const mockFrag = { id: "a", type: "fact", content: "c", key_id: "k", importance: 0.7 };
     const store = {
       getById   : mock.fn(async () => mockFrag),
+      getActiveRelation: mock.fn(async () => null),
       createLink: mock.fn(async () => {}),
       update    : mock.fn(async () => ({}))
     };
@@ -165,9 +166,10 @@ describe("dryRun: forget", () => {
 
     const targetFrag = {
       id: "frag-1", type: "fact", content: "지울 내용", ttl_tier: "medium",
-      linked_to: ["link-a", "link-b"], key_id: "key-123"
+      linked_to: [], key_id: "key-123"
     };
     deps.store.getById = mock.fn(async () => targetFrag);
+    deps.store.countActiveLinks = mock.fn(async () => 2);
 
     const rememberer = new MemoryRememberer(deps);
     const result = await rememberer.forget({ id: "frag-1", dryRun: true, _keyId: "key-123" });
