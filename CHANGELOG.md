@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [7.2.0] - 2026-11-09
+
 ### Added
 
 - `unlink` 도구: 방향이 정해진 링크 한 건을 해제한다. 파편과 다른 링크는 바뀌지 않고, `link`로 다시 걸 수 있다. `dryRun`, 그룹 `link` 권한, 감사 이벤트 `memory.unlink`를 지원한다. `contradicts`와 닫힌 파편의 `superseded_by`는 해제할 수 없다.
