@@ -785,8 +785,8 @@ reason code 목록 (최대 3개):
 | 필드 | 설명 |
 |-|-|
 | `intent`, `intent_source` | 질문 의도와 그 출처(`explicit`, `auto`) |
-| `status` | `no_evidence`(결과 없음), `conflicting`(상위 10건에 아직 유효한 충돌 상대), `partial`(질의 핵심 낱말 2개 이상 가운데 결과 본문에 나온 비율이 0.5 미만), `supported`. 낱말은 본문 어휘 채널과 같은 토큰화를 쓰고 의문사와 기능어는 뺀다. 결과 상위 30건만 본다 |
-| `coverage`, `uncovered_terms` | 덮인 비율과 결과 본문에 나오지 않은 질의 낱말. `partial`이면 이 낱말로 다시 검색하고, `no_evidence`면 기억에 없다고 답하는 데 쓴다 |
+| `status` | `no_evidence`(결과 없음), `conflicting`(상위 10건에 아직 유효한 충돌 상대), `partial`(질의 핵심 낱말 가운데 결과 본문이나 키워드에 나온 비율이 0.5 미만), `supported`. 낱말은 본문 어휘 채널과 같은 토큰화를 쓰고 의문사와 기능어는 뺀다. 결과 상위 30건만 본다 |
+| `coverage`, `uncovered_terms` | 덮인 비율과 결과 본문과 키워드에 나오지 않은 질의 낱말. `partial`이면 이 낱말로 다시 검색하고, `no_evidence`면 기억에 없다고 답하는 데 쓴다 |
 | `bundle` | 의도가 `aggregate`, `temporal`, `state`일 때만. `rows`(세계 시각 오름차순: `id`, `time`, `time_basis`(`event`, `mention`, `stored`), 있을 때 `precision`, `mentioned`, `state`, `conflicts_with`, 본문 앞 160자 `preview`), `distinct_count`(날짜 머리와 공백을 무시하고 같은 본문을 하나로 센 수), `duplicate_ids`, `coverage`(`truncated`이면 페이지나 예산 때문에 후보가 더 있다) |
 | `digests` | `MEMENTO_DIGEST=on`(기본)이고 묶음 요약이 있을 때만. 의도가 `lookup`이 아니면 요청 topic(없으면 결과 상위 topic 3개)의 `topic_timeline`, 선호를 묻는 질의(선호, 좋아하, 추천, prefer, favorite, recommend 등)나 `type: "preference"`면 `preference_profile`. 항목은 `kind`, `subject`, `item_count`, `updated_at`, `content`. 같은 키, workspace, agent의 요약만 읽고, 출처 파편이 하나라도 유효하지 않은 요약은 싣지 않는다 |
 
