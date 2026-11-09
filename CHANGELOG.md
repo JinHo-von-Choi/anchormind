@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 런타임 의존성 `garu-ko`를 0.12.1로, `openai`를 7.50.0으로, 개발 의존성 `eslint`를 10.14.0으로 올렸다. `git pull` 뒤 `npm install`을 실행하고 서비스를 재시작한다.
+- `garu-ko` 0.12에서 일부 고유명사의 형태소 경계가 달라진다. 이미 저장된 파편의 어휘 토큰은 다시 계산하지 않는다.
+
 ### Removed
 
 - recall의 `_meta.suggestion`에서 `no_type_filter_noisy` 제안을 뺐다. `type` 파라미터는 그대로 쓴다.
