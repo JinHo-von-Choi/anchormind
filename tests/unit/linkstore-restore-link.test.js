@@ -44,7 +44,8 @@ describe("LinkStore.restoreLink", () => {
     assert.deepEqual(result, { created: true });
 
     const insert = captured[0];
-    assert.match(insert.sql, /ON CONFLICT \(from_id, to_id\) DO NOTHING/);
+    assert.match(insert.sql, /ON CONFLICT \(from_id, to_id\) DO UPDATE/);
+    assert.match(insert.sql, /WHERE \S*deleted_at IS NOT NULL/);
     assert.deepEqual(insert.params.slice(0, 7), ["a", "b", "caused_by", "2026-01-01T00:00:00.000Z", 2, 0.9, 0.01]);
     assert.equal(captured.length, 1);
   });

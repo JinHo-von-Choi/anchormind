@@ -228,8 +228,9 @@ describe("MemoryRememberer.forget 삭제 연쇄", () => {
   it("topic dryRun은 지우지 않고 실제 삭제와 같은 대상과 연쇄 예상 건수를 돌려준다", async () => {
     delete process.env.MEMENTO_FORGET_CASCADE;
     const { rememberer, store, index } = makeRememberer();
+    store.countActiveLinks = mock.fn(async () => 2);
     store.searchByTopic = mock.fn(async () => [
-      { id: "f1", key_id: "k1", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact", linked_to: ["x", "y"], permanent_total: 1 },
+      { id: "f1", key_id: "k1", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact", permanent_total: 1 },
       { id: "f2", key_id: "k9", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact", permanent_total: 1 },
       { id: "f3", key_id: "k1", ttl_tier: "permanent", keywords: [], topic: "ops", type: "fact", permanent_total: 1 }
     ]);
@@ -251,6 +252,7 @@ describe("MemoryRememberer.forget 삭제 연쇄", () => {
   it("id와 topic을 함께 준 dryRun은 id 대상을 뺀 topic 대상도 미리 보여 주고 지우지 않는다", async () => {
     delete process.env.MEMENTO_FORGET_CASCADE;
     const { rememberer, store } = makeRememberer();
+    store.countActiveLinks = mock.fn(async () => 0);
     /** 실제 삭제는 f1을 먼저 지우고 topic에서 200건을 고르므로 f1을 뺀 200건이 대상이다 */
     const rows = Array.from({ length: 202 }, (_, i) => ({ id: `f${i + 1}`, key_id: "k1", ttl_tier: "warm", keywords: [], topic: "ops", type: "fact" }));
     store.searchByTopic = mock.fn(async (topic, opts) => rows.slice(0, opts.limit));
