@@ -78,8 +78,7 @@ test("high semantic similarity does not retire distinct batch memories", async (
 
   assert.equal(count, 0);
   assert.equal(writes.length, 0, "different content must never be soft-deleted as an exact duplicate");
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /Near-duplicate detected/);
+  assert.equal(warnings.length, 0, "near-duplicates are reported as periodic totals, not per pair");
   /** 중복 판정은 같은 key 범위의 이전 파편에서만 고르고, 링크 후보도 같은 key 범위에서 고른다. */
   assert.match(scoredQuery.sql, /AND f\.key_id = \$5/);
   assert.match(scoredQuery.sql, /similarity >= 0\.90 AND same_workspace AND \(created_at < \$3::timestamptz/);

@@ -5,12 +5,12 @@
 ### Added
 
 - recall이 `limit`을 받는다. `pageSize`의 별칭이고 둘 다 주면 `pageSize`를 쓴다.
-- recall 응답의 `_meta.ignored_args`가 스키마에 없어 쓰지 않은 인자의 이름을 알려 준다.
+- 도구 응답의 `_meta.ignored_args`가 스키마에 없어 쓰지 않은 인자의 이름을 알려 준다.
 
 ### Changed
 
 - recall의 `large_limit_no_budget` 제안을 `page_cut_by_budget`으로 바꿨다. 건수를 지정했고 `tokenBudget`을 지정하지 않았는데 예산 때문에 요청보다 적게 돌아왔을 때 나오고, `nextCursor`를 권한다.
-- 유사 중복은 파편별 경고 대신 5분 단위로 키와 topic별 합계를 남긴다.
+- 유사 중복은 파편별 로그 대신 5분 단위로 키와 topic별 합계와 표본 한 쌍을 남긴다.
 
 ### Fixed
 

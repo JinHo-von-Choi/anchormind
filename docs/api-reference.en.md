@@ -735,7 +735,7 @@ When a shared key has no `default_workspace` and writes use an explicit workspac
 | `empty_result_no_context` | 0 results and contextText is absent | Add contextText |
 | `page_cut_by_budget` | A count (`pageSize`, `limit`) was given without tokenBudget and the budget returned fewer items than requested | Continue with `nextCursor` or raise tokenBudget |
 
-Rules are evaluated in the order above and only the first match is attached to `_meta.suggestion`. The field is omitted when nothing matches. Arguments that are not in the schema and were not used are named in `_meta.ignored_args`.
+Rules are evaluated in the order above and only the first match is attached to `_meta.suggestion`. The field is omitted when nothing matches. Every tool names arguments that are not in its schema and were not used in `_meta.ignored_args`.
 
 `explanation` (included only when `MEMENTO_SYMBOLIC_EXPLAIN=true`): Explains why the fragment was included in the search results, using up to 3 reason codes. The codes come from the search layers that found that fragment, so they differ per fragment.
 
