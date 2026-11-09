@@ -754,9 +754,8 @@ MCP 2026-07-28 개정을 먼저 시도하는 클라이언트는 400 본문이 �
 | `repeat_query` | 5분 내 동일 keywords 유형 쿼리 3회 이상 | reconstruct_history 또는 graph_explore |
 | `empty_result_no_context` | 결과 0건 + contextText 미제공 | recall (contextText 추가) |
 | `large_limit_no_budget` | limit >= 50 + tokenBudget 미지정 | recall (tokenBudget 지정) |
-| `no_type_filter_noisy` | type 미지정 + 파편 총 수 > 100 | recall (type 지정) |
 
-`repeat_query` 규칙은 `search_events` 테이블에서 최근 5분 이벤트를 조회한다(`SearchEventRecorder`가 기록). `no_type_filter_noisy` 규칙은 `fragments` 테이블의 `valid_to IS NULL` 행 카운트를 사용한다.
+`repeat_query` 규칙은 `search_events` 테이블에서 최근 5분 이벤트를 조회한다(`SearchEventRecorder`가 기록).
 
 ---
 

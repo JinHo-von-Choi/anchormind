@@ -750,7 +750,6 @@ Agent 조회는 생략 시 `default`, 지정 시 해당 agent와 `default`를 �
 | `repeat_query` | keywords 쿼리가 5분 이내 3회 이상 반복 (query_type이 keywords 또는 mixed인 search_events 기준) | 케이스 타임라인 조회 — `reconstruct_history`(상위 case_id 존재 시) 또는 `graph_explore` |
 | `empty_result_no_context` | 결과 0건이고 contextText가 없는 경우 | contextText 추가 |
 | `large_limit_no_budget` | `limit` 파라미터가 50 이상이고 tokenBudget 미지정인 경우. recall 스키마의 페이지 크기 파라미터는 `pageSize`이므로 현재 이 규칙은 발화하지 않는다 | tokenBudget 명시로 응답 크기 제어 |
-| `no_type_filter_noisy` | type 필터 없이 호출했고 해당 키 스코프의 총 파편 수가 100건을 초과하는 경우 (이번 호출의 반환 건수·depth는 판정에 쓰이지 않는다) | type 필터 추가 |
 
 규칙은 위 순서대로 평가되어 최초 1건만 `_meta.suggestion`에 실린다. 조건에 해당하지 않으면 필드는 생략된다.
 

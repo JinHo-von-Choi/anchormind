@@ -733,7 +733,6 @@ When a shared key has no `default_workspace` and writes use an explicit workspac
 | `repeat_query` | A keywords query repeated 3+ times within 5 minutes (counted over search_events whose query_type is keywords or mixed) | Pull the case timeline — `reconstruct_history` when a dominant case_id exists, otherwise `graph_explore` |
 | `empty_result_no_context` | 0 results and contextText is absent | Add contextText |
 | `large_limit_no_budget` | A `limit` parameter of 50 or more with no tokenBudget. recall's page-size parameter is `pageSize`, so this rule does not fire in practice | Set tokenBudget explicitly to control response size |
-| `no_type_filter_noisy` | Called without a type filter while the key scope holds more than 100 fragments (neither this call's result count nor depth is considered) | Add a type filter |
 
 Rules are evaluated in the order above and only the first match is attached to `_meta.suggestion`. The field is omitted when nothing matches.
 

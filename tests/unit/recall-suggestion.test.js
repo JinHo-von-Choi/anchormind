@@ -21,7 +21,7 @@ import { RecallSuggestionEngine } from "../../lib/memory/read/RecallSuggestionEn
  * 응답 배열을 순서대로 반환하는 pool mock과 엔진을 생성한다.
  *
  * responses 요소 형태:
- *  - Array  → { rows: Array } 반환 (search_events 또는 fragment count 결과)
+ *  - Array  → { rows: Array } 반환 (search_events 결과)
  *  - Error  → reject
  *
  * @param {Array<Array|Error>} responses
@@ -42,10 +42,6 @@ function createEngine(responses = []) {
 /** ─────────────────────── search_events 행 헬퍼 ─────────────────────── */
 function eventsOf(n, type = "keywords") {
   return Array.from({ length: n }, () => ({ query_type: type, filter_keys: [], result_count: 2 }));
-}
-
-function countRow(cnt) {
-  return [{ cnt }];
 }
 
 describe("RecallSuggestionEngine", { concurrency: false }, () => {
@@ -88,9 +84,8 @@ describe("RecallSuggestionEngine", { concurrency: false }, () => {
     it("2회 반복이면 null 반환 (3회 미만)", async () => {
       /** search_events 2개 → repeat_query 미매칭
        *  → empty_result_no_context 아님(fragments 있음)
-       *  → large_limit_no_budget 아님(limit 없음)
-       *  → no_type_filter_noisy: count 조회 → 10개 → 미매칭 */
-      const engine = createEngine([eventsOf(2), countRow(10)]);
+       *  → large_limit_no_budget 아님(limit 없음) */
+      const engine = createEngine([eventsOf(2)]);
 
       const params = { _keyId: "key-1", keywords: ["redis"] };
       const result = { fragments: [{ id: "frag-1" }] };
@@ -101,9 +96,8 @@ describe("RecallSuggestionEngine", { concurrency: false }, () => {
 
     it("keywords 없으면 repeat_query 감지 안 함 (normTarget 빈 문자열)", async () => {
       /** search_events 반환되지만 keywords 없으면 normTarget="" → 감지 스킵
-       *  → empty_result_no_context 아님(fragments 있음)
-       *  → no_type_filter_noisy: count 5개 → 미매칭 */
-      const engine = createEngine([eventsOf(3, "text"), countRow(5)]);
+       *  → empty_result_no_context 아님(fragments 있음) */
+      const engine = createEngine([eventsOf(3, "text")]);
 
       const params = { _keyId: "key-1", text: "nginx 설정" };
       const result = { fragments: [{ id: "frag-x" }] };
@@ -140,7 +134,7 @@ describe("RecallSuggestionEngine", { concurrency: false }, () => {
     });
 
     it("SpreadingActivation이 꺼져 있으면 효과 없는 contextText를 권하지 않는다", async () => {
-      const engine = createEngine([[], countRow(5)]);
+      const engine = createEngine([[]]);
       const saved  = process.env.ENABLE_SPREADING_ACTIVATION;
       delete process.env.ENABLE_SPREADING_ACTIVATION;
       try {
@@ -153,8 +147,8 @@ describe("RecallSuggestionEngine", { concurrency: false }, () => {
 
     it("contextText 있으면 empty_result_no_context 아님", async () => {
       /** fragments=0 이지만 contextText 있음 → empty_result_no_context 스킵
-       *  → large_limit_no_budget 아님 → no_type_filter_noisy: count 5개 → 미매칭 */
-      const engine = createEngine([[], countRow(5)]);
+       *  → large_limit_no_budget 아님 */
+      const engine = createEngine([[]]);
 
       const params = { _keyId: "key-1", keywords: [], contextText: "현재 nginx 디버깅 중" };
       const result = { fragments: [] };
@@ -181,7 +175,7 @@ describe("RecallSuggestionEngine", { concurrency: false }, () => {
     });
 
     it("limit < 50이면 large_limit_no_budget 아님", async () => {
-      const engine = createEngine([[], countRow(10)]);
+      const engine = createEngine([[]]);
 
       const params = { _keyId: "key-1", keywords: ["test"], limit: 20 };
       const result = { fragments: [{ id: "frag-a" }] };
@@ -191,63 +185,13 @@ describe("RecallSuggestionEngine", { concurrency: false }, () => {
     });
 
     it("tokenBudget 있으면 large_limit_no_budget 아님", async () => {
-      const engine = createEngine([[], countRow(10)]);
+      const engine = createEngine([[]]);
 
       const params = { _keyId: "key-1", keywords: [], limit: 100, tokenBudget: 2000 };
       const result = { fragments: [{ id: "frag-a" }] };
 
       const suggestion = await engine.suggest(params, result);
       assert.strictEqual(suggestion, null);
-    });
-  });
-
-  /** ── 규칙 4: no_type_filter_noisy ── */
-  describe("no_type_filter_noisy", () => {
-    it("type 미지정 + 파편 > 100 → no_type_filter_noisy 반환", async () => {
-      /** events 빈 배열 → repeat_query 미매칭
-       *  → fragments 있음 → empty_result_no_context 스킵
-       *  → limit 없음 → large_limit_no_budget 스킵
-       *  → type 없음 → count 150 → 매칭 */
-      const engine = createEngine([[], countRow(150)]);
-
-      const params = { _keyId: "key-1", keywords: ["test"] };
-      const result = { fragments: [{ id: "frag-z" }] };
-
-      const suggestion = await engine.suggest(params, result);
-
-      assert.ok(suggestion !== null);
-      assert.strictEqual(suggestion.code, "no_type_filter_noisy");
-      assert.ok(suggestion.message.includes("150"));
-      assert.strictEqual(suggestion.recommendedTool, "recall");
-    });
-
-    it("파편 <= 100이면 no_type_filter_noisy 아님", async () => {
-      const engine = createEngine([[], countRow(80)]);
-
-      const params = { _keyId: "key-1" };
-      const result = { fragments: [{ id: "frag-z" }] };
-
-      const suggestion = await engine.suggest(params, result);
-      assert.strictEqual(suggestion, null);
-    });
-
-    it("type 지정되면 no_type_filter_noisy 건너뜀 (count 쿼리 미실행)", async () => {
-      /** type 있으면 규칙 4 완전 스킵 → query 호출 1회(events)만 */
-      let queryCalls = 0;
-      const pool = {
-        query: async () => {
-          queryCalls++;
-          return { rows: [] };
-        }
-      };
-      const engine = new RecallSuggestionEngine({ pool });
-
-      const params = { _keyId: "key-1", type: "error" };
-      const result = { fragments: [{ id: "frag-z" }] };
-
-      const suggestion = await engine.suggest(params, result);
-      assert.strictEqual(suggestion, null);
-      assert.strictEqual(queryCalls, 1, "search_events 쿼리만 호출됨");
     });
   });
 
@@ -265,20 +209,6 @@ describe("RecallSuggestionEngine", { concurrency: false }, () => {
 
       assert.ok(suggestion !== null);
       assert.strictEqual(suggestion.code, "repeat_query");
-    });
-
-    it("large_limit_no_budget와 no_type_filter_noisy 동시 해당 → large_limit_no_budget 반환", async () => {
-      /** limit=50 tokenBudget 없음(large_limit_no_budget 해당)
-       *  type 없음 + count>100이어도 large_limit_no_budget이 먼저 매칭 */
-      const engine = createEngine([[]]); // events만 — count 쿼리 미도달
-
-      const params = { _keyId: "key-1", keywords: [], limit: 50 };
-      const result = { fragments: [{ id: "frag-a" }] };
-
-      const suggestion = await engine.suggest(params, result);
-
-      assert.ok(suggestion !== null);
-      assert.strictEqual(suggestion.code, "large_limit_no_budget");
     });
   });
 
@@ -298,17 +228,6 @@ describe("RecallSuggestionEngine", { concurrency: false }, () => {
         suggestion === null || suggestion.code === "empty_result_no_context",
         `예상치 못한 code: ${suggestion?.code}`
       );
-    });
-
-    it("fragment count DB 실패 시 no_type_filter_noisy null 반환", async () => {
-      /** search_events 정상, count 쿼리 실패 → no_type_filter_noisy catch → null */
-      const engine = createEngine([[], new Error("timeout")]);
-
-      const params = { _keyId: "key-1", keywords: [], limit: 10 };
-      const result = { fragments: [{ id: "frag-a" }] };
-
-      const suggestion = await engine.suggest(params, result);
-      assert.strictEqual(suggestion, null);
     });
   });
 });
