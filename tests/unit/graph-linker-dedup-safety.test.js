@@ -43,7 +43,8 @@ mock.module("../../lib/memory/write/FragmentStore.js", {
 
 mock.module("../../lib/logger.js", {
   namedExports: {
-    logDebug: () => {},
+    logDebug: message => warnings.push(message),
+    logInfo: () => {},
     logWarn: message => warnings.push(message)
   }
 });

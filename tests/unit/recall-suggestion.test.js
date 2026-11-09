@@ -163,39 +163,25 @@ describe("RecallSuggestionEngine", { concurrency: false }, () => {
   });
 
   /** ── 규칙 3: large_limit_no_budget ── */
-  describe("large_limit_no_budget", () => {
-    it("limit >= 50 && tokenBudget 없음 → large_limit_no_budget 반환", async () => {
-      const engine = new RecallSuggestionEngine(); // 빈 events
+  describe("page_cut_by_budget", () => {
+    const cut = { fragments: [{ id: "frag-a" }], nextCursor: "next", _budgetCut: { requested: 50, returned: 16, budget: 1000 } };
 
-      const params = { _keyId: "key-1", keywords: ["test"], limit: 50 };
-      const result = { fragments: [{ id: "frag-a" }] };
-
-      const suggestion = await engine.suggest(params, result);
-
-      assert.ok(suggestion !== null);
-      assert.strictEqual(suggestion.code, "large_limit_no_budget");
-      assert.strictEqual(suggestion.recommendedTool, "recall");
-      assert.strictEqual(suggestion.recommendedArgs.tokenBudget, 2000);
+    it("건수를 지정했고 예산 때문에 덜 돌아오면 이어 읽을 커서를 안내한다", async () => {
+      const suggestion = await new RecallSuggestionEngine().suggest({ _keyId: "key-1", pageSize: 50 }, cut);
+      assert.strictEqual(suggestion?.code, "page_cut_by_budget");
+      assert.ok(suggestion.message.includes("16건"));
+      assert.deepStrictEqual(suggestion.recommendedArgs, { cursor: "next" });
     });
 
-    it("limit < 50이면 large_limit_no_budget 아님", async () => {
-      const engine = new RecallSuggestionEngine();
-
-      const params = { _keyId: "key-1", keywords: ["test"], limit: 20 };
-      const result = { fragments: [{ id: "frag-a" }] };
-
-      const suggestion = await engine.suggest(params, result);
-      assert.strictEqual(suggestion, null);
+    it("예산 때문이 아니면 안내하지 않는다", async () => {
+      const result = { fragments: [{ id: "frag-a" }], nextCursor: "next", _budgetCut: null };
+      assert.strictEqual(await new RecallSuggestionEngine().suggest({ _keyId: "key-1", pageSize: 50 }, result), null);
     });
 
-    it("tokenBudget 있으면 large_limit_no_budget 아님", async () => {
+    it("건수를 지정하지 않았거나 예산을 지정했으면 안내하지 않는다", async () => {
       const engine = new RecallSuggestionEngine();
-
-      const params = { _keyId: "key-1", keywords: [], limit: 100, tokenBudget: 2000 };
-      const result = { fragments: [{ id: "frag-a" }] };
-
-      const suggestion = await engine.suggest(params, result);
-      assert.strictEqual(suggestion, null);
+      assert.strictEqual(await engine.suggest({ _keyId: "key-1" }, cut), null);
+      assert.strictEqual(await engine.suggest({ _keyId: "key-2", pageSize: 50, tokenBudget: 800 }, cut), null);
     });
   });
 

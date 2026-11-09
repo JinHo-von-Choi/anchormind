@@ -343,7 +343,7 @@ tools/list 응답이 mode의 excluded_tools 필터링 후 반환된다. get_skil
 3개 감지 규칙:
 - `repeat_query`: 최근 5분 내 동일 keyId에서 같은 검색 조건으로 3회 이상 recall → `reconstruct_history` 또는 `graph_explore` 권유
 - `empty_result_no_context`: 결과 0건 + contextText 미전달 + `ENABLE_SPREADING_ACTIVATION=true` → `contextText` 추가 권유(꺼진 서버에서는 나오지 않는다)
-- `large_limit_no_budget`: limit ≥ 50 + tokenBudget 미지정 → `tokenBudget` 명시 권고
+- `page_cut_by_budget`: 건수 지정 + tokenBudget 미지정 + 예산 때문에 요청보다 적게 반환 → `nextCursor` 또는 `tokenBudget` 권고
 
 `_suggestion`이 있으면 다음 호출에서 `recommendedTool` + `recommendedArgs`를 검토하여 적용한다.
 
@@ -952,6 +952,7 @@ async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기�
 | timeRange | object | - | {from, to, basis} 시간창 필터. basis=created(기본)는 생성시각(created_at), basis=event는 사건 시각(event_time, 없으면 mention_time, 없으면 created_at) 기준. ISO 8601과 한국어 자연어("3일 전","지난 주","오늘") 모두 지원. 지정 시 시간 검색 경로가 동작하고 RRF에서 시간 근접 가중이 부스트된다. |
 | cursor | string | - | 페이지네이션 커서 |
 | pageSize | number | - | 기본 20, 최대 50 |
+| limit | number | - | `pageSize`의 별칭. 둘 다 주면 `pageSize`를 쓴다 |
 | excludeSeen | boolean | - | context()에서 주입된 파편 제외. 기본 true. |
 | includeContext | boolean | - | context_summary + 인접 파편 포함 |
 | includeKeywords | boolean | - | 응답에 keywords 배열 포함 |

@@ -63,7 +63,7 @@ mock.module("../../lib/tools/db.js", {
   }
 });
 mock.module("../../lib/memory/signals/NLIClassifier.js", {
-  namedExports: { isNLIAvailable: () => false, detectContradiction: async () => null }
+  namedExports: { refreshNLIAvailability: async () => false, detectContradiction: async () => null }
 });
 mock.module("../../lib/gemini.js", {
   namedExports: { isGeminiCLIAvailable: async () => true, geminiCLIJson: async () => ({}) }
