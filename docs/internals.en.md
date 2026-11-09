@@ -698,10 +698,10 @@ On server startup, `initModeRegistry()` reads all `lib/memory/modes/*.json` file
 
 | Preset | Blocked Tools | Use Case |
 |--------|-------------|---------|
-| `recall-only` | remember, batch_remember, amend, forget, link, reflect, memory_consolidate | Read-only clients |
+| `recall-only` | remember, batch_remember, amend, forget, link, unlink, reflect, memory_consolidate | Read-only clients |
 | `write-only` | recall, context, reconstruct_history, graph_explore, fragment_history, search_traces, memory_stats | Write-only pipelines |
 | `onboarding` | (none; all tools exposed + beginner guide via `skill_guide_override`) | New-user guidance |
-| `audit` | remember, batch_remember, amend, forget, link, reflect (requiresMaster=true) | Master-key audit sessions |
+| `audit` | remember, batch_remember, amend, forget, link, unlink, reflect (requiresMaster=true) | Master-key audit sessions |
 
 Each JSON file schema: `{ name, description, excluded_tools[], fixed_tools[], skill_guide_override?, requiresMaster? }`.
 

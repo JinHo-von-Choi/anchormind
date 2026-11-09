@@ -567,7 +567,7 @@ Claude Code와 Codex의 훅이 부르는 `POST /hooks/{client}/{event}`다. `cli
 |-|-|-|-|
 | `admin.*` | 관리 API의 GET이 아닌 요청과 내보내기 GET. 응답이 끝날 때 기록한다. 행위 이름은 `lib/admin/admin-audit-actions.js`의 선언을 따르고, 선언이 없는 요청은 `admin.request`다 | 경로의 첫 변수(키, 그룹, 파편 id, 세션 id 앞 8자) 또는 처리기가 알린 생성 자원 id | `method`, `path`(질의 문자열 없이 UUID 조각을 앞 8자로 줄인 경로), `status`, 처리기가 알린 변경 값(키 정책은 `changed`, `before`, `after`, 키 수치와 상태는 `after`) |
 | `admin.auth` | 관리 로그인 성공(`success`)과 실패(`denied`) | 없음 | `channel`(form, bearer). 시도한 값은 남기지 않는다 |
-| `memory.remember`, `memory.amend`, `memory.forget`, `memory.link` | 기억 도구 처리기. 실패도 `failure`로 남기고 dryRun은 남기지 않는다 | 파편 id(forget의 주제 지정은 `topic`) | 본문은 `contentSha256`과 `contentLength`만, 실패는 `errorCode`만(오류 메시지는 남기지 않는다) |
+| `memory.remember`, `memory.amend`, `memory.forget`, `memory.link`, `memory.unlink` | 기억 도구 처리기. 실패도 `failure`로 남기고 dryRun은 남기지 않는다 | 파편 id(forget의 주제 지정은 `topic`) | 본문은 `contentSha256`과 `contentLength`만, 실패는 `errorCode`만(오류 메시지는 남기지 않는다) |
 | `memory.anchor` | 앵커로 저장하거나 amend가 `isAnchor`를 바꿀 때 | 파편 id | `isAnchor` |
 | `gate.block` | 쓰기 관문(`WriteGate`)이 거부할 때(hard gate, `MEMENTO_SENSITIVE_SCAN=reject`, hard gate 조회 실패) | 없음 | `entry`, `op`, `rule`, `fragmentType`. 행위자는 키(키 없는 사용자 진입점은 마스터, 서버 내부 작업은 system) |
 | `memory.batch_remember` | batch_remember 한 번에 이벤트 하나. 실패도 남기고 dryRun은 남기지 않는다 | 없음 | `total`, `inserted`, `skipped`, `anchors`(앵커 지정 항목 수), `async`. 본문은 남기지 않는다 |

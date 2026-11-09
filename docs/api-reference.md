@@ -403,6 +403,7 @@ Content-Type: application/json
 | `reflect` | Reflect: 세션 학습 영속화 | N | N | N | N |
 | `search_traces` | Search Traces: 정확 매칭 탐색 | Y | N | Y | N |
 | `session_rotate` | Session Rotate: 세션 교체 | N | N | N | N |
+| `unlink` | Unlink: 파편 관계 해제 | N | Y | Y | N |
 | `tool_feedback` | Tool Feedback: 도구 유용성 피드백 | N | N | N | N |
 
 - `readOnlyHint`가 `Y`인 도구는 저장된 기억의 내용을 바꾸지 않는다. `recall`은 `readOnlyHint`가 `Y`이지만 반환한 파편의 `access_count`, `accessed_at`, `ema_activation`을 갱신하고 함께 조회된 이웃 파편의 `accessed_at`을 갱신하며 검색 이벤트 한 건을 기록한다. 이는 기억 내용이 아닌 한정된 부수 기록이다. `check_update`는 로컬 확인 결과 캐시를 갱신한다.
@@ -1154,7 +1155,7 @@ topic 삭제는 한 번에 200건까지 지운다. force가 없으면 permanent 
 `dryRun=true`는 id와 topic 어느 쪽으로 지정해도 지우지 않는다.
 
 - id: `{success: true, dryRun: true, simulated: {fragment, linked_count, would_delete, reason}}`
-- topic: `{success: true, dryRun: true, simulated: {topic, would_delete, protected, linked_count, fragment_ids, purged}}`. 실제 삭제와 같은 규칙으로 대상을 고른다. `would_delete`는 지울 파편 수, `protected`는 소유하지 않거나 permanent 보호로 남는 파편 수, `linked_count`는 지울 파편들의 `linked_to` 수 합계다. `purged`는 삭제 연쇄로 함께 정리될 예상 건수이며 `MEMENTO_FORGET_CASCADE=off`이면 없다.
+- topic: `{success: true, dryRun: true, simulated: {topic, would_delete, protected, linked_count, fragment_ids, purged}}`. 실제 삭제와 같은 규칙으로 대상을 고른다. `would_delete`는 지울 파편 수, `protected`는 소유하지 않거나 permanent 보호로 남는 파편 수, `linked_count`는 지울 파편에 걸린 활성 링크 수다(양 끝이 호출자의 키 범위에 있는 링크). `purged`는 삭제 연쇄로 함께 정리될 예상 건수이며 `MEMENTO_FORGET_CASCADE=off`이면 없다.
 - id와 topic을 함께 주면 실제 삭제처럼 id 대상을 먼저 본다. id 대상을 지울 수 있으면 id 대상을 뺀 topic 미리보기를 `simulated.topic_targets`에 싣는다.
 - id와 topic이 모두 없으면 `{dryRun: true, simulated: null, error: "id or topic is required"}`다.
 
@@ -1175,7 +1176,41 @@ dryRun 응답은 감사 이벤트를 남기지 않는다.
 | relationType | string | - | 관계 유형 (related, caused_by, resolved_by, part_of, contradicts). 기본 related. |
 | agentId | string | - | 에이전트 ID |
 | weight | number | - | 관계 가중치 (0-1, 기본 1) |
-| dryRun | boolean | - | true 설정 시 실제 링크 생성 없이 사이클 여부·소유권 검사 결과만 반환. |
+| dryRun | boolean | - | true 설정 시 실제 링크 생성 없이 소유권 검사 결과와 저장될 관계만 반환. |
+
+응답의 `relationType`은 실제로 저장된 관계다. 기존 관계가 더 구체적이면 그대로 유지되고, 이때 요청한 값을 `requestedRelationType`에 함께 돌려준다.
+
+---
+
+## MCP 도구 — unlink
+
+방향이 정해진 링크 한 건을 해제한다. 파편과 다른 링크, 반대 방향 링크는 바꾸지 않고, 해제한 링크는 `link`로 다시 걸 수 있다.
+
+### 파라미터
+
+| 이름 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| fromId | string | O | 시작 파편 ID |
+| toId | string | O | 대상 파편 ID |
+| relationType | string | O | 해제할 관계 (related, caused_by, resolved_by, part_of, contradicts, superseded_by, co_retrieved, temporal). 현재 관계와 일치할 때만 해제한다. |
+| agentId | string | - | 에이전트 ID |
+| dryRun | boolean | - | true 설정 시 같은 권한 검사를 거쳐 해제 가능 여부만 반환한다. 쓰기와 감사 이벤트는 남기지 않는다. |
+
+### 응답
+
+| 상황 | 응답 |
+|------|------|
+| 해제함 | `{success: true, unlinked: true, relationType}` |
+| 링크가 없거나 이미 해제됨 | `{success: true, unlinked: false, reason: "not_found"}` |
+| 관계가 다름 | `{success: true, unlinked: false, reason: "relation_mismatch", currentRelationType}` |
+| 파편이 없거나 볼 수 없음 | `{success: false, unlinked: false, error}` |
+| 다른 키 파편에 `link` 권한 없음 | `{success: false, unlinked: false, code: "not_owner", error}` |
+| 해제할 수 없는 관계 | `{success: false, unlinked: false, code: "relation_protected", error}` |
+
+- 양 끝 파편이 보여야 하고, 다른 키의 파편이면 같은 그룹에서 `link` 권한이 필요하다. 닫힌 파편에 걸린 링크도 해제할 수 있다.
+- `contradicts`는 모순을 해소해야 닫히므로 해제할 수 없다. `superseded_by`는 시작 파편이 닫혀 있으면 대체 이력이므로 해제할 수 없다.
+- 파편의 `linked_to`에 저장된 선언 값은 바뀌지 않는다. 검색 그래프와 사이클 검사는 `fragment_links`만 쓰므로 해제 즉시 반영된다.
+- 해제한 링크는 자동 링크 작업이 되살리지 않는다. `link`를 호출하거나 시스템이 `superseded_by`, `contradicts`를 기록할 때만 되살아난다.
 
 ---
 

@@ -718,10 +718,10 @@ MCP 2026-07-28 개정을 먼저 시도하는 클라이언트는 400 본문이 �
 
 | 프리셋 | 차단 도구 | 용도 |
 |--------|---------|------|
-| `recall-only` | remember, batch_remember, amend, forget, link, reflect, memory_consolidate | 읽기 전용 클라이언트 |
+| `recall-only` | remember, batch_remember, amend, forget, link, unlink, reflect, memory_consolidate | 읽기 전용 클라이언트 |
 | `write-only` | recall, context, reconstruct_history, graph_explore, fragment_history, search_traces, memory_stats | 쓰기 전용 파이프라인 |
 | `onboarding` | (없음, 모든 도구 노출 + `skill_guide_override` 초심자 가이드) | 신규 사용자 안내 |
-| `audit` | remember, batch_remember, amend, forget, link, reflect (requiresMaster=true) | 마스터 키 감사 전용 |
+| `audit` | remember, batch_remember, amend, forget, link, unlink, reflect (requiresMaster=true) | 마스터 키 감사 전용 |
 
 각 JSON 파일의 스키마: `{ name, description, excluded_tools[], fixed_tools[], skill_guide_override?, requiresMaster? }`.
 

@@ -28,7 +28,7 @@ server.js  (HTTP 서버)
     └── GET  /.well-known/oauth-protected-resource
     │
     ├── lib/jsonrpc.js        JSON-RPC 2.0 파싱 및 메서드 디스패치. `dispatchJsonRpc`는 METHOD_MAP 객체로 메서드명→핸들러를 정적 매핑
-    ├── lib/tool-registry.js  20개 도구 등록 및 라우팅 (일반 키 16개, 마스터 키 전용 4개: memory_stats, memory_consolidate, check_update, apply_update)
+    ├── lib/tool-registry.js  21개 도구 등록 및 라우팅 (일반 키 17개, 마스터 키 전용 4개: memory_stats, memory_consolidate, check_update, apply_update)
     │
     └── lib/memory/
             ├── MemoryManager.js          비즈니스 로직 조율 facade (싱글턴). 공개 메서드를 4개 processor에 위임하여 라우팅. 공유 프로퍼티는 _installSharedSync로 동기화
@@ -317,8 +317,8 @@ integrations/
 
 ```
 lib/tools/
-├── memory.js    16개 MCP 도구 핸들러
-├── memory-audit.js 기억 도구의 파일 감사 기록과 감사 이벤트 값(remember, amend, forget, link, 앵커)
+├── memory.js    17개 MCP 도구 핸들러
+├── memory-audit.js 기억 도구의 파일 감사 기록과 감사 이벤트 값(remember, amend, forget, link, unlink, 앵커)
 ├── reconstruct.js  reconstruct_history, search_traces 도구 핸들러 (Narrative Reconstruction)
 ├── memory-schemas.js  도구 스키마 정의 (inputSchema)
 ├── reflect-params.js  reflect `lessons`와 context `view` 인자 스키마
@@ -334,6 +334,7 @@ lib/tools/
 ├── pool-gate.js 백그라운드 작업의 Primary 풀 점유 상한 관리
 ├── serverTime.js 서버 시각 헬퍼
 ├── update-tools.js check_update / apply_update 도구 정의와 핸들러 (마스터 키 전용)
+├── unlink-schema.js unlink 도구 정의
 ├── prompts.js   MCP Prompts 정의 (analyze-session, retrieve-relevant-memory 등)
 ├── resources.js MCP Resources 정의 (memory://stats, memory://topics 등)
 └── index.js     도구 핸들러 export
