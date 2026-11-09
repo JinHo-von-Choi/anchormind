@@ -25,7 +25,7 @@ server.js  (HTTP server)
     +-- GET  /.well-known/oauth-protected-resource
     |
     +-- lib/jsonrpc.js        JSON-RPC 2.0 parsing and method dispatch. `dispatchJsonRpc` uses a METHOD_MAP object for static method-name-to-handler routing
-    +-- lib/tool-registry.js  Registration and routing for 20 tools (16 for every key, 4 master-only: memory_stats, memory_consolidate, check_update, apply_update)
+    +-- lib/tool-registry.js  Registration and routing for 21 tools (17 for every key, 4 master-only: memory_stats, memory_consolidate, check_update, apply_update)
     |
     +-- lib/memory/
             +-- MemoryManager.js          Business logic orchestration facade (singleton). Routes public methods to 4 processors via delegation. Shared properties synchronized via _installSharedSync
@@ -313,8 +313,8 @@ Tool implementations are separated into `lib/tools/`.
 
 ```
 lib/tools/
-+-- memory.js    16 MCP tool handlers
-+-- memory-audit.js File audit records and audit event values of the memory tools (remember, amend, forget, link, anchor)
++-- memory.js    17 MCP tool handlers
++-- memory-audit.js File audit records and audit event values of the memory tools (remember, amend, forget, link, unlink, anchor)
 +-- reconstruct.js  reconstruct_history, search_traces tool handlers (Narrative Reconstruction)
 +-- memory-schemas.js  Tool schema definitions (inputSchema)
 +-- reflect-params.js  Schemas of reflect `lessons` and context `view`
@@ -330,6 +330,7 @@ lib/tools/
 +-- pool-gate.js Caps background use of the primary pool
 +-- serverTime.js Server time helper
 +-- update-tools.js check_update / apply_update definitions and handlers (master key only)
++-- unlink-schema.js unlink tool definition
 +-- prompts.js   MCP Prompts definitions (analyze-session, retrieve-relevant-memory, etc.)
 +-- resources.js MCP Resources definitions (memory://stats, memory://topics, etc.)
 +-- index.js     Tool handler exports

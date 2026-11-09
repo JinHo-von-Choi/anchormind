@@ -94,6 +94,7 @@ AnchorMind는 세션 사이의 지식을 파편(1~3문장의 자기완결 단위
 
 - 에러를 완전히 해결하면 그 error 파편을 `forget`한다. 사용자가 "잊어", "지워"라고 하면 즉시 forget. 대량 삭제 전에는 `dryRun=true`로 연결 링크 수를 확인한다.
 - 인과 관계는 저장 직후 `link`로 잇는다: 에러에서 해결책 `resolved_by`, 원인에서 결과 `caused_by`, 모순 `contradicts`. `related`는 서버가 자동 생성하므로 따로 걸지 않는다.
+- 잘못 걸었거나 낡은 링크는 `unlink(fromId, toId, relationType)`로 해제한다. 파편은 지워지지 않고 `link`로 다시 걸 수 있다.
 - 가설을 검증하면 `amend(assertionStatus="verified")`, 틀렸으면 `rejected`.
 - remember, link, amend, forget은 `dryRun=true`로 실행 없이 결과를 미리 볼 수 있다.
 
@@ -125,6 +126,7 @@ AnchorMind는 세션 사이의 지식을 파편(1~3문장의 자기완결 단위
 | `reflect` | 세션 요약, 결정, 해결 에러, 절차, 미해결 질문 영속화 |
 | `forget` | 파편 또는 토픽 삭제 |
 | `link` | 파편 사이 관계(resolved_by, caused_by, part_of, contradicts, related) 설정 |
+| `unlink` | 파편 사이 링크 한 건 해제(파편은 유지) |
 | `amend` | 기존 파편 수정, 확인 상태와 케이스 상태 전환 |
 | `tool_feedback` | 검색과 도구 결과의 유용성 피드백 |
 | `graph_explore` | 인과 체인 추적 |

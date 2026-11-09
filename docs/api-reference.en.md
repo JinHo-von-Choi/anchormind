@@ -399,6 +399,7 @@ Tools appear in the order `recall`, `context`, `remember`, followed by the rest 
 | `reflect` | Reflect: 세션 학습 영속화 | N | N | N | N |
 | `search_traces` | Search Traces: 정확 매칭 탐색 | Y | N | Y | N |
 | `session_rotate` | Session Rotate: 세션 교체 | N | N | N | N |
+| `unlink` | Unlink: 파편 관계 해제 | N | Y | Y | N |
 | `tool_feedback` | Tool Feedback: 도구 유용성 피드백 | N | N | N | N |
 
 - A tool with `readOnlyHint` `Y` does not change the content of stored memory. `recall` is marked `readOnlyHint` `Y` although it updates `access_count`, `accessed_at` and `ema_activation` on the fragments it returns, updates `accessed_at` on co-retrieved neighbor fragments, and writes one search event. This is bounded bookkeeping, not a change to memory content. `check_update` refreshes the local check-result cache.
@@ -1137,7 +1138,7 @@ A topic delete removes up to 200 fragments per call. Without `force` it keeps pe
 `dryRun=true` deletes nothing, whether the target is given by id or by topic.
 
 - id: `{success: true, dryRun: true, simulated: {fragment, linked_count, would_delete, reason}}`
-- topic: `{success: true, dryRun: true, simulated: {topic, would_delete, protected, linked_count, fragment_ids, purged}}`. Targets are chosen by the same rules as the real delete. `would_delete` is the number of fragments that would be deleted, `protected` the number kept because they are not owned or are permanent-protected, and `linked_count` the total `linked_to` entries of the fragments to delete. `purged` is the expected cascade cleanup and is absent with `MEMENTO_FORGET_CASCADE=off`.
+- topic: `{success: true, dryRun: true, simulated: {topic, would_delete, protected, linked_count, fragment_ids, purged}}`. Targets are chosen by the same rules as the real delete. `would_delete` is the number of fragments that would be deleted, `protected` the number kept because they are not owned or are permanent-protected, and `linked_count` is the number of active links on those fragments, counting links whose both ends are in the caller's key scope. `purged` is the expected cascade cleanup and is absent with `MEMENTO_FORGET_CASCADE=off`.
 - With both id and topic, the id target is checked first, as in the real delete. If it can be deleted, a topic preview without the id target is added as `simulated.topic_targets`.
 - With neither id nor topic, the response is `{dryRun: true, simulated: null, error: "id or topic is required"}`.
 
@@ -1158,7 +1159,41 @@ Establish a relationship between two fragments. Specifies causal, resolution, co
 | relationType | string | - | Relation type (related, caused_by, resolved_by, part_of, contradicts). Default related. |
 | agentId | string | - | Agent ID |
 | weight | number | - | Relation weight (0-1, default 1) |
-| dryRun | boolean | - | When true, returns cycle and ownership check results without creating the link. |
+| dryRun | boolean | - | When true, returns the ownership check result and the relation that would be stored, without creating the link. |
+
+The response `relationType` is the relation actually stored. When a more specific relation already exists it is kept, and the requested value is returned in `requestedRelationType`.
+
+---
+
+## MCP Tool — unlink
+
+Remove one directed link. Fragments, other links, and the reverse edge stay unchanged, and `link` can restore a removed link.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| fromId | string | Y | Source fragment ID |
+| toId | string | Y | Target fragment ID |
+| relationType | string | Y | Relation to remove (related, caused_by, resolved_by, part_of, contradicts, superseded_by, co_retrieved, temporal). The link is removed only when this matches its current relation. |
+| agentId | string | - | Agent ID |
+| dryRun | boolean | - | When true, runs the same permission checks and reports whether the link can be removed. Writes nothing and records no audit event. |
+
+### Response
+
+| Case | Response |
+|------|----------|
+| Removed | `{success: true, unlinked: true, relationType}` |
+| No link, or already removed | `{success: true, unlinked: false, reason: "not_found"}` |
+| Different relation | `{success: true, unlinked: false, reason: "relation_mismatch", currentRelationType}` |
+| Fragment missing or not visible | `{success: false, unlinked: false, error}` |
+| No `link` permission on another key's fragment | `{success: false, unlinked: false, code: "not_owner", error}` |
+| Protected relation | `{success: false, unlinked: false, code: "relation_protected", error}` |
+
+- Both fragments must be visible, and another key's fragment requires the `link` permission in a shared group. Links on closed fragments can be removed.
+- `contradicts` closes only when the conflict is resolved, so it cannot be removed. `superseded_by` is supersession history when the source fragment is closed, so it cannot be removed then.
+- Declared values in the fragment's `linked_to` do not change. The search graph and cycle check use `fragment_links` only, so a removal takes effect immediately.
+- Automatic link jobs do not restore a removed link. It returns only through `link`, or when the system records `superseded_by` or `contradicts`.
 
 ---
 

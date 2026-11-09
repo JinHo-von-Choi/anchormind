@@ -228,7 +228,8 @@ remember / link / forget / amend 4개 도구에서 실제 저장 없이 예상 �
 | 도구 | simulated |
 |-|-|
 | remember | `fragment`(예상 파편, `ttl_tier` 포함), `conflicts`, `validation_warnings`, `quota`. `scope=session`이면 `scope: "session"` |
-| link | `fromId`, `toId`, `relationType`, `would_link`, `ownership_ok` |
+| link | `fromId`, `toId`, `relationType`(저장될 관계), `would_link`, `ownership_ok`. 요청과 다르면 `requestedRelationType` |
+| unlink | `fromId`, `toId`, `relationType`, `would_unlink`. 해제할 간선이 없으면 `reason`(`not_found`, `relation_mismatch`) |
 | forget | id 지정: `fragment`, `linked_count`, `would_delete`, `reason`. topic 지정: `would_delete`(건수), `protected`, `linked_count`, `fragment_ids`, `purged` |
 | amend | `would_be_fragment`, `validation_warnings` |
 
@@ -545,6 +546,7 @@ tool_feedback(
 - 원인 -> 결과: `link(fromId=원인, toId=결과, relationType="caused_by")`
 - 관련 지식: `link(fromId=A, toId=B, relationType="related")`
 - 모순 발견: `link(fromId=A, toId=B, relationType="contradicts")`
+- 잘못 걸었거나 낡은 링크: `unlink(fromId=A, toId=B, relationType="related")`
 
 ### 3. 세션 종료
 
@@ -1010,9 +1012,27 @@ topic으로 지정하면 한 번에 200건까지 지운다. force가 없으면 p
 | relationType | string | - | related(기본), caused_by, resolved_by, part_of, contradicts |
 | weight | number | - | 관계 가중치 (0-1, 기본 1) |
 | agentId | string | - | 에이전트 ID |
-| dryRun | boolean | - | true 시 실제 링크 생성 없이 사이클 여부·소유권 검사 결과만 반환 |
+| dryRun | boolean | - | true 시 실제 링크 생성 없이 소유권 검사 결과와 저장될 관계만 반환 |
 
 fromId 또는 toId가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permission"` 오류가 반환된다.
+
+응답의 `relationType`은 실제로 저장된 관계다. 기존 관계가 더 구체적이면 유지되고, 요청한 값을 `requestedRelationType`에 함께 돌려준다.
+
+### unlink
+
+방향이 정해진 링크 한 건을 해제한다. 파편과 다른 링크는 바꾸지 않고, `link`로 다시 걸 수 있다.
+
+| 이름 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| fromId | string | O | 시작 파편 ID |
+| toId | string | O | 대상 파편 ID |
+| relationType | string | O | 해제할 관계. 현재 관계와 일치할 때만 해제한다 |
+| agentId | string | - | 에이전트 ID |
+| dryRun | boolean | - | true 시 같은 권한 검사를 거쳐 해제 가능 여부만 반환 |
+
+- 해제하면 `unlinked: true`다. 링크가 없으면 `reason: "not_found"`, 관계가 다르면 `reason: "relation_mismatch"`와 `unlinked: false`를 돌려주며 아무것도 바꾸지 않는다.
+- `contradicts`와 닫힌 파편의 `superseded_by`는 `code: "relation_protected"`로 거부한다.
+- 파편의 `linked_to` 값은 바뀌지 않는다. 해제한 링크는 자동 링크 작업이 되살리지 않는다.
 
 ### amend
 

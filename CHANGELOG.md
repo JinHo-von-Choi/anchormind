@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Added
+
+- `unlink` 도구: 방향이 정해진 링크 한 건을 해제한다. 파편과 다른 링크는 바뀌지 않고, `link`로 다시 걸 수 있다. `dryRun`, 그룹 `link` 권한, 감사 이벤트 `memory.unlink`를 지원한다. `contradicts`와 닫힌 파편의 `superseded_by`는 해제할 수 없다.
+
+### Changed
+
+- `link` 응답의 `relationType`은 실제로 저장된 관계다. 기존 관계가 유지되면 요청한 값을 `requestedRelationType`으로 함께 돌려준다.
+- `superseded_by`와 `contradicts`는 다른 관계로 덮이지 않는다. 모순이 해소될 때 `contradicts`가 `superseded_by`로 바뀌는 전환은 유지된다.
+- `forget` dryRun의 `linked_count`는 호출자의 키 범위 안에 있는 활성 링크 수다.
+
+### Fixed
+
+- 사이클 검사가 `linked_to` 대신 활성 방향 링크를 따라간다. 새 링크를 놓치거나 사이클이 없는 쌍을 사이클로 판정하던 문제가 사라진다.
+- 기존 관계가 유지되어 `resolved_by`로 저장되지 않았을 때 error 파편의 중요도를 낮추지 않는다.
+- 관리자 모순 해소와 가져오기가 소프트 삭제된 링크를 되살린다.
+- 의미 중복 병합이 승계자 쪽의 소프트 삭제 행에 막히지 않고 활성 링크를 옮긴다.
+
 ## [7.1.0] - 2026-11-04
 
 ### Added
