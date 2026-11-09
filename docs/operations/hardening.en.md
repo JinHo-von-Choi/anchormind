@@ -52,7 +52,7 @@ Setting `MEMENTO_FRAME_OPTIONS=deny` adds the `X-Frame-Options: DENY` header. Wi
 ## Protections that are always on
 
 - Deny by default: any tool name missing from `TOOL_PERMISSIONS` is rejected, no matter what the permissions say.
-- Per-key isolation: `forget`, `amend`, `link`, and `fragment_history` add `key_id` to their SQL conditions. They cannot touch another key's fragments. "Not found" and "no permission" return the same message, so existence does not leak either.
+- Per-key isolation: `forget`, `amend`, `link`, `unlink`, and `fragment_history` add `key_id` to their SQL conditions. They cannot touch another key's fragments. "Not found" and "no permission" return the same message, so existence does not leak either.
 - No spoofed session data: when a client sends internal fields such as `_keyId` or `_permissions`, the server replaces them with the result of its own authentication.
 - Key state recheck: sessions opened with an API key re-read the key state every `MEMENTO_SESSION_KEY_RECHECK_MS` (default 30000 ms; 0 disables it). If the key has been deactivated or deleted, the session closes and gets 404 `Session not found`. Permission changes apply to open sessions.
 - Admin API permissions: each request is checked against the capability declared for its route. Routes missing from the table are owner-only. Admin accounts sign in with TOTP (required for owner and admin), and session cookies use `SameSite=Strict` with double-submit CSRF checks. Master-key sign-in stays available as an emergency path.

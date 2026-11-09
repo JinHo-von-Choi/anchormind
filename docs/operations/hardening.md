@@ -52,7 +52,7 @@
 ## 항상 적용되는 보호
 
 - 기본 권한 거부: `TOOL_PERMISSIONS`에 없는 도구 이름은 권한 설정과 무관하게 거부한다.
-- 키별 격리: `forget`, `amend`, `link`, `fragment_history`는 SQL 조건에 `key_id`를 넣는다. 다른 키의 파편에 닿지 못하게 하기 위해서다. "없음"과 "권한 없음"에는 같은 메시지를 돌려 존재 여부도 드러내지 않는다.
+- 키별 격리: `forget`, `amend`, `link`, `unlink`, `fragment_history`는 SQL 조건에 `key_id`를 넣는다. 다른 키의 파편에 닿지 못하게 하기 위해서다. "없음"과 "권한 없음"에는 같은 메시지를 돌려 존재 여부도 드러내지 않는다.
 - 세션 정보 위조 차단: 클라이언트가 `_keyId`, `_permissions` 같은 내부 필드를 보내더라도 서버의 인증 결과로 다시 덮어쓴다.
 - 키 상태 재확인: API 키로 연 세션은 `MEMENTO_SESSION_KEY_RECHECK_MS`(기본 30000ms, 0이면 끔)마다 키 상태를 다시 읽는다. 키가 비활성화되거나 삭제되면 세션은 닫히고 404 `Session not found`를 받는다. 권한 변경도 열린 세션에 반영된다.
 - 관리 API 권한: 요청마다 라우트에 지정된 능력을 확인한다. 표에 없는 경로는 owner만 쓴다. 관리자 계정은 TOTP(owner와 admin 필수)로 로그인하고, 세션 쿠키에는 `SameSite=Strict`와 이중 제출 CSRF 확인을 쓴다. 마스터 키 로그인은 비상용으로 남겨 둔다.
