@@ -43,9 +43,9 @@ const norm = sql => String(sql).replace(/\s+/g, " ").trim();
 
 describe("영수증 순수 함수", () => {
   it("emptyPurge는 두 건수가 0이고 addPurge는 항목별로 더한다", () => {
-    assert.deepEqual(emptyPurge(), { case_summaries: 0, audit_fragments: 0, digests: 0 });
+    assert.deepEqual(emptyPurge(), { case_summaries: 0, audit_fragments: 0, digests: 0, derived_revoked: 0 });
     const sum = addPurge(addPurge(emptyPurge(), { case_summaries: 2, audit_fragments: 1 }), { case_summaries: 3 });
-    assert.deepEqual(sum, { case_summaries: 5, audit_fragments: 1, digests: 0 });
+    assert.deepEqual(sum, { case_summaries: 5, audit_fragments: 1, digests: 0, derived_revoked: 0 });
   });
 
   it("forgetReceipt는 purged가 null이면 영수증을 싣지 않는다", () => {
@@ -72,7 +72,7 @@ describe("영수증 순수 함수", () => {
     assert.equal(out.deleted, 2);
     assert.deepEqual(out.removedIds, ["t1", "a1", "t2"]);
     assert.deepEqual(out.auditRows.map(r => r.id), ["a1"]);
-    assert.deepEqual(out.purged, { case_summaries: 4, audit_fragments: 1, digests: 0 });
+    assert.deepEqual(out.purged, { case_summaries: 4, audit_fragments: 1, digests: 0, derived_revoked: 0 });
   });
 
   it("summarizeCascade는 지운 행이 없으면 건수가 모두 0이다", () => {
@@ -128,7 +128,7 @@ describe("FragmentWriter.deleteWithCascade", () => {
     ];
     const out = await new FragmentWriter().deleteWithCascade(["t1"], "agent-x", "k1");
 
-    assert.deepEqual(out, { deleted: 1, purged: { case_summaries: 2, audit_fragments: 1, digests: 0 } });
+    assert.deepEqual(out, { deleted: 1, purged: { case_summaries: 2, audit_fragments: 1, digests: 0, derived_revoked: 0 } });
     assert.match(dbCalls[0].sql, /WITH gone AS/);
     assert.deepEqual(dbCalls[0].params, [DELETED_SUMMARY]);
     assert.equal(dbCalls[0].opts.lock.operation, "delete");
@@ -188,7 +188,7 @@ describe("MemoryRememberer.forget 삭제 연쇄", () => {
 
     assert.equal(res.deleted, 1);
     assert.equal(res.protected, 0);
-    assert.deepEqual(res.purged, { case_summaries: 2, audit_fragments: 1, digests: 0 });
+    assert.deepEqual(res.purged, { case_summaries: 2, audit_fragments: 1, digests: 0, derived_revoked: 0 });
     assert.equal(store.delete.mock.calls.length, 0);
     assert.deepEqual(store.deleteWithCascade.mock.calls[0].arguments, [["f1"], "a1", "k1"]);
     /** 색인은 삭제 계층이 지운 행만 지운다. 지우기 전에 색인을 지우면 삭제가 실패한 행의 색인만 사라진다. */
@@ -220,7 +220,7 @@ describe("MemoryRememberer.forget 삭제 연쇄", () => {
 
     assert.equal(res.deleted, 2);
     assert.equal(res.protected, 2);
-    assert.deepEqual(res.purged, { case_summaries: 2, audit_fragments: 1, digests: 0 });
+    assert.deepEqual(res.purged, { case_summaries: 2, audit_fragments: 1, digests: 0, derived_revoked: 0 });
     assert.deepEqual(store.deleteWithCascade.mock.calls[0].arguments[0], ["f1", "f4"]);
     assert.equal(store.deleteMany.mock.calls.length, 0);
   });

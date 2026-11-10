@@ -89,6 +89,31 @@ describe("M6: import.js", () => {
     assert.ok(mod.usage.includes("--input"),      "--input 옵션이 문서화돼야 함");
   });
 
+  it("줄 반복자는 반복을 시작하기 전의 await 동안 지나간 줄을 잃지 않는다", async () => {
+    const { lineIterator } = await import("../../lib/cli/import.js");
+    const dir  = fs.mkdtempSync(path.join(os.tmpdir(), "memento-lines-"));
+    const file = path.join(dir, "rows.jsonl");
+    fs.writeFileSync(file, Array.from({ length: 500 }, (_, i) => JSON.stringify({ n: i })).join("\n") + "\n");
+    try {
+      const lines = lineIterator(fs.createReadStream(file, { encoding: "utf8" }));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const counted = (async () => {
+        let count = 0;
+        for await (const _line of lines) count++;
+        return count;
+      })();
+      let timer;
+      const stalled = new Promise((resolve) => { timer = setTimeout(() => resolve("stalled"), 2000); });
+      try {
+        assert.equal(await Promise.race([counted, stalled]), 500);
+      } finally {
+        clearTimeout(timer);
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("default export가 함수", async () => {
     const mod = await import("../../lib/cli/import.js");
     assert.strictEqual(typeof mod.default, "function", "default export는 함수여야 함");

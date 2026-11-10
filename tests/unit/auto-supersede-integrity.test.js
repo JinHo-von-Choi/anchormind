@@ -140,7 +140,8 @@ describe("ContradictionDetector 모순 해소", () => {
       { from: "n", to: "o", rel: "contradicts" }
     ]);
     /** 중요도 반감과 닫기는 한 문장이다. 반복 실행해도 아직 닫히지 않은 행에만 한 번 일어난다. */
-    assert.ok(writes.some(w => /SET importance = importance \* 0\.5, valid_to = NOW\(\)/.test(w.sql) && w.params[0] === "o"));
+    assert.ok(writes.some(w => /SET valid_to = NOW\(\), importance = importance \* 0\.5/.test(w.sql)
+      && Array.isArray(w.params[0]) && w.params[0][0] === "o" && w.params[2] === "contradiction_resolution"));
     assert.equal(audits.length, 1);
     assert.equal(audits[0].topic, CONTRADICTION_AUDIT_TOPIC);
   });

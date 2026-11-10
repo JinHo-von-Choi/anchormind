@@ -1,0 +1,12 @@
+{"id":"deploy-host","arg":"deploy.host","query":"배포 대상 호스트가 어디야?","template":"배포 대상 호스트는 {v}다","updates":["web-alpha","web-bravo","web-charlie"],"keywords":["배포","호스트"]}
+{"id":"auth-port","arg":"auth-service.port","query":"인증 서비스 포트 번호","template":"인증 서비스는 포트 {v}에서 동작한다","updates":["8080","15000","15443"],"keywords":["인증","포트"]}
+{"id":"db-url","arg":"db.primary","query":"운영 데이터베이스 주 서버 주소","template":"운영 데이터베이스 주 서버는 {v}이다","updates":["pg-east-1","pg-west-2","pg-north-3"],"keywords":["데이터베이스","주 서버"]}
+{"id":"editor","arg":"user.editor","query":"사용자가 쓰는 편집기","template":"사용자는 편집기로 {v}를 쓴다","updates":["vim","emacs","helix"],"keywords":["편집기"]}
+{"id":"release-branch","arg":"release.branch","query":"release branch name","template":"The release branch is {v}","updates":["release-2026-09","release-2026-10","release-2026-11"],"keywords":["release","branch"]}
+{"id":"node-version","arg":"runtime.node","query":"운영 서버 Node 버전","template":"운영 서버는 Node {v}로 실행한다","updates":["20.11","22.4","24.2"],"keywords":["Node","버전"]}
+{"id":"oncall","arg":"team.oncall","query":"이번 주 장애 담당자","template":"이번 주 장애 담당자는 {v}이다","updates":["담당자 갑","담당자 을","담당자 병"],"keywords":["장애","담당자"]}
+{"id":"cache-ttl","arg":"cache.ttl","query":"캐시 만료 시간 설정","template":"캐시 만료 시간은 {v}초로 설정한다","updates":["300","900","1800"],"keywords":["캐시","만료"]}
+{"id":"log-level","arg":"service.log_level","query":"service log level","template":"Service log level is set to {v}","updates":["debug","warn","error"],"keywords":["log","level"]}
+{"id":"backup-time","arg":"backup.schedule","query":"백업 실행 시각","template":"일일 백업은 {v}에 실행한다","updates":["새벽 2시","새벽 4시","오전 6시"],"keywords":["백업","시각"]}
+{"id":"embed-model","arg":"embedding.model","query":"임베딩 모델 이름","template":"임베딩 모델은 {v}를 쓴다","updates":["bge-small","bge-m3","e5-large"],"keywords":["임베딩","모델"]}
+{"id":"region","arg":"infra.region","query":"which cloud region hosts production","template":"Production runs in region {v}","updates":["ap-northeast-1","ap-northeast-2","us-west-2"],"keywords":["region","production"]}

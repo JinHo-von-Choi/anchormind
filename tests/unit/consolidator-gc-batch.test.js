@@ -87,8 +87,8 @@ describe("ConsolidatorGC.compressOldFragments 배치 병렬화", () => {
       "superseded_by 링크 생성 유지 필수"
     );
     assert.ok(
-      compressMethod.includes("valid_to = NOW()"),
-      "soft delete valid_to 설정 유지 필수"
+      compressMethod.includes("closeWithLogSql(") && compressMethod.includes('"compress_old_fragments"'),
+      "soft delete(valid_to 설정)와 변경 기록은 closeWithLogSql로 한다"
     );
     assert.ok(
       compressMethod.includes("access_count"),

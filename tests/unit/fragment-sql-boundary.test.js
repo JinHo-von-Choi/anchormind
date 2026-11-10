@@ -48,6 +48,9 @@ const ALLOWED = {
   "memory/consolidate/FragmentGC.js": 11,
   "memory/consolidate/RetentionGC.js": 2, // 보존 기간 삭제: 정책별 후보 CTE와 id 순 잠금 문장. FragmentGC의 만료 삭제와 같은 청크 규칙을 쓴다
   "memory/consolidate/MemoryConsolidator.js": 13,
+  "memory/consolidate/ChangeLog.js": 2, // 정리 단계의 닫기와 변경 기록을 한 문장(CTE)으로 만드는 공용 조각. 변경과 기록이 갈라지지 않게 데이터 계층 메서드가 아니라 SQL 조각으로 둔다
+  "memory/consolidate/SessionLessons.js": 2, // 세션 사이 정리의 사례 선별(이미 제안한 사례 제외 EXISTS)과 사건 근거 파편의 등급을 사건 조회와 한 문장으로 읽는다
+  "memory/consolidate/ConsolidationRollback.js": 4, // 주기 되돌리기는 다시 열기, 생성 파편 삭제, 앵커 해제, 존재 확인을 변경 기록 잠금과 같은 트랜잭션 클라이언트로 한다
   "memory/consolidate/MorphemeBackfill.js": 2,
   "memory/consolidate/SemanticDedup.js": 6, // topic·묶음 선별과 묶음 벡터 적재, 병합은 잠금, 폐기, 합산을 한 트랜잭션 클라이언트로 쓴다
   "memory/consolidate/UtilityBaseline.js": 1,
@@ -56,6 +59,8 @@ const ALLOWED = {
   "memory/embedding/SegmentEmbeddingWorker.js": 3, // 구간 생성 대상 한 건 조회, 저장 트랜잭션의 부모 행 잠금과 content_hash 재확인(FOR KEY SHARE, 낡은 작업이 쓰지 못하게), 최근 생성분 중 구간이 없는 파편 복구 스캔
   "memory/embedding/SyntheticQueryWorker.js": 4, // 생성 결과 INSERT도 원문 content_hash를 같은 문장에서 대조해 오래된 파생 자료 저장을 막는다
   "memory/link/ContradictionDetector.js": 12,
+  "memory/write/Lineage.js": 3, // 파생 파편 근거 상태 표시(계보 부분 질의를 건 갱신), 원본 삭제 여부 확인, 같은 키 원본 후보 조회. 계보 표와 한 문장으로 묶어야 해서 데이터 계층 객체를 거치지 않는다
+  "memory/write/Slot.js": 1, // 같은 범위의 같은 slot 이전 값 조회. 새 파편 행과 같은 키, workspace, agent를 자기 조인으로 비교한다
   "memory/link/GraphLinker.js": 6,
   "memory/link/LinkStore.js": 3,
   "memory/link/TemporalLinker.js": 1,
@@ -66,7 +71,7 @@ const ALLOWED = {
   "memory/CaseEventStore.js": 1,
   "memory/read/ContextBuilder.js": 1,
   "memory/read/FragmentReader.js": 17,
-  "memory/read/FragmentStateLoader.js": 1, // recall 근거 판정이 이미 범위를 통과한 결과 파편 id의 저장 어휘 토큰을 한 번에 읽는다(본문 재토큰화 대신) // recall 예산 선택 토큰, 모순 감사 등급, Hot Cache 본문·검토 버전 재검증
+  "memory/read/FragmentStateLoader.js": 2, // recall 근거 판정이 이미 범위를 통과한 결과 파편 id의 저장 어휘 토큰을 한 번에 읽는다(본문 재토큰화 대신). 같은 결과 id의 근거 상태(support_state)와 계보 원본 id를 한 문장으로 읽는다 // recall 예산 선택 토큰, 모순 감사 등급, Hot Cache 본문·검토 버전 재검증
   "memory/read/HistoryReconstructor.js": 1,
   "memory/read/GraphNeighborSearch.js": 2, // 그래프 이웃의 양방향 링크마다 파편을 기본 키로 한 번 조회한다. 파편 조건을 링크 조인에 섞으면 플래너가 키 전체 파편을 훑는 해시 조인을 고르므로 OFFSET 0 하위 질의로 분리한다
   "memory/read/LinkedFragmentLoader.js": 1, // linked 미리보기는 정렬된 링크 순서대로 파편을 하나씩 조회해 조건을 통과한 3건에서 멈춘다. 링크와 파편을 한 번에 조인해 정렬하면 시드의 링크 수만큼 파편을 조회한다
@@ -87,7 +92,7 @@ const ALLOWED = {
   "memory/write/ConflictResolver.js": 2,
   "memory/write/DedupScope.js": 1, // 중복 판정 사전 조회. insert, amend, batch_remember가 같은 질의와 같은 범위 판정을 쓴다
   "memory/write/DeleteCleanup.js": 6, // 모든 삭제 경로가 같이 쓰는 삭제 뒤 정리(다른 파편 linked_to의 참조 제거)와 정리 주기의 죽은 참조 정리(대상 조회, 존재 확인, 갱신). FragmentWriter의 보조 모듈이다
-  "memory/write/ForgetCascade.js": 4, // forget 삭제 연쇄의 잠금 문장(대상과 linked_to 대조 대상)과 삭제 문장(실행은 FragmentWriter.deleteWithCascade), 고아 요약 정리의 원본 파편 존재 조회
+  "memory/write/ForgetCascade.js": 5, // forget 삭제 연쇄의 잠금 문장(대상과 linked_to 대조 대상)과 삭제 문장(실행은 FragmentWriter.deleteWithCascade), 고아 요약 정리의 원본 파편 존재 조회. 지운 원본의 파생 파편 revoked 표시는 삭제와 같은 문장의 CTE라 따로 두지 않는다
   "memory/write/FragmentWriter.js": 24, // 가져오기의 id 충돌 판정은 같은 id 행의 키 소속을 조회한다, archive 전에 현재 파편을 FOR UPDATE로 재조회, 접근 기록 갱신 3경로와 linked_to 정리 2경로는 id 순 잠금 CTE와 갱신 문장을 함께 쓴다
   "memory/write/RememberPostProcessor.js": 1,
   "memory/write/rowLock.js": 2, // 여러 행 쓰기 경로가 공유하는 id 순 잠금 문장과 잠근 행 삭제 문장

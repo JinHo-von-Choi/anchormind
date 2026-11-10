@@ -78,27 +78,33 @@ afterEach(() => {
 });
 
 describe("주입 제외 술어", () => {
-  it("앵커 조회 조각은 켜지면 등급 술어와 origin 열을 덧붙이고 꺼지면 비어 있다", () => {
-    assert.deepEqual(anchorProvenanceSql(false), { select: "", filter: "" });
+  it("앵커 조회 조각은 켜지면 등급 술어와 origin 열을 덧붙이고, 근거 상태 술어는 스위치와 무관하게 붙인다", () => {
+    assert.deepEqual(anchorProvenanceSql(false), { select: "", filter: "AND (support_state IS NULL OR support_state NOT IN ('revoked', 'stale'))" });
     assert.deepEqual(anchorProvenanceSql(true), {
       select: ", origin",
-      filter: "AND (trust_tier IS NULL OR trust_tier >= 2)"
+      filter: "AND (trust_tier IS NULL OR trust_tier >= 2) AND (support_state IS NULL OR support_state NOT IN ('revoked', 'stale'))"
     });
   });
 
   it("core 후보에서 등급 1 이하와 조회 결과에 없는 파편을 뺀다", () => {
     const map = new Map([
       ["error", [{ id: "t0" }, { id: "t1" }, { id: "t2" }]],
-      ["fact", [{ id: "t3" }, { id: "unknown" }, { id: "null" }]]
+      ["fact", [{ id: "t3" }, { id: "unknown" }, { id: "null" }, { id: "revoked" }, { id: "stale" }, { id: "missing-parent" }]]
     ]);
     const provenance = new Map([
       ["t0", { trustTier: 0 }], ["t1", { trustTier: 1 }], ["t2", { trustTier: 2 }],
-      ["t3", { trustTier: 3 }], ["null", { trustTier: null }]
+      ["t3", { trustTier: 3 }], ["null", { trustTier: null }],
+      ["revoked", { trustTier: 2, supportState: "revoked" }], ["stale", { trustTier: 3, supportState: "stale" }],
+      ["missing-parent", { trustTier: 2, supportState: "parent_missing" }]
     ]);
     const { typeFragMap: kept, excluded } = dropLowTrust(map, provenance);
     assert.deepEqual(kept.get("error").map(f => f.id), ["t2"]);
-    assert.deepEqual(kept.get("fact").map(f => f.id), ["t3", "null"]);
-    assert.deepEqual(excluded, { lowTrust: 2, missing: 1 });
+    assert.deepEqual(kept.get("fact").map(f => f.id), ["t3", "null", "missing-parent"]);
+    assert.deepEqual(excluded, { lowTrust: 2, missing: 1, unsupported: 2 });
+
+    const off = dropLowTrust(map, provenance, { trust: false });
+    assert.deepEqual(off.typeFragMap.get("error").map(f => f.id), ["t0", "t1", "t2"], "출처 스위치가 꺼지면 등급은 보지 않는다");
+    assert.deepEqual(off.typeFragMap.get("fact").map(f => f.id), ["t3", "unknown", "null", "missing-parent"]);
     assert.deepEqual(map.get("error").map(f => f.id), ["t0", "t1", "t2"], "입력 맵은 그대로다");
   });
 
@@ -106,7 +112,7 @@ describe("주입 제외 술어", () => {
     const map = new Map([["error", [{ id: "a" }, { id: "b" }]]]);
     const { typeFragMap: kept, excluded } = dropLowTrust(map, new Map());
     assert.deepEqual(kept.get("error"), []);
-    assert.deepEqual(excluded, { lowTrust: 0, missing: 2 });
+    assert.deepEqual(excluded, { lowTrust: 0, missing: 2, unsupported: 0 });
   });
 
   it("주석 필드에 출처를 더한다", () => {
@@ -185,7 +191,7 @@ describe("ContextBuilder 주입 제외", () => {
 
   it("등급 조회에 성공하면 coreSelection은 partial이 아니고 뺀 수를 싣는다", async () => {
     const result = await makeBuilder([]).build({ types: ["error"] });
-    assert.deepEqual(result._coreSelection, { partial: false, loadStatus: { trust: true }, excluded: { lowTrust: 1, missing: 0 } });
+    assert.deepEqual(result._coreSelection, { partial: false, loadStatus: { trust: true }, excluded: { lowTrust: 1, missing: 0, unsupported: 0 } });
   });
 
   it("등급 조회가 실패하면 core 후보를 모두 빼고 partial과 지표를 남긴다", async () => {
@@ -194,7 +200,7 @@ describe("ContextBuilder 주입 제외", () => {
     assert.ok(!result.injectionText.includes("ok body"), result.injectionText);
     assert.ok(!result.injectionText.includes("low body"), result.injectionText);
     assert.ok(result.injectionText.includes("anchor body"), "앵커는 SQL 술어로 거르므로 그대로다");
-    assert.deepEqual(result._coreSelection, { partial: true, loadStatus: { trust: false }, excluded: { lowTrust: 0, missing: 2 } });
+    assert.deepEqual(result._coreSelection, { partial: true, loadStatus: { trust: false }, excluded: { lowTrust: 0, missing: 2, unsupported: 0 } });
     assert.equal(await counterValue("lookup_failed"), before + 2);
   });
 
@@ -229,12 +235,12 @@ describe("ContextBuilder 주입 제외", () => {
     assert.ok(JSON.stringify(result.core).includes("ok body"));
   });
 
-  it("꺼지면 출처 조회와 등급 술어가 없고 두 파편이 모두 주입된다", async () => {
+  it("꺼지면 등급을 읽지 않고 두 파편이 모두 주입된다. 근거 상태 조회만 한 번 한다", async () => {
     process.env.MEMENTO_PROVENANCE = "off";
     const queries = [];
     const result  = await makeBuilder(queries).build({ types: ["error"] });
     for (const sql of queries) assert.doesNotMatch(sql, /trust_tier|\borigin\b/);
-    assert.equal(queries.filter(isSourceSql).length, 0);
+    assert.equal(queries.filter(isSourceSql).length, 1);
     assert.ok(result.injectionText.includes("- low body (2026-09-20, observed)"), result.injectionText);
     assert.ok(result.injectionText.includes("- ok body (2026-09-21, observed)"), result.injectionText);
     assert.ok(!("_coreSelection" in result));

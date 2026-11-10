@@ -49,6 +49,8 @@ const ALLOWED = {
   "memory/read/quotaQueries.js": 2, // 할당량 회계: 키 자신의 파편 수, 키가 속한 그룹 멤버십 행
   "memory/signals/SearchParamAdaptor.js": 1,
   "memory/write/FragmentWriter.js": 4,
+  "memory/consolidate/SessionLessons.js": 2, // 사례의 키와 사건, 이미 제안한 교훈의 키를 같은 키로 비교한다(ce.key_id, f.key_id). 정리 주기가 사례 단위로 도는 내부 질의라 요청 키 바인딩이 아니다
+  "memory/write/Slot.js": 1, // 같은 slot의 이전 값을 새 파편 행과 자기 조인으로 고른다(o.key_id IS NOT DISTINCT FROM n.key_id). 요청 키를 바인딩하는 격리 조건이 아니라 두 행의 같은 키 비교다
   "symbolic/ClaimStore.js": 4,
 };
 

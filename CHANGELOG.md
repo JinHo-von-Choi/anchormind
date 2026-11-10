@@ -2,9 +2,30 @@
 
 ## [Unreleased]
 
+### Added
+
+- 파생 파편의 계보(`fragment_lineage`, migration-081). 분할 자식과 reflect 교훈이 원본을 기록한다. 원본을 forget하거나 거절(`rejected`)하거나 사용자가 대체(`supersedes`, slot)하면 파생 파편은 `support_state=revoked`, 원본 본문을 amend하면 `stale`이 된다. 두 상태의 파편은 지우지 않지만 context의 모든 구획에서 빠지고, recall에는 `support_state`, `support_reason`, `derived_from`과 함께 나온다. 분할로 원본이 닫히는 것과 만료 삭제는 전파하지 않는다. forget 응답의 `purged.derived_revoked`, amend 응답의 `derived_marked`가 상태를 바꾼 수다.
+- reflect `lessons` 항목의 선택 필드 `evidenceIds`. 같은 키의 근거 파편을 교훈의 계보로 남긴다.
+- remember와 recall의 `slot`("주체.속성"). 같은 키, workspace, agent의 같은 slot에 새 값이 오면 이전 값을 자동으로 대체하고(`slot_superseded`), recall `slot`은 그 자리의 현재 값을 돌려준다.
+- `MEMENTO_DIRECTIVE_ORIGIN_GATE`(off, warn, enforce. 기본 warn). origin이 `tool_output`, `agent_inferred`, `consolidation`, `import`인 preference와 procedure를 warn은 context CORE와 Learning에 넣고 세며, enforce는 빼고 같은 출처의 새 명령형 쓰기("항상", "반드시", always, must 등)를 검토 대기(`low_authority_directive`)로 둔다. 검토 승인됐거나 `quality_verified`인 파편과 앵커는 대상이 아니다.
+- 정리 주기의 변경 기록(`consolidation_changes`, migration-082)과 되돌리기. 주기마다 `cycleId`가 생기고, 닫기(중복 병합, 의미 중복 정리, 압축, 모순 해소, 대체 탐지, 분할 원본), 분할 자식 생성, 앵커 자동 승격이 같은 SQL 문장에서 기록된다. 관리 API `GET /consolidation/cycles`가 최근 주기를, `POST /consolidation/cycles/:id/rollback`이 한 주기를 되돌린다. 기록은 30일 보존한다.
+- 세션 사이 정리 단계 `session_lessons`와 스위치 `MEMENTO_SESSION_LESSONS`(기본 off). 켜면 정리 주기가 최근 24시간 안에 검증 결과, 마일스톤, 종결까지 간 사례의 사건 기록을 LLM 체인에 보내 교훈을 제안받는다. 제안은 origin `consolidation`, 검토 대기(`consolidation_proposal`)로만 저장되고 관리 API `/review`에서 승인해야 context에 주입된다. 근거 파편은 계보로, 생성은 주기 변경 기록으로 남는다.
+- `memento-mcp benchmark --mode action`. 도구 인자가 여러 번 갱신된 뒤 recall 1순위로 인자를 채웠을 때 최신 값(correct), 이전 값(stale), 미발견(miss)을 slot 방식과 일반 검색 방식별로 세고 평균 반환 토큰과 지연을 낸다. 리더 모델을 부르지 않는다. 골드셋은 `tests/fixtures/action-goldset.jsonl`이다.
+- `scripts/backfill-fragment-lineage.js`(기존 분할 자식의 계보, 원본 없는 자식의 근거 상태)와 `scripts/backfill-learning-source.js`(자동 회고 학습 항목의 source). 둘 다 기본은 미리보기이고 `--execute`로 반영한다.
+
 ### Changed
 
 - 라이선스가 Apache 2.0에서 AGPL-3.0으로 바뀐다. 소스를 공개하지 않고 쓰려면 상용 라이선스가 필요하다. 7.3.0 이하 버전에는 계속 Apache 2.0이 적용된다.
+- 내보내기 형식 버전 2가 출처 열(`origin`, `observed_client`, `trust_tier`)과 검토 열(`review_state`, `review_reason`)을 싣는다. 가져오기는 파일의 origin을 이어받되 등급을 올리지 않고, 검토 대기 행은 검토 대기로 들인다. 되살리기가 아닌 가져오기는 remember와 같은 검토 규칙을 판정한다. 출처 열이 없는 파일은 전처럼 `import`(등급 2)로 들어온다.
+- 중복 병합(`merge_duplicates`)이 중복 파편을 지우지 않고 닫고 승계자로 `superseded_by` 링크를 남긴다. 열린 파편끼리만 묶는다.
+- 정리 주기에 `session_lessons`, `gc_consolidation_changes` 단계가 더해져 28단계가 된다.
+
+### Fixed
+
+- `memento-mcp import --key`가 파일이나 표준 입력에서 아무것도 가져오지 않고 출력 없이 종료 코드 0으로 끝났다.
+- 등급 1 파편이 내보냈다가 가져오면 등급 2가 되어 context 주입 대상이 됐다.
+- context의 Learning과 Working 구획이 등급 1 파편을 주입했다. Redis 작업 기억 항목은 검토 대기 파편도 주입했다. 두 구획이 CORE, ANCHOR와 같은 출처 판정을 한다.
+- 자동 회고의 학습 항목이 `LEARNING:` 접두어를 본문에 둔 채 세션 source로 저장되어 context의 Learning 구획에 나오지 않았다. 이제 저장 전에 접두어를 떼고 source를 `learning_extraction`으로 둔다.
 
 ## [7.3.0] - 2026-11-09
 

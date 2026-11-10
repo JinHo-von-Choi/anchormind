@@ -32,6 +32,7 @@ mock.module("../../lib/config.js", {
     writeGateEnabled       : () => true,
     provenanceEnabled      : () => true,
     reviewQueueEnabled     : () => true,
+    directiveOriginGateMode: () => "warn",
     sensitiveScanMode      : () => "mask",
     anchorPermissionMode   : () => "warn",
     anchorLimitPerKey      : () => 1000,

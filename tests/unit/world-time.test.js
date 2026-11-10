@@ -194,11 +194,14 @@ describe("annotateFragmentState", () => {
   });
 
   it("includeHistory가 아니면 이전 값을 조회하지 않는다", async () => {
-    let queries = 0;
+    const queries = [];
     const out = await annotateFragmentState([{ id: "a" }], {}, {
-      getPool: () => ({ query: async () => { queries++; return { rows: [] }; } })
+      getPool: () => ({ query: async (sql) => { queries.push(sql); return { rows: [] }; } })
     });
-    assert.equal(queries, 1);
+    /** 충돌 상대와 근거 상태(support_state)만 읽고, 이전 값(superseded_by 체인)은 읽지 않는다 */
+    assert.equal(queries.length, 2);
+    assert.ok(queries.some(sql => /support_state/.test(sql)));
+    assert.ok(!queries.some(sql => /'superseded_by'/.test(sql)));
     assert.deepEqual(out, [{ id: "a" }]);
   });
 });
