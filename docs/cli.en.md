@@ -774,6 +774,13 @@ Before seeding, one line with the target DB (host, port, database) is written to
 
 `--synthetic` generates synthetic reverse queries for the seeded fragments before evaluating, so the augmentation can be measured as a controlled variable. It costs one LLM call per fragment and is therefore off by default.
 
+`--mode action` is an action benchmark. After one tool argument (for example the deploy target host) is updated several times, the argument is filled from the top recall result, and the run counts correct (latest value), stale (an older value) and miss. There are two arms: `slot` stores with the remember `slot` and finds with the recall `slot`; `plain` stores without a slot and finds with the query text and keywords. Each arm reports accuracy, stale rate, mean returned tokens of one recall, and latency p50 and p95. No reader model is called, so results are deterministic and free. The default goldset is `tests/fixtures/action-goldset.jsonl` (entries `{id, arg, query, template, updates[], keywords?}`; updates go into `{v}` in order and the last value is the answer); an entry where one value is part of another is rejected as ambiguous. Seeding uses agentId `action-benchmark`, workspace `__action_benchmark__` and the inactive key `action-benchmark-key`, cleaned at the start and end of each arm.
+
+```bash
+node bin/memento.js benchmark --mode action
+node bin/memento.js benchmark --mode action --json
+```
+
 Exits with code 2 when `--baseline` comparison detects a regression. Tolerances are 2pp for recall and 15% for p95 latency. Repeated evaluations of one seeding show zero spread, but a fresh seeding moves the number by about 1pp, so a tighter tolerance would fire on noise.
 
 | Mode | Candidate set | Reproducible | Use |

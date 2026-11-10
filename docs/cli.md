@@ -773,6 +773,13 @@ node bin/memento.js benchmark --baseline scripts/baseline-recall.json
 
 `--synthetic`은 적재한 파편에 합성 역질의를 생성한 뒤 평가한다. 역질의 증강의 효과를 통제 변수로 재려는 목적이며, 파편당 LLM 호출이 발생하므로 기본 실행에는 포함되지 않는다.
 
+`--mode action`은 행동 기반 평가다. 도구 인자 하나(예: 배포 대상 호스트)가 여러 번 갱신된 뒤 recall의 1순위 파편으로 인자를 채운다고 보고, 최신 값이면 correct, 이전 값이면 stale, 둘 다 없으면 miss로 센다. 방식은 두 가지다. `slot`은 remember의 `slot`으로 저장하고 recall의 `slot`으로 찾고, `plain`은 slot 없이 저장하고 질의문(text)과 keywords로 찾는다. 방식마다 정답률, 이전 값 비율, recall 한 번의 평균 반환 토큰, 지연 p50과 p95를 낸다. 리더 모델을 부르지 않아 결과가 결정적이고 비용이 들지 않는다. 기본 골드셋은 `tests/fixtures/action-goldset.jsonl`(항목 `{id, arg, query, template, updates[], keywords?}`, template의 `{v}`에 updates를 차례로 넣고 마지막 값이 정답)이고, 한 값이 다른 값의 일부인 항목은 판정이 모호해 거부한다. 격리 agentId `action-benchmark`, workspace `__action_benchmark__`, 비활성 키 `action-benchmark-key`로 적재하고 방식마다 시작과 끝에 회수한다.
+
+```bash
+node bin/memento.js benchmark --mode action
+node bin/memento.js benchmark --mode action --json
+```
+
 `--baseline`으로 비교했을 때 회귀가 감지되면 종료 코드 2를 반환한다. Recall 하락 허용치는 2pp, 지연 p95 증가 허용치는 15%다. 같은 적재분 안에서는 회차 간 편차가 0이지만 적재를 다시 하면 1pp 안팎으로 움직이므로, 허용치를 그보다 좁게 잡으면 게이트가 잡음에 반응한다.
 
 측정 모드는 두 가지다.

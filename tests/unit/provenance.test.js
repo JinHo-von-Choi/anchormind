@@ -18,6 +18,7 @@ import {
   DEFAULT_TRUST_TIER,
   MIN_INJECTABLE_TIER,
   CLAIM_ENTRIES,
+  importedProvenance,
   isOrigin,
   originLabel,
   claimedOrigin,
@@ -252,5 +253,30 @@ describe("INSERT 조각", () => {
 
   it("force이면 출처 값이 없어도 NULL 세 개를 싣는다", () => {
     assert.deepEqual(provenanceInsertParts({}, 5, { force: true }).values, [null, null, null]);
+  });
+});
+
+describe("가져오기 출처", () => {
+  it("파일의 등급 1 출처는 가져온 뒤에도 등급 1이다", () => {
+    const p = importedProvenance({ entry: "cli_import", fileOrigin: "external_content", fileTier: 1 });
+    assert.equal(p.origin, "external_content");
+    assert.equal(p.trust_tier, 1);
+    assert.equal(p.observed_client, "internal/cli_import");
+  });
+
+  it("등급 없이 origin만 있으면 그 출처의 주장 등급으로 낮춘다", () => {
+    assert.equal(importedProvenance({ entry: "cli_import", fileOrigin: "external_content" }).trust_tier, 1);
+  });
+
+  it("파일 값으로 등급을 올리지 않는다", () => {
+    const p = importedProvenance({ entry: "admin_import", fileOrigin: "user_stated", fileTier: 3, trustCap: 3 });
+    assert.equal(p.origin, "user_stated");
+    assert.equal(p.trust_tier, 2);
+  });
+
+  it("출처 열이 없는 옛 파일 행은 import 등급 2다", () => {
+    const p = importedProvenance({ entry: "cli_import", fileOrigin: "unknown", fileTier: null });
+    assert.equal(p.origin, "import");
+    assert.equal(p.trust_tier, 2);
   });
 });

@@ -112,6 +112,17 @@ describe("비GET 관리 라우트의 감사 행위 선언", () => {
     }
   });
 
+  it("admin-consolidation 라우트 표의 비GET 항목마다 되돌리기 행위 선언이 있다", () => {
+    const routes = keyRoutes("admin-consolidation").filter(r => MUTATING.includes(r.method));
+    assert.equal(routes.length, 1);
+    for (const r of routes) {
+      const found = findAdminAuditAction(r.method, r.sample);
+      assert.ok(found, `${r.method} ${r.sample} 선언 없음`);
+      assert.equal(found.entry.module, "admin-consolidation", `${r.method} ${r.sample}`);
+      assert.equal(found.entry.action, "consolidation.rollback");
+    }
+  });
+
   for (const name of ["admin-memory", "admin-sessions", "admin-export", "admin-routes", "admin-audit", "admin-user-auth"]) {
     it(`${name}의 비GET 메서드 비교 수와 선언 수가 메서드별로 같다`, () => {
       assert.deepEqual(methodComparisons(name), declaredMethods(name));
@@ -120,7 +131,7 @@ describe("비GET 관리 라우트의 감사 행위 선언", () => {
 
   it("비GET 라우트를 판정하는 관리 모듈은 모두 위 검사 대상이다", () => {
     const covered = new Set(["admin-keys", "admin-memory", "admin-sessions", "admin-export", "admin-routes", "admin-audit",
-      "admin-users", "admin-user-auth", "admin-review", "admin-key-policies"]);
+      "admin-users", "admin-user-auth", "admin-review", "admin-key-policies", "admin-consolidation"]);
     for (const file of readdirSync(ADMIN_DIR).filter(f => f.endsWith(".js") && f !== "admin-audit-actions.js" && f !== "admin-route-table.js")) {
       const name = file.replace(/\.js$/, "");
       const text = source(name);

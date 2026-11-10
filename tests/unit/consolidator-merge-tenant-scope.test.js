@@ -72,12 +72,13 @@ describe("_mergeDuplicates — tenant/workspace scope 회귀 가드", () => {
     }
   });
 
-  it("store.delete 호출에 groupKey(keyId)가 세 번째 인자로 전달된다", () => {
-    assert.match(
-      body,
-      /store\.delete\s*\(\s*rid\s*,\s*"system"\s*,\s*groupKey\s*\)/,
-      'store.delete(rid, "system", groupKey) 형태여야 한다'
-    );
+  it("중복은 지우지 않고 그룹 동질성 확인 뒤에 닫으며 변경 기록을 남긴다", () => {
+    assert.doesNotMatch(body, /store\.delete\s*\(/, "중복 병합은 파편을 지우지 않는다");
+    const check = body.search(/scope[_\s]*mismatch/i);
+    const close = body.indexOf("closeWithLogSql(");
+    assert.ok(check >= 0 && close > check, "닫기는 그룹 동질성 확인 뒤에 한다");
+    assert.match(body, /\[\[rid\], currentCycleId\(\), "merge_duplicates", \[keepId\]\]/, "닫은 파편과 승계자를 기록한다");
+    assert.match(body, /WHERE\s+key_id\s+IS\s+NOT\s+NULL\s+AND\s+valid_to\s+IS\s+NULL/i, "열린 중복만 고른다");
   });
 
   it("기존 cross-tenant 병합 SQL이 잔존하지 않는다", () => {

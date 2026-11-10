@@ -242,7 +242,7 @@ describe("삭제 연쇄의 묶음 요약", () => {
   it("지운 파편을 출처로 가진 요약을 같은 문장에서 지우고 수를 센다", () => {
     assert.match(CASCADE_DELETE_SQL, /DELETE FROM agent_memory\.fragment_digest WHERE source_ids && \$1::text\[\]/);
     const out = summarizeCascade(["a"], [{ id: "a", scrubbed: 1, digests: 2 }]);
-    assert.deepEqual(out.purged, { case_summaries: 1, audit_fragments: 0, digests: 2 });
-    assert.deepEqual(emptyPurge(), { case_summaries: 0, audit_fragments: 0, digests: 0 });
+    assert.deepEqual(out.purged, { case_summaries: 1, audit_fragments: 0, digests: 2, derived_revoked: 0 });
+    assert.deepEqual(emptyPurge(), { case_summaries: 0, audit_fragments: 0, digests: 0, derived_revoked: 0 });
   });
 });

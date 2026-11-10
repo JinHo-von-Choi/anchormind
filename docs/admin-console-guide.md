@@ -16,7 +16,7 @@ https://{도메인}/v1/internal/model/nothing/
 
 ## Admin UI 아키텍처
 
-Admin UI는 얇은 진입점 + 25개 ESM 모듈로 구성된다. Consolidator는 22개 stage(stageDefs 배열)를 순차 실행하며, 진행률 표시는 `stageDefs.length`(22)를 분모로 계산된다.
+Admin UI는 얇은 진입점 + 25개 ESM 모듈로 구성된다. Consolidator는 28개 stage(stageDefs 배열)를 순차 실행하며, 진행률 표시는 `stageDefs.length`(28)를 분모로 계산된다.
 
 ```
 assets/admin/

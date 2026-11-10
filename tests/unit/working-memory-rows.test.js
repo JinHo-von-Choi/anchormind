@@ -319,7 +319,8 @@ describe("순수 함수", () => {
       key_id: undefined, importance: null, estimated_tokens: 0, created_at: new Date(T0)
     });
     assert.deepEqual(Object.keys(item).sort(),
-      ["added_at", "agent_id", "content", "estimated_tokens", "id", "importance", "key_id", "topic", "type", "workspace"]);
+      ["added_at", "agent_id", "content", "estimated_tokens", "id", "importance", "key_id", "origin", "review_state",
+        "topic", "trust_tier", "type", "workspace"]);
     assert.equal(item.workspace, null);
     assert.equal(item.key_id, null);
     assert.equal(item.importance, 0.5);

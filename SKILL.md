@@ -887,7 +887,8 @@ RBAC default-deny: 등록되지 않은 도구 이름은 `Unknown tool: <name>`(-
 | linkedTo | string[] | - | 연결할 기존 파편 ID 목록 |
 | scope | string | - | permanent(기본) 또는 session. session 응답의 `working_memory`가 저장 경로(`redis`, Redis가 준비되지 않아 PostgreSQL 작업 기억 행에 저장한 `postgres-fallback`, 저장하지 못한 `none`)를 알린다. `none`이면 permanent로 다시 저장한다 |
 | isAnchor | boolean | - | true면 영구 보존. 핵심 규칙/정책용. master 키와 권한 목록에 `anchor`가 있는 키만 지정할 수 있고, 권한이 없으면 `MEMENTO_ANCHOR_PERMISSION`(기본 `warn`)에 따라 일반 파편으로 저장하고 경고하거나 거부한다. |
-| supersedes | string[] | - | 대체할 기존 파편 ID. 지정 파편은 만료 처리. |
+| supersedes | string[] | - | 대체할 기존 파편 ID. 지정 파편은 만료 처리. 지정 파편에서 나온 분할 자식과 교훈은 `support_state=revoked`가 되어 context 주입에서 빠진다. |
+| slot | string | - | 값이 바뀌는 사실의 자리("주체.속성", 예: `auth-service.port`). 같은 키, workspace, agent의 같은 slot에 먼저 저장된 열린 파편을 자동으로 대체하고 응답 `slot_superseded`로 알린다. recall의 `slot`으로 현재 값을 찾는다. |
 | contextSummary | string | - | 맥락/배경 요약 (1-2문장) |
 | sessionId | string | - | 현재 세션 ID |
 | agentId | string | - | 에이전트 ID (에이전트 구분용) |
@@ -943,6 +944,7 @@ async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기�
 | linkRelationType | string | - | 연결 관계 필터 (related, caused_by, resolved_by, part_of, contradicts). 미지정 시 `linked` 미리보기는 resolved_by → caused_by → related 순 |
 | threshold | number | - | similarity 임계값 0~1 |
 | includeSuperseded | boolean | - | 만료 파편 포함. 기본 false. |
+| slot | string | - | remember의 slot과 같은 이름. 그 자리의 현재 값을 찾는다. intent를 주지 않으면 state(includeHistory 기본 true)로 본다. |
 | includeHistory | boolean | - | 결과 파편이 대체한 이전 값을 바로 뒤에 state=superseded로 끼우고 대체한 쪽에 state=current를 단다(최대 5건). 값이 어떻게 바뀌었는지 물을 때 쓴다. 기본 false. |
 | order | string | - | rank(기본, 관련도순) 또는 chronological(사건 시각, 없으면 말한 시각, 없으면 저장 시각 오름차순). 사건 순서를 물을 때 쓴다. |
 | intent | string | - | auto(기본), lookup, aggregate, temporal, state. 응답 `_meta.evidence`에 근거 상태(no_evidence, conflicting, partial, supported), 덮이지 않은 질의 낱말, 묶음 의도면 시간순 근거 묶음과 topic 시간선·선호 목록 요약이 실린다. partial이면 uncovered_terms로 다시 찾고, no_evidence면 기억에 없다고 답한다. |
@@ -1001,7 +1003,7 @@ topic으로 지정하면 한 번에 200건까지 지운다. force가 없으면 p
 
 타 테넌트(다른 API 키) 소유 파편을 삭제 시도하면 `"Fragment not found or no permission"` 오류가 반환된다. master key는 전체 파편에 접근 가능하다.
 
-삭제한 파편의 본문 사본(케이스 이벤트 요약, 모순 해소 기록)은 같은 트랜잭션에서 지워지고, 응답의 `purged`(`case_summaries`, `audit_fragments`)가 그 건수를 알린다(`MEMENTO_FORGET_CASCADE=on`, 기본).
+삭제한 파편의 본문 사본(케이스 이벤트 요약, 모순 해소 기록)은 같은 트랜잭션에서 지워지고, 응답의 `purged`(`case_summaries`, `audit_fragments`)가 그 건수를 알린다(`MEMENTO_FORGET_CASCADE=on`, 기본). 삭제한 파편에서 나온 분할 자식과 교훈은 지우지 않고 `support_state=revoked`로 바꾸며 `purged.derived_revoked`가 그 수다. 이런 파편은 context 주입에서 빠지고 recall에는 `support_state`, `support_reason`, 원본 id 목록 `derived_from`과 함께 나온다.
 
 ### link
 
@@ -1040,6 +1042,8 @@ fromId 또는 toId가 타 테넌트 소유 파편인 경우 `"Fragment not found
 
 타 테넌트 소유 파편 수정 시도 시 `"Fragment not found or no permission"` 오류가 반환된다.
 
+본문을 바꾸면 그 파편을 근거로 한 교훈과 분할 자식은 `support_state=stale`, `assertionStatus`를 `rejected`로 바꾸면 `revoked`가 되어 context 주입에서 빠진다. 응답 `derived_marked`가 상태를 바꾼 파생 파편 수다.
+
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | id | string | O | 수정할 파편 ID |
@@ -1070,7 +1074,7 @@ fromId 또는 toId가 타 테넌트 소유 파편인 경우 `"Fragment not found
 | errors_resolved | string[] | - | 해결 에러 ('원인: X -> 해결: Y') |
 | new_procedures | string[] | - | 확립된 절차 |
 | open_questions | string[] | - | 미해결 질문 |
-| lessons | (object\|"NO_ENTRY")[] | - | 옮겨 쓸 교훈. 항목은 `{cue, lesson, evidence, confidence?}`. cue(적용 상황), lesson(할 조작), evidence(근거 관찰) 중 하나라도 비면 저장하지 않는다. confidence는 문자열 `high`, `medium`(기본), `low`이며 숫자를 넣으면 인자 오류다. 근거가 없으면 객체 대신 항목 자체를 문자열 `"NO_ENTRY"`로 넣는다. cue는 상황을 묻는 recall text 질의가 교훈을 찾게 하는 보조 검색어가 된다. 응답 `breakdown.lessons`, `lessons_no_entry`, `lessons_rejected`로 건수를 알린다. 최대 20개 |
+| lessons | (object\|"NO_ENTRY")[] | - | 옮겨 쓸 교훈. 항목은 `{cue, lesson, evidence, confidence?}`. cue(적용 상황), lesson(할 조작), evidence(근거 관찰) 중 하나라도 비면 저장하지 않는다. confidence는 문자열 `high`, `medium`(기본), `low`이며 숫자를 넣으면 인자 오류다. 근거가 없으면 객체 대신 항목 자체를 문자열 `"NO_ENTRY"`로 넣는다. cue는 상황을 묻는 recall text 질의가 교훈을 찾게 하는 보조 검색어가 된다. 응답 `breakdown.lessons`, `lessons_no_entry`, `lessons_rejected`로 건수를 알린다. 선택 필드 `evidenceIds`(최대 10개)에 근거 파편 id를 주면 같은 키의 파편만 계보로 남고, 그 근거를 forget하거나 거절하면 교훈은 `support_state=revoked`, 근거 본문을 amend하면 `stale`이 되어 context 주입에서 빠진다. 최대 20개 |
 | narrative_summary | string | - | 3~5문장 서사 요약. episode 파편으로 저장되어 세션 연속성에 기여. |
 | task_effectiveness | object | - | {outcome, evaluator, evidence, unmet_requirements[], overall_success, tool_highlights[], tool_pain_points[]} |
 | workspace | string | - | 호출자가 넘긴 항목에 적용할 워크스페이스. 세션 종합 그룹은 원래 workspace를 유지한다. 미지정 시 키의 default_workspace, 그것도 없으면 전역(NULL). |

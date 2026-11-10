@@ -151,7 +151,8 @@ describe("MemoryConsolidator stage 계측", () => {
             assert.strictEqual(typeof stage.affected,   "number",  "affected가 number가 아니다");
 
             assert.ok("status" in stage,                           `stage에 status 없음`);
-            assert.ok(["ok", "error"].includes(stage.status),      `status 값이 unexpected: ${stage.status}`);
+            /** skipped는 설정으로 꺼진 단계(기본 off인 session_lessons 등)의 상태다 */
+            assert.ok(["ok", "error", "skipped"].includes(stage.status), `status 값이 unexpected: ${stage.status}`);
         }
     });
 

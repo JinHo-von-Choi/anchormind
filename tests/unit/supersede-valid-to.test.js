@@ -9,7 +9,7 @@ describe("superseded_by valid_to 연동", () => {
     const src     = new MemoryConsolidator()._resolveContradiction.toString();
     const resolve = ContradictionDetector.prototype.resolveContradiction.toString();
     assert.ok(src.includes("contradictionDetector.resolveContradiction("), "통합 경로도 같은 해소 규칙을 쓴다");
-    assert.ok(resolve.includes("valid_to"), "해소는 패자의 valid_to를 갱신한다");
+    assert.ok(resolve.includes("closeWithLogSql("), "해소는 패자의 valid_to를 변경 기록과 함께 갱신한다");
   });
 
   test("해소 기록은 ContradictionDetector의 감사 기록 함수와 topic을 쓴다", async () => {
@@ -25,10 +25,10 @@ describe("superseded_by valid_to 연동", () => {
   test("재탐지를 막는 contradicts 링크는 패자를 닫은 뒤에 만든다", async () => {
     const { ContradictionDetector } = await import("../../lib/memory/link/ContradictionDetector.js");
     const resolve = ContradictionDetector.prototype.resolveContradiction.toString();
-    const closeAt = resolve.indexOf("valid_to = NOW()");
+    const closeAt = resolve.indexOf("closeWithLogSql(");
     const linkAt  = resolve.lastIndexOf('"contradicts"');
     assert.ok(closeAt > 0 && linkAt > closeAt, "contradicts 링크는 닫기 뒤에 와야 한다");
-    assert.match(resolve, /importance = importance \* 0\.5, valid_to = NOW\(\)/);
+    assert.match(resolve, /setExtra: ", importance = importance \* 0\.5"/);
   });
 
   test("GraphLinker.linkFragment이 superseded_by 시 valid_to를 갱신한다", async () => {

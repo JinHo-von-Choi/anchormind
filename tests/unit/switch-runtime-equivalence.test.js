@@ -45,6 +45,8 @@ const RUNTIME = {
   MEMENTO_WRITE_GATE:                       "cfg.writeGateEnabled() ? 'on' : 'off'",
   MEMENTO_SENSITIVE_SCAN:                   "cfg.sensitiveScanMode()",
   MEMENTO_ANCHOR_PERMISSION:                "cfg.anchorPermissionMode()",
+  MEMENTO_DIRECTIVE_ORIGIN_GATE:            "cfg.directiveOriginGateMode()",
+  MEMENTO_SESSION_LESSONS:                  "cfg.sessionLessonsEnabled() ? 'on' : 'off'",
   MEMENTO_ANCHOR_TOKEN_BUDGET_MODE:         "cfg.anchorTokenBudgetMode()",
   MEMENTO_WM_PG_FALLBACK:                   "cfg.wmPgFallbackEnabled() ? 'on' : 'off'",
   MEMENTO_DEDUP_SCOPE:                      "cfg.dedupScope()",

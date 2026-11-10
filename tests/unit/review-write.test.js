@@ -52,13 +52,13 @@ function gate({ review = true, provenance = true, hardGate = false, scan = "mask
 }
 
 /** 생성 요청 하나를 관문에 통과시킨다. */
-function create(g, { entry = "remember", fields = {}, provenance = {}, mode = "production", keyId = "key-1" } = {}) {
+function create(g, { entry = "remember", fields = {}, provenance = {}, mode = "production", keyId = "key-1", restore = false } = {}) {
   return g.check({
     entry,
     op    : "create",
     mode,
     fields: { content: BENIGN, topic: "ops", type: "fact", ...fields },
-    ctx   : { keyId, agentId: "default", provenance },
+    ctx   : { keyId, agentId: "default", provenance, restore },
     build : (input) => new FragmentFactory().create(input, { contentPrepared: true })
   });
 }
@@ -100,10 +100,31 @@ describe("검토 단계: 생성", () => {
   });
 
   it("서버와 운영 진입점은 검토하지 않는다", async () => {
-    for (const entry of ["admin_import", "cli_import", "cli_remember", "consolidate_split", "auto_reflect"]) {
+    for (const entry of ["cli_remember", "consolidate_split", "auto_reflect"]) {
       const { draft } = await create(gate(), { entry, fields: { content: OVERRIDE }, provenance: { reviewMode: "all" } });
       assert.equal(Object.hasOwn(draft, "review_state"), false, entry);
     }
+  });
+
+  it("가져오기는 remember와 같은 규칙으로 검토하고 파일의 검토 대기를 이어받는다", async () => {
+    for (const entry of ["admin_import", "cli_import"]) {
+      const flagged = await create(gate(), { entry, fields: { content: OVERRIDE } });
+      assert.equal(flagged.draft.review_state, "pending", entry);
+      assert.equal(flagged.draft.review_reason, "instruction_override", entry);
+
+      const pending = await create(gate(), { entry, fields: { review_state: "pending", review_reason: "low_trust_directive" } });
+      assert.equal(pending.draft.review_state, "pending", entry);
+      assert.equal(pending.draft.review_reason, "low_trust_directive", entry);
+    }
+  });
+
+  it("되살리기는 저장 당시의 검토 결과만 따른다", async () => {
+    const approved = await create(gate(), { entry: "cli_import", restore: true, fields: { content: OVERRIDE, review_state: "approved" } });
+    assert.equal(Object.hasOwn(approved.draft, "review_state"), false);
+
+    const pending = await create(gate(), { entry: "cli_import", restore: true, fields: { review_state: "pending", review_reason: "unknown_reason" } });
+    assert.equal(pending.draft.review_state, "pending");
+    assert.equal(pending.draft.review_reason, "mode_all");
   });
 
   it("클라이언트 진입점(remember, batch_remember, reflect)은 검토한다", async () => {
