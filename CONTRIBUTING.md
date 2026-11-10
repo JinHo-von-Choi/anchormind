@@ -1,5 +1,23 @@
 # Contributing to Memento MCP
 
+## 기여물의 라이선스 (License of Contributions)
+
+Memento MCP는 AGPL-3.0과 상용 라이선스로 함께 배포된다. 그래서 기여를 받을 때 아래 조건이 적용된다. Pull Request나 패치를 보내면 이 조건에 동의한 것으로 본다.
+
+1. 기여물은 AGPL-3.0으로 제공한다.
+2. 이와 별도로, 기여자는 저작권자(최진호, Jinho Choi)에게 기여물을 사용, 복제, 수정, 배포하고 다른 라이선스로 재허락할 수 있는 권리를 준다. 이 권리는 영구적이고, 전 세계에 적용되며, 비독점적이고, 무상이며, 취소할 수 없다. 상용 라이선스처럼 AGPL-3.0이 아닌 조건으로 배포하는 것도 이 권리에 포함된다.
+3. 기여물에 기여자의 특허가 걸려 있으면, 기여물과 그것을 포함한 Memento MCP를 쓰는 데 필요한 범위에서 2번과 같은 조건으로 특허 사용을 허락한다.
+4. 기여물의 저작권은 기여자에게 그대로 남는다. 기여자는 자기 기여물을 다른 곳에서 어떤 조건으로든 쓸 수 있다.
+5. 기여자는 기여물을 이 조건으로 제공할 권리가 있다고 보증한다. 회사나 단체에 소속되어 업무로 만든 코드라면 소속 기관의 허락을 받아야 한다. 다른 사람이 만든 코드가 들어 있으면 그 출처와 라이선스를 Pull Request에 적는다.
+
+Memento MCP is distributed under both AGPL-3.0 and a commercial license. By submitting a pull request or patch, you agree to the following terms.
+
+1. You license your contribution under AGPL-3.0.
+2. In addition, you grant the copyright holder (Jinho Choi) a perpetual, worldwide, non-exclusive, royalty-free, irrevocable license to use, reproduce, modify, distribute and sublicense your contribution, including under terms other than AGPL-3.0 such as a commercial license.
+3. If your contribution is covered by your patents, you grant a patent license on the same terms as item 2, to the extent necessary to use your contribution and Memento MCP as it includes your contribution.
+4. You keep the copyright to your contribution and may use it elsewhere under any terms.
+5. You confirm that you have the right to submit the contribution under these terms. If you made it as part of your work for an employer or organization, you have their permission. If it includes code written by others, state its source and license in the pull request.
+
 ## Development Setup
 
 1. Clone the repository

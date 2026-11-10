@@ -10,7 +10,7 @@
     <img src="https://img.shields.io/github/stars/JinHo-von-Choi/anchormind?style=flat&color=f5c542" alt="GitHub Stars" />
   </a>
   <a href="LICENSE">
-    <img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat" alt="License" />
+    <img src="https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat" alt="License" />
   </a>
   <a href="https://lobehub.com/mcp/jinho-von-choi-memento-mcp">
     <img src="https://lobehub.com/badge/mcp/jinho-von-choi-memento-mcp" alt="MCP Badge" />
@@ -360,7 +360,11 @@ RAG는 이미 있는 문서를 색인해 찾아 준다. AnchorMind는 에이전�
 
 ## License
 
-Apache 2.0
+[AGPL-3.0](LICENSE). Copyright 2026 Jinho Choi.
+
+수정한 코드를 배포하거나 네트워크 서비스로 제공하면 수정한 소스 전체를 AGPL-3.0으로 공개해야 한다. 소스를 공개하지 않고 쓰려면 상용 라이선스가 필요하다. 상용 라이선스 문의는 [jinho.von.choi@nerdvana.kr](mailto:jinho.von.choi@nerdvana.kr)로 한다.
+
+7.3.0 이하 버전은 Apache 2.0으로 배포했고, 그 버전에는 계속 Apache 2.0이 적용된다.
 
 ---
 

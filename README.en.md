@@ -10,7 +10,7 @@
     <img src="https://img.shields.io/github/stars/JinHo-von-Choi/anchormind?style=flat&color=f5c542" alt="GitHub Stars" />
   </a>
   <a href="LICENSE">
-    <img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat" alt="License" />
+    <img src="https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat" alt="License" />
   </a>
   <a href="https://lobehub.com/mcp/jinho-von-choi-memento-mcp">
     <img src="https://lobehub.com/badge/mcp/jinho-von-choi-memento-mcp" alt="MCP Badge" />
@@ -360,7 +360,11 @@ Retrieval finds most of the evidence. The remaining errors concentrate in questi
 
 ## License
 
-Apache 2.0
+[AGPL-3.0](LICENSE). Copyright 2026 Jinho Choi.
+
+If you distribute modified code or offer it as a network service, you must release the complete modified source under AGPL-3.0. Using it without releasing your source requires a commercial license. For commercial licensing, contact [jinho.von.choi@nerdvana.kr](mailto:jinho.von.choi@nerdvana.kr).
+
+Versions 7.3.0 and earlier were released under Apache 2.0 and remain under Apache 2.0.
 
 ---
 
