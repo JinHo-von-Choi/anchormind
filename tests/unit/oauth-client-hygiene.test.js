@@ -17,6 +17,8 @@ process.env.CACHE_ENABLED           ??= "false";
 
 const KEY_ID  = "550e8400-e29b-41d4-a716-446655440000";
 const RAW_KEY = `mmcp_owner_${"d".repeat(32)}`;
+const OTHER_ID  = "660e8400-e29b-41d4-a716-446655440000";
+const OTHER_KEY = `mmcp_other_${"e".repeat(32)}`;
 
 const realStore = await import("../../lib/admin/OAuthClientStore.js");
 const realKeys  = await import("../../lib/admin/ApiKeyStore.js");
@@ -31,7 +33,8 @@ mock.module("../../lib/admin/OAuthClientStore.js", {
 mock.module("../../lib/admin/ApiKeyStore.js", {
   namedExports: {
     ...realKeys,
-    validateApiKeyFromDB: async (raw) => (raw === RAW_KEY ? { valid: true, keyId: KEY_ID } : { valid: false }),
+    validateApiKeyFromDB: async (raw) => (raw === RAW_KEY ? { valid: true, keyId: KEY_ID }
+      : raw === OTHER_KEY ? { valid: true, keyId: OTHER_ID } : { valid: false }),
     validateApiKeyById  : async (id) => (id === KEY_ID ? { valid: true, keyId: KEY_ID } : { valid: false })
   }
 });
@@ -202,5 +205,27 @@ describe("갱신 토큰 만료", () => {
     const again = await handleToken({ grant_type: "refresh_token", refresh_token: tok.refresh_token });
     assert.equal(again.error, "invalid_grant");
     assert.equal(again.error_description, "Refresh token expired");
+  });
+});
+
+describe("갱신 토큰의 키 귀속", () => {
+  it("키에 묶인 토큰은 다른 키의 client_secret으로 갱신할 수 없고, 같은 키나 secret 없는 갱신은 통과한다", async () => {
+    const verifier  = "v".repeat(64);
+    const challenge = createHash("sha256").update(verifier).digest("base64url");
+    const auth      = await handleAuthorize({
+      response_type: "code", client_id: RAW_KEY, redirect_uri: "http://localhost:1/cb",
+      code_challenge: challenge, code_challenge_method: "S256", state: "s"
+    });
+    const tok = await handleToken({ grant_type: "authorization_code", code: auth.code, redirect_uri: "http://localhost:1/cb", code_verifier: verifier, client_secret: RAW_KEY });
+    assert.ok(tok.refresh_token);
+
+    const stolen = await handleToken({ grant_type: "refresh_token", refresh_token: tok.refresh_token, client_secret: OTHER_KEY });
+    assert.equal(stolen.error, "invalid_grant");
+    assert.match(stolen.error_description, /does not match the key/);
+
+    const same = await handleToken({ grant_type: "refresh_token", refresh_token: tok.refresh_token, client_secret: RAW_KEY });
+    assert.ok(same.refresh_token);
+    const bare = await handleToken({ grant_type: "refresh_token", refresh_token: same.refresh_token });
+    assert.ok(bare.access_token);
   });
 });

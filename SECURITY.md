@@ -33,7 +33,9 @@
 
 API 키로 연 MCP 세션은 사용할 때 키 상태를 `MEMENTO_SESSION_KEY_RECHECK_MS`(기본 30000ms, 0이면 끔) 주기로 다시 읽는다. 비활성 또는 삭제된 키의 세션은 닫히고 404를 받는다.
 
-관리 인증은 `MEMENTO_ADMIN_AUTH_BACKOFF=on`일 때 연속 5회 실패 뒤 다음 시도를 최대 60초까지 늦추고, 지연 중에는 올바른 키도 429를 받는다. 기본은 `off`이며 실패 기록은 항상 남는다. `/register`는 프로세스당 시간당 `MEMENTO_DCR_MAX_PER_HOUR`(기본 100, 0은 상한 없음)건을 넘으면 429를 돌려준다. `MEMENTO_SESSION_ID_POLICY=enforce`와 `MEMENTO_RESERVED_AGENT_IDS=enforce`는 쿼리스트링 세션 ID와 예약 agentId(`system`, `admin`)를 거부한다. 두 값의 기본은 `warn`이다.
+유효한 세션의 요청은 세션에 저장된 주체로 처리된다. 요청에 자격 증명이 함께 오면 `MEMENTO_SESSION_CREDENTIAL_CHECK`가 그 자격 증명을 세션 주체와 대조한다. 기본 `warn`은 기록만 하고, `enforce`는 무효한 자격 증명을 401, 다른 주체의 자격 증명을 403으로 거부한다. 세션 ID가 유출됐으면 `POST /session/rotate`나 `DELETE /mcp`로 세션을 바꾸거나 닫는다.
+
+관리 인증은 `MEMENTO_ADMIN_AUTH_BACKOFF=on`일 때 연속 5회 실패 뒤 다음 시도를 최대 60초까지 늦추고, 지연 중에는 올바른 키도 429를 받는다. `TRUST_PROXY_HOPS`가 설정된 설치는 실패한 요청 주소의 시도만 늦춘다. 기본은 `off`이며 실패 기록은 항상 남는다. `/register`는 프로세스당 시간당 `MEMENTO_DCR_MAX_PER_HOUR`(기본 100, 0은 상한 없음)건을 넘으면 429를 돌려준다. `MEMENTO_SESSION_ID_POLICY=enforce`와 `MEMENTO_RESERVED_AGENT_IDS=enforce`는 쿼리스트링 세션 ID와 예약 agentId(`system`, `admin`)를 거부한다. 두 값의 기본은 `warn`이다.
 
 ### 데이터베이스 격리
 
@@ -45,11 +47,11 @@ API 키로 연 MCP 세션은 사용할 때 키 상태를 `MEMENTO_SESSION_KEY_RE
 
 ### 저장 데이터
 
-기억 본문은 PostgreSQL에 평문으로 저장된다. 저장 암호화와 백업 암호화는 인프라 계층 책임이다. Redis에 접근 통제를 걸지 않으면 세션과 토큰이 노출된다.
+기억 본문은 PostgreSQL에 평문으로 저장된다. 저장 암호화와 백업 암호화는 인프라 계층 책임이다. DB가 서버와 다른 호스트에 있으면 `PGSSLMODE`로 연결을 암호화한다. 값이 없으면 연결은 평문이다. Redis에 접근 통제를 걸지 않으면 세션과 토큰이 노출된다.
 
 ### LLM CLI 공급자
 
-`MEMENTO_LLM_CLI_TOOL_APPROVAL`의 기본은 `none`이다. gemini-cli, copilot-cli, opencode-cli는 제한된 도구 승인으로 서버 작업 디렉터리가 아닌 빈 임시 디렉터리에서 실행된다. `all`은 승인 제한을 풀고 서버 작업 디렉터리에서 실행하므로 신뢰하는 입력에만 쓴다.
+`MEMENTO_LLM_CLI_TOOL_APPROVAL`의 기본은 `none`이다. 모든 CLI 공급자(gemini-cli, copilot-cli, opencode-cli, codex-cli, qwen-cli, agy-cli)는 서버 작업 디렉터리가 아닌 빈 임시 디렉터리에서 실행된다. gemini-cli, copilot-cli, opencode-cli에는 제한된 도구 승인도 함께 적용된다. `all`은 승인 제한을 풀고 서버 작업 디렉터리에서 실행하므로 신뢰하는 입력에만 쓴다.
 
 ### 타임아웃
 

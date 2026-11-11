@@ -41,9 +41,10 @@
 | `MEMENTO_RESERVED_AGENT_IDS` (`warn`, `enforce`) | `warn` | API 키 요청이 내부용 agentId(`system`, `admin`)를 쓰면 -32001로 거부한다. 마스터 키는 허용한다. |
 | `MEMENTO_ANCHOR_PERMISSION` (`off`, `warn`, `enforce`) | `warn` | `anchor` 권한이 없는 키의 앵커 지정을 거부한다. |
 | `MEMENTO_WORKSPACE_READ_AUTHZ` (`off`, `warn`, `enforce`) | `warn` | 키의 `allowed_workspaces` 밖을 읽거나, 마스터가 아닌 세션이 마스터 전용 preset을 요청하면 -32001로 거부한다. |
+| `MEMENTO_SESSION_CREDENTIAL_CHECK` (`off`, `warn`, `enforce`) | `warn` | 유효한 세션의 요청에 함께 온 자격 증명이 무효하거나 만료됐으면 401, 세션과 다른 주체의 것이면 403으로 거절한다. 자격 증명을 보내지 않은 요청은 그대로 처리한다. |
 | `MEMENTO_OAUTH_REDIRECT_CHECK` (`warn`, `enforce`) | `warn` | `/authorize` 오류 응답이 등록되지 않은 `redirect_uri`로 이동하지 않고 400 JSON을 돌려준다. |
 | `MEMENTO_SSE_QUERY_KEY` (`allow`, `deny`) | `allow` | 옛 SSE의 `?accessKey=` 쿼리 키를 받지 않고 401로 `Authorization` 헤더를 쓰라고 안내한다. `allow`는 마스터 키에 한해 받는다. |
-| `MEMENTO_ADMIN_AUTH_BACKOFF` (`on`, `off`) | `off` | 관리 인증이 연속 5회 실패하면 다음 시도를 최대 60초 늦춘다. 지연 중에는 올바른 키도 429(`Retry-After`)를 받는다. |
+| `MEMENTO_ADMIN_AUTH_BACKOFF` (`on`, `off`) | `off` | 관리 인증이 연속 5회 실패하면 다음 시도를 최대 60초 늦춘다. `TRUST_PROXY_HOPS`가 설정된 설치는 실패한 요청 주소의 시도만 늦추고, 설정되지 않은 설치는 모든 시도를 늦춘다. 지연 중에는 올바른 키도 429(`Retry-After`)를 받는다. |
 
 `MEMENTO_WORKSPACE_READ_AUTHZ`는 `enforce` 전에 `warn` 기간 동안 쌓인 키별 기록(`memento_workspace_read_authz_total`과 경고 로그)을 확인한다.
 
@@ -58,7 +59,7 @@
 - 관리 API 권한: 요청마다 라우트에 지정된 능력을 확인한다. 표에 없는 경로는 owner만 쓴다. 관리자 계정은 TOTP(owner와 admin 필수)로 로그인하고, 세션 쿠키에는 `SameSite=Strict`와 이중 제출 CSRF 확인을 쓴다. 마스터 키 로그인은 비상용으로 남겨 둔다.
 - 출처와 검토: 파편의 `origin`과 `trust_tier`를 확인해 신뢰가 낮은 내용은 ANCHOR와 CORE 주입에서 제외한다. 지시를 덮어쓰려는 문구는 검토 대기열로 보낸다.
 - 키 수명: 만료, 허용 주소 대역, 교체, 폐기를 지원한다. 폐기한 키의 세션은 즉시 닫힌다.
-- 호출 제한: `/auth`, `/keys` POST, `/import` POST에는 IP 기준 제한을 둔다. 그 밖의 요청은 API 키당 분당 100회, IP당 분당 30회이며 환경 변수로 조정할 수 있다. `initialize`, `GET /sse`, `/token`, `/register`, `/authorize`는 IP 한도를 함께 쓰고, 한도를 넘으면 429와 `Retry-After`를 돌려준다.
+- 호출 제한: `/auth`, `/keys` POST, `/import` POST에는 IP 기준 제한을 둔다. 그 밖의 요청은 API 키당 분당 100회, IP당 분당 30회이며 환경 변수로 조정할 수 있다. `initialize`, `GET /sse`, `/token`, `/register`, `/authorize`(GET과 POST)는 IP 한도를 함께 쓰고, 한도를 넘으면 429와 `Retry-After`를 돌려준다. 옛 SSE의 `POST /message`는 `/mcp`와 같은 키·IP 한도를 쓴다. `GET /authorize`의 클라이언트 자동 등록은 `/register`와 같은 시간당 상한(`MEMENTO_DCR_MAX_PER_HOUR`)을 쓴다.
 - 감사 기록: 도구 호출 기록에는 행위자(`key=`, `sid=` 앞 8자, `ip=`)를 남긴다. 관리 API의 변경 요청(GET 제외)과 관리 인증의 성공·실패도 기록한다.
 - 응답 헤더: 모든 응답에 `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`를 붙인다.
 - OpenAPI: `ENABLE_OPENAPI=true`이면 `GET /openapi.json`을 연다. 마스터 키는 전체 경로를 받고, API 키는 권한으로 걸러진 명세만 받는다.
@@ -88,9 +89,9 @@
 - 감사 기록 검증: `anchormind audit verify`가 해시 체인을 다시 계산한다. 끊어진 곳이 있으면 종료 코드 1로 끝난다. 관리자 계정을 잃었을 때는 `anchormind admin recover --confirm`로 비상 복구한다.
 - 기능 스위치 점검: `npm run switches`가 스위치마다 적용값, 기본값, 상태를 표로 보여 준다. `--strict`를 붙이면 값이 잘못된 스위치가 있을 때 종료 코드 1로 끝난다.
 - 마이그레이션 검사: `npm run lint:migrations`.
-- 메트릭: `/metrics`는 Prometheus 형식으로 열린다. `MEMENTO_ACCESS_KEY`가 설정되어 있으면 마스터 키 인증이 필요하다. 공유 Prometheus용 설정은 [monitoring.md](monitoring.md)에 있다.
+- 메트릭: `/metrics`는 Prometheus 형식으로 열린다. `MEMENTO_ACCESS_KEY`가 설정되어 있으면 마스터 키나 지표 전용 토큰(`MEMENTO_METRICS_TOKEN`) 인증이 필요하다. 공유 Prometheus용 설정은 [monitoring.md](monitoring.md)에 있다.
 
-운영 문서는 이 디렉터리에 더 있다. LLM provider 체인, symbolic hard gate, agent worktree, upstream porting 등을 다룬다.
+운영 문서는 이 디렉터리에 더 있다. LLM provider 체인, symbolic hard gate 등을 다룬다.
 
 ## 알려진 제한사항
 

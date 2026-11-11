@@ -1,4 +1,3 @@
-<!-- iron-laws: ignore-file[IL-102] RFC 6238 TOTP 표준 HMAC-SHA1이며 인증기 앱 호환에 필요하다 -->
 # Configuration
 
 ---
@@ -35,7 +34,7 @@
 | off, warn, enforce (공백만 있는 값을 포함한 그 밖의 값은 enforce로 동작) | MEMENTO_TOOL_ARGS_VALIDATION |
 | off, warn, enforce (그 밖의 값은 warn) | MEMENTO_ANCHOR_PERMISSION |
 | warn, enforce (그 밖의 값은 warn) | MEMENTO_SESSION_ID_POLICY, MEMENTO_RESERVED_AGENT_IDS, MEMENTO_OAUTH_REDIRECT_CHECK |
-| off, warn, enforce (그 밖의 값은 warn) | MEMENTO_WORKSPACE_READ_AUTHZ |
+| off, warn, enforce (그 밖의 값은 warn) | MEMENTO_WORKSPACE_READ_AUTHZ, MEMENTO_SESSION_CREDENTIAL_CHECK |
 | off, warn, enforce (그 밖의 값은 warn) | MEMENTO_DIRECTIVE_ORIGIN_GATE |
 | warn, reject, allow (그 밖의 값은 warn) | MEMENTO_MISSING_WORKSPACE |
 | reflect, observe, allowlist (그 밖의 값은 observe) | MEMENTO_CORS_MODE |
@@ -89,6 +88,7 @@
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
 | PORT | 57332 | HTTP 리슨 포트 |
+| MEMENTO_BIND_HOST | (없음) | 리슨 주소. 비워 두면 모든 인터페이스에 리슨한다. 같은 호스트의 리버스 프록시만 붙는 설치는 `127.0.0.1`을 쓴다. 컨테이너 안에서는 비워 두어야 포트 매핑이 동작한다 |
 | MEMENTO_ACCESS_KEY | (없음) | Bearer 인증 키. 미설정 상태로는 서버가 기동하지 않고 종료 코드 78로 멈춘다. 인증 없이 운용하려면 `MEMENTO_AUTH_DISABLED=true`를 함께 지정해야 한다 |
 | MEMENTO_AUTH_DISABLED | false | `true`로 설정 시 인증을 완전히 비활성화하여 모든 요청을 master 권한으로 처리. 개발·시험 전용이며 이 선언이 없으면 키 없는 기동 자체가 거부된다. `MEMENTO_ACCESS_KEY`가 비어 있을 때만 유효 |
 | DB_STATEMENT_TIMEOUT_MS | 30000 | 사용자 요청 경로의 질의 시간 상한(ms). 0은 무제한. system·admin 유지보수 경로에는 적용하지 않는다 |
@@ -118,6 +118,7 @@
 | ALLOWED_ORIGINS | (없음) | 허용할 Origin 목록. 쉼표로 구분. 미설정 시 모든 Origin 허용 (MCP 클라이언트 호환성 우선) |
 | ADMIN_ALLOWED_ORIGINS | (없음) | Admin 콘솔 허용 Origin 목록. 미설정 시 모든 Origin 허용 |
 | ENABLE_OPENAPI | false | `true`로 설정 시 `GET /openapi.json` 엔드포인트 활성화. 인증 레벨에 따라 다른 스펙 반환 (master key: 전체 경로 포함, API key: 권한 필터된 도구 목록) |
+| MEMENTO_METRICS_TOKEN | (없음) | `GET /metrics`만 통과하는 지표 전용 Bearer 토큰. 다른 경로의 인증에는 쓰이지 않는다. 비워 두면 토큰 인증을 쓰지 않는다. 마스터 키는 이 값과 관계없이 `/metrics`를 통과한다 |
 | RATE_LIMIT_WINDOW_MS | 60000 | Rate limiting 윈도우 크기 (ms) |
 | RATE_LIMIT_MAX_REQUESTS | 120 | 윈도우 내 IP당 최대 요청 수 |
 | RATE_LIMIT_PER_IP | 30 | IP당 분당 요청 한도 (미인증 요청) |
@@ -135,9 +136,10 @@
 | MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS | 401 | `api_keys` 조회 실패로 인증을 판정하지 못한 MCP `initialize`와 세션 자동 복구의 응답 상태. `401`(기본)은 키 무효와 같은 응답이며 세션 복구는 404다. `503`은 `Retry-After: 10`을 붙인 일시 장애 응답이다. 마스터 키 인증은 저장소와 무관하다. 조회 실패는 `mcp_auth_store_errors_total{operation}`과 `memento_auth_denied_total{reason="store_unavailable"}`로 집계한다 |
 | MEMENTO_SESSION_ID_POLICY | warn | MCP 세션 ID 수신 처리. `warn`(기본): 쿼리스트링(`?sessionId=`, `?mcp-session-id=`)으로 받은 ID와 서버 발급 형식(UUID)이 아닌 ID의 자동 복구를 `[Session] session id received in query string`, `recovery requested for non-issued id format` 경고로 기록하고 정상 처리한다. `enforce`: 쿼리 ID는 400, UUID가 아닌 ID의 복구는 404로 응답한다. 헤더(`MCP-Session-Id`)로 보낸 UUID 세션은 두 값 모두 영향이 없다. 로그와 reflect 프롬프트의 세션 ID는 앞 8자만 표기한다. `warn` 기간에 클라이언트가 정한 ID로 복구된 세션은 `enforce`로 바꾼 뒤에도 만료될 때까지 계속 동작한다. Legacy `/message?sessionId=`는 프로토콜 요구라 대상이 아니다 |
 | MEMENTO_WORKSPACE_READ_AUTHZ | warn | 읽기 경로 workspace 허가. 대상은 tools/call의 recall, context, graph_explore, fragment_history, reconstruct_history, search_traces와 resources/read 전체이고, 요청의 effective workspace(명시 `workspace` 인자, 없으면 키 기본 workspace, 둘 다 없으면 전역)를 API 키의 `allowed_workspaces`로 판정한다. 마스터 키와 `allowed_workspaces`가 NULL인 키는 제한이 없고, 값이 있는 키는 목록의 workspace와 전역(workspace 없음) 파편만 읽는다. 저장소 전체를 집계하는 도구(memory_stats)는 전체 workspace 대상이며 지금은 마스터 전용이다. 같은 스위치가 master가 아닌 세션의 master 전용 mode preset(`audit`) 요청(`X-Memento-Mode` 헤더, `initialize`의 `params.mode`, 키 `default_mode`)도 판정한다. `warn`(기본): 허가 밖 요청을 그대로 처리하고(preset은 무시해 전체 도구를 노출) `memento_workspace_read_authz_total{surface,reason,outcome="would_deny"}`와 `[WorkspaceReadAuthz] would_deny` 경고 로그(키 id, 표면, 사유, 대상 workspace 또는 preset과 출처)를 남긴다. `enforce`: 허가 밖 읽기는 처리기에 들어가지 않고 JSON-RPC 오류 `-32001`로 끝나며, master 전용 preset 요청은 세션을 만들지 않고 HTTP 403과 `-32001`로 거부한다(`outcome="denied"`). 허가된 범위 제한 키의 검색은 파편 단위로도 같은 판정(SearchScope)을 적용한다. `off`: 판정하지 않는다. 사유 라벨: `explicit_out_of_range`, `default_out_of_range`(키 기본 workspace가 `allowed_workspaces` 밖), `all_workspaces`, `lookup_failed`(`allowed_workspaces` 조회 실패), `preset_requires_master`. `enforce`로 바꾸기 전에 `warn` 기간의 would_deny 로그를 키별로 확인한다. `allowed_workspaces` 변경은 키별 30초 캐시를 거쳐 적용된다. `warn` 기간에 master 전용 preset으로 열린 세션은 `enforce`로 바꾼 뒤에도 만료될 때까지 preset을 무시한 채 동작한다. 호출 시점에 읽는다 |
+| MEMENTO_SESSION_CREDENTIAL_CHECK | warn | 유효한 세션의 요청(`POST /mcp`, `GET /mcp`, `POST /message`)에 자격 증명이 함께 오면 그 자격 증명이 지금 유효한지, 세션의 주체와 같은지 본다. 자격 증명을 보내지 않은 요청은 판정하지 않는다. `warn`(기본)은 `memento_session_credential_total{result}`(absent, match, invalid, mismatch)와 경고 로그만 남기고 요청을 처리한다. `enforce`는 무효하거나 만료된 자격 증명을 401(`WWW-Authenticate` 포함), 유효하지만 세션과 다른 주체의 자격 증명을 403으로 거부한다. `off`는 판정하지 않는다. 호출 시점에 읽는다 |
 | MCP_ALLOW_AUTO_DCR_REGISTER | false | `true`로 설정 시 `/authorize`에서 신뢰 목록(기본 신뢰 도메인, `OAUTH_TRUSTED_ORIGINS`, `OAUTH_ALLOWED_REDIRECT_URIS`, localhost)에 없는 `redirect_uri`를 가진 미등록 `client_id`의 자동 등록을 허용한다. 기본 `false`는 그 경우 `invalid_client`로 거부하고 RFC 7591 `POST /register` 경유를 요구한다. 신뢰 목록에 있는 `redirect_uri`는 이 값과 무관하게 자동 등록된다 |
 | OAUTH_ALLOWED_REDIRECT_URIS | (없음) | OAuth redirect_uri 정확 일치 허용 목록 (쉼표 구분). OAUTH_TRUSTED_ORIGINS와 별도로 동작 |
-| MEMENTO_DCR_MAX_PER_HOUR | 100 | `/register` 시간당 등록 상한 (프로세스 단위 고정 창). 유효한 API 키를 Bearer로 제시한 등록(키에 묶인 등록)과 그 밖의 등록은 같은 상한값을 쓰되 따로 센다. 초과하면 429와 `Retry-After`(현재 창이 끝나기까지 남은 초, 올림, 최소 1). `0`이면 상한 없음. 호출 시점에 읽는다 |
+| MEMENTO_DCR_MAX_PER_HOUR | 100 | `/register`와 `GET /authorize` 자동 등록의 시간당 등록 상한 (프로세스 단위 고정 창). 유효한 API 키를 Bearer로 제시한 등록(키에 묶인 등록)과 그 밖의 등록은 같은 상한값을 쓰되 따로 센다. 초과하면 429와 `Retry-After`(현재 창이 끝나기까지 남은 초, 올림, 최소 1). `0`이면 상한 없음. 호출 시점에 읽는다 |
 | DEFAULT_DAILY_LIMIT | 10000 | API 키 생성 시 기본 일일 호출 한도 |
 | DEFAULT_PERMISSIONS | read,write | API 키 생성 시 기본 권한 |
 | DEFAULT_FRAGMENT_LIMIT | (없음) | API 키 생성 시 기본 파편 할당량. 미설정 시 무제한 |
@@ -163,7 +165,7 @@
 | ENABLE_SPREADING_ACTIVATION | false | SpreadingActivation 활성화. true 시 recall의 contextText 파라미터로 관련 파편을 선제적 활성화한다. 레이턴시 영향 측정 후 활성화 권장 |
 | ENABLE_PATTERN_ABSTRACTION | (미사용) | 패턴 추상화 예약 변수. 현재 코드에서 읽지 않으므로 설정해도 동작에 영향이 없다 |
 | MEMENTO_METRICS_DEFAULT | (없음) | `off`로 설정하면 prom-client 기본 메트릭(CPU·메모리 등) 수집을 생략한다. 그 외 값은 수집 활성 |
-| MEMENTO_ADMIN_AUTH_BACKOFF | `off` | `on`이면 관리 인증이 연속 5회 실패한 뒤 이어지는 실패마다 다음 시도를 1, 2, 4초 순으로 최대 60초까지 늦춘다. 지연 중에는 올바른 마스터 키도 지연 시간 동안 `POST /auth`와 관리 API 경로에서 429(Retry-After)를 받는다. 관리 UI 셸과 이미지 경로는 지연 중에도 계속 401을 돌려준다. 이미 발급된 쿠키 세션은 영향받지 않는다. 관리 경로에 일반 API 키 등 마스터 키가 아닌 Bearer를 보내 실패한 요청도 실패로 센다. 마지막 실패로부터 60초 동안 실패가 없으면 누적이 새로 시작되고, 인증에 성공해도 지워진다. 실패 기록은 이 값과 무관하게 남고 상태는 프로세스 메모리에 있다 |
+| MEMENTO_ADMIN_AUTH_BACKOFF | `off` | `on`이면 관리 인증이 연속 5회 실패한 뒤 이어지는 실패마다 다음 시도를 1, 2, 4초 순으로 최대 60초까지 늦춘다. `TRUST_PROXY_HOPS`가 설정된 설치는 실패를 요청 주소마다 세고 그 주소의 시도만 늦춘다. 설정되지 않은 설치는 요청 주소를 믿을 수 없으므로 실패를 한데 세고 모든 시도를 늦춘다. 지연 중에는 올바른 마스터 키도 지연 시간 동안 `POST /auth`와 관리 API 경로에서 429(Retry-After)를 받는다. 관리 UI 셸과 이미지 경로는 지연 중에도 계속 401을 돌려준다. 이미 발급된 쿠키 세션은 영향받지 않는다. 관리 경로에 일반 API 키 등 마스터 키가 아닌 Bearer를 보내 실패한 요청도 실패로 센다. 마지막 실패로부터 60초 동안 실패가 없으면 누적이 새로 시작되고, 인증에 성공해도 지워진다. 실패 기록은 이 값과 무관하게 남고 상태는 프로세스 메모리에 있다 |
 | MEMENTO_ADMIN_METRICS_SAMPLING | (없음) | `off`로 설정하면 admin 콘솔 메트릭 샘플링을 비활성화한다. 그 외 값은 샘플링 활성 |
 | UPDATE_CHECK_DISABLED | false | `true`로 설정 시 신규 버전 확인을 수행하지 않는다 |
 | UPDATE_CHECK_INTERVAL_HOURS | 24 | 신규 버전 확인 주기(시간) |
@@ -173,7 +175,7 @@
 | MEMENTO_MISSING_WORKSPACE | warn | remember, batch_remember, reflect가 인자에도 API 키의 `default_workspace`에도 workspace 없이 올 때의 처리. 이런 파편은 전역으로 저장되어 모든 workspace의 recall에 나온다. `warn`: 저장하고 응답 `_meta.warnings`에 `workspace_missing`을 싣는다, `reject`: JSON-RPC `-32602`로 거부, `allow`: 그대로 저장. `scope=session` remember와 모든 항목에 workspace가 있는 batch_remember는 해당하지 않는다. 호출 시점에 읽는다 |
 | MEMENTO_TOOL_ARGS_ALLOW_UNKNOWN | false | `true`면 스키마에 없는 필드를 위반으로 세지 않는다. `enforce` 모드에서 별칭 필드를 쓰는 클라이언트를 받아 줄 때 쓴다. 이 값과 상관없이 스키마 밖 필드는 `memento_tool_args_unknown_total{tool, field}`로 세며, 허용할 때는 (도구, 필드)마다 처음 한 번 경고를 남긴다. 이 지표가 계속 0이면 꺼도 된다 |
 | MEMENTO_LLM_CLI_ENV_PASSTHROUGH | (없음) | CLI provider(gemini-cli, codex-cli, copilot-cli, qwen-cli, agy-cli, opencode-cli) 자식 프로세스에 추가로 전달할 환경변수 이름(쉼표 구분). 기본으로는 PATH, HOME 등 기본 변수와 CLI별 인증 변수만 전달된다 |
-| MEMENTO_LLM_CLI_TOOL_APPROVAL | none | gemini-cli, copilot-cli, opencode-cli의 도구 실행 승인 방식(`none`, `all`). 호출 시점에 읽으며 그 밖의 값은 `none`으로 처리하고 설정 문제로 기록한다. `none`: gemini는 `-y`를 붙이지 않고, copilot은 `--deny-tool=shell`, `--deny-tool=write`, `--deny-tool=url`, `--disable-builtin-mcps`, `--no-custom-instructions`를 더하며(비대화형 실행에 필요한 `--allow-all-tools`는 유지, 거부 규칙이 항상 우선), opencode는 `OPENCODE_PERMISSION={"*":"deny"}`를 넘기고, gemini는 임시 디렉터리를 신뢰 작업 공간으로 지정하는 `GEMINI_CLI_TRUST_WORKSPACE=true`를 자식 환경에 더한다. 세 CLI 모두 서버 작업 디렉터리가 아닌 빈 임시 디렉터리에서 실행한다(opencode의 `--dir`는 호출자가 지정한 `cwd`가 우선). `all`: gemini `-y`, copilot `--allow-all-tools`만 쓰고 opencode는 승인 관련 설정을 더하지 않으며 서버 작업 디렉터리에서 실행한다. gemini-cli, copilot-cli, opencode-cli를 쓰는 배포는 기본에서 제한된 호출을 받고, `all`로 설정하면 승인 제한이 없는 호출을 쓴다. codex-cli, qwen-cli, agy-cli에는 적용되지 않는다 |
+| MEMENTO_LLM_CLI_TOOL_APPROVAL | none | gemini-cli, copilot-cli, opencode-cli의 도구 실행 승인 방식(`none`, `all`). 호출 시점에 읽으며 그 밖의 값은 `none`으로 처리하고 설정 문제로 기록한다. `none`: gemini는 `-y`를 붙이지 않고, copilot은 `--deny-tool=shell`, `--deny-tool=write`, `--deny-tool=url`, `--disable-builtin-mcps`, `--no-custom-instructions`를 더하며(비대화형 실행에 필요한 `--allow-all-tools`는 유지, 거부 규칙이 항상 우선), opencode는 `OPENCODE_PERMISSION={"*":"deny"}`를 넘기고, gemini는 임시 디렉터리를 신뢰 작업 공간으로 지정하는 `GEMINI_CLI_TRUST_WORKSPACE=true`를 자식 환경에 더한다. gemini-cli, copilot-cli, opencode-cli, codex-cli, qwen-cli, agy-cli 모두 서버 작업 디렉터리가 아닌 빈 임시 디렉터리에서 실행한다(opencode의 `--dir`는 호출자가 지정한 `cwd`가 우선). `all`: gemini `-y`, copilot `--allow-all-tools`만 쓰고 opencode는 승인 관련 설정을 더하지 않으며 서버 작업 디렉터리에서 실행한다. gemini-cli, copilot-cli, opencode-cli를 쓰는 배포는 기본에서 제한된 호출을 받고, `all`로 설정하면 승인 제한이 없는 호출을 쓴다. codex-cli, qwen-cli, agy-cli에는 작업 디렉터리 선택만 적용되고 승인 관련 인자는 더하지 않는다 |
 | MEMENTO_REMEMBER_ATOMIC | false | true 시 remember()의 quota check + INSERT를 단일 트랜잭션으로 원자화. BEGIN → api_keys FOR UPDATE(quota 재검증) → INSERT → COMMIT 순서로 TOCTOU를 완전 차단. false(기본)는 선제 quota check만 수행하며 동시 요청이 드문 환경에 적합 |
 | MEMENTO_REMEMBER_DUPLICATE_GUARD | false | `true`면 remember 중복 적중 시 기존 파편에 후처리, TTL 조정, 재색인을 하지 않고 `existing`, `duplicate`(same_scope, other_workspace, closed, unknown)로 알린다. 동일한 저장 두 건이 경합하면 먼저 들어간 행이 삽입의 충돌 경로에서 importance가 더 큰 값으로 올라가고 접근 시각이 갱신될 수 있다. 같은 범위(같은 workspace 또는 전역 파편) 적중은 이 값과 무관하게 응답에 `duplicate_of`(기존 파편 id)를 싣는다. `other_workspace`는 키 범위 판정(`MEMENTO_DEDUP_SCOPE=key` 또는 키 범위 색인이 남은 상태)에서만 나온다 |
 | MEMENTO_API_KEY_DELETE_GUARD | true | API 키 삭제 전에 그 키의 파편과 재공고화 이력을 확인하고, 있으면 409로 거부한다. `false`면 확인 없이 삭제 |
@@ -452,6 +454,7 @@ POSTGRES_* 접두어가 DB_* 접두어보다 우선한다. 두 형식을 혼용�
 | POSTGRES_DB / DB_NAME | 데이터베이스 이름 |
 | POSTGRES_USER / DB_USER | 접속 사용자 |
 | POSTGRES_PASSWORD / DB_PASSWORD | 접속 비밀번호 |
+| PGSSLMODE | DB 연결 암호화. 풀 설정에 `ssl` 항목이 없어 값이 없으면 평문으로 연결한다. `prefer`, `require`, `verify-ca`, `verify-full`은 모두 암호화와 서버 인증서 검증을 함께 켠다(libpq와 달리 `require`도 인증서를 검증한다). `no-verify`는 검증 없이 암호화만 하고, `disable`은 평문이다. 사설 CA는 `NODE_EXTRA_CA_CERTS`로 지정한다. `BATCH_DATABASE_URL`의 쿼리 문자열에 적은 값은 이 변수보다 우선한다 |
 | DB_MAX_CONNECTIONS | 연결 풀 최대 연결 수. 기본 20 |
 | DB_IDLE_TIMEOUT_MS | 유휴 연결 반환 대기 시간 ms. 기본 30000 |
 | DB_CONN_TIMEOUT_MS | 연결 획득 타임아웃 ms. 기본 10000 |

@@ -11,7 +11,7 @@
 
 | 경로 | 인증 | 용도 |
 |-|-|-|
-| `/metrics` | `MEMENTO_ACCESS_KEY` 설정 시 마스터 키 Bearer 필요. 키가 없거나 틀리면 401 | Prometheus 지표 |
+| `/metrics` | `MEMENTO_ACCESS_KEY` 설정 시 지표 전용 토큰(`MEMENTO_METRICS_TOKEN`)이나 마스터 키 Bearer 필요. 없거나 틀리면 401 | Prometheus 지표 |
 | `/health` | `MEMENTO_ACCESS_KEY` 설정 시 마스터 키 Bearer가 있으면 전체 상세, 없으면 최소 본문(`status`, `timestamp`)만 | 서비스 상태 종합(DB, Redis, pgvector, 워커). DB가 응답하지 않으면 503 |
 | `/health/live` | 없음 | 프로세스 생존 확인(DB, Redis를 보지 않음) |
 | `/health/ready` | 없음 | 주 DB 응답 확인(`MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`(기본 2000, 범위 100~4500) 안에 응답하면 200, 아니면 503) |
@@ -22,7 +22,7 @@
 
 ## 스크레이프 잡
 
-`prometheus.yml`의 `scrape_configs`에 다음 잡을 추가한다. 마스터 키는 설정 파일에 적지 않고 `credentials_file`로 파일을 참조한다. 해당 파일은 키 문자열 한 줄만 담고 Prometheus 실행 계정만 읽을 수 있게 둔다.
+서버의 `MEMENTO_METRICS_TOKEN`에 지표 전용 토큰을 먼저 설정한다. 이 토큰은 `/metrics`만 통과하므로 수집기에 마스터 키를 둘 필요가 없다. 그다음 `prometheus.yml`의 `scrape_configs`에 다음 잡을 추가한다. 토큰은 설정 파일에 적지 않고 `credentials_file`로 파일을 참조한다. 해당 파일은 토큰 문자열 한 줄만 담고 Prometheus 실행 계정만 읽을 수 있게 둔다.
 
 ```yaml
 scrape_configs:
@@ -31,7 +31,7 @@ scrape_configs:
     metrics_path: /metrics
     authorization:
       type: Bearer
-      credentials_file: /etc/prometheus/secrets/memento-master-key
+      credentials_file: /etc/prometheus/secrets/memento-metrics-token
     static_configs:
       - targets: ["127.0.0.1:57332"]
         labels:
@@ -193,7 +193,7 @@ outbox 게이지는 작업자를 돌리는 프로세스만 갱신한다. 작업�
 4. `/metrics` 출력에 규칙이 참조하는 지표의 `# TYPE` 줄이 있는지 확인한다.
 
 ```bash
-curl -s -H "Authorization: Bearer $(cat /etc/prometheus/secrets/memento-master-key)" http://127.0.0.1:57332/metrics \
+curl -s -H "Authorization: Bearer $(cat /etc/prometheus/secrets/memento-metrics-token)" http://127.0.0.1:57332/metrics \
   | grep -cE "^# TYPE (mcp_auth_store_errors_total|memento_consolidate_split_step_failed_total|memento_db_deadlock_retries_total|mcp_protocol_version_negotiations_total) "
 ```
 

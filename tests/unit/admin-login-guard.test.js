@@ -131,3 +131,27 @@ describe("키별 로그인 실패 지연(계정, 클라이언트 주소)", () =>
     assert.equal(guard.check("k3", T0).allowed, false);
   });
 });
+
+describe("요청 주소별 지연", () => {
+  beforeEach(() => {
+    process.env.MEMENTO_ADMIN_AUTH_BACKOFF = "on";
+    _resetAdminAuthGuardForTest();
+  });
+
+  it("한 주소의 연속 실패는 그 주소만 늦추고 다른 주소의 시도는 통과한다", () => {
+    for (let i = 0; i < 6; i++) recordAdminAuthFailure(T0, "203.0.113.5");
+    assert.equal(checkAdminAuthAttempt(T0, "203.0.113.5").allowed, false);
+    assert.deepEqual(checkAdminAuthAttempt(T0, "198.51.100.7"), { allowed: true, retryAfterSec: 0 });
+  });
+
+  it("주소를 넘기지 않는 판정은 주소별 실패의 영향을 받지 않는다", () => {
+    for (let i = 0; i < 20; i++) recordAdminAuthFailure(T0, "203.0.113.5");
+    assert.equal(checkAdminAuthAttempt(T0).allowed, true);
+  });
+
+  it("성공하면 그 주소의 누적이 지워진다", () => {
+    for (let i = 0; i < 8; i++) recordAdminAuthFailure(T0, "203.0.113.5");
+    recordAdminAuthSuccess("203.0.113.5");
+    assert.equal(checkAdminAuthAttempt(T0, "203.0.113.5").allowed, true);
+  });
+});

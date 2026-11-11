@@ -43,7 +43,8 @@ const GATED = Object.freeze([
   `${RP}::_persistIndividually`,
   `${FI}::checkImportRow`,
   "lib/cli/remember.js::rememberLocal",
-  `${CGC}::_processFragmentSplit`
+  `${CGC}::_processFragmentSplit`,
+  "lib/memory/consolidate/SessionLessons.js::proposeForCase"
 ]);
 
 /** 위임 간선. 출발 함수 안에서 callee가 정규식과 맞는 호출이 있어야 한다. */

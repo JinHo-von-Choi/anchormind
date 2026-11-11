@@ -162,7 +162,10 @@ describe("구조: 관문 호출 위치", () => {
   it("클라이언트가 보낸 허가 범위 인자는 신뢰 문맥 주입 전에 지워진다", () => {
     const start = src.indexOf("export function applyTrustedToolContext(");
     const body  = src.slice(start, src.indexOf("\n}\n", start));
-    assert.match(body, /"_workspaceReadRange"\s*\n?\s*\]\) delete args\[key\]/);
+    assert.ok(body.indexOf("dropClientPrivateArgs(args)") > 0);
+    assert.ok(body.indexOf("dropClientPrivateArgs(args)") < body.indexOf("args._keyId "));
+    const helper = src.slice(src.indexOf("function dropClientPrivateArgs("), src.indexOf("\n}\n", src.indexOf("function dropClientPrivateArgs(")));
+    assert.match(helper, /if \(key\.startsWith\("_"\)\) delete args\[key\]/);
   });
 });
 
