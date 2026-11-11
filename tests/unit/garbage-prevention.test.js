@@ -16,7 +16,7 @@ import { sanitizeInsertImportance, FragmentWriter }      from "../../lib/memory/
 import { FragmentStore }                                 from "../../lib/memory/write/FragmentStore.js";
 import { computeEmaRankBoost, computeUtilityScore }      from "../../lib/memory/consolidate/decay.js";
 
-// ── Task 1: fallback EMA 차단 ──────────────────────────────────────────────
+// ── fallback EMA 차단 ──────────────────────────────────────────────
 
 describe("fallback EMA 차단", () => {
     it("_searchL1 반환값에 isFallback 필드가 있다", () => {
@@ -30,7 +30,7 @@ describe("fallback EMA 차단", () => {
     });
 });
 
-// ── Task 8: 삽입 importance 상한 ──────────────────────────────────────────
+// ── 삽입 importance 상한 ──────────────────────────────────────────
 
 describe("삽입 importance 상한", () => {
     it("20자 미만 content는 importance가 0.2 이하로 강제된다", () => {
@@ -50,7 +50,7 @@ describe("삽입 importance 상한", () => {
     });
 });
 
-// ── Task 9: co_retrieved spreading activation ──────────────────────────────
+// ── co_retrieved spreading activation ──────────────────────────────
 
 describe("co_retrieved spreading activation", () => {
     it("touchLinked가 FragmentWriter에 존재한다", () => {
@@ -64,7 +64,7 @@ describe("co_retrieved spreading activation", () => {
     });
 });
 
-// ── Task 2: permanent parole ────────────────────────────────────────────────
+// ── permanent parole ────────────────────────────────────────────────
 
 describe("permanent parole", () => {
     it("transitionTTL에 permanent→cold 강등 조건이 존재한다", () => {
@@ -75,7 +75,7 @@ describe("permanent parole", () => {
     });
 });
 
-// ── Task 4: quality_verified permanent 장벽 ───────────────────────────────
+// ── quality_verified permanent 장벽 ───────────────────────────────
 
 describe("quality_verified permanent 장벽", () => {
     it("FragmentGC.transitionTTL 소스에 quality_verified 조건이 있다", () => {
@@ -92,7 +92,7 @@ describe("quality_verified permanent 장벽", () => {
     });
 });
 
-// ── Task 6: EMA 배치 감쇠 ────────────────────────────────────────────────
+// ── EMA 배치 감쇠 ────────────────────────────────────────────────
 
 describe("EMA 배치 감쇠", () => {
     it("decayEmaActivation이 FragmentGC에 존재한다", () => {
@@ -101,7 +101,7 @@ describe("EMA 배치 감쇠", () => {
     });
 });
 
-// ── Task 7: EMA boost 상한 0.3→0.2 ────────────────────────────────────────
+// ── EMA boost 상한 0.3→0.2 ────────────────────────────────────────
 
 describe("EMA boost 상한", () => {
     it("EMA boost 최대값이 0.2 이하다", () => {
@@ -116,7 +116,7 @@ describe("EMA boost 상한", () => {
     });
 });
 
-// ── Task 3: utility_score 나이 가중치 ──────────────────────────────────────
+// ── utility_score 나이 가중치 ──────────────────────────────────────
 
 describe("utility_score 나이 가중치", () => {
     it("나이가 오래될수록 utility_score가 낮아진다", () => {
@@ -138,7 +138,7 @@ describe("utility_score 나이 가중치", () => {
     });
 });
 
-// ── Task 5: 고-EMA 저-importance 재평가 큐 등록 ───────────────────────────
+// ── 고-EMA 저-importance 재평가 큐 등록 ───────────────────────────
 
 describe("고-EMA 저-importance 재평가", () => {
     it("_requeueHighEmaLowQuality가 MemoryConsolidator에 존재한다", async () => {

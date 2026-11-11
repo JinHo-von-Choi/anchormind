@@ -1,4 +1,3 @@
-<!-- iron-laws: ignore-file[IL-102] 중복 적재를 막는 색인 키이며 보안 용도가 아니다 -->
 # Architecture
 
 ## System Architecture
@@ -922,7 +921,7 @@ The `fragments.workspace` column provides an additional isolation layer within t
 **Retention**: a maximum age in days can be set for a whole key or for one of its workspaces (`key_retention_policies`). The `retention_expire` consolidation stage (`lib/memory/consolidate/RetentionGC.js`) deletes older fragments with the same chunk rules as expiry deletion and keeps anchors.
 
 **Use cases**:
-- Developer switching between projects in the same session (`workspace: "memento-mcp"`, `workspace: "docs-mcp"`)
+- Developer switching between projects in the same session (`workspace: "memento-mcp"`, `workspace: "my-project"`)
 - Agent separating work and personal memories (`workspace: "work"`, `workspace: "personal"`)
 - Freelancer isolating client memories (`workspace: "client-acme"`, `workspace: "client-xyz"`)
 

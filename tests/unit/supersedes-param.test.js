@@ -2,7 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
 /**
- * Phase 5-B 분해 이후 remember / _supersede 본문은
+ * remember / _supersede 본문은
  * `lib/memory/processors/MemoryRememberer.js`로 이관됐다.
  * MemoryManager.prototype.remember는 얇은 위임, _supersede는 facade에 존재하지 않는다.
  * 따라서 본 스위트는 MemoryRememberer.prototype을 직접 검증한다.

@@ -1,4 +1,3 @@
-<!-- iron-laws: ignore-file[IL-102] 중복 적재를 막는 색인 키이며 보안 용도가 아니다 -->
 # Architecture
 
 작성자: 최진호
@@ -924,7 +923,7 @@ CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
 **보존 기간**: 키 전체나 키의 workspace 하나에 최대 보존 일수를 둘 수 있다(`key_retention_policies`). 정리 주기의 `retention_expire` 단계(`lib/memory/consolidate/RetentionGC.js`)가 오래된 파편을 만료 삭제와 같은 청크 규칙으로 지우고, 앵커는 남긴다.
 
 **사용 시나리오**:
-- 개발자가 여러 프로젝트를 같은 Claude Code 세션에서 전환할 때 (`workspace: "memento-mcp"`, `workspace: "docs-mcp"`)
+- 개발자가 여러 프로젝트를 같은 Claude Code 세션에서 전환할 때 (`workspace: "memento-mcp"`, `workspace: "my-project"`)
 - 동일 에이전트가 업무/개인 기억을 분리할 때 (`workspace: "work"`, `workspace: "personal"`)
 - 프리랜서가 클라이언트별 기억을 격리할 때 (`workspace: "client-acme"`, `workspace: "client-xyz"`)
 

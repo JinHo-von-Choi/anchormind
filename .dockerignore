@@ -33,7 +33,6 @@ tests/
 .vscode/
 .idea/
 .worktrees/
-.gstack/
 .playwright-mcp/
 
 # 린트 설정

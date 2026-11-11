@@ -11,10 +11,10 @@
     "lib/cli/recall.js": 25,
     "lib/cli/remember.js": 32,
     "lib/handlers/health-handler.js": 28,
-    "lib/handlers/mcp-handler.js": 78,
-    "lib/handlers/oauth-handler.js": 29,
+    "lib/handlers/mcp-handler.js": 75,
+    "lib/handlers/oauth-handler.js": 28,
     "lib/handlers/sse-handler.js": 22,
-    "lib/jsonrpc.js": 97,
+    "lib/jsonrpc.js": 96,
     "lib/llm/index.js": 31,
     "lib/llm/registry.js": 24,
     "lib/llm/util/retry-hints.js": 32,
@@ -41,7 +41,7 @@
     "lib/symbolic/rules/v1/proactive-gate.js": 47,
     "lib/tools/memory.js": 38,
     "lib/updater/update-executor.js": 28,
-    "server.js": 53
+    "server.js": 52
   },
   "max-lines-per-function": {
     "lib/admin/admin-logs.js": 162,
@@ -52,13 +52,13 @@
     "lib/memory/consolidate/ConsolidatorGC.js": 148,
     "lib/memory/link/ContradictionDetector.js": 130,
     "lib/memory/read/CaseRecall.js": 124,
-    "lib/oauth.js": 151,
-    "server.js": 134
+    "lib/oauth.js": 150,
+    "server.js": 131
   },
   "max-lines": {
     "lib/admin/admin-memory.js": 1022,
     "lib/memory/read/FragmentSearch.js": 803,
-    "lib/tools/memory-schemas.js": 1267
+    "lib/tools/memory-schemas.js": 1225
   },
   "max-depth": {
     "lib/llm/util/retry-hints.js": 6,

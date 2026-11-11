@@ -76,7 +76,7 @@ describe("validateQuery", () => {
   });
 
   test("원문에 한자가 있으면 질의의 한자를 허용한다", () => {
-    const v = validateQuery("開天錄 gcr 문파 설정 뭐였지", "開天錄 문파 설정을 정리했다 gcr");
+    const v = validateQuery("三國志 sgz 인물 설정 뭐였지", "三國志 인물 설정을 정리했다 sgz");
     assert.equal(v.accept, true);
   });
 

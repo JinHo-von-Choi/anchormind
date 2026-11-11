@@ -4,7 +4,7 @@
  * 작성자: 최진호
  * 작성일: 2026-04-27
  *
- * Phase 7 검증:
+ * 검증:
  * - getBatchPool() 인스턴스가 getPrimaryPool()과 별개 객체
  * - 두 풀이 동시에 active 상태 유지 가능
  * - batchPool application_name이 'memento-mcp:batch'
@@ -21,7 +21,7 @@ import assert from "node:assert/strict";
 
 import { getPrimaryPool, getBatchPool, getPoolStats, shutdownPool } from "../../lib/tools/db.js";
 
-describe("Phase 7 — DB Pool 격리 검증", () => {
+describe("DB Pool 격리 검증", () => {
 
   let primaryPool;
   let batchPool;

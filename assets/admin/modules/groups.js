@@ -65,10 +65,8 @@ export function sharedWorkspacesLabel(list) {
  * @returns {string[]|null|undefined} 취소면 undefined
  */
 export function parseSharedWorkspacesInput(text) {
-  // iron-laws: ignore[IL-307] 취소하면 undefined를 돌려준다
   if (text === null || text === undefined) return undefined;
   const trimmed = String(text).trim();
-  // iron-laws: ignore[IL-307] null은 API에서 전체 공유를 뜻한다
   if (trimmed.toLowerCase() === "all") return null;
   return trimmed.split(",").map((w) => w.trim()).filter(Boolean);
 }
@@ -418,10 +416,8 @@ export function groupLimitLabel(group) {
  * @returns {number|null|undefined}
  */
 export function parseGroupLimitInput(input) {
-  // iron-laws: ignore[IL-307] 취소하면 undefined를 돌려준다
   if (input === null || input === undefined) return undefined;
   const text = String(input).trim();
-  // iron-laws: ignore[IL-307] null은 상한 없음을 뜻한다
   if (text === "") return null;
   return /^\d+$/.test(text) ? Number(text) : NaN;
 }

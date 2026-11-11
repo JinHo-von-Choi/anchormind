@@ -46,7 +46,7 @@ function checkOriginAllowed({ origin, strictOrigin, oauthTrusted = [], allowedSe
 /*  테스트 케이스                                                       */
 /* ================================================================== */
 
-describe("isOriginAllowed — DNS rebinding 방어 (Phase 2c-2)", () => {
+describe("isOriginAllowed — DNS rebinding 방어", () => {
 
   it("TC1: Origin 없음(CLI/curl) + STRICT=true → 통과", () => {
     const allowed = checkOriginAllowed({

@@ -71,13 +71,12 @@ export async function checkEmbeddingConsistency() {
         });
         continue;
       }
-    } catch { // iron-laws: ignore[IL-301] 표가 없으면 데이터 표본 검사로 진행한다
+    } catch {
       /** 테이블 미존재 → 데이터 표본 검사로 진행 */
     }
 
     /** 2차: 실데이터 표본 검사 (선언은 맞지만 이질 데이터가 남은 경우) */
     try {
-      // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
       const { rows } = await pool.query(`
         SELECT vector_dims(embedding) AS dim
         FROM agent_memory.${table}
@@ -87,7 +86,7 @@ export async function checkEmbeddingConsistency() {
       if (rows.length > 0 && rows[0].dim !== EMBEDDING_DIMENSIONS) {
         mismatches.push({ table, dbDim: rows[0].dim, configDim: EMBEDDING_DIMENSIONS });
       }
-    } catch { // iron-laws: ignore[IL-301] 표가 없거나 halfvec이면 차원 검사를 건너뛴다
+    } catch {
       /** 테이블 미존재 또는 halfvec 타입 → vector_dims 에러는 무시 */
     }
   }
@@ -100,7 +99,6 @@ export async function checkEmbeddingConsistency() {
   await checkEmbeddingProfile(pool);
 
   try {
-    // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
     const { rows } = await pool.query(`
       SELECT count(*)::int AS cnt
       FROM agent_memory.fragments
@@ -117,7 +115,7 @@ export async function checkEmbeddingConsistency() {
         console.warn("[embedding-consistency] MorphemeBackfill 미실행/기록 없음 — 서버 스케줄러 가동 여부를 확인하세요 (5분 주기, batch 500).");
       }
     }
-  } catch { // iron-laws: ignore[IL-301] migration-035 이전 환경에는 열이 없어 건너뛴다
+  } catch {
     /** migration-035 미적용 환경에서는 컬럼 미존재 → 무시 */
   }
 

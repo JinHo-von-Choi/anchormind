@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// iron-laws: ignore-file[IL-111] JSDoc 타입 표기이며 실제 값이 아니다
 /**
  * 검색 지표 측정 스크립트
  *

@@ -4,7 +4,7 @@
  * 작성자: 최진호
  * 작성일: 2026-04-27
  *
- * Phase 4 Consistency Gate 단위 테스트:
+ * Consistency Gate 단위 테스트:
  *  1. morpheme_indexed=false 파편 — keywords 검색(searchByKeywords SQL) morpheme_indexed 조건 없음
  *  2. morpheme_indexed=true  — searchBySemantic morphemeOnly=true → SQL에 조건 포함
  *  3. morphemeOnly=false → SQL에 조건 없음

@@ -181,13 +181,13 @@ describe("reflect 세션 종합 재수집 방지", () => {
 
   it("다른 workspace 파편이 있는 세션에서 수동 reflect는 호출자 workspace에만 저장한다", async () => {
     const env = makeEnv();
-    await env.seed({ content: "개천록 인디게임 조사에서 제안 15개를 정리했다", type: "fact", topic: "gaecheonrok", workspace: "gaecheonrok" });
+    await env.seed({ content: "가계부 앱 사용자 조사에서 제안 15개를 정리했다", type: "fact", topic: "ledger-app", workspace: "ledger-app" });
 
     const created = await env.reflect({ workspace: "memento-mcp", summary: ["memento-mcp dependabot PR 세 건을 병합했다"] });
 
     assert.ok(created.length > 0);
     assert.ok(created.every(r => r.workspace === "memento-mcp"));
-    assert.equal(created.some(r => r.content.includes("개천록")), false);
+    assert.equal(created.some(r => r.content.includes("가계부")), false);
   });
 
   it("WM 전용 항목은 첫 reflect에서 한 번 저장되고 두 번째 reflect에서는 새 행이 없다", async () => {

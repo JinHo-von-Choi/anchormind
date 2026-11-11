@@ -62,10 +62,10 @@ describe("keys/policy.getAllowedWorkspaces", () => {
 
   it("allowed_workspaces 배열이 있는 키 → 배열 반환", async () => {
     invalidateAllowedWorkspacesCache("key-with-allow");
-    mockQuery.mock.mockImplementationOnce(() => Promise.resolve({ rows: [{ allowed_workspaces: ["memento-mcp", "docs-mcp"] }] }));
+    mockQuery.mock.mockImplementationOnce(() => Promise.resolve({ rows: [{ allowed_workspaces: ["memento-mcp", "my-project"] }] }));
 
     const result = await getAllowedWorkspaces("key-with-allow");
-    assert.deepStrictEqual(result, ["memento-mcp", "docs-mcp"]);
+    assert.deepStrictEqual(result, ["memento-mcp", "my-project"]);
   });
 
   it("DB 오류는 무제한 허용과 구분되는 표식을 반환한다", async () => {

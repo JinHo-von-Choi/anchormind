@@ -388,7 +388,7 @@ async function loadGraph() {
     .filter(e => nodeIds.has(e.from_id) && nodeIds.has(e.to_id))
     .map(e => ({ source: e.from_id, target: e.to_id, type: e.relation_type, weight: e.weight }));
 
-  /** G2: 인접맵 사전 구축 — hover O(L) → O(1) */
+  /** 인접맵 사전 구축 — hover O(L) → O(1) */
   const adjMap = new Map();
   links.forEach((l, i) => {
     const sId = typeof l.source === "object" ? l.source.id : l.source;

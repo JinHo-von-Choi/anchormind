@@ -4,9 +4,9 @@
  * 작성자: 최진호
  * 작성일: 2026-03-28
  *
- * Task 4-1: confidence 계산, age_days 계산
- * Task 4-2: linked 배열 구조
- * Task 4-4: mergeRRF 범용 레이어 배열 동작 검증
+ * confidence 계산, age_days 계산
+ * linked 배열 구조
+ * mergeRRF 범용 레이어 배열 동작 검증
  */
 
 import { test, describe } from "node:test";
@@ -15,7 +15,7 @@ import assert             from "node:assert/strict";
 import { computeConfidence, getUtilityBaseline } from "../../lib/memory/consolidate/UtilityBaseline.js";
 import { mergeRRF }                               from "../../lib/memory/read/FragmentSearch.js";
 
-/** ─── Task 4-1 / 4-3: confidence 계산 ─── */
+/** ─── confidence 계산 ─── */
 
 describe("computeConfidence", () => {
   test("utility_score가 baseline과 같으면 confidence = 1.0", () => {
@@ -43,7 +43,7 @@ describe("computeConfidence", () => {
   });
 });
 
-/** ─── Task 4-1: age_days 계산 ─── */
+/** ─── age_days 계산 ─── */
 
 describe("age_days 계산", () => {
   test("오늘 생성된 파편은 age_days = 0", () => {
@@ -65,7 +65,7 @@ describe("age_days 계산", () => {
   });
 });
 
-/** ─── Task 4-2: linked 배열 구조 ─── */
+/** ─── linked 배열 구조 ─── */
 
 describe("linked 배열 구조", () => {
   test("linked 엔트리는 id, relation_type, preview 필드를 가져야 한다", () => {
@@ -87,7 +87,7 @@ describe("linked 배열 구조", () => {
   });
 });
 
-/** ─── Task 4-4: mergeRRF 범용 레이어 배열 ─── */
+/** ─── mergeRRF 범용 레이어 배열 ─── */
 
 describe("mergeRRF (layers interface)", () => {
   const l1Ids       = ["b"];
