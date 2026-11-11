@@ -331,17 +331,14 @@ The main tools are `context` for restoring core memory at session start, `recall
 
 ## Benchmark
 
-[LongMemEval-S](https://arxiv.org/abs/2410.10813), 500 questions (measured 2026-10-10, reader deepseek-flash, judges GPT-4o official setting, MiniMax and Claude Sonnet 5.5):
+| Benchmark | Result |
+|-|-|
+| LongMemEval-S (500 questions) | accuracy 84.0% (official GPT-4o judge), all evidence turns in the top 10: 91.2% |
+| LoCoMo (1,986 questions) | accuracy 86.3%, official F1 0.633 (k=50) |
+| MemBench (469 questions) | accuracy 85.9% |
+| BEAM 1M (700 questions) | 0.418; best in the BEAM paper: 0.336 |
 
-| Metric | Score | Condition |
-|-|-|-|
-| All evidence turns within top-10 | 91.2% | bge-m3, segment search on |
-| Retrieval recall_any@5 | 98.4% | session level |
-| QA accuracy (GPT-4o official judge) | 84.0% | 95% CI 80.5-87.0% |
-| QA accuracy (MiniMax judge) | 84.0% | 95% CI 80.5-87.0% |
-| QA accuracy (Claude judge) | 78.0% | 95% CI 74.2-81.4% |
-
-Retrieval finds most of the evidence. The remaining errors concentrate in questions that need summing values across sessions or computing dates (multi-session, temporal-reasoning). Conditions and analysis: [Benchmark Report](docs/benchmark.en.md).
+Every run stored the conversations as verbatim chunks, the ingest of a plain RAG system, without AnchorMind's atomic fragments, types, slots or links: conditions unfavorable to AnchorMind. Conditions and details: [Benchmark Report](docs/benchmark.en.md).
 
 ## Documentation
 

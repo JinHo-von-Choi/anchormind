@@ -331,17 +331,14 @@ RAG는 이미 있는 문서를 색인해 찾아 준다. AnchorMind는 에이전�
 
 ## 벤치마크
 
-[LongMemEval-S](https://arxiv.org/abs/2410.10813) 500문항 기준(2026-10-10 측정, 리더 deepseek-flash, 평가자 GPT-4o 공식 설정, MiniMax, Claude 소넷 5.5):
+| 벤치마크 | 결과 |
+|-|-|
+| LongMemEval-S (500문항) | 정답률 84.0% (공식 평가자 GPT-4o), 근거 턴 전체 상위 10개 회수 91.2% |
+| LoCoMo (1,986문항) | 정답률 86.3%, 공식 F1 0.633 (k=50) |
+| MemBench (469문항) | 정확도 85.9% |
+| BEAM 1M (700문항) | 0.418, BEAM 논문 최고 0.336 |
 
-| 지표 | 점수 | 조건 |
-|-|-|-|
-| 근거 턴 전체가 top-10에 든 비율 | 91.2% | bge-m3, 구간 검색 켬 |
-| 검색 recall_any@5 | 98.4% | 세션 단위 |
-| QA 정답률 (GPT-4o 공식 평가자) | 84.0% | 95% CI 80.5–87.0% |
-| QA 정답률 (MiniMax 평가) | 84.0% | 95% CI 80.5–87.0% |
-| QA 정답률 (Claude 평가) | 78.0% | 95% CI 74.2–81.4% |
-
-검색은 근거를 대부분 찾아 온다. 남은 오답은 여러 세션의 값을 합산하거나 날짜를 계산하는 질문(multi-session, temporal-reasoning)에 몰려 있다. 측정 조건과 분석은 [Benchmark Report](docs/benchmark.md).
+모든 측정은 대화 원문을 청크로 잘라 그대로 넣는 일반 RAG 적재로 했다. AnchorMind의 원자 파편 분해, 유형, slot, 링크 전처리를 쓰지 않은 불리한 조건이다. 측정 조건과 세부 결과는 [벤치마크 리포트](docs/benchmark.md)에 있다.
 
 ## 문서
 

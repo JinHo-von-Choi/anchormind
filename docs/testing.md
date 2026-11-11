@@ -238,6 +238,57 @@ MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test \
 
 ---
 
+## 검색 품질 측정
+
+### 골드셋 회귀
+
+`tests/fixtures/recall-goldset.jsonl`(저장문과 패러프레이즈 질의 100쌍)을 적재하고 질의해 Recall@k, MRR, 지연을 낸다. 옵션은 [CLI 문서](cli.md#benchmark)에 있다.
+
+```bash
+node bin/memento.js benchmark --repeat 3                                       # isolated: 골드셋 파편만 후보
+node bin/memento.js benchmark --key-scope corpus --repeat 3                     # corpus: 기존 파편과 경쟁
+node bin/memento.js benchmark --baseline scripts/baseline-recall.json           # 기준선 비교
+```
+
+- 회귀 판정은 isolated 모드와 기준선 비교로 한다. isolated는 회차마다 결과가 같다. corpus는 데이터가 바뀌면 함께 흔들린다.
+- 허용 하락폭은 Recall과 MRR 2pp, p95 지연 15%다. `--isolation-probe` 위반은 한 건이라도 퇴행이다.
+- 적재와 삭제를 하므로 일회용 DB나 스테이징 DB에서만 실행한다. 시작할 때 대상 host, port, database를 표준 에러에 출력한다.
+
+기준선 갱신:
+
+```bash
+export DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<throwaway_db>
+export EMBEDDING_PROVIDER=transformers EMBEDDING_MODEL=Xenova/bge-m3 EMBEDDING_DIMENSIONS=1024
+npm run migrate
+node scripts/post-migrate-flexible-embedding-dims.js
+EMBEDDING_ENABLED=true node bin/memento.js benchmark --repeat 3 --save-baseline scripts/baseline-recall.json
+```
+
+isolated 모드는 `api_keys`에 `benchmark-harness-key`(상태 `inactive`) 행을 만든다. 지울 때는 그 키를 참조하는 파편이 없는지 확인한 뒤 `DELETE FROM agent_memory.api_keys WHERE id = 'benchmark-harness-key' AND status = 'inactive';`를 실행한다.
+
+### 평가 세트 v2
+
+`scripts/measure/recall-metrics.mjs`는 `tests/fixtures/recall-eval-v2`의 질의를 대상 DB에 실행해 R@1/5/10, MRR, 토큰 예산 내 nDCG, 지연을 JSON으로 낸다. 정답은 대상 DB에 있는 파편 id와 관련도 등급이다. 세트 형식은 `tests/fixtures/recall-eval-v2/README.md`에 있다.
+
+```bash
+node scripts/measure/recall-metrics.mjs --target localhost:35433/<복구본_DB> --out run-a.json
+node scripts/measure/recall-metrics.mjs --compare run-a.json run-b.json --out compare.json
+```
+
+- `--target`은 일회용 시험 서버여야 하며, 아니면 접속 전에 종료 코드 3으로 거부한다. recall이 접근 기록을 남기므로 실행마다 새 복구본에서 시작한다.
+- 비교는 질의별 짝지은 부트스트랩 95% 구간으로 하고, 구간이 0을 제외할 때만 차이로 본다. 짝지은 질의가 `--min-n`(기본 10) 미만인 묶음은 결론으로 쓰지 않는다.
+
+### context 주석 토큰
+
+`scripts/measure/context-annotation-tokens.mjs`는 `MEMENTO_CONTEXT_ANNOTATE`를 켰을 때 context 주입 줄과 recall `format:"pack"`이 늘리는 토큰을 DB 없이 잰다.
+
+```bash
+node scripts/measure/context-annotation-tokens.mjs
+node scripts/measure/context-annotation-tokens.mjs --fragments <내보내기.jsonl> --out annotate-tokens.json
+```
+
+---
+
 ## 전체 테스트 현황
 
 - 시험 파일: 658개(tests/unit 595, 그중 tests/unit/symbolic 9, tests/structure 16, tests/integration 14, tests/e2e 4, tests/db-concurrency 29).
