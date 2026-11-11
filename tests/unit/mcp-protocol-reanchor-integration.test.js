@@ -4,7 +4,7 @@
  * 작성자: codex (계약 위임 구현)
  * 작성일: 2026-07-26
  *
- * 배경 (findings/anchormind-protocol-mismatch-contract-20260725.md):
+ * 배경:
  *   서버 재기동 시 in-memory streamableSessions Map은 비워지지만 Redis 세션은
  *   preserveRedis:true로 살아남는다. 이때 Redis 복원 경로(lib/sessions.js
  *   validateStreamableSession)는 `...redisSession` 스프레드로 전 필드를 복원하므로
@@ -318,7 +318,7 @@ describe("MCP protocol-version 자가치유 — 실제 핸들러 통합 테스�
     assert.strictEqual((await fakeRedisModule.getSession(sessionId))?.isMaster, true);
   });
 
-  it("I13: Redis에 stale negotiatedVersion(null)이 저장돼 있어도 복원 시 요청 헤더로 즉시 재앵커링된다 (R2)", async () => {
+  it("I13: Redis에 stale negotiatedVersion(null)이 저장돼 있어도 복원 시 요청 헤더로 즉시 재앵커링된다", async () => {
     const { sessionId } = await initializeSession({ protocolVersion: "2025-03-26" });
 
     /** 구버전 버그 재현: Redis에 저장된 negotiatedVersion을 인위적으로 null로 되돌린다 */
@@ -332,7 +332,7 @@ describe("MCP protocol-version 자가치유 — 실제 핸들러 통합 테스�
     assert.strictEqual(res.statusCode, 200);
 
     const restored = streamableSessions.get(sessionId);
-    assert.strictEqual(restored.negotiatedVersion, "2025-11-25", "Redis 복원 직후 헤더 값으로 재앵커링되어야 한다 (R2)");
+    assert.strictEqual(restored.negotiatedVersion, "2025-11-25", "Redis 복원 직후 헤더 값으로 재앵커링되어야 한다");
 
     const persisted = await fakeRedisModule.getSession(sessionId);
     assert.strictEqual(persisted.negotiatedVersion, "2025-11-25", "재앵커링된 값이 Redis에도 즉시 반영되어야 한다");
@@ -412,6 +412,6 @@ describe("MCP protocol-version 자가치유 — 실제 핸들러 통합 테스�
     assert.strictEqual(res.statusCode, 200, `자동복구 실패: ${res.body}`);
     const session = streamableSessions.get("ghost-but-authenticated-session");
     assert.ok(session, "세션이 생성되어야 한다");
-    assert.strictEqual(session.negotiatedVersion, "2025-06-18", "자동복구 세션도 헤더 값으로 즉시 채워져야 한다 (R2)");
+    assert.strictEqual(session.negotiatedVersion, "2025-06-18", "자동복구 세션도 헤더 값으로 즉시 채워져야 한다");
   });
 });

@@ -2,7 +2,7 @@
 
 작성자: 최진호
 작성일: 2026-04-18
-수정일: 2026-04-29 (v3.2.0 Phase 1~7 신규 통합 테스트 4건 추가)
+수정일: 2026-04-29 (v3.2.0 신규 통합 테스트 4건 추가)
 
 ---
 
@@ -13,7 +13,7 @@ MorphemeIndex의 LLM 체인 관통 동작을 end-to-end로 검증한다.
 각 테스트는 환경변수 가드로 기본 skip 처리되어 있으며, 명시적으로 활성화해야 실행된다.
 CI에서 무조건 실행되지 않도록 의도적으로 설계된 구조다.
 
-v3.2.0부터 Phase 1~7 구현 검증용 통합 테스트 4건이 추가되었다.
+v3.2.0부터 구현 검증용 통합 테스트 4건이 추가되었다.
 이 4건은 별도 활성화 변수 없이 DB/Redis 연결 가능 여부를 런타임에 자동 판단하여 skip 처리된다.
 
 ---
@@ -115,11 +115,11 @@ node --test tests/integration/db-pool-isolation.test.js
 
 ### reflect-large-payload.test.js
 - DB, Redis, EMBEDDING_API_KEY 모두 불필요. 모든 외부 의존성을 stub으로 격리.
-- v3.2.0 Phase 1+2 회귀 가드(R12 TDZ 버그). `MEMENTO_REMEMBER_ATOMIC=true` 경로 검증.
+- v3.2.0 회귀 가드(TDZ 버그). `MEMENTO_REMEMBER_ATOMIC=true` 경로 검증.
 
 ### embedding-worker-batch.test.js
 - DB, Redis, EMBEDDING_API_KEY 불필요. EmbeddingWorker의 API 호출을 stub으로 대체.
-- v3.2.0 Phase 3 배치 retry 4 시나리오 검증.
+- v3.2.0 배치 retry 4 시나리오 검증.
 
 ### 공통
 - Node.js 22 이상 (`node:test` runner 사용).
@@ -225,7 +225,7 @@ ESM 모듈 캐시를 완전히 격리한 상태에서 체인을 초기화한다.
 PostgreSQL에 형태소 캐시가 저장되고 재조회 시 동일 결과를 반환하는지도 포함된다.
 실제 LLM CLI 호출로 응답에 20~60초가 소요될 수 있다.
 
-### db-pool-isolation.test.js (Phase 7)
+### db-pool-isolation.test.js
 
 `getBatchPool()`이 `getPrimaryPool()`과 별개 객체임을 검증한다.
 batchPool의 `options.max`가 primaryPool 대비 30% 이하로 제한되는지,
@@ -234,19 +234,19 @@ batchPool의 `options.max`가 primaryPool 대비 30% 이하로 제한되는지,
 `shutdownPool()` 호출 시 두 풀이 모두 종료되는지를 포함한다.
 DB 연결 없이 Pool 인스턴스 속성만으로 검증 가능한 케이스는 DB 없는 환경에서도 실행된다.
 
-### session-linker-deadlock.test.js (Phase 5)
+### session-linker-deadlock.test.js
 
 10개 reflect 동시 호출 시 deadlock이 발생하지 않고 lock_timeout 5s 내 모두 완료되는지 검증한다.
 SessionLinker의 `sortedKey` 오름차순 정렬로 lock ordering을 일관되게 유지하는 구현이 전제다.
 DATABASE_URL 미설정 또는 DB TCP 접속 불가 시 전체 skip.
 
-### reflect-large-payload.test.js (Phase 1+2)
+### reflect-large-payload.test.js
 
-R12 TDZ 회귀 가드 테스트. `MEMENTO_REMEMBER_ATOMIC=true` 경로에서
+TDZ 회귀 가드 테스트. `MEMENTO_REMEMBER_ATOMIC=true` 경로에서
 다건 summary와 긴 narrative_summary를 포함한 reflect 페이로드가 ReferenceError 없이
 완료되는지 검증한다. DB/Redis/EMBEDDING_API_KEY 불필요. 항상 실행 가능.
 
-### embedding-worker-batch.test.js (Phase 3)
+### embedding-worker-batch.test.js
 
 EmbeddingWorker의 `_embedMany` 배치화 4 시나리오를 검증한다.
 a) 정상 50건 — generateBatchEmbeddings 1회 + UPDATE 1회

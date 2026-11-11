@@ -1,13 +1,13 @@
 /**
- * fragment-isolation.test.js — Phase 1 cross-tenant 격리 단위 테스트
+ * fragment-isolation.test.js — cross-tenant 격리 단위 테스트
  *
  * 작성자: 최진호
  * 작성일: 2026-04-10
  *
  * 두 보안 task의 회귀 검증을 통합:
- *   1. content_hash 테넌트 격리 (Task 1.3): migration-031 partial index 2개로
+ *   1. content_hash 테넌트 격리: migration-031 partial index 2개로
  *      전환된 content_hash 격리 동작을 FragmentWriter / BatchRememberProcessor mock으로 검증
- *   2. GraphLinker + ContradictionDetector cross-tenant 격리 (Task 1.4):
+ *   2. GraphLinker + ContradictionDetector cross-tenant 격리:
  *      linkFragment 및 resolveContradiction의 key_id 격리 적용 검증
  *
  * 모든 DB/Redis 의존성은 mock 처리. 실 DB 호출 없음.
@@ -320,7 +320,7 @@ describe("BatchRememberProcessor — content_hash ON CONFLICT 격리", () => {
 
 
 /* ============================================================================
-   Task 1.4: GraphLinker + ContradictionDetector cross-tenant 격리
+   GraphLinker + ContradictionDetector cross-tenant 격리
    ============================================================================ */
 
 /** ──────────────────────────────────────────────────

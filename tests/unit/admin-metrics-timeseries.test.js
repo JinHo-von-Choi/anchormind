@@ -4,7 +4,7 @@
  * 작성자: 최진호
  * 작성일: 2026-04-20
  *
- * 테스트 대상: lib/admin/admin-metrics.js Phase 2 확장
+ * 테스트 대상: lib/admin/admin-metrics.js 시계열
  *  1. ring buffer RING_SIZE 초과 시 oldest 제거
  *  2. buildMetricsSummary timeseries 3개 키 모두 포함
  *  3. include에 "timeseries" 누락 시 timeseries 키 미포함

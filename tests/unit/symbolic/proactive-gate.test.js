@@ -5,7 +5,7 @@
  * 작성일: 2026-04-15
  * 수정일: 2026-05-19
  *
- * 검증 대상 (Phase 6):
+ * 검증 대상:
  *  - polarity 충돌 존재 시 block (reason=polarity_conflict)
  *  - quarantine_state (non-released) 시 block (reason=quarantine)
  *  - cohort mismatch (case_id 상이) 시 block (reason=cohort_mismatch)
@@ -40,7 +40,7 @@ function makeThrowingDetector(msg) {
   };
 }
 
-describe("evaluateProactiveGate — Phase 6 rule pack", () => {
+describe("evaluateProactiveGate — rule pack", () => {
 
   test("정상 케이스: allow + reason=ok", async () => {
     const res = await evaluateProactiveGate(

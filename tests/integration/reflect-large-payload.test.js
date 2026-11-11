@@ -1,10 +1,10 @@
 /**
- * R12 회귀 통합 테스트 — reflect 큰 페이로드 TDZ 회귀 가드
+ * 회귀 통합 테스트 — reflect 큰 페이로드 TDZ 회귀 가드
  *
  * 작성자: 최진호
  * 작성일: 2026-04-20
  *
- * 배경 (docs/plans/2026-04-19-tech-debt-audit.md R12):
+ * 배경:
  *   v2.9.0에서 MemoryManager.remember 본문의 atomic 분기가 const fragment
  *   선언보다 앞에 놓여 MEMENTO_REMEMBER_ATOMIC=true && keyId != null 경로에서
  *   `ReferenceError: Cannot access 'fragment' before initialization`.
@@ -40,7 +40,7 @@ mock.module("../../lib/tools/db.js", {
   }
 });
 
-describe("R12 reflect 큰 페이로드 TDZ 회귀 가드", () => {
+describe("reflect 큰 페이로드 TDZ 회귀 가드", () => {
   let prevAtomic;
 
   before(() => {
@@ -106,7 +106,7 @@ describe("R12 reflect 큰 페이로드 TDZ 회귀 가드", () => {
     mm.caseEventStore    = { append: async () => {}, recordEvent: async () => {} };
 
     /**
-     * Phase 1 변경: ReflectProcessor가 batchRememberProcessor를 통해 INSERT하므로
+     * ReflectProcessor가 batchRememberProcessor를 통해 INSERT하므로
      * 실제 DB pool 없이 동작하도록 batchRememberProcessor를 stub으로 교체한다.
      * stub은 입력 fragments 수만큼 성공 결과를 반환한다.
      */
@@ -140,7 +140,7 @@ describe("R12 reflect 큰 페이로드 TDZ 회귀 가드", () => {
     } catch (err) {
       assert.ok(
         !(err instanceof ReferenceError) || !/before initialization/.test(err.message),
-        `R12 regression: ${err.message}\n${err.stack}`
+        `regression: ${err.message}\n${err.stack}`
       );
       throw err;
     }
@@ -148,7 +148,7 @@ describe("R12 reflect 큰 페이로드 TDZ 회귀 가드", () => {
     assert.ok(result, "reflect()는 non-null 결과를 반환해야 한다");
     assert.ok(Array.isArray(result.fragments), "result.fragments는 배열이어야 한다");
     /**
-     * R12 본질은 "ReferenceError: Cannot access 'fragment' before initialization"이
+     * 문제의 본질은 "ReferenceError: Cannot access 'fragment' before initialization"이
      * 던져지지 않는 것이다. insert 호출 횟수는 reflect 내부 배치 전략에 따라 달라질
      * 수 있으므로 최소 1회만 요구한다. 위 try/catch 블록이 ReferenceError를 명시
      * 차단하므로 이 지점에 도달했다는 사실 자체가 회귀 가드를 만족한다.

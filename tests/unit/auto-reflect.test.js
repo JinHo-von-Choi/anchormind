@@ -29,9 +29,9 @@ import {
   reflectStorageScope,
 } from "../../lib/memory/processors/AutoReflect.js";
 
-/* ── Phase 6 회귀: Gemini timeout 30s 검증 ── */
+/* ── 회귀: Gemini timeout 30s 검증 ── */
 
-describe("Phase 6 — GEMINI_TIMEOUT_MS 회귀 가드", () => {
+describe("GEMINI_TIMEOUT_MS 회귀 가드", () => {
 
   it("GEMINI_TIMEOUT_MS가 export된 숫자다", () => {
     assert.strictEqual(typeof GEMINI_TIMEOUT_MS, "number");

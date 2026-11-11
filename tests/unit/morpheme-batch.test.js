@@ -4,7 +4,7 @@
  * 작성자: 최진호
  * 작성일: 2026-04-27
  *
- * Phase 4: MorphemeIndex 배치 임베딩 + multi-row INSERT 단위 테스트
+ * MorphemeIndex 배치 임베딩 + multi-row INSERT 단위 테스트
  *
  * 검증 대상:
  *  1. 50개 missing 형태소 → generateBatchEmbeddings 1회 호출 + pool.query INSERT 1회
@@ -105,7 +105,7 @@ const resetMocks = () => {
 /*  Tests                                                               */
 /* ------------------------------------------------------------------ */
 
-describe("MorphemeIndex — Phase 4 배치 임베딩 + multi-row INSERT", () => {
+describe("MorphemeIndex — 배치 임베딩 + multi-row INSERT", () => {
 
   beforeEach(() => resetMocks());
 

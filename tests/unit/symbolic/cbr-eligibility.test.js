@@ -4,7 +4,7 @@
  * 작성자: 최진호
  * 작성일: 2026-04-15
  *
- * 검증 포인트 (Phase 5 옵션 A):
+ * 검증 포인트:
  * 1. tenant 불일치 → 차단 (master ↔ API key 혼입 방지)
  * 2. case_id 없음 → 차단
  * 3. quarantine_state='soft' → 차단

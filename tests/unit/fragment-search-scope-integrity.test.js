@@ -133,7 +133,7 @@ describe("_searchL2 ID 보충 조회 scope 정합", () => {
   it("topic 일치 파편만 통과한다", async () => {
     const rows = [
       { id: "f1", content: "x", topic: "memento-mcp", type: "fact", agent_id: "default", created_at: "2026-08-01T00:00:00Z", workspace: null },
-      { id: "f2", content: "y", topic: "arcana",      type: "fact", agent_id: "default", created_at: "2026-08-01T00:00:00Z", workspace: null },
+      { id: "f2", content: "y", topic: "alpha",       type: "fact", agent_id: "default", created_at: "2026-08-01T00:00:00Z", workspace: null },
     ];
     const results = await FragmentSearch.prototype._searchL2.call(
       { store: makeStore(rows) },

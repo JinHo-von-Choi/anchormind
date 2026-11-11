@@ -1,14 +1,14 @@
 /**
  * 이슈 #21: Codex Desktop deferred/lazy tool discovery 대응 회귀 테스트
  *
- * Task 1: initialize instructions에 deferred 가이드 포함
- * Task 2: 코어 도구 title/annotations + tools/list 순서
- * Task 3: get_skill_guide codex 섹션 + 기존 섹션 회귀
+ * initialize instructions에 deferred 가이드 포함
+ * 코어 도구 title/annotations + tools/list 순서
+ * get_skill_guide codex 섹션 + 기존 섹션 회귀
  */
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-describe("issue #21: deferred tool discovery 가이드 — Task 1", () => {
+describe("issue #21: deferred tool discovery 가이드", () => {
   test("initialize instructions에 deferred 재검색 가이드가 포함된다", async () => {
     const { handleInitialize } = await import("../../lib/jsonrpc.js");
     const result = await handleInitialize({
@@ -27,7 +27,7 @@ describe("issue #21: deferred tool discovery 가이드 — Task 1", () => {
   });
 });
 
-describe("issue #21: title/annotations 메타데이터 — Task 2", () => {
+describe("issue #21: title/annotations 메타데이터", () => {
   test("recall에 title/annotations 메타데이터가 있다", async () => {
     const { recallDefinition } = await import("../../lib/tools/memory-schemas.js");
     assert.ok(recallDefinition.title, "recall에 title 필드가 있어야 한다");
@@ -72,7 +72,7 @@ describe("issue #21: title/annotations 메타데이터 — Task 2", () => {
   });
 });
 
-describe("issue #21: get_skill_guide codex 섹션 — Task 3", () => {
+describe("issue #21: get_skill_guide codex 섹션", () => {
   test("get_skill_guide(section=release)가 v6 변경 요약을 반환한다", async () => {
     const { tool_getSkillGuide } = await import("../../lib/tools/memory.js");
     const r = await tool_getSkillGuide({ section: "release" });

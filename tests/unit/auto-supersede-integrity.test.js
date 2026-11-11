@@ -82,9 +82,9 @@ describe("GraphLinker는 유사도만으로 파편을 닫지 않는다", () => {
     {
       name  : "서로 다른 세션의 앵커 reflect episode (cos 0.887)",
       source: { id: "new", topic: "session_reflect", type: "episode", key_id: "k1", created_at: "2026-09-20T00:00:10Z",
-                content: "개천록의 경험 밀도를 높일 방향을 운영 자료로 진단했다." },
+                content: "가계부 앱의 입력 단계를 줄일 방향을 사용 기록으로 진단했다." },
       old   : { id: "old", type: "episode", is_anchor: true, similarity: "0.887", created_at: "2026-09-18T00:00:00Z",
-                content: "개천록 2026-09-18 밸런스 완화 묶음. 소경계 돌파 실패의 대가를 낮췄다." }
+                content: "가계부 앱 2026-09-18 입력 개선 묶음. 영수증 인식 실패 때의 재입력을 줄였다." }
     },
     {
       name  : "시각이 다른 NPC 행적 기록 (cos 0.95)",

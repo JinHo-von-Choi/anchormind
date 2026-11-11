@@ -3,13 +3,13 @@
  *
  * 작성자: 최진호
  * 작성일: 2026-04-19
- * 수정일: 2026-04-19 (Phase 3 FragmentWriter.insert 오버로드 완료 — 단언 방향 반전)
+ * 수정일: 2026-04-19 (FragmentWriter.insert 오버로드 완료 — 단언 방향 반전)
  *
- * 배경(Phase 0 R7):
+ * 배경:
  *   QuotaChecker.check()와 FragmentWriter.insert()가 분리 트랜잭션으로 실행되어
  *   동시 요청 시 fragment_limit 초과 삽입이 이론적으로 가능했다.
  *
- * Phase 3 이후:
+ * 해결:
  *   MEMENTO_REMEMBER_ATOMIC=true 설정 시 단일 트랜잭션
  *   (BEGIN → api_keys FOR UPDATE → INSERT → COMMIT)으로 원자 실행.
  *   이 테스트는 MEMENTO_REMEMBER_ATOMIC=true 환경에서 실제 삽입 수가
@@ -115,7 +115,7 @@ describe("TOCTOU — fragment_limit 동시성 초과 재현", () => {
    * 분리 트랜잭션이므로 limit 초과 파편이 DB에 삽입될 수 있다.
    *
    * 현재 구현(v2.9.x)에서 이 단언이 실패함(실제 count > FRAGMENT_LIMIT)을 증명.
-   * Phase 3 이후 단일 트랜잭션으로 묶으면 count <= FRAGMENT_LIMIT이 보장되어야 한다.
+   * 단일 트랜잭션으로 묶으면 count <= FRAGMENT_LIMIT이 보장되어야 한다.
    */
   test(
     `${WORKERS} workers × ${REQUESTS_PER_WORKER} 동시 remember → ` +
@@ -175,7 +175,7 @@ describe("TOCTOU — fragment_limit 동시성 초과 재현", () => {
       );
 
       /**
-       * 핵심 단언 (Phase 3 이후):
+       * 핵심 단언:
        *   MEMENTO_REMEMBER_ATOMIC=true 환경에서 실제 삽입 수 <= fragment_limit.
        *   단일 트랜잭션 원자화(api_keys FOR UPDATE + INSERT)가 TOCTOU를 차단한다.
        *

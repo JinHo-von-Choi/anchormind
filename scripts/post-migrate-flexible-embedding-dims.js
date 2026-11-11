@@ -90,7 +90,6 @@ async function migrateTable(pool, { table, indexName, dropIndexName, whereClause
     await client.query("BEGIN");
     console.log(`migration-007: ${table} — 변환 중: ${mismatch.detail} (${keepValues ? "값 형변환 유지" : "임베딩 데이터 NULL 초기화"})`);
     await client.query(`DROP INDEX IF EXISTS ${SCHEMA}.${indexName ?? dropIndexName}`);
-    // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
     await client.query(
       `ALTER TABLE ${SCHEMA}.${table}
        ALTER COLUMN embedding TYPE ${spec.colType} USING ${keepValues ? `embedding::${spec.colType}` : "NULL"}`
@@ -106,7 +105,7 @@ async function migrateTable(pool, { table, indexName, dropIndexName, whereClause
     }
     await client.query("COMMIT");
   } catch (err) {
-    // iron-laws: ignore[IL-301] ROLLBACK 실패만 무시하고 원래 오류를 다시 던진다
+    // ROLLBACK 실패만 무시하고 원래 오류를 다시 던진다
     await client.query("ROLLBACK").catch(() => {});
     throw new Error(`${table} 변환 실패(롤백됨): ${err.message}`, { cause: err });
   } finally {
@@ -119,7 +118,6 @@ async function migrateTable(pool, { table, indexName, dropIndexName, whereClause
 
 /** 변환 후 상태 검증: NULL 수와 인덱스 유효성 출력 */
 async function verifyTable(pool, { table, indexName }) {
-  // iron-laws: ignore[IL-501] SQL 식별자는 코드 상수이고 입력값은 $n 자리표시자로 바인딩한다
   const { rows: [nulls] } = await pool.query(
     `SELECT count(*)::int AS total, count(*) FILTER (WHERE embedding IS NULL)::int AS null_rows
      FROM ${SCHEMA}.${table}`

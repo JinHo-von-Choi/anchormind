@@ -80,7 +80,7 @@ describe("summarizeWorkspaceDistribution", () => {
 
   it("NULL과 명시 workspace를 분리하고 count 내림차순으로 정렬한다", () => {
     const rows = [
-      { workspace: "docs-mcp", cnt: "5" },
+      { workspace: "my-project", cnt: "5" },
       { workspace: null,       cnt: "12" },
       { workspace: "memento",  cnt: "9" }
     ];
@@ -91,7 +91,7 @@ describe("summarizeWorkspaceDistribution", () => {
     assert.strictEqual(result.distinct_count, 2);
     assert.deepStrictEqual(result.top, [
       { workspace: "memento", count: 9 },
-      { workspace: "docs-mcp", count: 5 }
+      { workspace: "my-project", count: 5 }
     ]);
   });
 

@@ -1,5 +1,5 @@
 /**
- * R12 TDZ 회귀 가드 (2026-04-20).
+ * TDZ 회귀 가드 (2026-04-20).
  *
  * 작성자: 최진호
  * 작성일: 2026-04-20
@@ -14,7 +14,6 @@
  * if (!(atomicRemember && keyId)) 가드로 감쌌다. 이 테스트는 동일 리팩터 실수가
  * 다시 유입되는 것을 원천 차단한다.
  *
- * 참조: docs/plans/2026-04-19-tech-debt-audit.md R12
  */
 
 import { describe, it } from "node:test";
@@ -22,11 +21,11 @@ import assert           from "node:assert/strict";
 import { MemoryRememberer } from "../../lib/memory/processors/MemoryRememberer.js";
 
 /**
- * Phase 5-B 분해 이후 remember 본문은 `lib/memory/processors/MemoryRememberer.js`로
+ * remember 본문은 `lib/memory/processors/MemoryRememberer.js`로
  * 이관됐다. MemoryManager.prototype.remember는 이제 얇은 위임이므로
  * TDZ 회귀 가드는 MemoryRememberer.prototype.remember를 대상으로 한다.
  */
-describe("MemoryRememberer.remember — R12 TDZ regression guard", () => {
+describe("MemoryRememberer.remember — TDZ regression guard", () => {
   const src = MemoryRememberer.prototype.remember.toString();
 
   it("declares const fragment (via _buildGatedFragment) before referencing it in the atomic branch", () => {
@@ -39,7 +38,7 @@ describe("MemoryRememberer.remember — R12 TDZ regression guard", () => {
     assert.ok(atomicIdx   > 0, "_rememberAtomic(fragment, ...) call must exist in remember()");
     assert.ok(
       fragDeclIdx < atomicIdx,
-      `fragment must be assigned before atomic branch (decl=${fragDeclIdx}, ref=${atomicIdx}) — R12 TDZ regression`
+      `fragment must be assigned before atomic branch (decl=${fragDeclIdx}, ref=${atomicIdx}) — TDZ regression`
     );
   });
 

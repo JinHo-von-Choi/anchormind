@@ -3,7 +3,7 @@
  *
  * 작성자: 최진호
  * 작성일: 2026-04-20
- * 수정일: 2026-04-20 (Phase 2: SVG sparkline + 시간 범위 토글)
+ * 수정일: 2026-04-20 (SVG sparkline + 시간 범위 토글)
  */
 
 import { api }                                from "./api.js";

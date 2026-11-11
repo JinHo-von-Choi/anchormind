@@ -8,7 +8,7 @@
  * 목적: v2.7.0 이전 코퍼스에 ClaimExtractor를 소급 실행하여 fragment_claims 테이블을 채운다.
  *       실행 이후 신규 파편은 RememberPostProcessor 8단계 hook에서 실시간 추출되므로
  *       이 스크립트는 기존 코퍼스 전용이다.
- * 호출 조건: Phase 1 Shadow(MEMENTO_SYMBOLIC_SHADOW=true) 활성화 전 1회
+ * 호출 조건: Shadow(MEMENTO_SYMBOLIC_SHADOW=true) 활성화 전 1회
  * 빈도: 일회성
  * 의존: DATABASE_URL, OPENAI_API_KEY(또는 로컬 transformers provider)
  * 관련 문서: docs/operations/backfill-claims.md, docs/operations/maintenance.md
@@ -20,7 +20,7 @@
  * 작성자: 최진호
  * 수정일: 2026-04-19
  *
- * 목적: Phase 1 Shadow 진입 시 기존 v2.7.0 파편(미추출 상태)을 대상으로
+ * 목적: Shadow 진입 시 기존 v2.7.0 파편(미추출 상태)을 대상으로
  *       claim 을 소급 생성한다. 실행 시점에 새로 들어오는 파편은 RememberPostProcessor
  *       의 8단계 hook 에서 실시간으로 추출되므로, 이 스크립트는 기존 코퍼스 전용이다.
  *
@@ -210,7 +210,7 @@ async function processFragment(fragment, keyId) {
   let claims;
   try {
     claims = await extractor.extract(fragment.content, fragment.topic);
-  // iron-laws: ignore[IL-301] 실패를 extractor_errors로 세어 끝에 출력한다
+  // 실패를 extractor_errors로 세어 끝에 출력한다
   } catch {
     counters.extractor_errors++;
     return;
@@ -303,7 +303,7 @@ async function main() {
 
 main().catch(async (err) => {
   console.error("[backfill] fatal:", err);
-  // iron-laws: ignore[IL-301] 종료·정리 단계의 실패라 결과에 영향이 없다
+  // 종료·정리 단계의 실패라 결과에 영향이 없다
   try { await pool.end?.(); } catch {}
   process.exit(1);
 });

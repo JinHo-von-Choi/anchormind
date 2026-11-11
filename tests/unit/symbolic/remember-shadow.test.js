@@ -1,5 +1,5 @@
 /**
- * RememberPostProcessor Phase 1 symbolic claim extraction 단위 테스트
+ * RememberPostProcessor symbolic claim extraction 단위 테스트
  *
  * 작성자: 최진호
  * 작성일: 2026-04-15
@@ -194,7 +194,7 @@ const resetMocks = () => {
 /*  Tests                                                              */
 /* ------------------------------------------------------------------ */
 
-describe("RememberPostProcessor — Phase 1 symbolic claim extraction hook", () => {
+describe("RememberPostProcessor — symbolic claim extraction hook", () => {
 
   beforeEach(() => resetMocks());
 

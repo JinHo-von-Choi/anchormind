@@ -4,7 +4,7 @@
  * 작성자: 최진호
  * 작성일: 2026-04-15
  *
- * 검증 대상 (Phase 3):
+ * 검증 대상:
  *  - ClaimStore.findPolarityConflicts 결과를 PolarityConflict 배열로 정규화
  *  - 충돌 개수 기반 severity (none/low/medium/high)
  *  - 메트릭 호출 (warning 기록)

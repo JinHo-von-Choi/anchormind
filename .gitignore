@@ -67,20 +67,14 @@ docs/Requirements.md
 # Private Documents (Patent, etc.)
 docs/private/
 docs/plans/
-docs/superpowers/
 # Package lock (선택적 — 필요에 따라 주석 해제)
 # package-lock.json
 .worktrees/
 
-# gstack (security reports, analytics)
-.gstack/
 
 # Playwright MCP artifacts
 .playwright-mcp/
 
-GATES.md
-.unlazy/
-.unlazy-hook-state.json
 
 # 검색 평가 세트의 실제 질의와 라벨(저장소에 올리지 않는다)
 tests/fixtures/recall-eval-v2/private/*.jsonl

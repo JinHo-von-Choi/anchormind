@@ -94,7 +94,6 @@ describe("SearchParamAdaptor", () => {
     assert.deepStrictEqual(params, ["-1", "text", 10, 0.35, 3]);
   });
 
-  // iron-laws: ignore[IL-306] 예외 없이 끝나는지가 검증 대상이며 node:test는 던진 예외를 실패로 처리한다
   test("recordOutcome: DB 오류 시 예외 전파 없음", async () => {
     mockQuery.mock.mockImplementationOnce(() =>
       Promise.reject(new Error("disk full"))
@@ -107,7 +106,7 @@ describe("SearchParamAdaptor", () => {
 });
 
 /**
- * Phase 0 Task 0.4 회귀 테스트 — _normalizeKeyId 헬퍼 + array keyId 처리
+ * 회귀 테스트 — _normalizeKeyId 헬퍼 + array keyId 처리
  *
  * 커밋 2661394 (migration-030: key_id INTEGER → TEXT) +
  * 커밋 8f693b6 (_normalizeKeyId 헬퍼 도입) 이후
@@ -117,7 +116,7 @@ describe("SearchParamAdaptor", () => {
  * _normalizeKeyId는 module-scope private 함수이므로 직접 export 없이
  * getMinSimilarity / recordOutcome 호출 결과로 우회 검증한다.
  */
-describe("SearchParamAdaptor — array keyId 회귀 (Phase 0 Task 0.4)", () => {
+describe("SearchParamAdaptor — array keyId 회귀", () => {
   beforeEach(() => {
     mockQuery.mock.resetCalls();
     _resetForTesting();

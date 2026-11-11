@@ -106,7 +106,7 @@ function simulateSessionBranch({ sessionId, validationScenario, authValid, authK
 /*  테스트 케이스                                                       */
 /* ================================================================== */
 
-describe("MCP 세션 404 분기 (Phase 2c-1)", () => {
+describe("MCP 세션 404 분기", () => {
 
   it("TC1: sessionId 없음 + initialize + 인증 성공 → 세션 생성 (200)", () => {
     const result = simulateSessionBranch({

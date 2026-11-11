@@ -52,7 +52,7 @@ function buildBoundClientName(keyId) {
 
 describe("/register — name-based client_id 생성", () => {
   const SAMPLE_KEY_ID   = "550e8400-e29b-41d4-a716-446655440000";
-  const SAMPLE_KEY_NAME = "nerdvana-gem";
+  const SAMPLE_KEY_NAME = "sample-gem";
 
   it("name이 있는 경우 → <name>_<keyIdHex8> 형식", () => {
     const clientId = buildBoundClientId(SAMPLE_KEY_NAME, SAMPLE_KEY_ID);
@@ -171,7 +171,7 @@ describe("/authorize — name-based client_id bound_key_id 설정", () => {
 
   it("client_name='apikey:<uuid>' + validateApiKeyById 성공 → bound_key_id 설정", () => {
     const result = simulateAuthorizeBoundKeyPath({
-      clientId    : `nerdvana-gem_550e8400`,
+      clientId    : `sample-gem_550e8400`,
       clientName  : `apikey:${KEY_ID}`,
       clientFound : true,
       byIdValid   : true,
@@ -183,7 +183,7 @@ describe("/authorize — name-based client_id bound_key_id 설정", () => {
 
   it("client_name='apikey:<uuid>' + validateApiKeyById 실패 → bound_key_id null", () => {
     const result = simulateAuthorizeBoundKeyPath({
-      clientId    : `nerdvana-gem_550e8400`,
+      clientId    : `sample-gem_550e8400`,
       clientName  : `apikey:${KEY_ID}`,
       clientFound : true,
       byIdValid   : false,
@@ -225,7 +225,7 @@ describe("/token exchange — bound_key_id 전파", () => {
 
   it("codeData.bound_key_id → accessData.bound_key_id 전파", () => {
     const codeData = {
-      client_id    : "nerdvana-gem_550e8400",
+      client_id    : "sample-gem_550e8400",
       scope        : "mcp",
       is_api_key   : true,
       bound_key_id : KEY_ID,
@@ -242,7 +242,7 @@ describe("/token exchange — bound_key_id 전파", () => {
 
   it("codeData.bound_key_id → refreshData.bound_key_id 전파", () => {
     const codeData = {
-      client_id    : "nerdvana-gem_550e8400",
+      client_id    : "sample-gem_550e8400",
       scope        : "mcp",
       is_api_key   : true,
       bound_key_id : KEY_ID,
@@ -281,7 +281,7 @@ describe("refresh_token — bound_key_id 승계", () => {
   it("기존 tokenData.bound_key_id → 새 accessToken.bound_key_id 승계", () => {
     const tokenData = {
       type         : "refresh",
-      client_id    : "nerdvana-gem_550e8400",
+      client_id    : "sample-gem_550e8400",
       scope        : "mcp",
       is_api_key   : true,
       bound_key_id : KEY_ID,
@@ -299,7 +299,7 @@ describe("refresh_token — bound_key_id 승계", () => {
   it("기존 tokenData.bound_key_id → 새 refreshToken.bound_key_id 승계", () => {
     const tokenData = {
       type         : "refresh",
-      client_id    : "nerdvana-gem_550e8400",
+      client_id    : "sample-gem_550e8400",
       scope        : "mcp",
       is_api_key   : true,
       bound_key_id : KEY_ID,

@@ -2,7 +2,7 @@ import js from "@eslint/js";
 import noSilentCatch from "./scripts/eslint-rules/no-silent-catch.js";
 
 export default [
-  { ignores: ["node_modules/**", ".worktrees/**", ".samcheonpo/**", "assets/admin/vendor/**", "docs/superpowers/**"] },
+  { ignores: ["node_modules/**", ".*/**", "assets/admin/vendor/**"] },
   js.configs.recommended,
   {
     files: ["**/*.{js,mjs,cjs}"],
