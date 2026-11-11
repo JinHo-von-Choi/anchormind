@@ -23,7 +23,7 @@ import http from "http";
 import { resolveClientIp, applyBaseResponseHeaders, recommendedSettingsGap } from "./lib/http/helpers.js";
 
 /** 설정 */
-import { PORT, ACCESS_KEY, AUTH_DISABLED, REDIS_ENABLED, wmPgFallbackEnabled, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI, SHUTDOWN_DEADLINE_MS, envInt, CONFIG_STRICT, getConfigIssues } from "./lib/config.js";
+import { PORT, BIND_HOST, ACCESS_KEY, AUTH_DISABLED, REDIS_ENABLED, wmPgFallbackEnabled, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI, SHUTDOWN_DEADLINE_MS, envInt, CONFIG_STRICT, getConfigIssues } from "./lib/config.js";
 import { MEMORY_CONFIG }          from "./config/memory.js";
 import { validateMemoryConfig }   from "./config/validate-memory-config.js";
 import { currentSwitchLine }      from "./config/switches.js";
@@ -138,7 +138,6 @@ const server = http.createServer(requestTracker.wrap(async (req, res) => {
     return;
   }
 
-  // iron-laws: ignore[AI-101] 요청 경로를 해석하는 기준 URL이며 접속 주소가 아니다
   const url = new URL(req.url || "/", "http://localhost");
 
   /* GET /health, /health/live, /health/ready */
@@ -158,7 +157,6 @@ const server = http.createServer(requestTracker.wrap(async (req, res) => {
     if (!auth.valid) {
       res.statusCode = 401;
       res.setHeader("Content-Type", "application/json; charset=utf-8");
-      // iron-laws: ignore[IL-505] application/json 응답이라 브라우저가 HTML로 해석하지 않는다
       res.end(JSON.stringify({ error: auth.error || "Unauthorized" }));
       return;
     }
@@ -203,7 +201,7 @@ const server = http.createServer(requestTracker.wrap(async (req, res) => {
 
   /* POST /message */
   if (req.method === "POST" && url.pathname === "/message") {
-    await handleLegacySsePost(req, res);
+    await handleLegacySsePost(req, res, rateLimiter);
     return;
   }
 
@@ -219,13 +217,10 @@ const server = http.createServer(requestTracker.wrap(async (req, res) => {
   }
 
   if ((req.method === "GET" || req.method === "POST") && url.pathname === "/authorize") {
-    if (req.method === "POST") {
-      const clientIp = resolveClientIp(req);
-      if (!rateLimiter.allow(clientIp)) {
-        res.writeHead(429, { "Retry-After": String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)) });
-        res.end(JSON.stringify({ error: "too_many_requests" }));
-        return;
-      }
+    if (!rateLimiter.allow(resolveClientIp(req))) {
+      res.writeHead(429, { "Retry-After": String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)) });
+      res.end(JSON.stringify({ error: "too_many_requests" }));
+      return;
     }
     await handleOAuthAuthorize(req, res);
     return;
@@ -243,7 +238,7 @@ const server = http.createServer(requestTracker.wrap(async (req, res) => {
     return;
   }
 
-  /* POST /session/rotate — 세션 교체 (Phase 1 security-hardening) */
+  /* POST /session/rotate — 세션 교체 */
   if (req.method === "POST" && url.pathname === "/session/rotate") {
     await handleSessionRotate(req, res);
     return;
@@ -273,7 +268,6 @@ const server = http.createServer(requestTracker.wrap(async (req, res) => {
 
   /* Admin API (라우트 표의 ipLimit 항목: 인증, 키 생성, 가져오기, 자기 정보에 IP별 rate limit 적용) */
   if (url.pathname.startsWith(`${ADMIN_BASE}/`)) {
-    // iron-laws: ignore[IL-504] RegExp.exec 호출이며 운영체제 명령을 실행하지 않는다
     const isRateLimitedAdminPath = isRateLimitedAdminRequest(req.method, url.pathname.slice(ADMIN_BASE.length));
 
     if (isRateLimitedAdminPath) {
@@ -359,8 +353,8 @@ logInfo(currentSwitchLine());
 logInfo(describeWorkingMemoryBackend({ redisEnabled: REDIS_ENABLED, fallbackEnabled: wmPgFallbackEnabled() }));
 setAnchorAutoPromotionEnabled(MEMORY_CONFIG.consolidate?.autoPromoteAnchors !== false);
 
-server.listen(PORT, () => {
-  console.log(`Memento MCP HTTP server listening on port ${PORT}`);
+server.listen(PORT, BIND_HOST || undefined, () => {
+  console.log(`Memento MCP HTTP server listening on ${BIND_HOST || "all interfaces"} port ${PORT}`);
   console.log("Streamable HTTP endpoints: POST/GET/DELETE /mcp");
   console.log("Legacy SSE endpoints: GET /sse, POST /message");
 
@@ -437,7 +431,6 @@ async function gracefulShutdown(signal, { exitCode = 0 } = {}) {
   try {
     const { MemoryManager } = await import("./lib/memory/MemoryManager.js");
     drainPromises.push(MemoryManager.getInstance().drainMorpheme());
-  // iron-laws: ignore[IL-301] MemoryManager가 초기화되기 전에는 이 정리 단계를 건너뛴다
   } catch { /* MemoryManager 미초기화 시 skip */ }
 
   if (drainPromises.length > 0) {

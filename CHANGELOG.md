@@ -13,12 +13,28 @@
 - `memento-mcp benchmark --mode action`. 도구 인자가 여러 번 갱신된 뒤 recall 1순위로 인자를 채웠을 때 최신 값(correct), 이전 값(stale), 미발견(miss)을 slot 방식과 일반 검색 방식별로 세고 평균 반환 토큰과 지연을 낸다. 리더 모델을 부르지 않는다. 골드셋은 `tests/fixtures/action-goldset.jsonl`이다.
 - `scripts/backfill-fragment-lineage.js`(기존 분할 자식의 계보, 원본 없는 자식의 근거 상태)와 `scripts/backfill-learning-source.js`(자동 회고 학습 항목의 source). 둘 다 기본은 미리보기이고 `--execute`로 반영한다.
 
+- `MEMENTO_METRICS_TOKEN`. `GET /metrics`만 통과하는 지표 전용 Bearer 토큰이다. 수집기에 마스터 키를 두지 않아도 된다. 마스터 키는 계속 `/metrics`를 통과한다.
+- `MEMENTO_SESSION_CREDENTIAL_CHECK`(off, warn, enforce. 기본 warn). 유효한 세션의 요청(`POST /mcp`, `GET /mcp`, `POST /message`)에 자격 증명이 함께 오면 그 자격 증명을 세션 주체와 대조한다. warn은 `memento_session_credential_total{result}`와 경고 로그만 남기고, enforce는 무효하거나 만료된 자격 증명을 401, 다른 주체의 자격 증명을 403으로 거부한다. 자격 증명을 보내지 않은 요청은 판정하지 않는다.
+- `MEMENTO_BIND_HOST`. 리슨 주소를 정한다. 비워 두면 모든 인터페이스에 리슨한다.
+- `link`와 `unlink`의 `workspace` 인자. 공유 workspace가 제한된 그룹 멤버의 파편을 다룰 때 그 workspace를 지정한다.
+- 인증된 `GET /health` 응답의 `flags`. `TRUST_PROXY_HOPS` 없이 `X-Forwarded-For`를 받았으면 `trust_proxy_hops_unset`이 들어간다.
+
 ### Changed
 
 - 라이선스가 Apache 2.0에서 AGPL-3.0으로 바뀐다. 소스를 공개하지 않고 쓰려면 상용 라이선스가 필요하다. 7.3.0 이하 버전에는 계속 Apache 2.0이 적용된다.
 - 내보내기 형식 버전 2가 출처 열(`origin`, `observed_client`, `trust_tier`)과 검토 열(`review_state`, `review_reason`)을 싣는다. 가져오기는 파일의 origin을 이어받되 등급을 올리지 않고, 검토 대기 행은 검토 대기로 들인다. 되살리기가 아닌 가져오기는 remember와 같은 검토 규칙을 판정한다. 출처 열이 없는 파일은 전처럼 `import`(등급 2)로 들어온다.
 - 중복 병합(`merge_duplicates`)이 중복 파편을 지우지 않고 닫고 승계자로 `superseded_by` 링크를 남긴다. 열린 파편끼리만 묶는다.
 - 정리 주기에 `session_lessons`, `gc_consolidation_changes` 단계가 더해져 28단계가 된다.
+
+- 스키마에 없는 호출 인자는 처리기에 전달되지 않는다. 응답의 `_meta.ignored_args`는 전과 같이 이름을 알린다. 클라이언트가 보낸 `_` 접두 인자는 이름과 관계없이 지운다. `dryRun`은 미리보기를 지원하지 않는 도구가 그 요청을 거부할 수 있게 전달한다.
+- `MEMENTO_ADMIN_AUTH_BACKOFF=on`의 지연이 `TRUST_PROXY_HOPS`가 설정된 설치에서 요청 주소별로 걸린다. 다른 주소의 실패로 올바른 마스터 키가 429를 받지 않는다. `TRUST_PROXY_HOPS`가 없는 설치는 전과 같이 모든 시도를 늦춘다.
+- `GET /authorize`에 IP 요청 한도가 걸린다. 클라이언트 자동 등록은 `/register`와 같은 시간당 상한(`MEMENTO_DCR_MAX_PER_HOUR`)을 쓰고, `response_type=code`와 S256 `code_challenge`가 없는 요청은 클라이언트를 등록하지 않고 400을 받는다.
+- 옛 SSE의 `POST /message`가 `/mcp`와 같은 키·IP 요청 한도를 쓴다.
+- codex-cli, qwen-cli, agy-cli도 `MEMENTO_LLM_CLI_TOOL_APPROVAL=none`(기본)에서 서버 작업 디렉터리가 아닌 빈 임시 디렉터리에서 실행된다.
+- OAuth 토큰 갱신에 `client_secret`이 오면 토큰이 묶인 키와 같아야 한다. 다른 키의 secret으로는 갱신할 수 없다.
+- 마스터 키 로그인 쿠키로 인증한 관리 API의 상태 변경 요청은 다른 출처의 페이지가 보낸 경우 거부된다(`Sec-Fetch-Site`가 `same-site` 또는 `cross-site`이고 `Origin`이 `ADMIN_ALLOWED_ORIGINS`에 없을 때).
+- SessionStart 훅이 `context` 도구와 같은 workspace 읽기 허가(`MEMENTO_WORKSPACE_READ_AUTHZ`)를 거친다.
+- mongoose 하위 의존성을 9.12.1로 올린다.
 
 ### Fixed
 
@@ -480,7 +496,6 @@
 ### Added
 
 - `config/env-access.js`와 `npm run env-access`. 중앙 모듈(`lib/config.js`, `config/`) 밖에서 `process.env`를 읽는 지점을 구문 분석으로 찾아 startup, runtime, cli로 분류하고 대장과 대조한다. 등록되지 않은 접근, 코드에 없는 등록, 분류가 어긋난 등록은 `tests/structure/env-access.test.js`가 실패시킨다. 새 환경 변수는 중앙 모듈에서 읽고, 예외는 사유와 함께 대장에 등록한다.
-- 오철칙(iron-laws) 점검 워크플로 `.github/workflows/iron-laws.yml`. 기준선(`.iron-laws-baseline.json`)에 없던 새 지적만 판정하며 병합을 막지 않는다. 도구는 점검에 쓴 커밋으로 고정했고 범위와 제외 목록은 `.iron-laws.yml`에 있다.
 - `acorn`을 개발 의존성으로 명시했다. 환경 변수 접근 점검이 쓴다.
 
 ### Changed
@@ -1442,8 +1457,6 @@ recall 최종 정렬에서 cross-encoder reranker 결과를 보존하고, topic/
 ### Docs
 
 - `docs/migration-conventions.md`: 신규 마이그레이션 파일이 따라야 할 body-only 규약·멱등성 패턴·파일명 규약·추가 절차.
-- `docs/operations/agent-worktree.md`: 에이전트 isolation 워크트리 적체 방지 운영 가이드. cleanup 훅·cron GC·상한 5개·일괄 정리 절차·트러블슈팅.
-- `docs/operations/upstream-porting.md`: upstream remote 등록·port 브랜치 네이밍·cherry-pick 우선 정책·divergence 감지·fork 전용 패치 격리·충돌 해결 절차.
 
 ---
 
@@ -2310,7 +2323,7 @@ LLM_FALLBACKS='[
 ## [2.2.1] - 2026-03-31
 
 ### Fixed
-- migrate.js: pgvector 스키마 자동 감지 및 search_path 설정 추가. `nerdvana.vector_cosine_ops` 하드코딩 제거하여 표준 환경(public 스키마) 호환 복구
+- migrate.js: pgvector 스키마 자동 감지 및 search_path 설정 추가. 스키마 이름이 하드코딩된 `vector_cosine_ops` 참조를 제거하여 표준 환경(public 스키마) 호환 복구
 - migrate.js: dotenv로 .env 자동 로드. `POSTGRES_*` 변수로 `DATABASE_URL` 자동 구성하여 수동 지정 불필요
 
 ### Documentation
@@ -2332,7 +2345,7 @@ LLM_FALLBACKS='[
 - L1 cache miss rate measurement: text-only queries no longer counted as L1 miss
 - Quota check double-release bug
 - migrate.js strips inner BEGIN/COMMIT for transactional safety
-- migration-019: schema-qualified `nerdvana.vector_cosine_ops`
+- migration-019: schema-qualified `vector_cosine_ops`
 
 ### Changed
 - HNSW index: ef_construction 64→128, ef_search=80 session-level (migration-019)
@@ -2427,7 +2440,7 @@ LLM_FALLBACKS='[
 - Knowledge graph nodes overflowing viewport (no zoom/pan)
 
 ### Removed
-- docs-mcp dead code from gemini.js (489 lines: generateContent, generateWikiContent, improveWikiContent, GEMINI_MODELS, braveSearch, generateWikiContentWithCLI, enhanceWikiContentWithCLI, checkGeminiStatus)
+- Dead code from gemini.js (489 lines: generateContent, generateWikiContent, improveWikiContent, GEMINI_MODELS, braveSearch, generateWikiContentWithCLI, enhanceWikiContentWithCLI, checkGeminiStatus)
 
 ## [1.8.0] - 2026-03-28
 

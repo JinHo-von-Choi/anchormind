@@ -61,7 +61,8 @@ export const DYNAMIC_IMPORT_ALLOW = Object.freeze({
   "lib/copilot.js"                               : "isLlmAvailable 위임 shim",
   "lib/opencode.js"                              : "isLlmAvailable 위임 shim",
   "lib/memory/embedding/MorphemeIndex.js"        : "LLM 형태소 경로(MEMENTO_MORPHEME_TOKENIZER=llm)에서만 gemini.js를 불러온다",
-  "lib/memory/embedding/SyntheticQueryGenerator.js": "remember 후처리 경로가 LLM 스택 전체를 기동 시 불러오지 않게 지연 로드한다"
+  "lib/memory/embedding/SyntheticQueryGenerator.js": "remember 후처리 경로가 LLM 스택 전체를 기동 시 불러오지 않게 지연 로드한다",
+  "lib/memory/consolidate/MemoryConsolidator.js" : "세션 교훈 단계(MEMENTO_SESSION_LESSONS)가 켜졌을 때만 LLM 모듈을 불러온다"
 });
 
 /** 동적 import 구조 분해로 꺼낼 수 있는 이름 */

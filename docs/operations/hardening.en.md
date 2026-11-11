@@ -41,9 +41,10 @@ By default, these settings only log a warning and let the request pass. Check th
 | `MEMENTO_RESERVED_AGENT_IDS` (`warn`, `enforce`) | `warn` | API-key requests using internal agentIds (`system`, `admin`) are rejected with -32001. The master key is still allowed. |
 | `MEMENTO_ANCHOR_PERMISSION` (`off`, `warn`, `enforce`) | `warn` | Setting an anchor from a key without the `anchor` permission is rejected. |
 | `MEMENTO_WORKSPACE_READ_AUTHZ` (`off`, `warn`, `enforce`) | `warn` | Reading outside the key's `allowed_workspaces`, or a non-master session requesting a master-only preset, is rejected with -32001. |
+| `MEMENTO_SESSION_CREDENTIAL_CHECK` (`off`, `warn`, `enforce`) | `warn` | A credential sent on a valid session is rejected with 401 when it is invalid or expired and with 403 when it belongs to a different identity. Requests without a credential are processed as before. |
 | `MEMENTO_OAUTH_REDIRECT_CHECK` (`warn`, `enforce`) | `warn` | An error response from `/authorize` no longer redirects to an unregistered `redirect_uri`; it returns 400 JSON instead. |
 | `MEMENTO_SSE_QUERY_KEY` (`allow`, `deny`) | `allow` | The legacy SSE `?accessKey=` query key is refused with 401 and a hint to use the `Authorization` header. `allow` accepts it for the master key only. |
-| `MEMENTO_ADMIN_AUTH_BACKOFF` (`on`, `off`) | `off` | After 5 consecutive admin authentication failures, the next attempt is delayed up to 60 seconds. During the delay, even a correct key gets 429 (`Retry-After`). |
+| `MEMENTO_ADMIN_AUTH_BACKOFF` (`on`, `off`) | `off` | After 5 consecutive admin authentication failures, the next attempt is delayed up to 60 seconds. With `TRUST_PROXY_HOPS` set, only attempts from the failing client address are delayed; without it, all attempts are delayed. During the delay, even a correct key gets 429 (`Retry-After`). |
 
 Before moving `MEMENTO_WORKSPACE_READ_AUTHZ` to `enforce`, review the per-key records collected during the `warn` period (`memento_workspace_read_authz_total` and the warning logs).
 
@@ -58,7 +59,7 @@ Setting `MEMENTO_FRAME_OPTIONS=deny` adds the `X-Frame-Options: DENY` header. Wi
 - Admin API permissions: each request is checked against the capability declared for its route. Routes missing from the table are owner-only. Admin accounts sign in with TOTP (required for owner and admin), and session cookies use `SameSite=Strict` with double-submit CSRF checks. Master-key sign-in stays available as an emergency path.
 - Provenance and review: a fragment's `origin` and `trust_tier` keep low-trust content out of ANCHOR and CORE injection. Text that tries to override instructions is sent to the review queue.
 - Key lifetime: expiry, allowed address ranges, rotation, and revocation are supported. Sessions for a revoked key close immediately.
-- Request limits: `/auth`, `/keys` POST, and `/import` POST have per-IP limits. Each API key also gets 100 requests per minute, and each IP gets 30 per minute; both are adjustable by environment variable. `initialize`, `GET /sse`, `/token`, `/register`, and `/authorize` share one IP bucket and return 429 with `Retry-After` when it is exceeded.
+- Request limits: `/auth`, `/keys` POST, and `/import` POST have per-IP limits. Each API key also gets 100 requests per minute, and each IP gets 30 per minute; both are adjustable by environment variable. `initialize`, `GET /sse`, `/token`, `/register`, and `/authorize` (GET and POST) share one IP bucket and return 429 with `Retry-After` when it is exceeded. Legacy SSE `POST /message` uses the same per-key and per-IP limits as `/mcp`. Client auto-registration on `GET /authorize` uses the same hourly cap as `/register` (`MEMENTO_DCR_MAX_PER_HOUR`).
 - Audit log: tool-call records include the actor (`key=`, the first 8 characters of `sid=`, `ip=`). Admin API changes except GET, plus successful and failed admin authentication, are logged too.
 - Response headers: every response includes `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
 - OpenAPI: when `ENABLE_OPENAPI=true`, `GET /openapi.json` is available. The master key sees all paths; an API key sees a spec filtered to its permissions.
@@ -88,9 +89,9 @@ Setting `MEMENTO_FRAME_OPTIONS=deny` adds the `X-Frame-Options: DENY` header. Wi
 - Audit verification: `anchormind audit verify` recomputes the hash chain. A broken chain exits with code 1. Emergency recovery for a lost admin account is `anchormind admin recover --confirm`.
 - Feature switch report: `npm run switches` prints each switch's applied value, default, and state as a table. With `--strict`, it exits with code 1 if any switch has an invalid value.
 - Migration lint: `npm run lint:migrations`.
-- Metrics: `/metrics` exposes Prometheus-format metrics. Master-key authentication is required when `MEMENTO_ACCESS_KEY` is set. Shared Prometheus configuration is in [monitoring.md](monitoring.md).
+- Metrics: `/metrics` exposes Prometheus-format metrics. Master-key or metrics-token (`MEMENTO_METRICS_TOKEN`) authentication is required when `MEMENTO_ACCESS_KEY` is set. Shared Prometheus configuration is in [monitoring.md](monitoring.md).
 
-More operations documents are in this directory: LLM provider chain, symbolic hard gate, agent worktree, upstream porting, and others.
+More operations documents are in this directory: LLM provider chain, symbolic hard gate, and others.
 
 ## Known limitations
 

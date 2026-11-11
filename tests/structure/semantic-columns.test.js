@@ -46,6 +46,8 @@ const ALLOWED_SEMANTIC_SQL = Object.freeze({
     "Phase A에서 항목마다 WriteGate.check를 통과한 파편만 청크 단위 다중 행 INSERT로 기록한다",
   "lib/memory/consolidate/MemoryConsolidator.js::_promoteAnchors":
     "통합 단계의 앵커 자동 승격. 접근 수와 중요도 조건으로 is_anchor만 올린다",
+  "lib/memory/consolidate/ConsolidationRollback.js::undoChange":
+    "정리 주기 되돌리기. 그 주기의 자동 승격이 올린 is_anchor만 내리고 다른 의미 열은 쓰지 않는다",
   "lib/admin/ReviewStore.js::applyDecision":
     "관리자의 검토 승인. 쓰기 관문을 통과해 검토 대기로 저장될 때 보류한 앵커 지정 요청(anchor_requested 표지)만 is_anchor에 적용한다",
   "scripts/backfill-body-keywords.js::main":
