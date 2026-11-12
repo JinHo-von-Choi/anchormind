@@ -101,17 +101,19 @@ describe("resolveErrorRedirect", () => {
 describe("GET /authorize 미등록 클라이언트", () => {
   const query = { ...PKCE, client_id: "unknown-client", redirect_uri: OTHER_URI };
 
-  it("warn(기본)은 현행대로 302를 유지한다", async () => {
-    const r = await call(null, { query });
+  it("warn은 등록되지 않은 대상으로 302를 보낸다", async () => {
+    const r = await call("warn", { query });
     assert.equal(r.status, 302);
     assert.equal(hostOf(r.location), "elsewhere.example");
   });
 
-  it("enforce는 검증되지 않은 대상으로 이동시키지 않고 400을 준다", async () => {
-    const r = await call("enforce", { query });
-    assert.equal(r.status, 400);
-    assert.equal(r.location, null);
-    assert.equal(r.error, "invalid_client");
+  it("기본과 enforce는 검증되지 않은 대상으로 이동시키지 않고 400을 준다", async () => {
+    for (const mode of [null, "enforce"]) {
+      const r = await call(mode, { query });
+      assert.equal(r.status, 400);
+      assert.equal(r.location, null);
+      assert.equal(r.error, "invalid_client");
+    }
   });
 });
 
@@ -155,8 +157,8 @@ describe("POST /authorize 거부", () => {
 describe("POST /authorize 허용 후 오류", () => {
   const form = { ...PKCE, decision: "allow", client_id: REG.client_id, redirect_uri: OTHER_URI };
 
-  it("warn은 현행대로 302를 유지한다", async () => {
-    const r = await call(null, { form });
+  it("warn은 302를 유지한다", async () => {
+    const r = await call("warn", { form });
     assert.equal(r.status, 302);
   });
 

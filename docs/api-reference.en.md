@@ -11,7 +11,7 @@ For MCP tool details, see [SKILL.md](../SKILL.md).
 | POST | /mcp | Streamable HTTP. JSON-RPC request receiver. MCP-Session-Id header required (except initial initialize) |
 | GET | /mcp | Streamable HTTP. Opens SSE stream. For server-side push |
 | DELETE | /mcp | Streamable HTTP. Explicit session termination |
-| GET | /sse | Legacy SSE. Session creation. Authenticate with the `Authorization: Bearer` header. The `?accessKey=` query is a master-key-only compatibility path; `MEMENTO_SSE_QUERY_KEY=deny` returns 401. Subject to a per-client-IP request limit (`RATE_LIMIT_PER_IP`, default 30 per minute) that shares one bucket with `/token`, `/register`, `/authorize` and `initialize`; above it the server answers 429 with `Retry-After` |
+| GET | /sse | Legacy SSE. Session creation. Authenticate with the `Authorization: Bearer` header. The `?accessKey=` query returns 401 by default (`MEMENTO_SSE_QUERY_KEY=deny`); with `allow` it is accepted for the master key only. Subject to a per-client-IP request limit (`RATE_LIMIT_PER_IP`, default 30 per minute) that shares one bucket with `/token`, `/register`, `/authorize` and `initialize`; above it the server answers 429 with `Retry-After` |
 | POST | /message?sessionId= | Legacy SSE. JSON-RPC request receiver. Responses delivered via SSE stream |
 | GET | /health | Health check. Verifies DB query (SELECT 1), session state, and Redis connection, returning JSON. When `REDIS_ENABLED=false`, Redis shows as `disabled` with 200 returned. DB failure returns 503. Without master key authentication the body is only `{status, timestamp}`; services and worker details are included when authenticated |
 | GET | /health/live | Process liveness. Always 200 `{status: "alive", uptime}` without authentication. Does not check the DB or Redis |
@@ -263,7 +263,7 @@ With `MEMENTO_ADMIN_USERS=on` (default) and at least one account, admins can log
 
 When Redis is disabled (`REDIS_ENABLED=false`) the server returns healthy (200); when the Redis connection fails it returns degraded (200). L1 cache and Working Memory are deactivated, but core memory storage/retrieval operates fully on PostgreSQL alone.
 
-Two authentication methods are available. Streamable HTTP authenticates via `Authorization: Bearer <MEMENTO_ACCESS_KEY>` header on the `initialize` request, then maintains the session. Legacy SSE also authenticates with the `Authorization: Bearer` header by default. The `/sse?accessKey=<MEMENTO_ACCESS_KEY>` query parameter is a master-key-only compatibility path and can be turned off with `MEMENTO_SSE_QUERY_KEY=deny`. Query values are recorded in proxy access logs.
+Two authentication methods are available. Streamable HTTP authenticates via `Authorization: Bearer <MEMENTO_ACCESS_KEY>` header on the `initialize` request, then maintains the session. Legacy SSE also authenticates with the `Authorization: Bearer` header by default. The `/sse?accessKey=<MEMENTO_ACCESS_KEY>` query parameter is not accepted by default. With `MEMENTO_SSE_QUERY_KEY=allow` it is accepted for the master key only. Query values are recorded in proxy access logs.
 
 ### HTTP Response Headers — Rate Limit
 
@@ -510,7 +510,7 @@ Submitted as form data when the user allows or denies on the consent screen.
 | `state` | Original OAuth parameter (if present) |
 
 - `decision=allow`: 302 redirect to `redirect_uri?code=<code>&state=<state>`
-- `decision=deny`: 302 redirect to `redirect_uri?error=access_denied&error_description=User%20denied%20access&state=<state>` (`state` only when present in the request). Common error rule: a missing or non-URL redirect_uri returns 400 JSON; a redirect_uri not registered for the client is redirected with a warning under `MEMENTO_OAUTH_REDIRECT_CHECK=warn` (default) and returns 400 JSON under `enforce`
+- `decision=deny`: 302 redirect to `redirect_uri?error=access_denied&error_description=User%20denied%20access&state=<state>` (`state` only when present in the request). Common error rule: a missing or non-URL redirect_uri returns 400 JSON; a redirect_uri not registered for the client returns 400 JSON under `MEMENTO_OAUTH_REDIRECT_CHECK=enforce` (default) and is redirected with a warning under `warn`
 
 ### PUT /v1/internal/model/nothing/keys/:id/daily-limit
 

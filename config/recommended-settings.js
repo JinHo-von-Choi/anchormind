@@ -16,8 +16,8 @@ export function recommendedSettingsGap(env = process.env) {
   if (env.TRUST_PROXY_HOPS === undefined)                gap.push("TRUST_PROXY_HOPS");
   if (env.MEMENTO_CORS_MODE !== "allowlist")             gap.push("MEMENTO_CORS_MODE=allowlist");
   if (env.MEMENTO_FRAME_OPTIONS !== "deny")              gap.push("MEMENTO_FRAME_OPTIONS=deny");
-  if (env.MEMENTO_OAUTH_REDIRECT_CHECK !== "enforce")    gap.push("MEMENTO_OAUTH_REDIRECT_CHECK=enforce");
-  if (env.MEMENTO_SSE_QUERY_KEY !== "deny")              gap.push("MEMENTO_SSE_QUERY_KEY=deny");
+  if (env.MEMENTO_OAUTH_REDIRECT_CHECK === "warn")       gap.push("MEMENTO_OAUTH_REDIRECT_CHECK=enforce");
+  if (env.MEMENTO_SSE_QUERY_KEY === "allow")             gap.push("MEMENTO_SSE_QUERY_KEY=deny");
   if (env.MEMENTO_TOOL_ARGS_VALIDATION !== "enforce")    gap.push("MEMENTO_TOOL_ARGS_VALIDATION=enforce");
   return gap;
 }

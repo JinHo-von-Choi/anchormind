@@ -42,9 +42,9 @@
 | `MEMENTO_ANCHOR_PERMISSION` (`off`, `warn`, `enforce`) | `warn` | `anchor` 권한이 없는 키의 앵커 지정을 거부한다. |
 | `MEMENTO_WORKSPACE_READ_AUTHZ` (`off`, `warn`, `enforce`) | `warn` | 키의 `allowed_workspaces` 밖을 읽거나, 마스터가 아닌 세션이 마스터 전용 preset을 요청하면 -32001로 거부한다. |
 | `MEMENTO_SESSION_CREDENTIAL_CHECK` (`off`, `warn`, `enforce`) | `warn` | 유효한 세션의 요청에 함께 온 자격 증명이 무효하거나 만료됐으면 401, 세션과 다른 주체의 것이면 403으로 거절한다. 자격 증명을 보내지 않은 요청은 그대로 처리한다. |
-| `MEMENTO_OAUTH_REDIRECT_CHECK` (`warn`, `enforce`) | `warn` | `/authorize` 오류 응답이 등록되지 않은 `redirect_uri`로 이동하지 않고 400 JSON을 돌려준다. |
-| `MEMENTO_SSE_QUERY_KEY` (`allow`, `deny`) | `allow` | 옛 SSE의 `?accessKey=` 쿼리 키를 받지 않고 401로 `Authorization` 헤더를 쓰라고 안내한다. `allow`는 마스터 키에 한해 받는다. |
 | `MEMENTO_ADMIN_AUTH_BACKOFF` (`on`, `off`) | `off` | 관리 인증이 연속 5회 실패하면 다음 시도를 최대 60초 늦춘다. `TRUST_PROXY_HOPS`가 설정된 설치는 실패한 요청 주소의 시도만 늦추고, 설정되지 않은 설치는 모든 시도를 늦춘다. 지연 중에는 올바른 키도 429(`Retry-After`)를 받는다. |
+
+`MEMENTO_OAUTH_REDIRECT_CHECK`와 `MEMENTO_SSE_QUERY_KEY`는 기본이 거부(`enforce`, `deny`)다. `/authorize` 오류 응답은 등록되지 않은 `redirect_uri`로 이동하지 않고 400 JSON을 돌려주고, 옛 SSE의 `?accessKey=` 쿼리 키는 401을 받는다. 옛 동작이 필요한 설치만 `warn`, `allow`를 적는다.
 
 `MEMENTO_WORKSPACE_READ_AUTHZ`는 `enforce` 전에 `warn` 기간 동안 쌓인 키별 기록(`memento_workspace_read_authz_total`과 경고 로그)을 확인한다.
 

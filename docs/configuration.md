@@ -33,12 +33,13 @@
 | 0 이상 1 이하의 숫자 (1을 넘으면 1, 음수와 숫자가 아닌 값은 0) | MEMENTO_DECAY_MIN_DELTA, MEMENTO_UTILITY_MIN_DELTA |
 | off, warn, enforce (공백만 있는 값을 포함한 그 밖의 값은 enforce로 동작) | MEMENTO_TOOL_ARGS_VALIDATION |
 | off, warn, enforce (그 밖의 값은 warn) | MEMENTO_ANCHOR_PERMISSION |
-| warn, enforce (그 밖의 값은 warn) | MEMENTO_SESSION_ID_POLICY, MEMENTO_RESERVED_AGENT_IDS, MEMENTO_OAUTH_REDIRECT_CHECK |
+| warn, enforce (그 밖의 값은 warn) | MEMENTO_SESSION_ID_POLICY, MEMENTO_RESERVED_AGENT_IDS |
+| warn, enforce (그 밖의 값은 enforce) | MEMENTO_OAUTH_REDIRECT_CHECK |
 | off, warn, enforce (그 밖의 값은 warn) | MEMENTO_WORKSPACE_READ_AUTHZ, MEMENTO_SESSION_CREDENTIAL_CHECK |
 | off, warn, enforce (그 밖의 값은 warn) | MEMENTO_DIRECTIVE_ORIGIN_GATE |
 | warn, reject, allow (그 밖의 값은 warn) | MEMENTO_MISSING_WORKSPACE |
 | reflect, observe, allowlist (그 밖의 값은 observe) | MEMENTO_CORS_MODE |
-| allow, deny (그 밖의 값은 allow) | MEMENTO_SSE_QUERY_KEY |
+| allow, deny (그 밖의 값은 deny) | MEMENTO_SSE_QUERY_KEY |
 | deny (그 밖의 값은 헤더를 붙이지 않음) | MEMENTO_FRAME_OPTIONS |
 | 401, 503 (그 밖의 값은 401) | MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS |
 | inner, outer (그 밖의 값은 inner) | MEMENTO_SEMANTIC_THRESHOLD_MODE |
@@ -130,8 +131,8 @@
 | MCP_STRICT_ORIGIN | false | `true`로 설정 시 Origin 헤더 엄격 검증 활성화 (DNS rebinding 방어). 허용 목록(`OAUTH_TRUSTED_ORIGINS` + `ALLOWED_ORIGINS` + 기본 신뢰 도메인)에 없는 Origin에서 온 요청을 403으로 거부. Origin 헤더 없는 요청(CLI/curl)은 항상 허용. **opt-in** — 기본 `false`로 기존 동작 유지 |
 | MEMENTO_CORS_MODE | observe | `ALLOWED_ORIGINS` 미설정 시 교차 출처 응답 방식. `reflect`: 요청 Origin을 그대로 돌려준다. `observe`(기본): `reflect`와 응답이 같고 처음 본 Origin을 `[CORS] cross-origin request from` 로그로 프로세스당 256건까지 남긴다. `allowlist`: 기본 신뢰 도메인과 `OAUTH_TRUSTED_ORIGINS`에 있는 Origin에만 `Access-Control-Allow-Origin`을 붙인다. Origin이 있는 응답에는 `Vary: Origin`이 붙는다. `ALLOWED_ORIGINS`가 설정되면 모드와 무관하게 목록이 우선한다. 호출 시점에 읽으므로 재시작 없이 바뀐다 |
 | MEMENTO_FRAME_OPTIONS | (없음) | `deny`로 설정 시 모든 응답에 `X-Frame-Options: DENY`를 붙인다. 미설정이거나 다른 값이면 붙이지 않는다. `X-Content-Type-Options: nosniff`와 `Referrer-Policy: no-referrer`는 모든 응답에 항상 붙는다 |
-| MEMENTO_OAUTH_REDIRECT_CHECK | warn | `/authorize` 오류 응답의 리다이렉트 대상 확인. `warn`(기본): 등록되지 않은 `redirect_uri`로 이동시키되 `error redirect target not registered` 경고를 대상 호스트만 담아 남긴다. `enforce`: 그 경우 이동 대신 400 JSON을 준다. `redirect_uri`가 없거나 URL이 아니면 두 모드 모두 400 JSON을 준다 |
-| MEMENTO_SSE_QUERY_KEY | allow | Legacy SSE의 `?accessKey=` 쿼리 키 처리. `allow`(기본): 마스터 키 한정으로 받는다. `deny`: 받지 않고 `Authorization` 헤더 사용을 안내하는 401을 준다. 쿼리 값은 프록시 접근 로그에 남는다 |
+| MEMENTO_OAUTH_REDIRECT_CHECK | enforce | `/authorize` 오류 응답의 리다이렉트 대상 확인. `warn`: 등록되지 않은 `redirect_uri`로 이동시키되 `error redirect target not registered` 경고를 대상 호스트만 담아 남긴다. `enforce`(기본): 그 경우 이동 대신 400 JSON을 준다. `redirect_uri`가 없거나 URL이 아니면 두 모드 모두 400 JSON을 준다 |
+| MEMENTO_SSE_QUERY_KEY | deny | Legacy SSE의 `?accessKey=` 쿼리 키 처리. `allow`: 마스터 키 한정으로 받는다. `deny`(기본): 받지 않고 `Authorization` 헤더 사용을 안내하는 401을 준다. 쿼리 값은 프록시 접근 로그에 남는다 |
 | MCP_REJECT_NONAPIKEY_OAUTH | true | 기본 `true`는 `is_api_key=false` OAuth 토큰 인증을 거부한다. `false`는 해당 인증만 허용하며 master 권한을 부여하지 않는다. API 키 바인딩이 없는 OAuth 세션의 도구 호출은 `-32001`로 거부된다. API 키 기반 OAuth 토큰(`is_api_key=true`)과 Bearer ACCESS_KEY 직접 사용은 영향 없음 |
 | MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS | 401 | `api_keys` 조회 실패로 인증을 판정하지 못한 MCP `initialize`와 세션 자동 복구의 응답 상태. `401`(기본)은 키 무효와 같은 응답이며 세션 복구는 404다. `503`은 `Retry-After: 10`을 붙인 일시 장애 응답이다. 마스터 키 인증은 저장소와 무관하다. 조회 실패는 `mcp_auth_store_errors_total{operation}`과 `memento_auth_denied_total{reason="store_unavailable"}`로 집계한다 |
 | MEMENTO_SESSION_ID_POLICY | warn | MCP 세션 ID 수신 처리. `warn`(기본): 쿼리스트링(`?sessionId=`, `?mcp-session-id=`)으로 받은 ID와 서버 발급 형식(UUID)이 아닌 ID의 자동 복구를 `[Session] session id received in query string`, `recovery requested for non-issued id format` 경고로 기록하고 정상 처리한다. `enforce`: 쿼리 ID는 400, UUID가 아닌 ID의 복구는 404로 응답한다. 헤더(`MCP-Session-Id`)로 보낸 UUID 세션은 두 값 모두 영향이 없다. 로그와 reflect 프롬프트의 세션 ID는 앞 8자만 표기한다. `warn` 기간에 클라이언트가 정한 ID로 복구된 세션은 `enforce`로 바꾼 뒤에도 만료될 때까지 계속 동작한다. Legacy `/message?sessionId=`는 프로토콜 요구라 대상이 아니다 |
@@ -425,8 +426,6 @@ OAuth 토큰 TTL은 세션 TTL과 연동된다.
 ALLOWED_ORIGINS=https://memento.example.com
 MEMENTO_CORS_MODE=allowlist
 MEMENTO_FRAME_OPTIONS=deny
-MEMENTO_OAUTH_REDIRECT_CHECK=enforce
-MEMENTO_SSE_QUERY_KEY=deny
 MEMENTO_TOOL_ARGS_VALIDATION=enforce
 ```
 

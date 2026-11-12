@@ -37,9 +37,15 @@ describe("recommendedSettingsGap", () => {
     }), []);
   });
 
-  it("빈 환경에서는 여섯 항목 이름만 돌려주고 값은 싣지 않는다", () => {
+  it("빈 환경에서는 네 항목 이름만 돌려주고 값은 싣지 않는다", () => {
     const gap = recommendedSettingsGap({});
-    assert.equal(gap.length, 6);
+    assert.equal(gap.length, 4);
     assert.equal(gap[0], "TRUST_PROXY_HOPS");
+  });
+
+  it("기본이 거부인 스위치를 느슨한 값으로 적으면 항목에 든다", () => {
+    const gap = recommendedSettingsGap({ MEMENTO_OAUTH_REDIRECT_CHECK: "warn", MEMENTO_SSE_QUERY_KEY: "allow" });
+    assert.ok(gap.includes("MEMENTO_OAUTH_REDIRECT_CHECK=enforce"));
+    assert.ok(gap.includes("MEMENTO_SSE_QUERY_KEY=deny"));
   });
 });

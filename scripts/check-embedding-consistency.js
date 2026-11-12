@@ -16,6 +16,7 @@
 
 import { pathToFileURL }                                      from "node:url";
 import { getPrimaryPool }                                     from "../lib/tools/db.js";
+import { queryScoped, ROW_SUBJECT }                           from "../lib/tools/row-scope.js";
 import { EMBEDDING_DIMENSIONS, EMBEDDING_PROVIDER, EMBEDDING_MODEL, EMBEDDING_STORAGE } from "../lib/config.js";
 import { getSchedulerRegistry } from "../lib/scheduler-registry.js";
 import { NOT_WM_ROW } from "../lib/memory/WorkingMemorySql.js";
@@ -77,12 +78,12 @@ export async function checkEmbeddingConsistency() {
 
     /** 2차: 실데이터 표본 검사 (선언은 맞지만 이질 데이터가 남은 경우) */
     try {
-      const { rows } = await pool.query(`
+      const { rows } = await queryScoped(pool, `
         SELECT vector_dims(embedding) AS dim
         FROM agent_memory.${table}
         WHERE embedding IS NOT NULL
         LIMIT 1
-      `);
+      `, undefined, ROW_SUBJECT.SYSTEM);
       if (rows.length > 0 && rows[0].dim !== EMBEDDING_DIMENSIONS) {
         mismatches.push({ table, dbDim: rows[0].dim, configDim: EMBEDDING_DIMENSIONS });
       }
@@ -99,11 +100,11 @@ export async function checkEmbeddingConsistency() {
   await checkEmbeddingProfile(pool);
 
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await queryScoped(pool, `
       SELECT count(*)::int AS cnt
       FROM agent_memory.fragments
       WHERE morpheme_indexed = false AND ${NOT_WM_ROW}
-    `);
+    `, undefined, ROW_SUBJECT.SYSTEM);
     if (rows.length > 0 && rows[0].cnt > 0) {
       console.warn(`[embedding-consistency] morpheme_indexed=false 파편 ${rows[0].cnt}개 (형태소 미인덱싱)`);
       const reg  = getSchedulerRegistry();

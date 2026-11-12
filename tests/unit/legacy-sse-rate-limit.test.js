@@ -16,6 +16,8 @@ process.env.DOTENV_CONFIG_PATH      ??= ".env.test";
 process.env.MEMENTO_METRICS_DEFAULT ??= "off";
 process.env.REDIS_ENABLED           ??= "false";
 process.env.CACHE_ENABLED           ??= "false";
+/** 쿼리 키를 받는 설정에서 틀린 키의 401과 한도 초과의 429를 본다. */
+process.env.MEMENTO_SSE_QUERY_KEY     = "allow";
 
 const realAuth = await import("../../lib/auth.js");
 mock.module("../../lib/auth.js", {

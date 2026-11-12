@@ -32,6 +32,7 @@ Most upgrades stop here. Only the cases below need extra work.
 | You changed the embedding provider, model or dimension | [Section 4](#4-after-changing-the-embedding-provider-model-or-dimension) |
 | Production DB has millions of rows | [Section 5](#5-very-large-production-databases) |
 | Admin accounts have workspace bindings (migration-074) | [Section 6](#6-admin-workspace-bindings-migration-074) |
+| A client connects to legacy SSE with the `?accessKey=` query key, or an OAuth client receives error responses on an unregistered `redirect_uri` | [Section 7 below](#7-switches-whose-default-is-now-reject) |
 
 ## 1. Anchor permission, admin accounts, body lexical search (migration-053 to 060)
 
@@ -209,3 +210,14 @@ For each account found, set the binding again under ROLES on the admin accounts 
 - If you added a new migration file, run `npm run lint:migrations` first. Conventions are in [migration-conventions.md](../migration-conventions.md).
 - Name rollback SQL `rollback-migration-NNN-*.sql`. `migrate` only picks up `migration-*.sql`, so files with the `rollback-` prefix never run automatically.
 - Optional cleanup: preview with `node scripts/cleanup-noise.js --dry-run`, then remove noise fragments with `--execute`. For old installations that need one-time embedding normalization, run `node scripts/normalize-vectors.js`.
+
+## 7. Switches whose default is now reject
+
+Two switch defaults change. Installs that set a value in `.env` keep that value.
+
+| Switch | Old default | New default | What changes |
+|-|-|-|-|
+| `MEMENTO_OAUTH_REDIRECT_CHECK` | `warn` | `enforce` | An error response from `/authorize` returns 400 JSON instead of redirecting to an unregistered `redirect_uri` |
+| `MEMENTO_SSE_QUERY_KEY` | `allow` | `deny` | Legacy SSE `GET /sse?accessKey=` gets 401. Clients send the key in the `Authorization: Bearer` header |
+
+To keep the old behavior, set `MEMENTO_OAUTH_REDIRECT_CHECK=warn` and `MEMENTO_SSE_QUERY_KEY=allow` in `.env` and restart.

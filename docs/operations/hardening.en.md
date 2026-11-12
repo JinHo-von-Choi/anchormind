@@ -42,9 +42,9 @@ By default, these settings only log a warning and let the request pass. Check th
 | `MEMENTO_ANCHOR_PERMISSION` (`off`, `warn`, `enforce`) | `warn` | Setting an anchor from a key without the `anchor` permission is rejected. |
 | `MEMENTO_WORKSPACE_READ_AUTHZ` (`off`, `warn`, `enforce`) | `warn` | Reading outside the key's `allowed_workspaces`, or a non-master session requesting a master-only preset, is rejected with -32001. |
 | `MEMENTO_SESSION_CREDENTIAL_CHECK` (`off`, `warn`, `enforce`) | `warn` | A credential sent on a valid session is rejected with 401 when it is invalid or expired and with 403 when it belongs to a different identity. Requests without a credential are processed as before. |
-| `MEMENTO_OAUTH_REDIRECT_CHECK` (`warn`, `enforce`) | `warn` | An error response from `/authorize` no longer redirects to an unregistered `redirect_uri`; it returns 400 JSON instead. |
-| `MEMENTO_SSE_QUERY_KEY` (`allow`, `deny`) | `allow` | The legacy SSE `?accessKey=` query key is refused with 401 and a hint to use the `Authorization` header. `allow` accepts it for the master key only. |
 | `MEMENTO_ADMIN_AUTH_BACKOFF` (`on`, `off`) | `off` | After 5 consecutive admin authentication failures, the next attempt is delayed up to 60 seconds. With `TRUST_PROXY_HOPS` set, only attempts from the failing client address are delayed; without it, all attempts are delayed. During the delay, even a correct key gets 429 (`Retry-After`). |
+
+`MEMENTO_OAUTH_REDIRECT_CHECK` and `MEMENTO_SSE_QUERY_KEY` reject by default (`enforce`, `deny`). An error response from `/authorize` returns 400 JSON instead of redirecting to an unregistered `redirect_uri`, and the legacy SSE `?accessKey=` query key gets 401. Set `warn` or `allow` only on installs that need the old behavior.
 
 Before moving `MEMENTO_WORKSPACE_READ_AUTHZ` to `enforce`, review the per-key records collected during the `warn` period (`memento_workspace_read_authz_total` and the warning logs).
 

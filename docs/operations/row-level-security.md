@@ -22,9 +22,21 @@ DB를 두 번째 방어선으로 세우려면 아래 절차가 필요하다. 이
 | 에이전트 | `app.current_agent_id` | 값이 일치하거나 행이 `default`이면 허용. `system`과 `admin`은 전체 허용 |
 | API 키 | `app.current_key_ids`, `app.current_key_id` | 둘 다 비어 있으면 키 범위 없음으로 보고 종전대로 동작. 값이 있으면 목록(쉼표로 잇는다) 안의 키 소유 행만 허용. 키 없는(마스터) 행은 허용하지 않는다 |
 
-변수는 `lib/tools/db.js`의 `queryWithAgentVector`가 설정한다. 이 가운데 `app.current_key_ids`에는 질의의 키 격리 절이 넣은 키 목록이 들어간다. `lib/memory/keyScope.js`의 도우미(`keyScopeClause` 등)는 절에 넣은 키 id를 바인딩 배열의 기호 속성에 적는다(`lib/tools/key-scope-ids.js`). 그러면 `queryWithAgentVector`가 그 목록을 넘긴다. 그룹 공유 읽기는 자기 키와 읽을 수 있는 멤버 키가 함께 목록에 들어가므로 정책을 통과한다.
+변수는 두 실행기가 설정한다.
 
-키 격리 도우미를 거치지 않는 질의는 키 목록이 비어 있어서 FORCE를 켜도 키 축 필터를 받지 않는다. 직접 쓴 SQL 조건, `pool.query`로 바로 보내는 관리 API 질의, 바인딩 배열을 펼쳐 새로 만든 질의가 여기에 해당한다. 에이전트 축은 `queryWithAgentVector`를 거치는 질의에 모두 걸린다. 반면 `pool.query`로 바로 보내는 질의에는 `app.current_agent_id`가 없어서 `default` 에이전트 행만 보인다. 그래서 FORCE를 켜기 전에 3단계에서 모든 경로를 확인한다.
+- `lib/tools/db.js`의 `queryWithAgentVector`는 에이전트와 키 목록을 함께 건다.
+- `lib/tools/row-scope.js`의 `queryScoped`, `applyRowScope`, `beginScoped`는 풀로 바로 보내는 질의와 자체 트랜잭션에 키 목록이나 주체를 건다. 관리 API와 CLI의 질의는 `admin`, 백그라운드 작업(정리 주기, 임베딩 작업자, 스케줄러, 할당량 회계, 기동 점검)은 `system` 주체로 실행한다.
+
+`row-scope.js`의 실행기는 정책이 접속 역할에 적용될 때만 설정을 건다. 표 소유자로 접속하고 FORCE가 꺼진 구성에서는 질의를 그대로 보내므로 왕복이 늘지 않는다. 적용 여부는 `row_security_active()`로 확인해 1분 동안 기억한다. FORCE를 켜거나 끄면 1분 안에 반영된다.
+
+키 목록(`app.current_key_ids`)에는 질의의 키 격리 절이 넣은 키가 들어간다. `lib/memory/keyScope.js`의 도우미(`keyScopeClause` 등)는 절에 넣은 키 id를 바인딩 배열의 기호 속성에 적고(`lib/tools/key-scope-ids.js`), 실행기가 그 목록을 넘긴다. 그룹 공유 읽기는 자기 키와 읽을 수 있는 멤버 키가 함께 목록에 들어가므로 정책을 통과한다. 바인딩 배열을 펼쳐 새 배열을 만들면 목록이 따라가지 않으므로 같은 배열을 실행기에 넘긴다.
+
+정책이 키 축을 보지 않는 질의는 두 가지다.
+
+- 마스터 키 요청. 키 목록이 비어 있고, 정책은 빈 값을 키 범위 없음으로 읽는다.
+- 앞선 범위 질의가 고른 id로만 쓰는 후속 문장(접근 수 갱신, 링크 기록, 삭제 뒤 참조 정리). SQL에 키 조건이 없어서 키 목록을 넘기지 않고 에이전트 축만 받는다.
+
+`queryScoped`로 보내는 요청 경로 질의는 에이전트 변수를 걸지 않는다. 그래서 정책이 적용되는 접속에서는 `default` 에이전트의 행만 읽는다. `agentId`를 나눠 쓰는 배포는 3단계에서 해당 경로의 결과를 확인한다.
 
 ---
 
@@ -47,16 +59,16 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA agent_memory
 
 ### 2. 키 범위 전달 확인
 
-정책 자체는 `tests/db-concurrency/rls-key-list.test.js`가 FORCE와 소유자가 아닌 역할(NOBYPASSRLS)로 확인한다. 이 시험은 키 목록 안의 키 파편만 보이는지, 목록이 비면 키 축을 보지 않는지 본다. system 주체가 전체를 보는지, 목록 밖 키의 행을 쓸 수 없는지도 본다. 마지막으로 키 격리 절의 키 목록이 `app.current_key_ids`로 넘어가는지 확인한다.
+정책 자체는 `tests/db-concurrency/rls-key-list.test.js`가 FORCE와 소유자가 아닌 역할(NOBYPASSRLS)로 확인한다. 이 시험은 키 목록 안의 키 파편만 보이는지, 목록이 비면 키 축을 보지 않는지 본다. system 주체가 전체를 보는지, 목록 밖 키의 행을 쓸 수 없는지도 본다. 키 격리 절의 키 목록이 `queryWithAgentVector`와 `queryScoped`를 거쳐 `app.current_key_ids`로 넘어가는지도 확인한다.
 
 ```
 DOTENV_CONFIG_PATH=.env.test REDIS_ENABLED=false node --experimental-test-module-mocks --test tests/db-concurrency/rls-key-list.test.js
 ```
 
-키 격리 도우미를 거치지 않는 질의는 다음 명령으로 찾는다.
+두 표를 건드리는 질의가 실행기를 거치는지는 구조 검사가 본다. 풀에 바로 보내는 질의, 범위를 걸지 않은 자체 트랜잭션, 키 조건을 손으로 쓰고 키 목록을 넘기지 않는 질의가 있으면 실패한다.
 
 ```
-grep -rn "pool.query\|\.query(" lib/admin lib/memory --include=*.js | grep -i fragments
+node --test tests/structure/row-scope.test.js
 ```
 
 ### 3. 스테이징 검증
