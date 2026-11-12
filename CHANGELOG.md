@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.0.0] - 2026-11-12
+
 ### Added
 
 - 파생 파편의 계보(`fragment_lineage`, migration-081). 분할 자식과 reflect 교훈이 원본을 기록한다. 원본을 forget하거나 거절(`rejected`)하거나 사용자가 대체(`supersedes`, slot)하면 파생 파편은 `support_state=revoked`, 원본 본문을 amend하면 `stale`이 된다. 두 상태의 파편은 지우지 않지만 context의 모든 구획에서 빠지고, recall에는 `support_state`, `support_reason`, `derived_from`과 함께 나온다. 분할로 원본이 닫히는 것과 만료 삭제는 전파하지 않는다. forget 응답의 `purged.derived_revoked`, amend 응답의 `derived_marked`가 상태를 바꾼 수다.
