@@ -149,7 +149,7 @@ const GATE_CALL       = "requireFullScope";
 
 /**
  * 관리 모듈 밖에서 가져와도 기억 표를 읽거나 쓰지 않는 모듈(가져온 이름 단위 제한이 있으면 그 이름만).
- * 로그, 지표 레지스트리, 본문 판독, SQL 조각 문자열, 풀 획득(질의 문자열은 이 검사의 SQL 규칙이 본다), 세션 표(기억 표 아님),
+ * 로그, 지표 레지스트리, 본문 판독, SQL 조각 문자열, 풀 획득과 행 수준 보안 범위 실행기(질의 문자열은 이 검사의 SQL 규칙이 본다), 세션 표(기억 표 아님),
  * 감사 표(관리 감사, 전역 라우트), 설정과 Redis 연결, 키 캐시 무효화와 키 정책 조회(api_keys 행), 내보내기 형식 협상과 가져오기 줄 판독이다.
  * 이 목록 밖의 가져오기는 기억 경로로 보고 전체 범위 가드를 요구한다.
  */
@@ -176,6 +176,7 @@ export const NON_DATA_IMPORTS = Object.freeze({
   "../memory/transfer/importErrors.js"  : null,
   "../memory/transfer/ImportReport.js"  : null,
   "../tools/db.js"                      : ["getPrimaryPool", "getPoolStats"],
+  "../tools/row-scope.js"               : null,
   "../tools/pool-gate.js"               : null,
   "../http/helpers.js"                  : null,
   "../sessions.js"                      : null,
