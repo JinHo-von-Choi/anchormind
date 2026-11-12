@@ -32,6 +32,7 @@
 | 임베딩 제공자, 모델, 차원을 바꿨다 | [아래 4번](#4-임베딩-제공자-모델-차원을-바꿨을-때) |
 | 행이 수백만 건인 운영 DB | [아래 5번](#5-행이-매우-많은-운영-db) |
 | 관리자 계정에 workspace 바인딩이 있다 (migration-074) | [아래 6번](#6-관리자-workspace-바인딩-migration-074) |
+| 옛 SSE를 `?accessKey=` 쿼리 키로 붙는 클라이언트가 있거나, OAuth 클라이언트가 등록되지 않은 `redirect_uri`로 오류 응답을 받는다 | [아래 7번](#7-기본값이-거부로-바뀐-스위치) |
 
 ## 1. 앵커 권한, 관리자 계정, 본문 어휘 검색 (migration-053 ~ 060)
 
@@ -209,3 +210,14 @@ SELECT u.username, b.role, b.workspace
 - 새 마이그레이션 파일을 추가했다면 실행 전에 `npm run lint:migrations`로 규약을 검사한다. 규약은 [migration-conventions.md](../migration-conventions.md)에 있다.
 - 롤백용 SQL은 `rollback-migration-NNN-*.sql` 형식으로 이름 짓는다. `migrate`는 `migration-*.sql`만 자동으로 집으므로, `rollback-` 접두어가 붙은 파일은 실행하지 않는다.
 - 선택 정리: `node scripts/cleanup-noise.js --dry-run`으로 먼저 확인하고 `--execute`로 노이즈 파편을 지운다. 오래된 설치에서 임베딩 정규화가 한 번 필요하면 `node scripts/normalize-vectors.js`를 실행한다.
+
+## 7. 기본값이 거부로 바뀐 스위치
+
+두 스위치의 기본값이 바뀐다. `.env`에 값을 적어 둔 설치는 그 값이 그대로 적용된다.
+
+| 스위치 | 이전 기본값 | 새 기본값 | 달라지는 동작 |
+|-|-|-|-|
+| `MEMENTO_OAUTH_REDIRECT_CHECK` | `warn` | `enforce` | `/authorize`의 오류 응답이 등록되지 않은 `redirect_uri`로 이동하지 않고 400 JSON을 돌려준다 |
+| `MEMENTO_SSE_QUERY_KEY` | `allow` | `deny` | 옛 SSE의 `GET /sse?accessKey=`가 401을 받는다. 클라이언트는 `Authorization: Bearer` 헤더로 키를 보낸다 |
+
+옛 동작이 필요하면 `.env`에 `MEMENTO_OAUTH_REDIRECT_CHECK=warn`, `MEMENTO_SSE_QUERY_KEY=allow`를 적고 재시작한다.

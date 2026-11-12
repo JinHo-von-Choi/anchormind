@@ -33,12 +33,13 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | Number, 0 to 1 (above 1 is capped to 1; negative and non-numeric values become 0) | MEMENTO_DECAY_MIN_DELTA, MEMENTO_UTILITY_MIN_DELTA |
 | off, warn, enforce (any other value, including a whitespace-only value, behaves as enforce) | MEMENTO_TOOL_ARGS_VALIDATION |
 | off, warn, enforce (any other value is warn) | MEMENTO_ANCHOR_PERMISSION |
-| warn, enforce (any other value is warn) | MEMENTO_SESSION_ID_POLICY, MEMENTO_RESERVED_AGENT_IDS, MEMENTO_OAUTH_REDIRECT_CHECK |
+| warn, enforce (any other value is warn) | MEMENTO_SESSION_ID_POLICY, MEMENTO_RESERVED_AGENT_IDS |
+| warn, enforce (any other value is enforce) | MEMENTO_OAUTH_REDIRECT_CHECK |
 | off, warn, enforce (any other value is warn) | MEMENTO_WORKSPACE_READ_AUTHZ, MEMENTO_SESSION_CREDENTIAL_CHECK |
 | off, warn, enforce (any other value is warn) | MEMENTO_DIRECTIVE_ORIGIN_GATE |
 | warn, reject, allow (any other value is warn) | MEMENTO_MISSING_WORKSPACE |
 | reflect, observe, allowlist (any other value is observe) | MEMENTO_CORS_MODE |
-| allow, deny (any other value is allow) | MEMENTO_SSE_QUERY_KEY |
+| allow, deny (any other value is deny) | MEMENTO_SSE_QUERY_KEY |
 | deny (any other value adds no header) | MEMENTO_FRAME_OPTIONS |
 | 401, 503 (any other value is 401) | MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS |
 | inner, outer (any other value is inner) | MEMENTO_SEMANTIC_THRESHOLD_MODE |
@@ -130,8 +131,8 @@ The kind is determined automatically from the code and must match the registry.
 | MCP_STRICT_ORIGIN | false | When `true`, enables strict Origin header validation (DNS rebinding defense). Requests from Origins not in the allowlist (`OAUTH_TRUSTED_ORIGINS` + `ALLOWED_ORIGINS` + default trusted domains) are rejected with 403. Requests without an Origin header (CLI/curl) are always allowed. **opt-in** — defaults to `false` to preserve existing behavior |
 | MEMENTO_CORS_MODE | observe | Cross-origin response mode when `ALLOWED_ORIGINS` is unset. `reflect`: echoes the request Origin. `observe` (default): same response as `reflect`, and logs each newly seen Origin as `[CORS] cross-origin request from` (up to 256 per process). `allowlist`: sets `Access-Control-Allow-Origin` only for the default trusted domains and `OAUTH_TRUSTED_ORIGINS`. Responses to requests with an Origin carry `Vary: Origin`. When `ALLOWED_ORIGINS` is set, the list takes precedence regardless of mode. Read at call time, so changes apply without a restart |
 | MEMENTO_FRAME_OPTIONS | (none) | When `deny`, every response carries `X-Frame-Options: DENY`. Unset or any other value adds nothing. `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer` are always sent on every response |
-| MEMENTO_OAUTH_REDIRECT_CHECK | warn | Redirect target check for `/authorize` error responses. `warn` (default): redirects to an unregistered `redirect_uri` and logs an `error redirect target not registered` warning containing only the target host. `enforce`: returns a 400 JSON instead of redirecting. A missing or non-URL `redirect_uri` gets a 400 JSON in both modes |
-| MEMENTO_SSE_QUERY_KEY | allow | Legacy SSE `?accessKey=` query key handling. `allow` (default): accepted for the master key only. `deny`: not accepted; returns 401 pointing to the `Authorization` header. Query values are recorded in proxy access logs |
+| MEMENTO_OAUTH_REDIRECT_CHECK | enforce | Redirect target check for `/authorize` error responses. `warn`: redirects to an unregistered `redirect_uri` and logs an `error redirect target not registered` warning containing only the target host. `enforce` (default): returns a 400 JSON instead of redirecting. A missing or non-URL `redirect_uri` gets a 400 JSON in both modes |
+| MEMENTO_SSE_QUERY_KEY | deny | Legacy SSE `?accessKey=` query key handling. `allow`: accepted for the master key only. `deny` (default): not accepted; returns 401 pointing to the `Authorization` header. Query values are recorded in proxy access logs |
 | MCP_REJECT_NONAPIKEY_OAUTH | true | The default `true` rejects authentication with `is_api_key=false` OAuth tokens. `false` permits that authentication only and never grants master privileges. OAuth sessions without an API-key binding receive `-32001` on tool calls. API-key-based OAuth tokens (`is_api_key=true`) and direct Bearer ACCESS_KEY use are unaffected |
 | MEMENTO_AUTH_STORE_UNAVAILABLE_STATUS | 401 | Response status for MCP `initialize` and session auto-recovery when an `api_keys` lookup failed and authentication could not be decided. `401` (default) matches the invalid-key response, and session recovery answers 404. `503` adds `Retry-After: 10`. Master key authentication does not depend on the store. Lookup failures are counted in `mcp_auth_store_errors_total{operation}` and `memento_auth_denied_total{reason="store_unavailable"}` |
 | MEMENTO_SESSION_ID_POLICY | warn | How MCP session ids are received. `warn` (default): a session id received in the query string (`?sessionId=`, `?mcp-session-id=`) and auto-recovery of an id that is not in the server-issued format (UUID) are logged as `[Session] session id received in query string` and `recovery requested for non-issued id format` warnings and processed normally. `enforce`: a query-string id gets 400, and recovery of a non-UUID id gets 404. UUID sessions sent in the `MCP-Session-Id` header are unaffected by either value. Session ids in logs and the reflect prompt show only the first 8 characters. Sessions recovered with a client-chosen id during the `warn` period keep working after the switch to `enforce` until they expire. Legacy `/message?sessionId=` is required by the protocol and is not covered |
@@ -430,8 +431,6 @@ Recommended production settings are shown below. They assume a deployment used o
 ALLOWED_ORIGINS=https://memento.example.com
 MEMENTO_CORS_MODE=allowlist
 MEMENTO_FRAME_OPTIONS=deny
-MEMENTO_OAUTH_REDIRECT_CHECK=enforce
-MEMENTO_SSE_QUERY_KEY=deny
 MEMENTO_TOOL_ARGS_VALIDATION=enforce
 ```
 

@@ -14,7 +14,7 @@ MCP 도구 상세는 [SKILL.md](../SKILL.md) 참조.
 | POST | /mcp | Streamable HTTP. JSON-RPC 요청 수신. MCP-Session-Id 헤더 필요 (초기 initialize 제외) |
 | GET | /mcp | Streamable HTTP. SSE 스트림 열기. 서버 측 푸시용 |
 | DELETE | /mcp | Streamable HTTP. 세션 명시적 종료 |
-| GET | /sse | Legacy SSE. 세션 생성. `Authorization: Bearer` 헤더로 인증한다. `?accessKey=` 쿼리는 마스터 키 전용 하위 호환 경로이며 `MEMENTO_SSE_QUERY_KEY=deny`면 401. 클라이언트 IP별 요청 제한(`RATE_LIMIT_PER_IP`, 기본 분당 30)을 받으며 `/token`, `/register`, `/authorize`, `initialize`와 같은 버킷을 쓴다. 초과 시 429와 `Retry-After` |
+| GET | /sse | Legacy SSE. 세션 생성. `Authorization: Bearer` 헤더로 인증한다. `?accessKey=` 쿼리는 기본(`MEMENTO_SSE_QUERY_KEY=deny`)에서 401이고, `allow`로 두면 마스터 키에 한해 받는다. 클라이언트 IP별 요청 제한(`RATE_LIMIT_PER_IP`, 기본 분당 30)을 받으며 `/token`, `/register`, `/authorize`, `initialize`와 같은 버킷을 쓴다. 초과 시 429와 `Retry-After` |
 | POST | /message?sessionId= | Legacy SSE. JSON-RPC 요청 수신. 응답은 SSE 스트림으로 전달 |
 | GET | /health | 헬스 체크. DB 쿼리(SELECT 1), 세션 상태, Redis 연결을 확인하고 JSON으로 반환. `REDIS_ENABLED=false` 시 Redis는 `disabled`로 표시되며 200 반환. DB 장애 시 503. 마스터 키 인증이 없으면 `{status, timestamp}`만 반환하고, 인증 시 services·workers 상세를 포함한다 |
 | GET | /health/live | 프로세스 생존 확인. 인증 없이 항상 200 `{status: "alive", uptime}`. DB와 Redis를 보지 않는다 |
@@ -267,7 +267,7 @@ GET이 아닌 관리 요청, 관리 로그인, 기억 쓰기(remember, amend, fo
 Redis가 비활성화(`REDIS_ENABLED=false`)되면 healthy(200), 연결에 실패하면 degraded(200)를 반환합니다.
 L1 캐시와 Working Memory가 비활성화되지만 핵심 기억 저장/검색은 PostgreSQL만으로 동작합니다.
 
-인증 방식은 두 가지다. Streamable HTTP는 `initialize` 요청 시 `Authorization: Bearer <MEMENTO_ACCESS_KEY>` 헤더로 인증하며 이후 세션으로 유지된다. Legacy SSE도 `Authorization: Bearer` 헤더로 인증하는 것을 기본으로 한다. `/sse?accessKey=<MEMENTO_ACCESS_KEY>` 쿼리 파라미터는 마스터 키 전용 하위 호환 경로이며 `MEMENTO_SSE_QUERY_KEY=deny`로 끌 수 있다. 쿼리 값은 프록시 접근 로그에 남는다.
+인증 방식은 두 가지다. Streamable HTTP는 `initialize` 요청 시 `Authorization: Bearer <MEMENTO_ACCESS_KEY>` 헤더로 인증하며 이후 세션으로 유지된다. Legacy SSE도 `Authorization: Bearer` 헤더로 인증하는 것을 기본으로 한다. `/sse?accessKey=<MEMENTO_ACCESS_KEY>` 쿼리 파라미터는 기본에서 받지 않는다. `MEMENTO_SSE_QUERY_KEY=allow`로 두면 마스터 키에 한해 받는다. 쿼리 값은 프록시 접근 로그에 남는다.
 
 ### HTTP 응답 헤더 — Rate Limit
 
@@ -512,7 +512,7 @@ OAuth 2.0 토큰 엔드포인트. `application/x-www-form-urlencoded` 또는 `ap
 | `state` | 원본 OAuth 파라미터 (존재 시) |
 
 - `decision=allow`: `redirect_uri?code=<code>&state=<state>` 로 302 리다이렉트
-- `decision=deny`: `redirect_uri?error=access_denied&error_description=User%20denied%20access&state=<state>`로 302 리다이렉트(`state`는 요청에 있을 때만 포함). 오류 응답 공통 규칙: redirect_uri가 없거나 URL이 아니면 400 JSON. 클라이언트에 등록되지 않은 redirect_uri는 `MEMENTO_OAUTH_REDIRECT_CHECK=warn`(기본)이면 경고를 남기고 302, `enforce`면 400 JSON
+- `decision=deny`: `redirect_uri?error=access_denied&error_description=User%20denied%20access&state=<state>`로 302 리다이렉트(`state`는 요청에 있을 때만 포함). 오류 응답 공통 규칙: redirect_uri가 없거나 URL이 아니면 400 JSON. 클라이언트에 등록되지 않은 redirect_uri는 `MEMENTO_OAUTH_REDIRECT_CHECK=enforce`(기본)이면 400 JSON, `warn`이면 경고를 남기고 302
 
 ### PUT /v1/internal/model/nothing/keys/:id/daily-limit
 

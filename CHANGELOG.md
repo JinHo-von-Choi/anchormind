@@ -26,6 +26,7 @@
 - 중복 병합(`merge_duplicates`)이 중복 파편을 지우지 않고 닫고 승계자로 `superseded_by` 링크를 남긴다. 열린 파편끼리만 묶는다.
 - 정리 주기에 `session_lessons`, `gc_consolidation_changes` 단계가 더해져 28단계가 된다.
 
+- 호환성 변경: `MEMENTO_OAUTH_REDIRECT_CHECK`의 기본값이 `enforce`, `MEMENTO_SSE_QUERY_KEY`의 기본값이 `deny`가 된다. `/authorize` 오류 응답은 등록되지 않은 `redirect_uri`로 이동하지 않고 400 JSON을 돌려주고, 옛 SSE의 `?accessKey=` 쿼리 키는 401을 받는다. 옛 동작이 필요한 설치는 `MEMENTO_OAUTH_REDIRECT_CHECK=warn`, `MEMENTO_SSE_QUERY_KEY=allow`를 적는다.
 - 스키마에 없는 호출 인자는 처리기에 전달되지 않는다. 응답의 `_meta.ignored_args`는 전과 같이 이름을 알린다. 클라이언트가 보낸 `_` 접두 인자는 이름과 관계없이 지운다. `dryRun`은 미리보기를 지원하지 않는 도구가 그 요청을 거부할 수 있게 전달한다.
 - `MEMENTO_ADMIN_AUTH_BACKOFF=on`의 지연이 `TRUST_PROXY_HOPS`가 설정된 설치에서 요청 주소별로 걸린다. 다른 주소의 실패로 올바른 마스터 키가 429를 받지 않는다. `TRUST_PROXY_HOPS`가 없는 설치는 전과 같이 모든 시도를 늦춘다.
 - `GET /authorize`에 IP 요청 한도가 걸린다. 클라이언트 자동 등록은 `/register`와 같은 시간당 상한(`MEMENTO_DCR_MAX_PER_HOUR`)을 쓰고, `response_type=code`와 S256 `code_challenge`가 없는 요청은 클라이언트를 등록하지 않고 400을 받는다.
@@ -35,6 +36,7 @@
 - 마스터 키 로그인 쿠키로 인증한 관리 API의 상태 변경 요청은 다른 출처의 페이지가 보낸 경우 거부된다(`Sec-Fetch-Site`가 `same-site` 또는 `cross-site`이고 `Origin`이 `ADMIN_ALLOWED_ORIGINS`에 없을 때).
 - SessionStart 훅이 `context` 도구와 같은 workspace 읽기 허가(`MEMENTO_WORKSPACE_READ_AUTHZ`)를 거친다.
 - mongoose 하위 의존성을 9.12.1로 올린다.
+- 행 수준 보안 정책이 접속 역할에 적용되는 설치에서, 풀로 바로 보내던 파편 표 질의와 자체 트랜잭션이 키 목록이나 주체(`admin`, `system`)를 정책에 넘긴다. 관리 API와 CLI는 `agentId`가 붙은 파편도 읽고, 키 요청의 저장·수정·중복 조회·부가 정보 조회는 그 키 범위로 한 번 더 걸린다. 표 소유자로 접속하고 FORCE가 꺼진 설치는 질의가 전과 같다(`docs/operations/row-level-security.md`).
 
 ### Fixed
 

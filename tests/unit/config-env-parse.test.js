@@ -284,10 +284,10 @@ describe("호출 시점에 읽는 변수의 기동 검사", () => {
 
   /** [이름, 문서 밖 값, 사용처가 그 값에 적용하는 값, 문서에 있는 값] */
   const ENUM_SWITCHES = [
-    ["MEMENTO_OAUTH_REDIRECT_CHECK", "block",      "warn",    ["warn", "enforce"]],
+    ["MEMENTO_OAUTH_REDIRECT_CHECK", "block",      "enforce", ["warn", "enforce"]],
     ["MEMENTO_CORS_MODE",           "open",       "observe", ["reflect", "observe", "allowlist"]],
     ["MEMENTO_FRAME_OPTIONS",       "sameorigin", "off",     ["deny"]],
-    ["MEMENTO_SSE_QUERY_KEY",       "block",      "allow",   ["allow", "deny"]]
+    ["MEMENTO_SSE_QUERY_KEY",       "block",      "deny",    ["allow", "deny"]]
   ];
 
   /** [이름, 사용처가 문서 밖 값에 적용하는 값]. 문서에 있는 값은 true와 false다. */
@@ -323,7 +323,7 @@ describe("호출 시점에 읽는 변수의 기동 검사", () => {
       assert.equal(issue[1], "not_in_enum");
       assert.equal(issue[2], used, `${name} 적용 값`);
     }
-    assert.equal(r.sse, "allow");
+    assert.equal(r.sse, "deny");
   });
 
   it("논리 스위치의 true와 false 밖 값은 기록하고 사용처가 적용하는 값을 남긴다", () => {

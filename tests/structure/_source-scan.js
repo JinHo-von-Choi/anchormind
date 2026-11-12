@@ -76,7 +76,7 @@ function exprPart(node) {
   return [{ expr: node.type === "Identifier" ? node.name : null }];
 }
 
-/** 호출 인자 요약. 객체 리터럴은 키 목록, 식별자는 이름이다. */
+/** 호출 인자 요약. 객체 리터럴은 키 목록, 식별자는 이름, 문자열 리터럴은 값(value)이다. */
 function describeArg(arg) {
   if (!arg) return { kind: "none" };
   if (arg.type === "ObjectExpression") {
@@ -85,6 +85,7 @@ function describeArg(arg) {
     return { kind: "object", keys, spreads };
   }
   if (arg.type === "Identifier") return { kind: "identifier", name: arg.name };
+  if (arg.type === "Literal" && typeof arg.value === "string") return { kind: "other", value: arg.value };
   if (arg.type === "MemberExpression" && !arg.computed && arg.object.type === "Identifier") {
     return { kind: "member", object: arg.object.name, property: arg.property.name };
   }
@@ -102,15 +103,17 @@ function describeArg(arg) {
  * - bindings: { name, source, scope }. `x = new C()`는 source "new C", `x = a.b`는 source "a.b"
  * - objectVars: { name, keys, scope }. 객체 리터럴로 초기화한 변수
  * - memberAssigns: { object, property, scope }. `x.p = ...`
+ * - constTexts: Map<이름, 값>. 문자열 리터럴이나 템플릿으로 초기화한 변수의 값
  *
  * @param {string} source
+ * @param {Record<string, string>} [knownConsts] 다른 모듈에서 가져오는 문자열 상수의 이름과 값. 보간을 이 값으로 채운다
  */
-export function scanSource(source) {
+export function scanSource(source, knownConsts = {}) {
   const calls         = [];
   const rawStrings    = [];
   const imports       = [];
   const importSpecs   = [];
-  const constStrings  = new Map();
+  const constStrings  = new Map(Object.entries(knownConsts));
   const constParts    = new Map();
   const bindings      = [];
   const objectVars    = [];
@@ -220,10 +223,13 @@ export function scanSource(source) {
     return "${}";
   }).join("");
   const strings = rawStrings.map(({ parts, scope, line }) => ({ text: resolve(parts, 2), scope, line }));
-  return { calls, strings, imports, importSpecs, bindings, objectVars, memberAssigns };
+  /** 문자열 상수의 이름과 값. 템플릿 상수는 보간을 같은 규칙으로 채운 값이다. */
+  const constTexts = new Map(constStrings);
+  for (const [name, parts] of constParts) constTexts.set(name, resolve(parts, 2));
+  return { calls, strings, imports, importSpecs, bindings, objectVars, memberAssigns, constTexts };
 }
 
 /** 저장소 기준 상대 경로 파일을 읽어 스캔한다. */
-export function scanFile(relPath) {
-  return scanSource(readFileSync(path.join(ROOT, relPath), "utf8"));
+export function scanFile(relPath, knownConsts = {}) {
+  return scanSource(readFileSync(path.join(ROOT, relPath), "utf8"), knownConsts);
 }

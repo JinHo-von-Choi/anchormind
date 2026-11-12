@@ -57,8 +57,8 @@ async function open(mode, key) {
 }
 
 describe("legacySseQueryKeyMode", () => {
-  it("deny일 때만 deny, 나머지는 allow", () => {
-    const cases = [[undefined, "allow"], ["deny", "deny"], ["DENY", "allow"], ["off", "allow"]];
+  it("allow일 때만 allow, 나머지는 deny", () => {
+    const cases = [[undefined, "deny"], ["allow", "allow"], ["ALLOW", "deny"], ["off", "deny"], ["deny", "deny"]];
     for (const [value, expected] of cases) {
       if (value === undefined) delete process.env.MEMENTO_SSE_QUERY_KEY;
       else process.env.MEMENTO_SSE_QUERY_KEY = value;
@@ -69,20 +69,22 @@ describe("legacySseQueryKeyMode", () => {
 });
 
 describe("GET /sse 쿼리 키", () => {
-  it("기본(allow)은 현행대로 스트림을 연다", async () => {
-    const r = await open(null, ACCESS_KEY);
+  it("allow는 마스터 키의 쿼리 키로 스트림을 연다", async () => {
+    const r = await open("allow", ACCESS_KEY);
     assert.equal(r.status, 200);
     assert.match(r.type, /^text\/event-stream/);
   });
 
-  it("deny는 쿼리 키를 받지 않고 헤더 사용을 안내한다", async () => {
-    const r = await open("deny", ACCESS_KEY);
-    assert.equal(r.status, 401);
-    assert.match(r.body, /Authorization header/);
+  it("기본과 deny는 쿼리 키를 받지 않고 헤더 사용을 안내한다", async () => {
+    for (const mode of [null, "deny"]) {
+      const r = await open(mode, ACCESS_KEY);
+      assert.equal(r.status, 401);
+      assert.match(r.body, /Authorization header/);
+    }
   });
 
   it("키가 없으면 두 모드 모두 401", async () => {
-    for (const mode of [null, "deny"]) {
+    for (const mode of ["allow", "deny"]) {
       assert.equal((await open(mode)).status, 401);
     }
   });

@@ -7,6 +7,7 @@
  * migration-080 정책을 FORCE ROW LEVEL SECURITY와 소유자가 아닌 역할(NOBYPASSRLS)로 실제로 적용해 본다. 키 목록 안의
  * 키 파편만 보이는지, 목록이 비면 종전처럼 키 축을 보지 않는지, system 주체는 전체를 보는지, 목록 밖 키의 행은
  * 쓸 수 없는지, 키 격리 절이 넣은 키 목록이 queryWithAgentVector를 거쳐 app.current_key_ids로 넘어가는지 본다.
+ * 풀로 바로 보내는 질의와 호출자가 연 트랜잭션은 queryScoped와 applyRowScope(lib/tools/row-scope.js)로 같은 범위를 건다.
  * FORCE와 역할은 이 실행의 전용 데이터베이스에만 걸고, 역할은 끝나면 지운다.
  */
 import crypto                  from "node:crypto";
@@ -21,6 +22,8 @@ await prepareLaneDatabase();
 
 const { shutdownPool, queryWithAgentVector } = await import("../../lib/tools/db.js");
 const { keyScopeClause }                     = await import("../../lib/memory/keyScope.js");
+const { noteKeyScope }                       = await import("../../lib/tools/key-scope-ids.js");
+const { queryScoped, applyRowScope, ROW_SUBJECT } = await import("../../lib/tools/row-scope.js");
 
 const ROLE = `lane_rls_${crypto.randomBytes(4).toString("hex")}`;
 /** 역할을 지울 관리 접속. 데이터베이스를 지운 뒤에는 접속 정보를 다시 얻을 수 없어 미리 받아 둔다. */
@@ -125,5 +128,35 @@ describe("행 수준 보안 키 목록 정책", () => {
 
     const unscoped = await queryWithAgentVector("default", "SELECT current_setting('app.current_key_ids', true) AS ids", []);
     assert.equal(unscoped.rows[0].ids, "");
+  });
+
+  it("풀로 바로 보내는 질의도 queryScoped를 거치면 키 목록과 주체가 정책에 걸린다", async () => {
+    /** 접속할 때부터 시험 역할로 바꾼 풀. 이 역할에는 정책이 적용된다. */
+    const pool  = new pg.Pool({ ...directClientConfig(), options: `-c role=${ROLE}`, max: 2 });
+    const count = "SELECT COALESCE(key_id, 'master') AS k, count(*)::int AS n FROM agent_memory.fragments WHERE topic = 'rls' GROUP BY 1 ORDER BY 1";
+    const seen  = async (params, subject) => Object.fromEntries((await queryScoped(pool, count, params, subject)).rows.map((r) => [r.k, r.n]));
+    try {
+      const scoped = [];
+      noteKeyScope(scoped, [KEYS.a, KEYS.b]);
+      assert.deepEqual(await seen(scoped), { [KEYS.a]: 2, [KEYS.b]: 1 });
+
+      const all = { [KEYS.a]: 2, [KEYS.b]: 1, [KEYS.c]: 1, master: 1 };
+      assert.deepEqual(await seen([], ROW_SUBJECT.SYSTEM), all);
+      assert.deepEqual(await seen(scoped, ROW_SUBJECT.ADMIN), all);
+
+      /** 호출자가 연 트랜잭션에는 applyRowScope가 같은 범위를 건다 */
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await applyRowScope(pool, client, { keyIds: [KEYS.c] });
+        const { rows } = await client.query(count);
+        assert.deepEqual(Object.fromEntries(rows.map((r) => [r.k, r.n])), { [KEYS.c]: 1 });
+      } finally {
+        await client.query("ROLLBACK").catch(() => {});
+        client.release();
+      }
+    } finally {
+      await pool.end();
+    }
   });
 });

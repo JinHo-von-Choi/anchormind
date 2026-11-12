@@ -878,7 +878,7 @@ fragment_links의 weight/confidence 변경 이력을 기록하는 감사 테이�
 
 ### Row-Level Security
 
-fragments와 fragment_links에는 RLS가 켜져 있다(migration-045, 키 목록은 migration-080). fragments 정책 `fragment_isolation_policy`는 에이전트 축 `app.current_agent_id`를 본다. 키 범위가 설정되어 있으면 키 목록 `app.current_key_ids`나 단일 값 `app.current_key_id`도 본다. 키 범위는 질의를 만들 때 함께 정해진다. `lib/memory/keyScope.js`는 키 격리 절에 넣은 키 id를 바인딩 배열에도 적는다(`lib/tools/key-scope-ids.js`). 그러면 `queryWithAgentVector`가 질의마다 그 목록을 `app.current_key_ids`로 넘긴다. 그래서 자기 키와 읽을 수 있는 멤버 키를 함께 읽는 그룹 공유 질의도 정책과 같은 범위를 쓴다. fragment_links 정책은 from_id 파편을 읽을 수 있는지에 따른다. 애플리케이션 계정이 표 소유자이고 `FORCE ROW LEVEL SECURITY`가 없으므로 런타임 질의의 키 격리는 질의 필터가 맡는다. DB 수준 격리를 켜는 절차는 `docs/operations/row-level-security.md`에 있다.
+fragments와 fragment_links에는 RLS가 켜져 있다(migration-045, 키 목록은 migration-080). fragments 정책 `fragment_isolation_policy`는 에이전트 축 `app.current_agent_id`를 본다. 키 범위가 설정되어 있으면 키 목록 `app.current_key_ids`나 단일 값 `app.current_key_id`도 본다. 키 범위는 질의를 만들 때 함께 정해진다. `lib/memory/keyScope.js`는 키 격리 절에 넣은 키 id를 바인딩 배열에도 적는다(`lib/tools/key-scope-ids.js`). 그러면 `queryWithAgentVector`가 질의마다 그 목록을 `app.current_key_ids`로 넘긴다. 풀로 바로 보내는 질의와 자체 트랜잭션에는 `lib/tools/row-scope.js`의 `queryScoped`와 `applyRowScope`가 같은 목록이나 주체(관리 질의는 `admin`, 백그라운드 작업은 `system`)를 건다. 이 실행기는 정책이 접속 역할에 적용될 때만 설정을 건다. 그래서 자기 키와 읽을 수 있는 멤버 키를 함께 읽는 그룹 공유 질의도 정책과 같은 범위를 쓴다. fragment_links 정책은 from_id 파편을 읽을 수 있는지에 따른다. 애플리케이션 계정이 표 소유자이고 `FORCE ROW LEVEL SECURITY`가 없으므로 런타임 질의의 키 격리는 질의 필터가 맡는다. DB 수준 격리를 켜는 절차는 `docs/operations/row-level-security.md`에 있다.
 
 ```sql
 CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
