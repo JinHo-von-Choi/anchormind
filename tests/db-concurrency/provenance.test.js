@@ -214,8 +214,8 @@ describe("context 주입 제외", () => {
       { agentId: "default", keyId: null, groupKeyIds: null, workspace: null },
       getPrimaryPool
     );
-    assert.deepEqual(map.get(`${TAG}-core-ok`), { source: null, origin: "tool_output", trustTier: 2 });
-    assert.deepEqual(map.get(`${TAG}-anchor-null`), { source: null, origin: null, trustTier: null });
+    assert.deepEqual(map.get(`${TAG}-core-ok`), { source: null, supportState: null, origin: "tool_output", trustTier: 2, qualityVerified: false, reviewState: null });
+    assert.deepEqual(map.get(`${TAG}-anchor-null`), { source: null, supportState: null, origin: null, trustTier: null, qualityVerified: false, reviewState: null });
     assert.equal(map.has("missing-id"), false);
 
     await client.query(

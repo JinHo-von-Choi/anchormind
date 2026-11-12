@@ -56,12 +56,12 @@ describe("범위 규칙 검사의 변형 소스 시험", () => {
   };
 
   it("scopedQuery 조립 함수가 술어를 버리면 잡힌다", () => {
-    const out = scopeViolations(change("WHERE ${NOT_WM_ROW} AND ${ws}`)),", "WHERE ${NOT_WM_ROW}`)),"));
+    const out = scopeViolations(change("WHERE ${NOT_WM_ROW} AND ${ws}`), ROW_SUBJECT.ADMIN),", "WHERE ${NOT_WM_ROW}`), ROW_SUBJECT.ADMIN),"));
     assert.ok(out.some((m) => m.includes("술어 ws를 쓰지 않는다")), out.join("; "));
   });
 
   it("기억 표 SQL에서 범위 술어를 빼면 잡힌다", () => {
-    const out = scopeViolations(change(" AND ${scopePredicate(params, \"workspace\", scope)}`,\n      params\n    );", "`,\n      params\n    );"));
+    const out = scopeViolations(change(" AND ${scopePredicate(params, \"workspace\", scope)}`,\n      params, ROW_SUBJECT.ADMIN\n    );", "`,\n      params, ROW_SUBJECT.ADMIN\n    );"));
     assert.ok(out.some((m) => m.includes("범위 술어 없는 기억 표 SQL")), out.join("; "));
   });
 
@@ -78,7 +78,7 @@ describe("범위 규칙 검사의 변형 소스 시험", () => {
   });
 
   it("손으로 쓴 workspace 범위 조건은 잡힌다", () => {
-    const out = scopeViolations(change("WHERE ${NOT_WM_ROW} AND ${ws}`)),", "WHERE ${NOT_WM_ROW} AND ${ws} AND workspace = ANY($1)`)),"));
+    const out = scopeViolations(change("WHERE ${NOT_WM_ROW} AND ${ws}`), ROW_SUBJECT.ADMIN),", "WHERE ${NOT_WM_ROW} AND ${ws} AND workspace = ANY($1)`), ROW_SUBJECT.ADMIN),"));
     assert.ok(out.some((m) => m.includes("손으로 쓴")), out.join("; "));
   });
 });

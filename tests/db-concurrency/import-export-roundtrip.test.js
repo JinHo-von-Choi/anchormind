@@ -180,6 +180,20 @@ const RESET_ON_IMPORT = Object.freeze(["access_count", "accessed_at", "verified_
 /** 되살리기에서만 따르는 열. 보통 가져오기에서는 비운다. */
 const RESTORE_ONLY = Object.freeze(["quality_verified", "quality_rationale"]);
 
+/**
+ * 출처 열은 서버가 다시 판정한다(lib/memory/provenance.js importedProvenance). origin은 파일 값을 잇고 없으면
+ * import다. 관측 클라이언트는 가져오기 진입점이고, 등급은 진입점 등급보다 높아지지 않는다.
+ */
+const SERVER_PROVENANCE = Object.freeze(["origin", "observed_client", "trust_tier"]);
+
+function assertImportedProvenance(from, to) {
+  for (let i = 0; i < from.length; i++) {
+    assert.equal(to[i].origin, from[i].origin ?? "import", `${from[i].id}.origin`);
+    assert.match(String(to[i].observed_client), /import$/, `${from[i].id}.observed_client`);
+    assert.ok(to[i].trust_tier <= 2, `${from[i].id}.trust_tier`);
+  }
+}
+
 async function v2Rows(query) {
   const { rows } = await query(`SELECT ${V2_SELECT} FROM ${SCHEMA}.fragments ORDER BY id`);
   return rows;
@@ -252,7 +266,8 @@ describe("저장 규칙을 지킨 데이터의 왕복", () => {
     /** 내보내기 열 전체: 초기화 열과 되살리기 전용 열만 예외다. */
     const fromV2 = await v2Rows((sql) => sourceClient.query(sql));
     const toV2   = await v2Rows((sql) => directQuery(sql));
-    assertV2ColumnsEqual(fromV2, toV2, [...RESET_ON_IMPORT, ...RESTORE_ONLY]);
+    assertV2ColumnsEqual(fromV2, toV2, [...RESET_ON_IMPORT, ...RESTORE_ONLY, ...SERVER_PROVENANCE]);
+    assertImportedProvenance(fromV2, toV2);
     const first = toV2.find(r => r.id === "fr-01");
     assert.equal(first.access_count, 0, "접근 수는 초기화된다");
     assert.equal(first.quality_verified, null, "보통 가져오기는 quality_verified를 따르지 않는다");
@@ -384,8 +399,11 @@ describe("저장 규칙 이전의 행", () => {
     const from = await sourceFragments();
     const to   = await targetFragments();
     assert.deepEqual(hashSet(to), hashSet(from));
-    assertV2ColumnsEqual(await v2Rows((sql) => sourceClient.query(sql)), await v2Rows((sql) => directQuery(sql)), RESET_ON_IMPORT);
-    const restoredFirst = (await v2Rows((sql) => directQuery(sql))).find(r => r.id === "fr-01");
+    const restoredFrom = await v2Rows((sql) => sourceClient.query(sql));
+    const restoredTo   = await v2Rows((sql) => directQuery(sql));
+    assertV2ColumnsEqual(restoredFrom, restoredTo, [...RESET_ON_IMPORT, ...SERVER_PROVENANCE]);
+    assertImportedProvenance(restoredFrom, restoredTo);
+    const restoredFirst = restoredTo.find(r => r.id === "fr-01");
     assert.deepEqual([restoredFirst.quality_verified, restoredFirst.quality_rationale], [true, "검증을 마친 사실이다"]);
     const long = to.find(r => r.id === "leg-long");
     assert.equal(long.importance, 0.95);

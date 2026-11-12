@@ -100,6 +100,11 @@ describe("openapi-schema-examples: recallDefinition", () => {
   });
 });
 
+/** 도구 정의 모듈. link 정의는 lib/tools/link-schema.js에 있다. */
+async function loadDefinitions() {
+  return { ...(await import("../../lib/tools/memory-schemas.js")), ...(await import("../../lib/tools/link-schema.js")) };
+}
+
 describe("openapi-schema-examples: dryRun examples", () => {
   const DRYRYN_DEFINITIONS = [
     "rememberDefinition",
@@ -110,7 +115,7 @@ describe("openapi-schema-examples: dryRun examples", () => {
 
   for (const defName of DRYRYN_DEFINITIONS) {
     test(`${defName}.dryRun에 examples [true, false]가 존재한다`, async () => {
-      const mod = await import("../../lib/tools/memory-schemas.js");
+      const mod = await loadDefinitions();
       const def = mod[defName];
       assert.ok(def, `${defName}이 export되어야 한다`);
       const dryRun = def.inputSchema.properties.dryRun;
@@ -143,7 +148,7 @@ describe("openapi-schema-examples: description 충분한 길이(80자 이상) �
 
   for (const defName of MULTI_LINE_DEFINITIONS) {
     test(`${defName}.description이 한 줄 초과(80자 이상, 2문장 이상)다`, async () => {
-      const mod = await import("../../lib/tools/memory-schemas.js");
+      const mod = await loadDefinitions();
       const def = mod[defName];
       assert.ok(def, `${defName}이 export되어야 한다`);
       const desc = def.description;
