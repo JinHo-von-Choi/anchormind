@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.1.0] - 2026-11-19
+
 ### Added
 
 - 사용 사건(`fragment_use_events`, migration-083). `access_count`와 `ema_activation`은 노출(recall 반환, context 주입, 그래프 확산)로 오르므로, 에이전트가 파편 id를 지목한 사건만 따로 남긴다. tool_feedback의 relevant 판정, `amend(assertionStatus=verified)`, reflect `lessons_applied`의 helped와 failed, link 도구로 만든 링크의 양 끝, 교훈 `evidenceIds`다. `MEMENTO_USE_SIGNAL`(off, shadow, on. 기본 shadow). shadow는 사건을 기록하고 context 온도 정렬을 지금 방식, 사용 기준, 가산점 없음으로 나란히 계산해 차이만 지표 `memento_context_shadow_diff`에 남긴다. on은 온도 정렬의 최근, 빈도 가산점을 사용 사건으로 준다. GC, 앵커 승격, 90일 하향은 노출 기준 그대로다. 사건은 180일 보존한다.
