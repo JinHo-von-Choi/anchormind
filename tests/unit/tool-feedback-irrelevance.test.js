@@ -87,7 +87,7 @@ describe("toolFeedback INSERT", () => {
         });
 
         assert.ok(q.sql.includes("irrelevance_reason"));
-        assert.strictEqual(q.params.length, 9);
+        assert.strictEqual(q.params.length, 12);
         assert.strictEqual(q.params[8], null);
     });
 

@@ -15,6 +15,9 @@ import {
   selectAnchorFragments,
 } from "../../lib/memory/read/ContextBuilder.js";
 
+/** 이 파일은 앵커 조회와 주입 줄을 본다. 교훈 색인 조회(lib/memory/read/LessonIndex.js)는 끈다. */
+process.env.MEMENTO_LESSON_INDEX = "off";
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 function loadAnchorConfig(values = {}, validate = false) {

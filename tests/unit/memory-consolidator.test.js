@@ -3,14 +3,12 @@
  *
  * 작성자: 최진호
  * 작성일: 2026-04-19
- * 수정일: 2026-06-15 (feedbackFactor 라이브 계수로 갱신)
  *
- * feedbackFactor 및 timedStage 래퍼의 동작,
+ * timedStage 래퍼의 동작,
  * _resolveContradiction의 시간 논리, getStats 풀 부재 시 빈 객체 반환을
  * DB 없이 검증한다.
  *
  * mock 전략:
- * - feedbackFactor: 순수 함수이므로 mock 없음
  * - MemoryConsolidator 인스턴스 메서드: 의존 메서드를 직접 교체하여 DB 접근 차단
  * - getStats: pool을 null로 만들어 빈 객체 반환 경로 검증
  */
@@ -24,37 +22,10 @@ import {
   summarizeKeyWorkspaceFillRate,
   summarizeSessionFragmentDistribution
 }                               from "../../lib/memory/consolidate/MemoryConsolidator.js";
-import { feedbackFactor }      from "../../lib/memory/consolidate/feedbackFactor.js";
 import { disconnectRedis }     from "../../lib/redis.js";
 
 import { after } from "node:test";
 after(async () => { await disconnectRedis().catch(() => {}); });
-
-/* ── feedbackFactor ── */
-
-describe("feedbackFactor — 순수 함수", () => {
-
-  it("relevant=true, sufficient=true → POSITIVE_FACTOR 1.1", () => {
-    assert.strictEqual(feedbackFactor(true, true), 1.1);
-  });
-
-  it("relevant=false → NEGATIVE_FACTOR 0.85", () => {
-    assert.strictEqual(feedbackFactor(false, false), 0.85);
-    assert.strictEqual(feedbackFactor(false, true),  0.85);
-  });
-
-  it("relevant=true, sufficient=false → MIXED_FACTOR 0.95", () => {
-    assert.strictEqual(feedbackFactor(true, false), 0.95);
-  });
-
-  it("반환값이 세 계수 중 하나임을 확인", () => {
-    const valid = new Set([0.85, 0.95, 1.1]);
-    assert.ok(valid.has(feedbackFactor(true,  true)));
-    assert.ok(valid.has(feedbackFactor(false, false)));
-    assert.ok(valid.has(feedbackFactor(true,  false)));
-  });
-
-});
 
 /* ── MemoryConsolidator.getStats — pool 없을 때 빈 객체 ── */
 

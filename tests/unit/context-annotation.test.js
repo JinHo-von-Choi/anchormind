@@ -19,6 +19,9 @@ import {
 import { ContextBuilder, buildRankedInjection } from "../../lib/memory/read/ContextBuilder.js";
 import { countContentTokens } from "../../lib/memory/read/BudgetSelector.js";
 
+/** 이 파일은 앵커 조회와 주입 줄을 본다. 교훈 색인 조회(lib/memory/read/LessonIndex.js)는 끈다. */
+process.env.MEMENTO_LESSON_INDEX = "off";
+
 /** 앵커 줄 주체 표지는 별도 시험이 본다. 여기서는 주석만 보도록 앵커 권한 집행을 끈다. */
 process.env.MEMENTO_ANCHOR_PERMISSION = "off";
 
