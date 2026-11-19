@@ -58,7 +58,7 @@
   "max-lines": {
     "lib/admin/admin-memory.js": 1022,
     "lib/memory/read/FragmentSearch.js": 803,
-    "lib/tools/memory-schemas.js": 1225
+    "lib/tools/memory-schemas.js": 1220
   },
   "max-depth": {
     "lib/llm/util/retry-hints.js": 6,

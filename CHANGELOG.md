@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- 사용 사건(`fragment_use_events`, migration-083). `access_count`와 `ema_activation`은 노출(recall 반환, context 주입, 그래프 확산)로 오르므로, 에이전트가 파편 id를 지목한 사건만 따로 남긴다. tool_feedback의 relevant 판정, `amend(assertionStatus=verified)`, reflect `lessons_applied`의 helped와 failed, link 도구로 만든 링크의 양 끝, 교훈 `evidenceIds`다. `MEMENTO_USE_SIGNAL`(off, shadow, on. 기본 shadow). shadow는 사건을 기록하고 context 온도 정렬을 지금 방식, 사용 기준, 가산점 없음으로 나란히 계산해 차이만 지표 `memento_context_shadow_diff`에 남긴다. on은 온도 정렬의 최근, 빈도 가산점을 사용 사건으로 준다. GC, 앵커 승격, 90일 하향은 노출 기준 그대로다. 사건은 180일 보존한다.
+- tool_feedback `fragment_judgments`(`{id, relevant}` 배열). 파편마다 판정해 `tool_feedback_fragments`(migration-083)에 남긴다. `search_event_id`를 주면 그 recall이 돌려준 파편만 받고, 응답 `fragments_judged`, `fragments_ignored`로 건수를 알린다.
+- reflect `lessons_applied`(`{id, outcome}` 배열, outcome은 helped, failed, not_applicable). 결과는 `lesson_outcomes`(migration-083)에 세션마다 한 번 남는다. 교훈의 신뢰도는 Beta(1+helped, 1+failed) 평균이고, 서로 다른 세션에서 실패가 쌓여 성공보다 많아진 교훈은 `contested`가 되어 context에서 빠진다(helped 3 이상이면 failed가 helped를 넘을 때). recall은 교훈에 `lesson_outcome`(helped, failed, not_applicable, n, reliability, state)을 싣는다.
+- context 교훈 색인과 `MEMENTO_LESSON_INDEX`(off, on, ab. 기본 on), `MEMENTO_LESSON_INDEX_LIMIT`(기본 8). 같은 workspace 교훈의 cue 한 줄과 id를 남은 토큰 예산 안에서 `[LESSON INDEX]` 구획과 응답 `lessonIndex`에 싣는다.
+- recall 응답 `alreadySeen`. 같은 세션의 context가 이미 주입해 본문을 뺀 파편을 점수 순 최대 5개까지 id, type, 첫 문장으로 알린다. 대화 압축으로 본문을 잃었으면 그 id로 다시 조회한다.
+- 정리 단계 `ema_decay`와 `MEMENTO_EMA_DECAY`(기본 on). 60일 넘게 접근이 없는 비앵커 파편의 `ema_activation`을 0으로, 30~60일 구간은 미접근 구간마다 한 번 절반으로 내린다. 바꾼 값은 주기 변경 기록(`ema_decayed`)에 남아 주기 되돌리기로 복원된다.
+- 정리 단계 `daily_metrics`. 끝난 날의 관측 사용률, 피드백 보고율, 교훈 반환율, 교훈 helped 비율, 30일 미사용률을 키별로 `memory_daily_metrics`(migration-083)에 분자, 분모와 함께 남긴다.
+- 정리 단계 `lesson_probe`. 하루 한 번 저장된 cue 벡터로 교훈이 같은 키 상위 5건에 오는지, 교훈과 코사인 0.9 이상인 다른 procedure가 있는지, not_applicable이 쌓인 교훈이 있는지를 `memory_daily_metrics`(metric `lesson_probe`)에 남긴다. 파편과 접근 기록은 바꾸지 않는다.
+- 지표 `memento_injection_tokens{tool}`, `memento_context_shadow_diff{comparison}`(표본 비율 `MEMENTO_CONTEXT_SHADOW_RATE`, 기본 0.1), `memento_context_contested_excluded_total`, `memento_context_lesson_index_lines`.
+
+### Changed
+
+- `feedback_calibration` 단계가 세션 단위 importance 배수(1.1, 0.95, 0.85)를 곱하지 않는다. 이 배수는 recall에서 받은 파편이 아니라 그 세션에서 쓴 파편에 곱해졌고, 활동 기록이 남아 있는 동안 주기마다 다시 곱해졌다. 접근 0건 + 90일 경과 파편의 0.5배 하향은 그대로다.
+
 ## [8.0.0] - 2026-11-12
 
 ### Added

@@ -45,6 +45,8 @@ server.js  (HTTP 서버)
             │   ├── FragmentSearch.js     3계층 검색 조율 (구조적: L1→L2, 시맨틱: L1→L2‖L3 RRF 병합). `_executeSearch`는 `_buildTextRRF` (text 파라미터 있을 때 L2+L3 병렬 RRF) / `_buildFallbackCombined` (text 없을 때 L1+L2, keywords 존재 시 합성 텍스트 L3 시맨틱 보조를 병렬 결합해 `L3kw:N` 세그먼트로 병합) 두 내부 메서드로 분해
             │   ├── FragmentReader.js     파편 읽기. `getById(id, agentId, keyId, groupKeyIds)` — groupKeyIds 파라미터로 그룹 소속 키의 파편도 단일 호출로 조회. `getByIds`, `getHistory`, `searchByKeywords`, `searchBySemantic`, `findCaseIdBySessionTopic`, `findErrorFragmentsBySessionTopic`
             │   ├── ContextBuilder.js     context() 로직 전담. effective workspace의 Anchor 예약분을 우선 선택한 뒤 후보를 anchor > core > learning > working 순으로 ID 중복 제거하고, 앵커와 비앵커 최소 슬롯을 보장한 공통 토큰 선택 결과로 flat/structured/injectionText를 조립
+            │   ├── ContextCoreSelection.js core 후보 선택(유형별 보장, 온도 정렬, 예산 채우기), contested 교훈 제외, 온도 정렬 방식별 비교
+            │   ├── LessonIndex.js        context 교훈 색인(cue 한 줄과 id)
             │   ├── ContextIndexView.js   context `view: "index"`의 목록 줄(첫 문장 60자)과 그 토큰 수
             │   ├── AnchorBudgetLoader.js 새 앵커 지정의 예산 판정에 쓸 현재 주입 앵커(같은 키, 같은 workspace 상위 앵커)를 읽는다
             │   ├── WorkspaceBoundary.js  allWorkspaces 조회에서 다른 workspace fact에 workspace_warning을 다는 순수 함수
@@ -56,6 +58,7 @@ server.js  (HTTP 서버)
             │   ├── ReviewVisibility.js   검토 대기와 거절 파편 가시성 술어(스위치와 무관). recall 질의(쓴 키에게만 보임), id 조회(API 키 조회만), 주입 후보와 앵커 승격과 모순 해소(모두 제외)의 SQL 조각, 응답 표지(pending_review, low_trust, review_rejected), core 후보 거르기
             │   ├── SearchLayerScope.js   FragmentSearch가 계층 호출에 넘기는 공통 범위 옵션(workspace, agent, 앵커 필터, 검토 가시성의 보는 주체)
             │   ├── provenance-metrics.js core 신뢰 등급 제외 지표 `memento_context_core_trust_excluded_total{reason}`
+            │   ├── experience-metrics.js 주입 토큰, context 비교 차이, contested 제외, 교훈 색인 줄 수 지표
             │   ├── GraphNeighborSearch.js L2.5 그래프 이웃 검색 (fragment_links 1-hop 양방향 UNION, tanh 포화 스코어링 + 관계 유형별 부스트)
             │   ├── HistoryReconstructor.js case_id/entity 기반 서사 재구성 (ordered_timeline, causal_chains, unresolved_branches)
             │   ├── BudgetSelector.js     recall 토큰 예산 선택. 검색 순서 절단(`trimInSearchOrder`)과 최종 점수 기반 선택(`selectWithinBudget`)을 순수 함수로 둔다
@@ -74,6 +77,7 @@ server.js  (HTTP 서버)
             ├── write/                    쓰기 레이어 모듈
             │   ├── WriteGate.js          의미 쓰기 단일 관문. normalize, sensitive, length, policy, workspace, anchor 단계를 순서대로 적용하고 위반을 경고로 남기거나 hard gate 키에서 거부한다. anchor 단계는 remember와 amend의 앵커 지정을 키의 anchor 권한과 앵커 상한으로 판정한다. `MEMENTO_WRITE_GATE`, `MEMENTO_ANCHOR_PERMISSION`
             │   ├── LessonCue.js          reflect lessons 정규화와 cue 행(`fragment_synthetic_query`, origin='cue') 등록
+            │   ├── LessonSummary.js      교훈 맥락 요약 형식("상황: " 머리말)과 교훈 판정 SQL 술어
             │   ├── ReviewQueue.js        검토 대기열 동기 판정(순수 함수). 지시 덮어쓰기 문구, 신뢰 등급 1 이하의 앵커와 preference와 procedure, 무권한 앵커 경고를 사유로 모으고 키의 검토 방식(off, flagged, all)으로 review_state='pending'을 싣는다. 앵커 요청은 승인까지 보류한다. INSERT 열 조각과 갱신 SET 조각. `MEMENTO_REVIEW_QUEUE`
             │   ├── reviewRules.js        지시 덮어쓰기 문구 규칙 표(한국어, 영어). 걸리지 않아야 하는 일반 절차문 표는 시험에 있다
             │   ├── write-gate-metrics.js 관문 판정 지표 `memento_write_gate_total{entry,outcome}`, 앵커 판정 지표 `memento_anchor_decision_total{outcome,reason}`
@@ -124,7 +128,8 @@ server.js  (HTTP 서버)
             │   ├── resumableBackfill.js  재개형 백필 도우미(`runResumableBackfill`). 묶음마다 watermark를 기록해 같은 작업 이름으로 이어 실행하고, 행 단위 오류는 `backfill_failures`에 남긴다
             │   ├── decay.js              지수 감쇠 반감기 상수, 순수 계산 함수, ACT-R EMA 활성화 근사 (`updateEmaActivation`, `computeEmaRankBoost`), EMA 기반 동적 반감기 (`computeDynamicHalfLife`), 나이 가중치 utility score (`computeUtilityScore`)
             │   ├── UtilityBaseline.js    파편 utility baseline 계산 (중복 제거/압축 판단 기준선)
-            │   ├── feedbackFactor.js     피드백 기반 보정 계수 계산
+            │   ├── DailyMetrics.js       정리 주기의 일별 경험 신호 지표(관측 사용률, 피드백 보고율, 교훈 반환율, 교훈 helped 비율, 30일 미사용률)를 `memory_daily_metrics`에 쓴다
+            │   ├── LessonProbe.js        교훈 자기 점검(cue 미적중, 간섭 후보, 적용 안 됨). 저장된 벡터만 쓰고 결과를 `memory_daily_metrics`에 남긴다
             │   ├── split-gate.js         긴 파편 분할 게이트 조건
             │   └── split-metrics.js      분할 결과 메트릭 집계
             ├── embedding/                임베딩 레이어 모듈
@@ -135,6 +140,8 @@ server.js  (HTTP 서버)
             │   └── LexicalTokens.js      본문 어휘 채널의 토큰화(MorphemeTokenizer 토큰을 소문자화, 어미 조각 제거)와 tsquery 생성(작은따옴표 감싸기, OR 결합)
             ├── signals/                  신호 레이어 모듈
             │   ├── SpreadingActivation.js contextText 기반 비동기 활성화 전파 (ACT-R 모델, keywords GIN seed → 1-hop 그래프 확산, 10분 TTL 캐시)
+            │   ├── UseEvents.js          에이전트가 파편 id를 지목한 사용 사건 기록(`fragment_use_events`)과 집계
+            │   ├── LessonOutcomes.js     reflect lessons_applied 결과 기록(`lesson_outcomes`), 신뢰도와 contested 판정
             │   ├── CaseRewardBackprop.js  case verification 이벤트 → 증거 파편 importance 원자적 역전파. MEMENTO_CASE_BACKPROP_ENABLED 환경변수 미설정 시 즉시 반환
             │   ├── NLIClassifier.js       NLI 기반 모순 분류기 (mDeBERTa ONNX, CPU)
             │   ├── MemoryEvaluator.js     비동기 Gemini CLI 품질 평가 워커 (싱글턴)
@@ -1522,7 +1529,7 @@ autoLinkSessionFragments (배치 처리)
 |-|-|-|-|
 | ProactiveRecall | remember() 직후 키워드 50%+ 매치 | symbolic gate + workspace 일치 + caseIdPolicy | auto |
 | autoLinkSessionFragments | reflect() 호출 | 1:1 top-1 매칭 + caseId/sessionId 인접 + 키워드 60%+ + phase 정합성 | 항상 적용 |
-| MemoryConsolidator | 6h 타이머 (`consolidateIntervalMs`) | schema-fit gate (3개 조건, mode=any) | 타이머 + 게이트 |
+| MemoryConsolidator | 8h 타이머 (`consolidateIntervalMs`) | schema-fit gate (3개 조건, mode=any) | 타이머 + 게이트 |
 | AutoReflect | 세션 종료 (Gemini CLI 가용 시) | 별도 게이트 없음 | Gemini CLI 의존 |
 
 MemoryConsolidator의 LLM 재작성 stage 3종(`split_long_fragments`, `detect_contradictions`, `compress_old_fragments`)은 `enableRiskyStages` 플래그로 개별 비활성화할 수 있다. `compressOldFragments`는 기본 `false`다.
@@ -1587,7 +1594,7 @@ lib/memory/
 ├── link/          ReconsolidationEngine, GraphLinker, LinkStore, SessionLinker, TemporalLinker, ContradictionDetector
 ├── consolidate/   MemoryConsolidator, ConsolidatorGC, FragmentGC, decay, UtilityBaseline
 ├── embedding/     EmbeddingWorker, EmbeddingCache, MorphemeIndex, MorphemeTokenizer, LexicalTokens
-├── signals/       SpreadingActivation, CaseRewardBackprop, NLIClassifier, MemoryEvaluator, SearchMetrics, SearchEventAnalyzer, SearchEventRecorder, EvaluationMetrics, SearchParamAdaptor
+├── signals/       SpreadingActivation, UseEvents, LessonOutcomes, CaseRewardBackprop, NLIClassifier, MemoryEvaluator, SearchMetrics, SearchEventAnalyzer, SearchEventRecorder, EvaluationMetrics, SearchParamAdaptor
 ├── processors/    MemoryRememberer, MemoryRecaller, MemoryReflector, MemoryLinker, ReflectProcessor, AutoReflect, EpisodeContinuityService, SessionActivityTracker
 └── migrations/    마이그레이션 SQL 59개 (001 ~ 060, 046 결번)
 ```

@@ -48,7 +48,9 @@ const LABEL_PARAMS = new Map([
   ["recordReviewDecision",          [0]],
   ["recordWorkspaceReadAuthz",      [0, 1, 2]],
   ["recordLexicalChannelSkipped",   [0]],
-  ["recordLexicalTokenizeSkipped",  [0]]
+  ["recordLexicalTokenizeSkipped",  [0]],
+  ["recordInjectionTokens",         [0]],
+  ["recordShadowDiff",              [0]]
 ]);
 
 /** 기록 함수 안에서 protocolVersionLabel로 값을 닫는 함수 */
@@ -68,6 +70,7 @@ const METRIC_MODULES = new Set([
   "lib/memory/write/write-gate-metrics.js",
   "lib/memory/read/provenance-metrics.js",
   "lib/memory/read/read-authz-metrics.js",
+  "lib/memory/read/experience-metrics.js",
   "lib/outbox/outbox-metrics.js",
   "lib/hooks/hook-metrics.js",
   "lib/memory/lexical-metrics.js"

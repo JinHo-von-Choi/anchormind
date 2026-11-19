@@ -270,6 +270,8 @@ export const MEMORY_CONFIG = {
       warmBoost          : 0.2,
       highAccessBoost    : 0.15,
       highAccessThreshold: 5,
+      /** MEMENTO_USE_SIGNAL=on에서 빈도 가산점을 주는 사용 사건 수 */
+      highUseThreshold   : 2,
       learningBoost      : 0.3,
     },
     /** structured=true 전용: rankedInjection 복합 점수 가중치 (합계 1.0) */

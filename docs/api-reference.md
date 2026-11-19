@@ -648,7 +648,7 @@ Agent 조회는 생략 시 `default`, 지정 시 해당 agent와 `default`를 �
 | includePeerAgents | boolean | - | master 전용. true 시 같은 키/workspace 스코프 내 다른 agentId 파편 포함. 일반 API 키는 권한 오류. 기본 false. |
 | includeKeyName | boolean | - | true 시 각 파편에 key_id와 key_name(액세스 키 라벨)을 포함한다. 같은 키 그룹 스코프의 정보만 노출된다. 기본 false. |
 | asOf | string | - | ISO 8601. 해당 시점에 가까운 파편을 상위로 올리는 시간 근접 랭킹 기준으로만 쓰인다. 그 시점에 유효했던 버전만 남기는 필터가 아니며, 기간을 한정하려면 `timeRange`를 쓴다. |
-| excludeSeen | boolean | - | context()에서 이미 주입된 파편 제외. 기본 true. |
+| excludeSeen | boolean | - | 같은 세션의 context()가 이미 주입한 파편은 본문을 빼고, 점수 순 최대 5개를 응답 `alreadySeen`(`id`, `type`, 첫 문장 `summary`)에 싣는다. 대화 압축으로 본문을 잃었으면 그 id로 다시 조회하거나 `excludeSeen:false`로 본문을 받는다. 기본 true. |
 | includeKeywords | boolean | - | 각 파편의 keywords 배열을 응답에 포함 |
 | includeContext | boolean | - | context_summary + 인접 파편(`nearby_context`) 포함. 조합할 재료가 있는 상위 3건에는 `stitched_context`도 함께 반환 |
 | timeRange | object | - | {from, to, basis} 시간 범위 필터 (ISO 8601 또는 자연어). `basis`가 `created`(기본)면 저장 시각, `event`면 세계 시각(`COALESCE(event_time, mention_time, created_at)`, 색인 `idx_fragments_world_time`)과 비교한다. |
@@ -1263,6 +1263,7 @@ dryRun 응답은 감사 이벤트를 남기지 않는다.
 | errors_resolved | string[] | - | 해결된 에러 목록. '원인: X → 해결: Y' 형식 권장. |
 | new_procedures | string[] | - | 확립된 절차/워크플로우 목록. 항목 1개 = 절차 1개. |
 | lessons | (object \| "NO_ENTRY")[] | - | 다른 작업에 옮겨 쓸 교훈. 항목은 `{cue, lesson, evidence, confidence?}`이고 cue(적용 상황, 300자), lesson(적용하고 확인할 수 있는 조작), evidence(근거가 된 관찰)가 모두 있어야 저장된다. confidence는 `high`(중요도 0.8), `medium`(기본, 0.7), `low`(0.6, `assertion_status=inferred`). 교훈은 procedure 파편(본문 lesson, `context_summary`에 상황, 근거, 확신도)으로 저장되고 cue는 역질의 표(`origin='cue'`)에 들어가 상황을 묻는 recall `text` 질의가 교훈을 찾게 한다. 근거가 없어 남기지 않을 때는 문자열 `NO_ENTRY`를 넣는다. 응답 `breakdown.lessons`, `lessons_no_entry`, `lessons_rejected`로 건수를 알린다. 최대 20개 선택 필드 `evidenceIds`(문자열 배열, 최대 10개)는 근거 파편 id다. 같은 키의 파편만 계보(`fragment_lineage`, relation=lesson)로 남고, 근거를 forget하거나 거절하면 교훈은 `support_state=revoked`, 근거 본문을 amend하면 `stale`이 되어 context 주입에서 빠진다. |
+| lessons_applied | object[] | - | 이번 세션에 적용한 교훈과 결과. 항목은 `{id, outcome}`이고 outcome은 `helped`(교훈대로 해서 해결됨), `failed`(교훈대로 했지만 해결되지 않음), `not_applicable`(상황이 달라 쓰지 않음)이다. 최대 20개. 호출 키의 열린 교훈 파편만 받고, 같은 세션의 같은 교훈은 한 번만 센다(다시 보내면 마지막 결과로 바뀐다). 응답 `breakdown.lessons_applied`, `lessons_applied_ignored`로 건수를 알린다. 교훈의 신뢰도는 Beta(1+helped, 1+failed) 평균이다. helped가 3 미만인 교훈은 서로 다른 세션 2곳 이상에서 실패하고 failed가 helped보다 많으면, helped가 3 이상인 교훈은 failed가 helped보다 많으면 `contested`가 되어 context에서 빠진다. recall에는 `lesson_outcome`(`helped`, `failed`, `not_applicable`, `n`, `reliability`, `state`)과 함께 나오고, 마지막 결과가 실패이면 `state=recent_failure`다. helped와 failed는 그 교훈의 사용 사건으로도 센다. |
 | open_questions | string[] | - | 미해결 질문 목록. 항목 1개 = 질문 1건. |
 | narrative_summary | string | - | 세션 전체를 3~5문장의 서사(narrative)로 요약. episode 파편으로 저장되어 세션 간 맥락 연속성에 기여. 생략 시 summary에서 자동 생성. |
 | agentId | string | - | 에이전트 ID |
@@ -1368,6 +1369,10 @@ Anchor + Core + Learning + Working Memory와 session_reflect를 분리 로드한
 
 `MEMENTO_PROVENANCE=on`(기본)이면 앵커와 core 줄의 괄호 끝에 저장된 출처가 붙는다. 예: `- 배포 전 스테이징 확인 (2026-09-30, observed, user_stated)`. 출처가 없거나 허용 값이 아니면 붙지 않는다. 같은 스위치에서 신뢰 등급 1 이하 파편(예: `origin=external_content`)은 `[ANCHOR MEMORY]`와 `[CORE MEMORY]`에 주입되지 않고 `fragments`와 structured 응답의 앵커, core에서도 빠진다. 앵커는 조회 술어(`trust_tier IS NULL OR trust_tier >= 2`)로, core는 회상 결과의 등급을 따로 조회해 거른다. core는 등급을 확인하지 못한 파편도 뺀다: 등급 조회가 실패하면 core 후보를 모두 빼고, 조회 결과에 없는 파편도 뺀다. 결과는 `_meta.coreSelection`(`partial`, `loadStatus.trust`, `excluded.lowTrust`, `excluded.missing`)과 지표 `memento_context_core_trust_excluded_total{reason}`(`low_trust`, `missing`, `lookup_failed`)에 남는다. learning과 working 구획은 거르지 않는다. 출처를 싣는 동안 주석 고정 비용은 가장 긴 출처(`, external_content`)까지 센 11이다.
 
+### 교훈 색인
+
+`MEMENTO_LESSON_INDEX=on`(기본)이면 `injectionText` 끝(시스템 힌트 앞)에 `[LESSON INDEX]` 구획을 싣고, flat과 structured 응답에 `lessonIndex`(`id`, `cue`, `reliability`, `n`)를 싣는다. 같은 workspace의 열린 교훈 가운데 근거를 잃지 않았고(`support_state`가 `revoked`, `stale`이 아님) 검토 대기가 아니며 `contested`가 아닌 것을 신뢰도(결과가 없으면 0.5), 최근성 순으로 고른다. 줄은 `- [id] cue`이고 본문은 싣지 않으며, 이미 context 본문에 실린 교훈은 뺀다. 줄 수는 `MEMENTO_LESSON_INDEX_LIMIT`(기본 8)와 `tokenBudget`에서 앵커 밖 본문이 쓰고 남은 양 안이다(앵커는 `budget.anchor`로 따로 센다). `totalTokens`에 색인 줄 토큰이 더해진다. `ab`이면 세션 id 해시로 실을 세션을 나누고 `lessonIndexArm`(`on`, `off`)에 어느 쪽인지 적는다. 상황이 맞는 줄의 id로 recall하면 본문이 나온다.
+
 ---
 
 ## MCP 도구 — tool_feedback
@@ -1388,6 +1393,7 @@ Anchor + Core + Learning + Working Memory와 session_reflect를 분리 로드한
 | irrelevance_reason | string | - | 무관 판정 원인. `not_stored`(저장된 적 없음), `search_miss`(저장됐으나 미검색), `scope_leak`(타 스코프 유입), `topic_mismatch`(주제 불일치), `other`(그 외). `relevant=false`일 때만 의미를 가지며, 그 외의 호출이나 열거값 밖의 값은 폐기되어 NULL로 기록된다. 원인별 분포는 `memory_stats`의 `irrelevance_breakdown`으로 집계된다. |
 | search_event_id | integer | - | 직전 recall이 반환한 _meta.searchEventId. 검색 품질 분석에 사용. |
 | fragment_ids | string[] | - | 피드백 대상 파편 ID 목록. 제공 시 해당 파편의 활성화 점수가 피드백에 따라 조정된다. |
+| fragment_judgments | object[] | - | 파편별 판정 `{id, relevant}`(최대 50개). 주면 `fragment_ids` 대신 쓴다. relevant인 파편은 EMA +0.1, 아닌 파편은 -0.15다. 판정은 `tool_feedback_fragments`에 남고, relevant 판정은 그 파편의 사용 사건이 된다. `search_event_id`를 주면 그 recall이 돌려준 파편만, 주지 않으면 호출 키의 파편만 받으며 응답 `fragments_judged`, `fragments_ignored`로 건수를 알린다. 세션은 검색 이벤트의 세션을 쓴다. |
 | idempotencyKey | string | - | 재시도 안전 식별자 (최대 128자). 같은 값으로 반복 호출하면 첫 호출의 응답을 그대로 반환하고 링크 가중치를 다시 조정하지 않는다 |
 
 ---
@@ -1450,7 +1456,7 @@ workspace 기입 현황과 세션당 파편 분포를 반환한다.
 
 master key 전용 도구다(`requiresMaster: true`). 일반 API 키 세션의 tools/list에는 나타나지 않으며, 호출하면 `-32001`과 `Permission denied: 'memory_consolidate' requires master authentication`이 반환된다.
 
-전체 사이클은 20개 이상의 stage로 구성되며 파편 규모에 비례해 시간이 걸린다. 약 1만 3천 파편 규모에서 전 사이클 소요는 7분 안팎이다. 스케줄러가 기본 6시간 주기로 같은 경로를 실행하므로, 수동 호출은 점검 목적일 때만 쓴다.
+전체 사이클은 32개 stage로 구성되며 파편 규모에 비례해 시간이 걸린다. 약 1만 3천 파편 규모에서 전 사이클 소요는 7분 안팎이다. 스케줄러가 기본 8시간 주기로 같은 경로를 실행하므로, 수동 호출은 점검 목적일 때만 쓴다.
 
 시맨틱 중복 제거 단계에는 안전 게이트가 걸려 있다. 제거 대상의 변별 토큰이 승계자에 남지 않으면 해당 병합을 차단한다. 상세는 [configuration](configuration.md#consolidategate-정리-안전-게이트)을 참조한다.
 

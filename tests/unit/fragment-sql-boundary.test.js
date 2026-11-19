@@ -50,7 +50,12 @@ const ALLOWED = {
   "memory/consolidate/MemoryConsolidator.js": 13,
   "memory/consolidate/ChangeLog.js": 2, // 정리 단계의 닫기와 변경 기록을 한 문장(CTE)으로 만드는 공용 조각. 변경과 기록이 갈라지지 않게 데이터 계층 메서드가 아니라 SQL 조각으로 둔다
   "memory/consolidate/SessionLessons.js": 2, // 세션 사이 정리의 사례 선별(이미 제안한 사례 제외 EXISTS)과 사건 근거 파편의 등급을 사건 조회와 한 문장으로 읽는다
-  "memory/consolidate/ConsolidationRollback.js": 4, // 주기 되돌리기는 다시 열기, 생성 파편 삭제, 앵커 해제, 존재 확인을 변경 기록 잠금과 같은 트랜잭션 클라이언트로 한다
+  "memory/consolidate/ConsolidationRollback.js": 5, // 주기 되돌리기는 다시 열기, 생성 파편 삭제, 앵커 해제, EMA 복원, 존재 확인을 변경 기록 잠금과 같은 트랜잭션 클라이언트로 한다
+  "memory/consolidate/DailyMetrics.js": 1, // 일별 지표의 30일 미사용률은 30일 전 그날 만든 파편을 사용 사건 표와 한 문장에서 센다. 정리 주기의 집계 전용 질의다
+  "memory/consolidate/LessonProbe.js": 3, // 교훈 자기 점검은 저장된 cue 벡터와 교훈 본문 벡터로 이웃을 찾는다(LIMIT 안쪽 색인 탐색 뒤 키와 유효성 조건). 하루 한 번 도는 보고 전용 질의다
+  "memory/read/LessonIndex.js": 1, // context 교훈 색인 후보 조회. 교훈 머리말, agent, 키, workspace, 근거 상태, 검토 대기 조건을 한 문장에 둔다
+  "memory/signals/LessonOutcomes.js": 1, // 교훈 적용 결과 기록이 호출 키의 열린 교훈인지 같은 문장에서 확인하고 lesson_outcomes에 넣는다
+  "memory/signals/UseEvents.js": 1, // 사용 사건 기록이 있는 파편만 골라 그 key_id로 fragment_use_events에 넣는다
   "memory/consolidate/MorphemeBackfill.js": 2,
   "memory/consolidate/SemanticDedup.js": 6, // topic·묶음 선별과 묶음 벡터 적재, 병합은 잠금, 폐기, 합산을 한 트랜잭션 클라이언트로 쓴다
   "memory/consolidate/UtilityBaseline.js": 1,

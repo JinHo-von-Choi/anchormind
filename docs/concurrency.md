@@ -62,7 +62,7 @@ write 경로별 lock 종류·격리 수준·재시도 정책을 한 페이지로
 |GC 삭제|`FragmentGC.deleteExpired`(청크 100건 반복, 청크마다 별도 트랜잭션과 `lock_timeout` 3초), `RetentionGC.deleteRetentionExpired`(같은 청크 규칙), `ConsolidatorGC.purgeStaleReflections`|후보 CTE의 id|UPDATE|DELETE ... RETURNING|gc_delete|
 |감쇠, utility 묶음|`idOrderedUpdate.updateOneBatch`|조건 + `id > 마지막 id` + LIMIT 묶음 크기|NO KEY UPDATE|호출자가 넘긴 SET|score_batch|
 |활성화 확산|`SpreadingActivation` 큐 처리|`id = ANY(ids)`, 키와 workspace 범위|NO KEY UPDATE|EMA, accessed_at, access_count|activation|
-|tool_feedback EMA|`MemoryRecaller.toolFeedback`|`id = ANY(fragment_ids)`, 키 범위|NO KEY UPDATE|EMA|feedback|
+|tool_feedback EMA|`MemoryRecaller.toolFeedback`|`fragment_ids` 또는 `fragment_judgments`의 판정 묶음별 id, 키 범위(`search_event_id`가 있으면 그 recall이 돌려준 id만)|NO KEY UPDATE|EMA|feedback|
 |case 보상 역전파|`CaseRewardBackprop.backprop`|case 증거 파편, 키 범위|NO KEY UPDATE|importance, quality_verified|case_reward|
 |병합의 linked_to 교체|`MemoryConsolidator._mergeDuplicates`|linked_to에 제거 id를 가진 같은 키의 행|NO KEY UPDATE|array_replace|merge_links|
 |TTL 계층 전환|`FragmentGC.transitionTTL`(5문장)|각 전환 조건|NO KEY UPDATE|ttl_tier|tier|

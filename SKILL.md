@@ -134,6 +134,7 @@ recall 호출
 응답 직후 tool_feedback 호출:
   - 활용한 파편 → relevant=true, fragment_ids=[활용된_id들]
   - 무관한 파편 → relevant=false, fragment_ids=[무관한_id들]
+  - 한 번에 판정하려면 fragment_judgments=[{id, relevant}]
   - search_event_id=보관한_id
 ```
 
@@ -557,6 +558,7 @@ reflect(
   new_procedures=["절차1"],
   open_questions=["미해결1"],
   lessons=[{cue: "적용 상황의 모양", lesson: "할 조작과 대상", evidence: "근거가 된 관찰", confidence: "medium"}],
+  lessons_applied=[{id: "적용한 교훈 id", outcome: "helped"}],
   workspace="프로젝트명"
 )
 ```
@@ -566,6 +568,7 @@ reflect 규칙:
 - 여러 사실을 한 항목에 뭉치지 않는다
 - 관련 파편들이 맥락상 연결되어 있다면 episode 유형 파편을 추가 생성
 - lessons의 cue는 이번 작업의 사실이 아니라 다른 작업에서도 알아볼 상황의 모양으로 쓴다. 근거가 섞여 어느 조치가 효과였는지 가릴 수 없으면 교훈 대신 "NO_ENTRY"를 넣는다
+- context의 `[LESSON INDEX]`나 recall로 받은 교훈을 이번 작업에 적용했으면 lessons_applied에 결과를 적는다. helped는 교훈대로 해서 해결됨, failed는 교훈대로 했지만 해결되지 않음, not_applicable은 상황이 달라 쓰지 않음이다
 - contextSummary로 전후관계 요약을 첨부
 - reflect가 새 episode나 파편을 저장하면 같은 workspace(없으면 topic)의 직전 milestone과 preceded_by 엣지가 생성됨 (경험 흐름 그래프 보존). 새로 저장할 내용이 없으면 milestone도 생기지 않음
 - reflect 한 번에 파편 수십 건을 쏟아붓지 않는다. 세션 진행 중 중요한 사실·결정·에러·절차가 확정되는 시점마다 remember로 즉시 개별 저장하고, 세션 종료 시 reflect는 그 세션의 narrative_summary와 open_questions 정리 및 누락분 최종 집계 용도로만 사용한다. 이 분할 저장 패턴이 중요도 가중, 키워드 정밀도, 링크 품질 모두에서 한 번에 몰아 넣는 reflect보다 유의미하게 우수하다.
@@ -955,7 +958,7 @@ async 사용 지침: 대량(수십~200건) 일괄 저장에서 호출자 대기�
 | cursor | string | - | 페이지네이션 커서 |
 | pageSize | number | - | 기본 20, 최대 50 |
 | limit | number | - | `pageSize`의 별칭. 둘 다 주면 `pageSize`를 쓴다 |
-| excludeSeen | boolean | - | context()에서 주입된 파편 제외. 기본 true. |
+| excludeSeen | boolean | - | 같은 세션의 context()가 이미 주입한 파편은 본문을 빼고, 점수 순 최대 5개를 응답 `alreadySeen`(`id`, `type`, 첫 문장 `summary`)에 싣는다. 대화 압축으로 본문을 잃었으면 그 id로 다시 조회하거나 `excludeSeen:false`로 본문을 받는다. 기본 true. |
 | includeContext | boolean | - | context_summary + 인접 파편 포함 |
 | includeKeywords | boolean | - | 응답에 keywords 배열 포함 |
 | agentId | string | - | 에이전트 ID |
@@ -1075,6 +1078,7 @@ fromId 또는 toId가 타 테넌트 소유 파편인 경우 `"Fragment not found
 | new_procedures | string[] | - | 확립된 절차 |
 | open_questions | string[] | - | 미해결 질문 |
 | lessons | (object\|"NO_ENTRY")[] | - | 옮겨 쓸 교훈. 항목은 `{cue, lesson, evidence, confidence?}`. cue(적용 상황), lesson(할 조작), evidence(근거 관찰) 중 하나라도 비면 저장하지 않는다. confidence는 문자열 `high`, `medium`(기본), `low`이며 숫자를 넣으면 인자 오류다. 근거가 없으면 객체 대신 항목 자체를 문자열 `"NO_ENTRY"`로 넣는다. cue는 상황을 묻는 recall text 질의가 교훈을 찾게 하는 보조 검색어가 된다. 응답 `breakdown.lessons`, `lessons_no_entry`, `lessons_rejected`로 건수를 알린다. 선택 필드 `evidenceIds`(최대 10개)에 근거 파편 id를 주면 같은 키의 파편만 계보로 남고, 그 근거를 forget하거나 거절하면 교훈은 `support_state=revoked`, 근거 본문을 amend하면 `stale`이 되어 context 주입에서 빠진다. 최대 20개 |
+| lessons_applied | object[] | - | 이번 세션에 적용한 교훈과 결과. 항목은 `{id, outcome}`이고 outcome은 `helped`, `failed`, `not_applicable`이다. 최대 20개. 호출 키의 열린 교훈만 받고 같은 세션의 같은 교훈은 한 번만 센다(다시 보내면 마지막 결과로 바뀐다). 응답 `breakdown.lessons_applied`, `lessons_applied_ignored`로 건수를 알린다. 서로 다른 세션에서 실패가 성공보다 많아진 교훈은 `contested`가 되어 context에서 빠지고, recall에는 `lesson_outcome`(`helped`, `failed`, `not_applicable`, `n`, `reliability`, `state`)과 함께 나온다. |
 | narrative_summary | string | - | 3~5문장 서사 요약. episode 파편으로 저장되어 세션 연속성에 기여. |
 | task_effectiveness | object | - | {outcome, evaluator, evidence, unmet_requirements[], overall_success, tool_highlights[], tool_pain_points[]} |
 | workspace | string | - | 호출자가 넘긴 항목에 적용할 워크스페이스. 세션 종합 그룹은 원래 workspace를 유지한다. 미지정 시 키의 default_workspace, 그것도 없으면 전역(NULL). |
@@ -1112,6 +1116,8 @@ task_effectiveness 세부 필드:
 
 응답 `budget.anchor`(`used`, `limit`, `exceeded`, `demote_candidates`)는 주입한 앵커만의 토큰 사용량이다. 앵커는 tokenBudget 절삭을 받지 않고 매번 주입되므로, `exceeded`가 true면 `demote_candidates`의 앵커 지정을 푸는 것을 검토한다.
 
+`MEMENTO_LESSON_INDEX=on`(기본)이면 `injectionText` 끝에 `[LESSON INDEX]` 구획이 붙고 응답 `lessonIndex`(`id`, `cue`, `reliability`, `n`)가 실린다. 같은 workspace에서 근거를 잃지 않았고 `contested`가 아닌 교훈의 cue 한 줄과 id만 싣는다. 상황이 맞는 줄이 있으면 그 id로 recall해서 본문을 연다. 줄 수는 `MEMENTO_LESSON_INDEX_LIMIT`(기본 8)와 `tokenBudget`에서 앵커 밖 본문이 쓰고 남은 양 안이다.
+
 `MEMENTO_CONTEXT_ANNOTATE=on`(기본)이면 주입 줄 끝에 저장일(UTC)과 assertion 주석 ` (YYYY-MM-DD, assertion)`이 붙는다. `MEMENTO_PROVENANCE=on`(기본)이면 신뢰 등급 1 이하 파편은 ANCHOR와 CORE 주입에서 빠진다. `MEMENTO_ANCHOR_PERMISSION`이 `off`가 아니면 앵커 주입 줄에 비식별 주체 표지(`[k:xxxx]`, master 앵커는 `[master]`)가 붙는다.
 
 ### tool_feedback
@@ -1129,6 +1135,7 @@ task_effectiveness 세부 필드:
 | trigger_type | string | - | sampled 또는 voluntary |
 | irrelevance_reason | string | - | not_stored / search_miss / scope_leak / topic_mismatch / other. relevant=false일 때만 기록되며, 그 외에는 값을 보내도 폐기된다 |
 | fragment_ids | string[] | - | 피드백 대상 파편 ID (EMA 조정) |
+| fragment_judgments | object[] | - | 파편별 판정 `{id, relevant}`(최대 50개). 주면 `fragment_ids` 대신 쓴다. relevant인 파편은 EMA +0.1, 아닌 파편은 -0.15이고 relevant 판정은 그 파편의 사용 사건이 된다. `search_event_id`를 주면 그 recall이 돌려준 파편만 받는다. 응답 `fragments_judged`, `fragments_ignored`로 건수를 알린다. |
 | search_event_id | integer | - | recall의 _searchEventId |
 
 fragment_ids를 지정하고 ENABLE_RECONSOLIDATION=true인 경우: relevant=false이면 해당 파편들의 fragment_links에 decay action, relevant=true이면 reinforce action이 적용된다. 이를 통해 검색 피드백이 링크 강도에 반영된다.

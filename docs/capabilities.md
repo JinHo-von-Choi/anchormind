@@ -14,6 +14,9 @@ AnchorMind가 제공하는 기능, 응답 메타, 선택 모듈, 기술 스택�
 - `context`: 세션을 시작할 때 핵심 기억을 한 번에 복원한다. `agentId=X`로 부르면 X의 기억과 공유 기억을 함께, 생략하면 공유 기억만 돌려준다. `view: "index"`는 파편마다 첫 문장만 보여 주는 목록이라 같은 예산에 더 많이 담고, 본문은 id로 `recall`해 연다.
 - `reflect`: 세션을 마칠 때 요약을 저장한다. 이어지는 세션의 에피소드끼리는 `preceded_by` 관계가 자동으로 걸려 경험의 흐름이 남는다.
 - 교훈: `reflect`의 `lessons`에 `{cue, lesson, evidence}`를 넣으면 교훈을 procedure로 저장하고, cue(어떤 상황에 쓰는지)를 보조 검색어로 등록한다. 나중에 비슷한 상황을 묻는 `recall`이 그 교훈을 찾는다. 셋 중 하나라도 비면 저장하지 않는다.
+- 교훈 결과: `reflect`의 `lessons_applied`에 적용한 교훈 id와 결과(`helped`, `failed`, `not_applicable`)를 넣으면 세션마다 한 번 기록한다. 교훈의 신뢰도는 Beta(1+helped, 1+failed) 평균이고, 서로 다른 세션에서 실패가 성공보다 많아진 교훈은 `contested`가 되어 context에서 빠진다. `recall`은 교훈에 `lesson_outcome`을 붙여 돌려준다.
+- 교훈 색인: `context`가 같은 workspace 교훈의 cue 한 줄과 id를 `[LESSON INDEX]` 구획에 싣는다. 본문은 싣지 않고, 상황이 맞는 줄의 id로 `recall`하면 본문이 나온다 (`MEMENTO_LESSON_INDEX`, `MEMENTO_LESSON_INDEX_LIMIT`).
+- 이미 받은 파편 알림: 같은 세션의 `context`가 이미 주입한 파편은 `recall`에서 본문이 빠지는 대신 응답 `alreadySeen`에 id와 첫 문장이 최대 5개 실린다. 대화 압축으로 본문을 잃었으면 그 id로 다시 조회한다.
 
 ### 검색이 정확해지게 한다
 
@@ -35,6 +38,9 @@ AnchorMind가 제공하는 기능, 응답 메타, 선택 모듈, 기술 스택�
 - 자동 정리: 중복 병합, 모순 탐지, 중요도 감쇠, 오래된 기억의 TTL 만료가 주기적으로 돈다. 만료 정리는 한 주기에 100건 단위로 반복한다 (`MEMENTO_GC_THROUGHPUT`).
 - 검증 보상: caseId가 있는 파편을 `amend(assertionStatus="verified")`로 검증하면 그 검증의 근거 파편 중요도가 오른다(`rejected`면 내려간다). 근거의 확신도만큼 반영하고, 같은 사례를 여러 번 검증해도 다른 근거에 누적되지 않는다 (`MEMENTO_CASE_BACKPROP_ENABLED`).
 - 링크 재조정: `tool_feedback`이 쌓이면 파편 사이 연결의 가중치가 바뀌고, 서로 모순되는 연결은 자동으로 격리된다 (`ENABLE_RECONSOLIDATION`).
+- 파편별 판정과 사용 사건: `tool_feedback`의 `fragment_judgments`로 파편마다 관련 여부를 남긴다. 관련 판정, `amend(assertionStatus="verified")`, 교훈의 helped와 failed, link 도구로 건 링크, 교훈 근거처럼 에이전트가 파편 id를 지목한 일은 노출 횟수와 따로 사용 사건으로 기록한다. shadow(기본)는 기록만 하고, on이면 context 온도 정렬의 가산점이 사용 사건을 따른다 (`MEMENTO_USE_SIGNAL`).
+- 활성도 감쇠: 60일 넘게 접근이 없는 비앵커 파편의 활성도(`ema_activation`)를 0으로, 30~60일 구간은 절반으로 내린다. 바꾼 값은 정리 주기 되돌리기로 복원된다 (`MEMENTO_EMA_DECAY`).
+- 일별 지표: 정리 주기가 끝난 날의 관측 사용률, 피드백 보고율, 교훈 반환율, 교훈 helped 비율, 30일 미사용률을 키별로 남기고, 하루 한 번 교훈이 자기 cue로 찾히는지와 비슷한 procedure끼리 겹치는지를 점검해 `memory_daily_metrics`에 기록한다.
 - 중복 판정: 같은 본문은 키와 workspace 안에서 하나로 본다. 이미 있으면 `remember` 응답의 `duplicate_of`에 기존 파편 id가 실린다 (`MEMENTO_DEDUP_SCOPE`).
 - 연쇄 삭제: `forget`은 그 파편에서 만들어진 사례 요약과 모순 해소 기록의 본문 사본도 같은 트랜잭션에서 지운다 (`MEMENTO_FORGET_CASCADE`).
 - 형태소 색인 확인: 형태소 색인이 끝나지 않은 파편은 형태소 검색에서 자동으로 빠진다.

@@ -42,6 +42,8 @@ server.js  (HTTP server)
             |   +-- FragmentSearch.js     3-layer search orchestration (structural: L1->L2, semantic: L1->L2||L3 RRF merge). `_executeSearch` decomposes into `_buildTextRRF` (L2+L3 parallel RRF when text parameter present) / `_buildFallbackCombined` (L1+L2 only when no text)
             |   +-- FragmentReader.js     Fragment reads. `getById(id, agentId, keyId, groupKeyIds)` -- groupKeyIds parameter enables single-call lookup of fragments belonging to same-group keys. `getByIds`, `getHistory`, `searchByKeywords`, `searchBySemantic`, `findCaseIdBySessionTopic`, `findErrorFragmentsBySessionTopic`
             |   +-- ContextBuilder.js     Dedicated context() logic. Reserves effective-workspace anchor slots first, deduplicates candidates by ID in anchor > core > learning > working order, guarantees anchors plus minimum non-anchor slots, and uses one token-selected set for flat/structured/injectionText outputs
+            |   +-- ContextCoreSelection.js Core candidate selection (per-type guarantee, temperature ordering, budget fill), contested lesson exclusion, temperature ordering comparison
+            |   +-- LessonIndex.js        Context lesson index (one cue line and id)
             |   +-- ContextIndexView.js   List lines (first sentence, 60 characters) and their token count for context `view: "index"`
             |   +-- AnchorBudgetLoader.js Reads the currently injected anchors (top anchors of the same key and workspace) for the budget check on a new anchor mark
             |   +-- WorkspaceBoundary.js  Pure function adding workspace_warning to facts from another workspace on allWorkspaces reads
@@ -53,6 +55,7 @@ server.js  (HTTP server)
             |   +-- ReviewVisibility.js   Visibility predicates for pending and rejected review fragments (independent of the switch). SQL fragments for recall queries (visible to the writing key only), id lookups (API key lookups only), injection candidates, anchor promotion and contradiction resolution (always excluded), response markers (pending_review, low_trust, review_rejected) and the core candidate filter
             |   +-- SearchLayerScope.js   Common scope options FragmentSearch passes to its layers (workspace, agent, anchor filter, review visibility viewer)
             |   +-- provenance-metrics.js Core trust exclusion metric `memento_context_core_trust_excluded_total{reason}`
+            |   +-- experience-metrics.js Injection tokens, context comparison difference, contested exclusion and lesson index line metrics
             |   +-- GraphNeighborSearch.js L2.5 graph neighbor search (fragment_links 1-hop bidirectional UNION, tanh-saturated scoring + relation-type boosts)
             |   +-- HistoryReconstructor.js case_id/entity-based narrative reconstruction (ordered_timeline, causal_chains, unresolved_branches)
             |   +-- BudgetSelector.js     recall token budget selection. Pure functions for the search-order cut (`trimInSearchOrder`) and the final-score selection (`selectWithinBudget`)
@@ -71,6 +74,7 @@ server.js  (HTTP server)
             +-- write/                    Write layer modules
             |   +-- WriteGate.js          Single semantic write gate. Applies the normalize, sensitive, length, policy, workspace and anchor steps in order and records violations as warnings or rejects them on hard-gate keys. The anchor step judges anchor designation by remember and amend against the key's anchor permission and anchor limit. `MEMENTO_WRITE_GATE`, `MEMENTO_ANCHOR_PERMISSION`
             |   +-- LessonCue.js          Normalizes reflect lessons and registers cue rows (`fragment_synthetic_query`, origin='cue')
+            |   +-- LessonSummary.js      Lesson context summary format ("상황: " prefix) and lesson SQL predicate
             |   +-- ReviewQueue.js        Synchronous review queue decisions (pure functions). Collects instruction override phrases, anchors, preferences and procedures with trust tier 1 or lower and unauthorized anchor warnings as reasons, and stores review_state='pending' according to the key's review mode (off, flagged, all). Holds anchor requests until approval. INSERT column fragment and update SET fragment. `MEMENTO_REVIEW_QUEUE`
             |   +-- reviewRules.js        Instruction override phrase rule table (Korean, English). The table of ordinary procedural sentences that must not match is in the tests
             |   +-- write-gate-metrics.js Gate verdict metric `memento_write_gate_total{entry,outcome}`, anchor decision metric `memento_anchor_decision_total{outcome,reason}`
@@ -120,7 +124,8 @@ server.js  (HTTP server)
             |   +-- resumableBackfill.js  Resumable backfill helper (`runResumableBackfill`). Records a watermark per batch so a run with the same job name resumes, and records row-level errors in `backfill_failures`
             |   +-- decay.js              Exponential decay half-life constants, pure computation functions, ACT-R EMA activation approximation (`updateEmaActivation`, `computeEmaRankBoost`), EMA-based dynamic half-life (`computeDynamicHalfLife`), age-weighted utility score (`computeUtilityScore`)
             |   +-- UtilityBaseline.js    Fragment utility baseline computation (dedup/compression decision baseline)
-            |   +-- feedbackFactor.js     Feedback-based correction factor computation
+            |   +-- DailyMetrics.js       Daily experience signal metrics (observed use rate, feedback report rate, lesson return rate, lesson helped rate, 30-day unused rate) written to `memory_daily_metrics`
+            |   +-- LessonProbe.js        Lesson self check (cue misses, interference candidates, not applicable). Uses stored vectors only and writes to `memory_daily_metrics`
             |   +-- split-gate.js         Long-fragment split gate conditions
             |   +-- split-metrics.js      Split-result metric aggregation
             +-- embedding/                Embedding layer modules
@@ -131,6 +136,8 @@ server.js  (HTTP server)
             |   +-- LexicalTokens.js      Tokenization of the content lexical channel (MorphemeTokenizer tokens lowercased, ending fragments removed) and the tsquery generator (single-quote wrapping, OR join)
             +-- signals/                  Signal layer modules
             |   +-- SpreadingActivation.js Async activation propagation based on contextText (ACT-R model, keywords GIN seed -> 1-hop graph spread, 10-min TTL cache)
+            |   +-- UseEvents.js          Use events where the agent names a fragment id (`fragment_use_events`) and their counts
+            |   +-- LessonOutcomes.js     reflect lessons_applied results (`lesson_outcomes`), reliability and contested state
             |   +-- CaseRewardBackprop.js  case verification event -> evidence fragment importance atomic backpropagation. Returns immediately when MEMENTO_CASE_BACKPROP_ENABLED is unset
             |   +-- NLIClassifier.js      NLI-based contradiction classifier (mDeBERTa ONNX, CPU)
             |   +-- MemoryEvaluator.js    Async Gemini CLI quality evaluation worker (singleton)
@@ -1492,7 +1499,7 @@ lib/memory/
 +-- link/          ReconsolidationEngine, GraphLinker, LinkStore, SessionLinker, TemporalLinker, ContradictionDetector
 +-- consolidate/   MemoryConsolidator, ConsolidatorGC, FragmentGC, decay, UtilityBaseline
 +-- embedding/     EmbeddingWorker, EmbeddingCache, MorphemeIndex, MorphemeTokenizer, LexicalTokens
-+-- signals/       SpreadingActivation, CaseRewardBackprop, NLIClassifier, MemoryEvaluator, SearchMetrics, SearchEventAnalyzer, SearchEventRecorder, EvaluationMetrics, SearchParamAdaptor
++-- signals/       SpreadingActivation, UseEvents, LessonOutcomes, CaseRewardBackprop, NLIClassifier, MemoryEvaluator, SearchMetrics, SearchEventAnalyzer, SearchEventRecorder, EvaluationMetrics, SearchParamAdaptor
 +-- processors/    MemoryRememberer, MemoryRecaller, MemoryReflector, MemoryLinker, ReflectProcessor, AutoReflect, EpisodeContinuityService, SessionActivityTracker
 +-- migrations/    59 migration SQL files (001 through 060; 046 unused)
 ```
@@ -1537,7 +1544,7 @@ Four automatic post-processing layers that prevent LLM rewrite loops from genera
 |-|-|-|-|
 | ProactiveRecall | Immediately after remember() — 50%+ keyword match | symbolic gate + workspace match + caseIdPolicy | auto |
 | autoLinkSessionFragments | reflect() call | 1:1 top-1 matching + caseId/sessionId adjacency + 60%+ keyword overlap + phase coherence | always applied |
-| MemoryConsolidator | 6h timer (`consolidateIntervalMs`) | schema-fit gate (3 conditions, mode=any) | timer + gate |
+| MemoryConsolidator | 8h timer (`consolidateIntervalMs`) | schema-fit gate (3 conditions, mode=any) | timer + gate |
 | AutoReflect | Session termination (when Gemini CLI is available) | No separate gate | Gemini CLI dependent |
 
 Three LLM rewriting stages in MemoryConsolidator (`split_long_fragments`, `detect_contradictions`, `compress_old_fragments`) can each be disabled individually via `enableRiskyStages` flags. `compressOldFragments` defaults to `false`.
