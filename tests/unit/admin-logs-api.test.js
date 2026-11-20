@@ -13,6 +13,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { teardownTestResources } from "../_lifecycle.js";
+import { readLogStats } from "../../lib/admin/admin-logs.js";
 
 const ADMIN_BASE = "/v1/internal/model/nothing";
 
@@ -21,7 +23,9 @@ const ADMIN_BASE = "/v1/internal/model/nothing";
 /* ------------------------------------------------------------------ */
 
 const tmpLogDir = fs.mkdtempSync(path.join(os.tmpdir(), "memento-log-test-"));
-const today     = new Date().toISOString().slice(0, 10);
+/** 로그 로테이션은 서버 현지 날짜로 파일 이름을 짓는다. */
+const localStamp = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const today      = localStamp(new Date());
 
 const COMBINED_LOG = [
   `${today} 10:00:01 [info]: Server started`,
@@ -123,54 +127,6 @@ function readLogFile(logDir, fileParam, { tail = 200, level = null, search = nul
   return { file: basename, lines: filtered, total, filtered: filtered.length, status: 200 };
 }
 
-/** /logs/stats 핵심 로직 */
-function getLogStats(logDir) {
-  const resolvedLogDir = path.resolve(logDir);
-  const entries        = fs.readdirSync(resolvedLogDir);
-  const logFiles       = entries.filter(n => n.endsWith(".log") && LOG_FILE_RE.test(n));
-
-  let fileCount      = logFiles.length;
-  let totalSizeBytes = 0;
-  const dates        = [];
-
-  for (const name of logFiles) {
-    const stat = fs.statSync(path.join(resolvedLogDir, name));
-    totalSizeBytes += stat.size;
-    const m = name.match(LOG_FILE_RE);
-    if (m) dates.push(m[2]);
-  }
-
-  dates.sort();
-  const oldestFile = dates[0] ?? null;
-  const newestFile = dates[dates.length - 1] ?? null;
-
-  const todayStr      = new Date().toISOString().slice(0, 10);
-  const todayCombined = path.join(resolvedLogDir, `combined-${todayStr}.log`);
-  const todayCounts   = { info: 0, warn: 0, error: 0, debug: 0 };
-
-  if (fs.existsSync(todayCombined)) {
-    const lines = fs.readFileSync(todayCombined, "utf-8").split("\n");
-    for (const line of lines) {
-      const m = line.match(LOG_LINE_RE);
-      if (m && todayCounts[m[2]] !== undefined) todayCounts[m[2]]++;
-    }
-  }
-
-  const todayError   = path.join(resolvedLogDir, `error-${todayStr}.log`);
-  const recentErrors = [];
-
-  if (fs.existsSync(todayError)) {
-    const lines  = fs.readFileSync(todayError, "utf-8").split("\n").filter(l => l.length > 0);
-    const last10 = lines.slice(-10);
-    for (const line of last10) {
-      const m = line.match(LOG_LINE_RE);
-      if (m) recentErrors.push({ timestamp: m[1], message: m[3] });
-    }
-  }
-
-  return { today: todayCounts, recentErrors, fileCount, totalSizeBytes, oldestFile, newestFile };
-}
-
 /* ------------------------------------------------------------------ */
 /*  인증 로직 (admin-routes.js에서 추출)                                  */
 /* ------------------------------------------------------------------ */
@@ -190,8 +146,9 @@ function validateMasterKey(req, accessKey) {
 
 describe("Admin Log Viewer API", () => {
 
-  after(() => {
+  after(async () => {
     fs.rmSync(tmpLogDir, { recursive: true, force: true });
+    await teardownTestResources();
   });
 
   describe("GET /logs/files", () => {
@@ -287,7 +244,7 @@ describe("Admin Log Viewer API", () => {
 
   describe("GET /logs/stats", () => {
     it("returns today counts object with expected keys", () => {
-      const result = getLogStats(tmpLogDir);
+      const result = readLogStats(tmpLogDir);
       assert.ok(typeof result.today === "object");
       assert.ok("info" in result.today);
       assert.ok("warn" in result.today);
@@ -296,7 +253,7 @@ describe("Admin Log Viewer API", () => {
     });
 
     it("counts today log levels correctly", () => {
-      const result = getLogStats(tmpLogDir);
+      const result = readLogStats(tmpLogDir);
       assert.equal(result.today.info, 2);
       assert.equal(result.today.warn, 1);
       assert.equal(result.today.error, 1);
@@ -304,7 +261,7 @@ describe("Admin Log Viewer API", () => {
     });
 
     it("returns recent errors from error log", () => {
-      const result = getLogStats(tmpLogDir);
+      const result = readLogStats(tmpLogDir);
       assert.ok(Array.isArray(result.recentErrors));
       assert.ok(result.recentErrors.length >= 1);
       for (const e of result.recentErrors) {
@@ -314,15 +271,33 @@ describe("Admin Log Viewer API", () => {
     });
 
     it("returns file count and size", () => {
-      const result = getLogStats(tmpLogDir);
+      const result = readLogStats(tmpLogDir);
       assert.equal(result.fileCount, 3);
       assert.ok(result.totalSizeBytes > 0);
     });
 
     it("returns oldest and newest dates", () => {
-      const result = getLogStats(tmpLogDir);
+      const result = readLogStats(tmpLogDir);
       assert.equal(result.oldestFile, "2026-03-20");
       assert.equal(result.newestFile, today);
+    });
+
+    it("reads the file named by the server's local date, not the UTC date", () => {
+      const dir    = fs.mkdtempSync(path.join(os.tmpdir(), "memento-log-tz-"));
+      const prevTz = process.env.TZ;
+      try {
+        fs.writeFileSync(path.join(dir, "combined-2026-11-20.log"), "2026-11-20 23:00:00 [info]: yesterday\n");
+        fs.writeFileSync(path.join(dir, "combined-2026-11-21.log"), "2026-11-21 05:00:00 [warn]: today\n");
+        fs.writeFileSync(path.join(dir, "error-2026-11-21.log"), "2026-11-21 05:00:01 [error]: today failed\n");
+        process.env.TZ = "Asia/Seoul";
+        /** UTC로는 11월 20일 20시, 서울로는 11월 21일 5시 */
+        const result = readLogStats(dir, new Date("2026-11-20T20:00:00Z"));
+        assert.deepEqual(result.today, { info: 0, warn: 1, error: 0, debug: 0 });
+        assert.deepEqual(result.recentErrors.map(e => e.message), ["today failed"]);
+      } finally {
+        if (prevTz === undefined) delete process.env.TZ; else process.env.TZ = prevTz;
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 
