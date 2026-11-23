@@ -33,7 +33,8 @@ const LIB  = path.resolve(HERE, "..", "..", "lib");
 const ALLOWED = {
   /** 고정 위치 파라미터로 격리를 박은 질의와 격리가 아닌 회계·멤버십 질의 */
   "admin/ApiKeyStore.js": 3, // 키 삭제 전 그 키의 파편, 재공고화 이력 수를 세는 회계 질의 2곳, 그룹 멤버 행 삭제
-  "admin/RetentionPolicyStore.js": 3, // 보존 정책 표(key_retention_policies)를 그 키 한 개로 읽고 고치는 관리 질의. 기억 격리 조건이 아니다
+  "admin/RetentionPolicyStore.js": 11, // 보존 정책 표(key_retention_policies)를 그 키 한 개로 읽고 고치고 workspace 병합 때 옮기는 관리 질의, 범위 설정 화면과 미리보기가 그 키의 파편 수를 세는 집계. 기억 격리 조건이 아니다
+  "memory/consolidate/RetentionGuard.js": 2, // 보존 정책 표에서 파편 행(또는 요청 키)과 같은 키의 manual 행을 찾는다. 요청 키를 바인딩하는 기억 격리 조건이 아니다
   "admin/WorkspaceAliasStore.js": 5, // 별칭 표를 그 키로 읽고 고치는 질의 3곳, 별칭 후보 집계와 병합 대상을 한 키로 고르는 운영 도구 질의 2곳
   "keys/policy.js": 1, // workspace 별칭 표를 그 키로 읽는 정책 조회. 기억 격리 조건이 아니다
   "admin/ApiKeyLifecycleStore.js": 2,

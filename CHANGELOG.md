@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+### Added
+
+- 보존 모드. 자동 정리를 범위마다 끌 수 있다. 전역은 `MEMENTO_RETENTION_MODE`(auto, manual. 기본 auto, 잘못된 값은 manual), 키 전체나 workspace 하나는 `key_retention_policies`의 새 열 `auto_lifecycle`, `auto_resume_at`, `no_expiry`(migration-084)로 정한다. manual 범위에서는 정리 주기와 저장 경로가 자동 판단으로 파편을 지우거나(`expired_delete`, `purge_stale_reflections`), 닫거나(중복 병합, 의미 중복 병합, 대체 판정, 모순 해소, 분할, 압축, 저장 직후 완전 중복, 검토 자동 거절), permanent를 cold로 내리지 않는다. 순위 신호, forget, 관리자가 정한 보존 기간은 그대로다. 기본 동작은 바뀌지 않는다.
+- 자동 정리를 다시 켤 때의 재개 대기. 범위는 `auto_resume_at`(기본 7일 뒤), 전역은 `MEMENTO_RETENTION_AUTO_AFTER`(ISO 시각)까지 manual로 다룬다.
+- 관리 API `GET/PUT /keys/:id/retention/scopes`, `GET /keys/:id/retention/preview`, `GET /retention/scopes`. 자동 정리를 바꾸려면 `retention.manage` 능력이 더 필요하다. 감사 행위는 `admin.key.retention_scope_update`다. 기존 `GET/PUT /keys/:id/retention`의 요청과 응답은 그대로다.
+- 관리 콘솔 보존 정책 카드의 Cleanup Settings 모달. 개요, 검토 대기, 그룹 화면은 자동 정리가 꺼진 범위가 있을 때만 그 사실을 보여 준다.
+- CLI `memento-mcp retention status|preview|set`, `cleanup --include-manual`. `workspace merge`는 보존 정책 행을 함께 옮긴다. `health`는 환경 변수 문제를 보여 주고, `stats`는 자동 정리가 꺼진 범위를 보여 준다.
+- remember 응답의 `retention`, context `_meta.retention`, 할당량 초과 오류의 `retention_mode`(manual 범위에서만). 관리 `/stats`의 `retention` 블록과 지표 `memento_lifecycle_skipped_total{stage,reason}`.
+
+### Changed
+
+- `retention_expire`는 workspace 행이 기간을 정하지 않았으면 키 전체 행의 기간을 따르고, `no_expiry` 범위는 지우지 않는다.
+- `memento-mcp cleanup`은 forget과 같은 삭제 문장과 삭제 뒤 정리(링크, 사례 사본, 색인)를 거친다.
+
+### Fixed
+
+- 분할 롤백이 분할과 무관한 기존 파편을 지우던 결함. 분할 자식과 본문이 같은 파편이 이미 있으면 저장은 기존 행을 돌려주는데, 그 행을 자식으로 담아 롤백 때 지우고 성공 때는 계보와 `part_of` 링크를 붙였다. 새로 만든 행만 자식으로 담는다.
+- 같은 본문을 importance 0.3 미만으로 다시 저장하면 기존 permanent 파편의 등급이 `short`로 내려가던 결함. 낮은 중요도 등급은 새로 만든 행에만 적용한다.
+
 ## [8.1.0] - 2026-11-19
 
 ### Added

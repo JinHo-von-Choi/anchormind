@@ -6,10 +6,13 @@
  *
  * 키 인스펙터에 이 키의 보존 정책(키 전체 또는 workspace 하나, 최대 보존 일수)을 보여 주고 넣거나 지운다.
  * 정리 주기가 created_at이 이 일수보다 오래된 파편을 지운다(앵커 제외). 자료는 GET/PUT /keys/:id/retention이다.
+ * 자동 정리가 꺼졌거나 재개를 기다리거나 만료 없음인 범위는 GET /keys/:id/retention/scopes로 읽어 기간 줄 아래에
+ * 한 줄씩 더하고, Cleanup Settings 버튼이 그 설정 모달(key-cleanup-settings.js)을 연다.
  */
 
 import { api }       from "./api.js";
 import { showToast } from "./ui.js";
+import { scopeNote, openCleanupSettings } from "./key-cleanup-settings.js";
 
 /**
  * 정책 한 줄의 글.
@@ -44,13 +47,15 @@ export function parseRetentionInput(text) {
  * 보존 정책 카드. 목록은 카드를 붙인 뒤 비동기로 읽는다.
  *
  * @param {object} key
- * @param {{ load?: Function, save?: Function, ask?: Function }} [deps]
+ * @param {{ load?: Function, save?: Function, ask?: Function, loadScopes?: Function, openCleanup?: Function }} [deps]
  * @returns {HTMLElement}
  */
 export function renderKeyRetentionCard(key, {
-  load = (id) => api(`/keys/${id}/retention`),
-  save = (id, body) => api(`/keys/${id}/retention`, { method: "PUT", body }),
-  ask  = (message, current) => globalThis.prompt?.(message, current)
+  load       = (id) => api(`/keys/${id}/retention`),
+  save       = (id, body) => api(`/keys/${id}/retention`, { method: "PUT", body }),
+  ask        = (message, current) => globalThis.prompt?.(message, current),
+  loadScopes = (id) => api(`/keys/${id}/retention/scopes`),
+  openCleanup = (k, opts) => openCleanupSettings(k, opts)
 } = {}) {
   const card = document.createElement("div");
   card.className = "bg-surface-container-highest p-4 rounded-sm border-l-2 border-outline space-y-1";
@@ -65,9 +70,12 @@ export function renderKeyRetentionCard(key, {
   list.className = "space-y-1";
   card.appendChild(list);
 
-  const show = (policies) => {
+  const show = (policies, scopes = []) => {
     list.textContent = "";
-    const rows = policies.length ? policies.map(retentionLabel) : ["No retention policy (global TTL rules only)"];
+    const notes = scopes.map((sc) => scopeNote(sc)).filter(Boolean);
+    const rows  = policies.length || notes.length
+      ? [...policies.map(retentionLabel), ...notes]
+      : ["No retention policy (global TTL rules only)"];
     for (const text of rows) {
       const p = document.createElement("p");
       p.className = "text-[10px] text-slate-400";
@@ -75,9 +83,13 @@ export function renderKeyRetentionCard(key, {
       list.appendChild(p);
     }
   };
-  const refresh = () => Promise.resolve(load(key.id)).then((res) => {
-    if (res?.ok) show(res.data?.policies ?? []);
-    else show([]);
+  /** 범위 설정은 읽지 못해도 기간 목록은 그대로 보인다 */
+  const readScopes = () => Promise.resolve()
+    .then(() => loadScopes(key.id))
+    .then((res) => (res?.ok ? res.data?.scopes ?? [] : []))
+    .catch(() => []);
+  const refresh = () => Promise.all([Promise.resolve(load(key.id)), readScopes()]).then(([res, scopes]) => {
+    show(res?.ok ? res.data?.policies ?? [] : [], scopes);
   });
 
   const editBtn = document.createElement("button");
@@ -95,6 +107,13 @@ export function renderKeyRetentionCard(key, {
     else showToast(res?.data?.error ?? "Update failed", "error");
   });
   card.appendChild(editBtn);
+
+  const cleanupBtn = document.createElement("button");
+  cleanupBtn.className = "text-[9px] text-primary font-bold uppercase hover:underline ml-3";
+  cleanupBtn.id = "key-retention-cleanup";
+  cleanupBtn.textContent = "Cleanup Settings";
+  cleanupBtn.addEventListener("click", () => openCleanup(key, { onSaved: refresh }));
+  card.appendChild(cleanupBtn);
 
   card.ready = refresh().catch(() => show([]));
   return card;

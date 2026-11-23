@@ -76,7 +76,7 @@ describe("분할 커밋 단계 실패", () => {
   it("삽입 부족 롤백에서 삭제가 실패하면 rollback_delete로 남기고 부모를 닫지 않는다", async () => {
     let n = 0;
     const store = {
-      insert    : async (f) => (n++ === 0 ? f.id : null),
+      insertDetailed: async (f) => (n++ === 0 ? { id: f.id, created: true } : null),
       delete    : async () => { throw new Error("delete failed"); },
       createLink: async () => {}
     };
@@ -88,9 +88,24 @@ describe("분할 커밋 단계 실패", () => {
     assert.ok(warnings.some(w => /split rollback_delete failed: parent=parent-1 child=/.test(w)));
   });
 
+  it("같은 본문의 기존 파편이 돌아오면 자식으로 담지 않아 롤백이 그 파편을 지우지 않는다", async () => {
+    let n = 0;
+    const deleted = [];
+    const store = {
+      insertDetailed: async (f) => (n++ === 0 ? { id: "existing-1", created: false } : { id: f.id, created: true }),
+      delete    : async (id) => { deleted.push(id); return true; },
+      createLink: async () => {}
+    };
+    const { pool, state } = makePool();
+    await new ConsolidatorGC(store).splitLongFragments({ pool });
+    assert.equal(deleted.length, 1);
+    assert.ok(!deleted.includes("existing-1"));
+    assert.equal(state.tombstoned, false);
+  });
+
   it("링크 생성이 실패하면 link_related, link_part_of로 남기고 분할은 끝낸다", async () => {
     const store = {
-      insert    : async (f) => f.id,
+      insertDetailed: async (f) => ({ id: f.id, created: true }),
       delete    : async () => true,
       createLink: async () => { throw new Error("link failed"); }
     };

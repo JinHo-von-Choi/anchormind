@@ -28,6 +28,8 @@ mock.module("../../lib/tools/db.js", {
         writes.push({ sql: normalized, params: [...params] });
         return { rows: [], rowCount: 1 };
       }
+      /** 보존 판정(RetentionGuard): 자동 정리가 꺼진 범위가 없다 */
+      if (normalized.includes("key_retention_policies")) return { rows: [{ any: false }] };
       throw new Error(`unexpected SQL: ${normalized}`);
     }
   }

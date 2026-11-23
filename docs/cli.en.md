@@ -51,7 +51,7 @@ Every command except `serve` sends server logs to stderr (the CLI sets `MEMENTO_
 
 ### Local-only (remote access not supported)
 
-`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`, `audit`, `admin`, `group`, and `workspace` access the DB or process directly and return an error when used with `--remote`.
+`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`, `audit`, `admin`, `group`, `workspace`, and `retention` access the DB or process directly and return an error when used with `--remote`.
 
 ### Remote-capable
 
@@ -89,6 +89,7 @@ Every command except `serve` sends server logs to stderr (the CLI sets `MEMENTO_
 | `admin recover [--user NAME] [--confirm]` | Emergency recovery for admin accounts (revoke all sessions, reset TOTP, explicit target) | No |
 | `group <sub>` | Manage key groups, member permissions and group fragment limits (list, create, delete, members, add, set, remove, limit) | No |
 | `workspace <sub>` | Per-key workspace aliases and merges (suggest, aliases, alias, merge) | No |
+| `retention <sub>` | Automatic cleanup on/off and no expiry per key or workspace (status, preview, set) | No |
 
 ---
 
@@ -138,7 +139,10 @@ Delete noisy fragments that satisfy `util_score`, `importance`, and inactivity c
 node bin/memento.js cleanup            # dry-run (preview only)
 node bin/memento.js cleanup --execute  # execute deletions
 node bin/memento.js cleanup --execute --include-nli  # also delete NLI-conflict fragments
+node bin/memento.js cleanup --execute --include-manual  # also delete fragments in scopes with automatic cleanup off
 ```
+
+Fragments in scopes with automatic cleanup off (`MEMENTO_RETENTION_MODE=manual`, `retention set --auto-cleanup off`, Cleanup Settings in the admin console) are skipped by default, and the preview shows how many were skipped. `--include-manual` deletes them too. Deletion uses the same delete statement as forget and also cleans up links, case copies and index entries of the deleted fragments.
 
 Alternative direct invocation:
 
@@ -178,7 +182,7 @@ node bin/memento.js stats --json
 node bin/memento.js stats --remote https://memento.example.com/mcp --key mmcp_xxx
 ```
 
-`--format table` prints a key/value table (Fragments, Anchors, Active, Expired, Topics, Avg utility, Noise ratio) followed by a table of the top 5 topics.
+`--format table` prints a key/value table (Fragments, Anchors, Active, Expired, Topics, Avg utility, Noise ratio) followed by a table of the top 5 topics. When some scope has automatic cleanup off or the global mode is manual, an `Auto cleanup off` row (scopes and fragments in them) and `retention` in JSON are added.
 
 Example output (`--format json`, local):
 
@@ -211,6 +215,8 @@ Diagnose DB connectivity, Redis status, and embedding provider availability.
 node bin/memento.js health
 node bin/memento.js health --format json
 ```
+
+When an environment variable has a bad value, `Config` rows show the variable name, the problem and the value used instead (`configIssues` with `--format json`). For example, a mistyped `MEMENTO_RETENTION_MODE` shows up here as read as manual. The original value is not shown.
 
 ### recall
 
@@ -603,7 +609,27 @@ memento-mcp workspace merge codex-key /home/u/jobs/proj proj --confirm
 memento-mcp workspace alias codex-key /home/u/jobs/proj none   # remove the alias
 ```
 
-`merge` moves one key's fragments under `<from>`, closed rows included, to `<to>`. A fragment whose content already exists under `<to>` stays under `<from>` and is closed. The audit events are `admin.key.workspace_alias_update` and `admin.key.workspace_merge`.
+`merge` moves one key's fragments under `<from>`, closed rows included, to `<to>`. A fragment whose content already exists under `<to>` stays under `<from>` and is closed. A retention policy on `<from>` (days, no expiry, automatic cleanup) moves to `<to>`. When `<to>` has one too, the two are combined so that keeping wins: cleanup is off if either is off, no expiry is on if either is on, and the longer number of days is kept. The preview shows the combined result. The audit events are `admin.key.workspace_alias_update` and `admin.key.workspace_merge`.
+
+### retention
+
+Local-only command that shows and changes automatic cleanup and no expiry for a whole key or one workspace. It connects to the database with the server `.env`, and `<key>` takes an id or a name. In a scope with automatic cleanup off, consolidation and the write path never delete fragments by automatic judgement, never close them by merge or supersession, and never demote permanent fragments to cold. Fragments there are removed only by forget or by an expired retention period.
+
+```bash
+memento-mcp retention status                                   # every scope with cleanup off, resume pending or no expiry
+memento-mcp retention status --key codex-key                   # applied values and their source for one key
+memento-mcp retention preview codex-key --workspace proj       # what the next cycle would touch with cleanup on
+memento-mcp retention set codex-key --workspace proj --auto-cleanup off            # only shows the change
+memento-mcp retention set codex-key --workspace proj --auto-cleanup off --confirm
+memento-mcp retention set codex-key --workspace archive --no-expiry --confirm
+memento-mcp retention set codex-key --workspace proj --auto-cleanup on --resume-after-days 7 --confirm
+```
+
+- Without `--workspace` the setting applies to the whole key. If the global setting, the whole key or the workspace has cleanup off, the scope is treated as off.
+- `--no-expiry` keeps the scope from being deleted by a retention period. `--inherit-expiry` removes no expiry so that the whole-key period applies. Retention days are changed with Set Policy in the admin console or `PUT /keys/:id/retention`.
+- Turning cleanup back on starts cleanup after `--resume-after-days` days (default 7, 0 is immediate). Until then the scope is treated as off, so you can run `preview` again and switch it back.
+- Without `--confirm` nothing changes, and turning cleanup on or removing no expiry also shows the preview counts.
+- A change records the audit event `admin.key.retention_scope_update` in the outbox. With Redis on, running servers apply it at once; without Redis they apply it within a minute.
 
 ---
 

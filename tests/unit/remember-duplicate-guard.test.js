@@ -77,7 +77,8 @@ describe("remember 중복 적중", () => {
     assert.equal(calls.state.length, 1);
     assert.equal(calls.index, 1);
     assert.equal(calls.post, 1);
-    assert.deepEqual(calls.ttl, [["frag-old", "short", null]]);
+    /** 돌아온 행은 기존 permanent 파편이다. 낮은 중요도 등급(short)은 새로 만든 행에만 적용한다. */
+    assert.deepEqual(calls.ttl, []);
   });
 
   it("확인이 켜져 있으면 다른 workspace의 기존 파편을 고치지 않고 알린다", async () => {

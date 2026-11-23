@@ -73,7 +73,8 @@ describe("_rememberAtomic 중복 적중", () => {
   it("확인이 꺼져 있으면 기존 응답 구조와 후속 처리를 그대로 타고 같은 범위 적중은 duplicate_of를 싣는다", async () => {
     const res = await makeRememberer("frag-old")._rememberAtomic(fragment(), ctx());
     assert.deepEqual(res, {
-      id: "frag-old", keywords: ["k"], ttl_tier: "warm", scope: "permanent", conflicts: [], duplicate_of: "frag-old"
+      /** 응답 등급은 돌아온 기존 행의 등급이다 */
+      id: "frag-old", keywords: ["k"], ttl_tier: "permanent", scope: "permanent", conflicts: [], duplicate_of: "frag-old"
     });
     assert.equal(calls.index, 1);
     assert.equal(calls.post, 1);

@@ -92,7 +92,7 @@ describe("비GET 관리 라우트의 감사 행위 선언", () => {
 
   it("admin-key-policies 라우트 표의 비GET 항목마다 admin-key-policies 선언이 있고 수가 같다", () => {
     const routes = keyRoutes("admin-key-policies").filter(r => MUTATING.includes(r.method));
-    assert.equal(routes.length, 3);
+    assert.equal(routes.length, 4);
     for (const r of routes) {
       const found = findAdminAuditAction(r.method, r.sample);
       assert.ok(found, `${r.method} ${r.sample} 선언 없음`);

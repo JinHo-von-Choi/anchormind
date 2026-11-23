@@ -52,7 +52,7 @@ node bin/memento.js stats
 
 ### local-only (원격 접속 불가)
 
-`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`, `audit`, `admin`, `group`, `workspace` 는 직접 DB / 프로세스에 접근하는 명령이므로 `--remote` 플래그와 함께 사용하면 에러를 반환한다.
+`serve`, `migrate`, `cleanup`, `backfill`, `health`, `update`, `export`, `import`, `benchmark`, `anchor-scope`, `audit`, `admin`, `group`, `workspace`, `retention` 는 직접 DB / 프로세스에 접근하는 명령이므로 `--remote` 플래그와 함께 사용하면 에러를 반환한다.
 
 ### 원격 지원
 
@@ -90,6 +90,7 @@ node bin/memento.js stats
 | `admin recover [--user NAME] [--confirm]` | 관리자 계정 비상 복구(전체 세션 폐기, TOTP 초기화, 명시 접속 대상) | 아니오 |
 | `group <sub>` | 키 그룹, 멤버 권한, 그룹 파편 상한 관리(list, create, delete, members, add, set, remove, limit) | 아니오 |
 | `workspace <sub>` | 키별 workspace 별칭과 병합(suggest, aliases, alias, merge) | 아니오 |
+| `retention <sub>` | 키·workspace별 자동 정리 켜고 끄기와 만료 없음(status, preview, set) | 아니오 |
 
 ---
 
@@ -139,7 +140,10 @@ node bin/memento.js migrate --help
 node bin/memento.js cleanup           # dry-run (미리보기만)
 node bin/memento.js cleanup --execute  # 실제 삭제 실행
 node bin/memento.js cleanup --execute --include-nli  # NLI 충돌 파편도 삭제
+node bin/memento.js cleanup --execute --include-manual  # 자동 정리가 꺼진 범위의 파편도 삭제
 ```
+
+자동 정리가 꺼진 범위(`MEMENTO_RETENTION_MODE=manual`, `retention set --auto-cleanup off`, 관리 콘솔 Cleanup Settings)의 파편은 기본으로 건너뛰고, 미리보기에 건너뛴 수를 보여 준다. `--include-manual`을 주면 함께 지운다. 삭제는 forget과 같은 삭제 문장을 쓰고, 지운 파편의 링크, 사례 사본, 색인도 정리한다.
 
 직접 실행 대안:
 
@@ -179,7 +183,7 @@ node bin/memento.js stats --json
 node bin/memento.js stats --remote https://memento.example.com/mcp --key mmcp_xxx
 ```
 
-`--format table`은 key/value 표(Fragments, Anchors, Active, Expired, Topics, Avg utility, Noise ratio)와 상위 5개 토픽 표를 출력한다.
+`--format table`은 key/value 표(Fragments, Anchors, Active, Expired, Topics, Avg utility, Noise ratio)와 상위 5개 토픽 표를 출력한다. 자동 정리가 꺼진 범위가 있거나 전역이 manual이면 `Auto cleanup off` 줄(범위 수와 그 범위의 파편 수)과 JSON의 `retention`이 더해진다.
 
 출력 예시 (`--format json`, 로컬):
 
@@ -212,6 +216,8 @@ DB 연결, Redis 상태, 임베딩 provider 동작 여부를 진단한다.
 node bin/memento.js health
 node bin/memento.js health --format json
 ```
+
+환경 변수 값에 문제가 있으면 변수 이름, 문제, 대신 쓰는 값을 `Config` 줄로 함께 보여 준다(`--format json`은 `configIssues`). 예를 들어 `MEMENTO_RETENTION_MODE`를 잘못 쓰면 manual로 읽혔다는 것을 여기서 알 수 있다. 원본 값은 보여 주지 않는다.
 
 ### recall
 
@@ -602,7 +608,27 @@ memento-mcp workspace merge codex-key /home/u/jobs/proj proj --confirm
 memento-mcp workspace alias codex-key /home/u/jobs/proj none   # 별칭 삭제
 ```
 
-`merge`는 키 하나의 `<from>` 파편을 닫힌 행까지 `<to>`로 옮긴다. `<to>`에 같은 본문이 있으면 그 파편은 `<from>`에 남긴 채 닫는다. 감사 이벤트는 `admin.key.workspace_alias_update`와 `admin.key.workspace_merge`다.
+`merge`는 키 하나의 `<from>` 파편을 닫힌 행까지 `<to>`로 옮긴다. `<to>`에 같은 본문이 있으면 그 파편은 `<from>`에 남긴 채 닫는다. `<from>`에 보존 정책(보존 일수, 만료 없음, 자동 정리)이 있으면 `<to>`로 옮긴다. `<to>`에도 정책이 있으면 보존 쪽이 이기도록 합친다. 자동 정리는 하나라도 꺼져 있으면 꺼짐, 만료 없음은 하나라도 켜져 있으면 켜짐, 일수는 긴 쪽이다. 미리보기에 합친 결과가 나온다. 감사 이벤트는 `admin.key.workspace_alias_update`와 `admin.key.workspace_merge`다.
+
+### retention
+
+키 전체나 workspace 하나의 자동 정리와 만료 없음을 확인하고 바꾸는 로컬 전용 명령이다. 서버와 같은 `.env`로 DB에 붙고, `<key>`에는 id나 이름을 쓴다. 자동 정리를 끈 범위에서는 정리 주기와 저장 경로가 자동 판단으로 파편을 지우거나, 병합·대체로 닫거나, permanent를 cold로 내리지 않는다. 그 범위의 파편은 forget이나 보존 기간 만료로만 지워진다.
+
+```bash
+memento-mcp retention status                                   # 자동 정리가 꺼졌거나 재개 대기이거나 만료 없음인 모든 범위
+memento-mcp retention status --key codex-key                   # 키 하나의 범위별 적용 값과 출처
+memento-mcp retention preview codex-key --workspace proj       # 자동 정리를 켜면 다음 주기에 손댈 수
+memento-mcp retention set codex-key --workspace proj --auto-cleanup off            # 바뀔 내용만 보인다
+memento-mcp retention set codex-key --workspace proj --auto-cleanup off --confirm
+memento-mcp retention set codex-key --workspace archive --no-expiry --confirm
+memento-mcp retention set codex-key --workspace proj --auto-cleanup on --resume-after-days 7 --confirm
+```
+
+- `--workspace`가 없으면 키 전체에 적용한다. 전역, 키 전체, workspace 가운데 하나라도 꺼져 있으면 그 범위는 꺼진 것으로 다룬다.
+- `--no-expiry`는 그 범위를 보존 기간으로 지우지 않는다. `--inherit-expiry`는 만료 없음을 풀고, 키 전체 기간을 따르게 한다. 보존 일수는 관리 콘솔의 Set Policy나 `PUT /keys/:id/retention`으로 바꾼다.
+- 꺼진 자동 정리를 다시 켜면 `--resume-after-days`일 뒤(기본 7, 0은 바로)부터 정리한다. 그 전에는 꺼진 것으로 다루므로, `preview`로 쌓인 정리 대상을 다시 보고 되돌릴 수 있다.
+- `--confirm`이 없으면 아무것도 바꾸지 않고, 자동 정리를 켜거나 만료 없음을 풀 때는 미리보기 수를 함께 보인다.
+- 바꾸면 감사 이벤트 `admin.key.retention_scope_update`를 outbox에 남긴다. Redis가 켜져 있으면 실행 중인 서버가 바로 반영하고, 없으면 최대 1분 뒤에 반영한다.
 
 ---
 

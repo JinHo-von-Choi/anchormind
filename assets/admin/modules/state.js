@@ -22,6 +22,8 @@ export const state = {
   masterKey:   "",
   userSession: false,
   currentUser: null,
+  /** /me가 준 능력 목록([{ cap, mode, range }]). 아직 읽지 않았으면 null이고, 그때 화면은 서버의 판정에 맡긴다 */
+  capabilities: null,
   adminUsers:  [],
   currentView: "overview",
   stats:       null,

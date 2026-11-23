@@ -249,7 +249,23 @@ export function renderGroupTable(groups) {
   return wrap;
 }
 
-export function renderGroupInspector(selected, members) {
+/**
+ * 그룹 구성원 가운데 자동 정리가 꺼진 범위(키 전체나 workspace 하나)를 가진 키 수. 그런 키가 없고 전역도 auto면 null이다.
+ * 그룹 단위 정책은 없다. 공유된 파편은 쓴 키의 정책을 따른다.
+ *
+ * @param {object[]} members
+ * @param {{ global?: { effective: string }, scopes?: Array<{ key_id: string, manual: boolean }> }|null} retention
+ * @returns {string|null}
+ */
+export function cleanupOffMembersLabel(members, retention) {
+  if (!retention) return null;
+  if (retention.global?.effective === "manual") return "Auto cleanup off for all keys (global)";
+  const off = new Set((retention.scopes ?? []).filter((s) => s.manual).map((s) => s.key_id));
+  const n   = members.filter((m) => off.has(m.id)).length;
+  return n > 0 ? `${fmt(n)} member keys with auto cleanup off` : null;
+}
+
+export function renderGroupInspector(selected, members, retention = null) {
   const panel = document.createElement("aside");
   panel.className = "w-96 bg-surface-container-high border-l border-white/5 flex flex-col p-6 gap-6 relative overflow-y-auto";
   panel.id = "group-inspector";
@@ -308,6 +324,13 @@ export function renderGroupInspector(selected, members) {
   memberCount.className = "mt-2 text-[10px] font-mono text-slate-500 uppercase";
   memberCount.textContent = fmt(selected.member_count ?? 0) + " Members";
   idCard.appendChild(memberCount);
+  const cleanupOff = cleanupOffMembersLabel(members, retention);
+  if (cleanupOff) {
+    const offLine = document.createElement("div");
+    offLine.className = "mt-1 text-[10px] font-mono text-amber-300 uppercase";
+    offLine.textContent = cleanupOff;
+    idCard.appendChild(offLine);
+  }
   const limitRow = document.createElement("div");
   limitRow.className = "mt-2 flex justify-between items-center";
   const limitText = document.createElement("span");
@@ -444,10 +467,15 @@ export async function renderGroups(container) {
 
   const selected = state.groups.find(g => g.id === state.selectedGroupId) ?? null;
   let members = [];
+  let retention = null;
   if (selected) {
-    const mRes = await api("/groups/" + selected.id + "/members", { signal: ctx.signal });
+    const [mRes, rRes] = await Promise.all([
+      api("/groups/" + selected.id + "/members", { signal: ctx.signal }),
+      api("/retention/scopes", { signal: ctx.signal })
+    ]);
     if (!ctx.isCurrent()) return;
     if (mRes.ok) members = mRes.data ?? [];
+    if (rRes.ok) retention = rRes.data ?? null;
   }
 
   container.textContent = "";
@@ -485,7 +513,7 @@ export async function renderGroups(container) {
   split.style.minHeight = "400px";
 
   split.appendChild(renderGroupTable(state.groups));
-  split.appendChild(renderGroupInspector(selected, members));
+  split.appendChild(renderGroupInspector(selected, members, retention));
   container.appendChild(split);
 
   /* Event: table row click */

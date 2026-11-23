@@ -79,6 +79,8 @@ const METRIC_MODULES = new Set([
 /** 검토를 마친 비리터럴 라벨 식. 키는 "파일|함수|식", 값은 값이 닫힌 집합인 근거다. */
 const REVIEWED = new Map([
   ["lib/memory/write/DeleteCleanup.js|inc|name",                                   "cleanupDeletedRows의 step 호출부 고정 문자열(copies, audit, links, linked_to, deindex)"],
+  ["lib/memory/consolidate/MemoryConsolidator.js|inc|def.name",                   "stageDefs 배열에 고정 문자열로 선언한 정리 단계 이름"],
+  ["lib/memory/consolidate/MemoryConsolidator.js|inc|s.reason",                   "SKIP_REASONS의 값(retention_manual, retention_resume_pending)일 때만 센다"],
   ["lib/memory/consolidate/FragmentGC.js|inc|transition",                         "countTier 호출부의 고정 문자열(preference_permanent, hub_permanent, importance_permanent, warm_cold, permanent_cold)"],
   ["lib/memory/link/LinkStore.js|inc|producer",                                   "LINK_PRODUCERS 목록 또는 other로 닫는다"],
   ["lib/memory/link/LinkStore.js|inc|r.relationType",                             "fragment_links 관계 CHECK 제약을 통과한 값이다(쓰기가 성공한 뒤에만 센다)"],

@@ -45,6 +45,7 @@ assets/admin/
     ├── key-lifecycle.js # API 키 수명 카드
     ├── key-access.js   # API 키 그룹 접근 카드
     ├── key-retention.js # API 키 보존 정책 카드
+    ├── key-cleanup-settings.js # API 키 자동 정리 설정 모달(Cleanup Settings)
     ├── memory.js       # 메모리 운영
     ├── review.js       # 검토 대기
     ├── conflicts.js    # 모순 처리
@@ -91,7 +92,7 @@ Tailwind CSS와 d3 스크립트는 외부 CDN이 아니라 서버가 `assets/adm
 
 좌측 영역:
 - 시스템 건전성 -- CPU, 메모리, 디스크 사용률을 막대로 표시한다. 85% 이상이면 빨간색으로 바뀌며 주의가 필요하다. 우측에 서버 가동 시간(uptime)이 표시된다.
-- 운영 상태 -- 스케줄러 작업마다 마지막 성공 시각, 실행 수, 실패 수를 보여 준다. 마지막 실패가 마지막 성공보다 늦은 작업은 빨간색이며 마우스를 올리면 오류 문구가 보인다. 마지막 통합(consolidate) 실행 결과와 기능 스위치 요약(켜짐, 꺼짐, 모드, 기본값과 다른 수, 잘못된 설정값)도 함께 보인다.
+- 운영 상태 -- 스케줄러 작업마다 마지막 성공 시각, 실행 수, 실패 수를 보여 준다. 마지막 실패가 마지막 성공보다 늦은 작업은 빨간색이며 마우스를 올리면 오류 문구가 보인다. 마지막 통합(consolidate) 실행 결과와 기능 스위치 요약(켜짐, 꺼짐, 모드, 기본값과 다른 수, 잘못된 설정값)도 함께 보인다. 자동 정리가 꺼진 범위가 있으면 통합 실행 줄 끝에 `자동 정리 꺼진 범위 N곳`이, 전역이 manual이면 `자동 정리 꺼짐(전역)`이 붙는다. 그래서 만료 삭제 0건이 고장이 아니라는 것을 알 수 있다.
 - 최근 메모리 활동 -- 가장 최근에 저장되거나 조회된 기억 파편 10건을 시간순으로 보여준다. 각 행의 타입 뱃지(Vector, Semantic, Graph 등)는 어떤 경로로 처리됐는지를 나타낸다.
 
 우측 영역:
@@ -151,7 +152,13 @@ PERMISSIONS의 REVIEW_OFF와 REVIEW_ALL은 검토 대기열 방식 표지다(`ME
   - REVOKE PERMANENTLY -- 사유를 넣고 두 번 눌러 키와 모든 비밀을 폐기한다. 되돌릴 수 없고, 폐기한 키는 다시 활성화할 수 없다. 그 키의 세션은 바로 닫힌다.
   - SIGN ACCESS REVIEW -- 접근 검토 시각과 행위자를 남긴다.
 - GROUP ACCESS -- 이 키가 그룹을 통해 읽을 수 있는 다른 키를 보여 주고, 키마다 받은 쓰기 권한(link, amend, forget)과 공유 workspace 제한도 함께 보여 준다. 아래 목록은 최근 7일 동안 다른 키의 recall 결과에 이 키의 파편이 들어간 기록이며, 읽은 키, recall 수, 파편 수, 마지막 시각이 나온다. 자료는 `GET /v1/internal/model/nothing/keys/:id/access`에서 온다.
-- RETENTION -- 보존 정책 목록이다. SET POLICY에 `일수`를 넣으면 키 전체에, `workspace=일수`를 넣으면 그 workspace에만 적용되고, `workspace=`나 `*=`를 넣으면 정책이 지워진다. 정리 주기가 created_at이 그 일수보다 오래된 파편을 지우고, 앵커는 남긴다. 변경하면 감사 이벤트 `admin.key.retention_update`가 남는다.
+- RETENTION -- 보존 정책 목록이다. SET POLICY에 `일수`를 넣으면 키 전체에, `workspace=일수`를 넣으면 그 workspace에만 적용되고, `workspace=`나 `*=`를 넣으면 정책이 지워진다. 정리 주기가 created_at이 그 일수보다 오래된 파편을 지우고, 앵커는 남긴다. 변경하면 감사 이벤트 `admin.key.retention_update`가 남는다. 자동 정리가 꺼졌거나 재개를 기다리거나 만료 없음인 범위는 일수 줄 아래에 한 줄씩 더 나온다(예: `team-a: auto cleanup off (expiry: inherits 90 days)`, `archive: no expiry`).
+- CLEANUP SETTINGS -- 키 전체나 workspace 하나의 자동 정리와 만료 없음을 정하는 모달이다. 범위 목록은 이 키의 workspace(파편 수 순)이고, 목록에 없는 이름은 아래 입력에 쓴다.
+  - AUTOMATIC CLEANUP -- Off로 두면 그 범위에서 정리 주기와 저장 경로가 자동 판단으로 파편을 지우거나, 병합·대체로 닫거나, permanent를 cold로 내리지 않는다. 파편이 계속 쌓여 할당량에 더 빨리 닿을 수 있다는 안내가 나오고, 그 범위에 보존 기간이 걸려 있으면 그 기간이 지나면 지워진다는 안내도 함께 나온다. 바꾸려면 `retention.manage` 능력이 필요하다. 없으면 이 항목은 읽기 전용이다. 전역이 manual(`MEMENTO_RETENTION_MODE`)이거나 `MEMENTO_RETENTION_AUTO_AFTER`가 미래 시각이면 모달 위에 그 사실이 나오고 이 항목이 잠긴다.
+  - RETENTION PERIOD -- 지금 적용되는 기간과 출처(키 전체, 이 workspace)를 보여 준다. 여기서는 No expiry만 켜고 끈다. 일수는 SET POLICY로 바꾼다.
+  - CURRENT STATE -- 그 범위의 파편 수, 키 할당량 사용량, 적용 중인 모드와 출처.
+  - 자동 정리를 다시 켜거나 No expiry를 풀면, 저장 전에 같은 모달이 확인 화면으로 바뀐다. 다음 주기에 지워질 수, 강등될 수, 자동 거절될 수, 닫힐 완전 중복 수를 단계별로 보여 주고, 재개까지 기다릴 일수(기본 7, 0은 바로)를 받는다. 그 시각 전에는 꺼진 것으로 다루므로, 그 사이에 다시 Off로 돌릴 수 있다.
+  - 저장하면 감사 이벤트 `admin.key.retention_scope_update`가 남고, detail에는 바뀐 필드만 담는다. Redis가 없으면 다른 서버는 최대 1분 뒤에 반영한다.
 - 소속 그룹 관리:
   - ADD GROUP 버튼을 클릭하면 모달이 열리며 그룹을 선택할 수 있다.
   - Groups Directory 섹션의 각 그룹 행에 ASSIGN 버튼이 표시되며, 클릭 시 해당 키를 그룹에 추가한다.
@@ -182,6 +189,7 @@ API 키를 논리적 단위로 묶어 관리한다. 같은 그룹의 키가 서�
 - 멤버 행의 SHARES를 누르면 이 멤버가 공유할 workspace를 쉼표로 적는다. `all`은 전체를 공유하고, 빈 값은 어떤 workspace도 공유하지 않는다. 목록을 정하면 다른 멤버는 요청 workspace가 목록 안에 있을 때만 이 멤버의 그 workspace 파편과 전역 파편을 읽는다.
 - 멤버 행의 REMOVE를 누르면 그룹에서 뺀다.
 - EFFECTIVE ACCESS를 누르면 읽는 키와 대상 키의 쌍마다 실제로 가능한 READ, LINK, AMEND, FORGET과 대상의 공유 workspace를 표로 보여 준다.
+- 구성원 키 가운데 자동 정리가 꺼진 범위를 가진 키가 있으면 그룹 카드에 그 수가 나온다(`N member keys with auto cleanup off`). 그룹 단위 보존 정책은 없고, 공유된 파편은 쓴 키의 정책을 따른다.
 - 그룹 카드의 Change Limit에서 그룹 파편 상한을 정한다. 멤버 키 전체의 살아 있는 파편 수가 상한에 이르면 멤버 키의 저장이 거부된다. 상한은 현재 파편 수보다 낮게 정할 수 없고, 비워 두면 상한이 없어진다. 변경하면 감사 이벤트 `admin.group.fragment_limit_update`가 남는다.
 
 멤버 권한:
@@ -237,7 +245,7 @@ API 키를 논리적 단위로 묶어 관리한다. 같은 그룹의 키가 서�
 
 ### 5. 검토 대기
 
-검토 관문에 걸린 파편을 오래된 순으로 보여 준다(`GET /review`, 능력 `review.decide`). 결정하지 않은 파편은 만든 지 30일이 지나면 자동으로 거절된다.
+검토 관문에 걸린 파편을 오래된 순으로 보여 준다(`GET /review`, 능력 `review.decide`). 결정하지 않은 파편은 만든 지 30일이 지나면 자동으로 거절된다. 자동 정리가 꺼진 범위의 파편은 자동으로 거절하지 않고 관리자가 결정할 때까지 남긴다. 그런 범위가 있으면 머리글에 그 사실이 덧붙고, 해당 행에는 남은 일수 대신 `자동 만료 꺼짐`이 나온다.
 
 - 키 id 입력 -- 특정 키의 파편만 본다. `master`는 마스터 키가 쓴 파편이다.
 - 각 행 -- 유형, topic, 키, workspace, 만든 시각, 자동 거절까지 남은 일수, 본문 미리보기(500자), 검토 사유(지시 덮어쓰기 문구, 낮은 신뢰 출처의 지시성 파편, 권한 없는 앵커 요청, 앵커 지정 요청, 키 설정: 전부 검토), 출처와 신뢰 등급

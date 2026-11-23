@@ -57,6 +57,9 @@ export function reviewReasonLabel(reasons) {
   return reasons.map(r => REASON_LABELS[r] ?? r).join(", ");
 }
 
+/** 검토 화면 안내 문구 */
+const REVIEW_INTRO = "검토 관문에 걸린 파편입니다. 만든 지 30일이 지나면 자동으로 거절됩니다.";
+
 /**
  * 자동 거절까지 남은 일수 문구.
  *
@@ -110,7 +113,8 @@ export function renderReviewItem(item, onDecide) {
 
   const head = el("div", "flex flex-wrap justify-between gap-2 text-[10px] font-mono text-slate-400");
   head.appendChild(el("span", "", `${item.type ?? "-"} · ${item.topic ?? "-"} · ${item.key_name ?? item.key_id ?? "master"}${item.workspace ? " · " + item.workspace : ""}`));
-  head.appendChild(el("span", "", `${fmtDate(item.created_at)} · ${autoRejectLabel(item.auto_reject_at)}`));
+  /** 자동 정리가 꺼진 범위의 대기 파편은 자동 거절하지 않는다(서버가 retention_manual로 알린다) */
+  head.appendChild(el("span", "", `${fmtDate(item.created_at)} · ${item.retention_manual === true ? "자동 만료 꺼짐" : autoRejectLabel(item.auto_reject_at)}`));
   row.appendChild(head);
 
   row.appendChild(el("div", "text-[11px] text-slate-300 whitespace-pre-wrap", truncate(item.content_preview ?? "", 500)));
@@ -173,7 +177,8 @@ export async function renderReview(container) {
   const header = el("div", "flex justify-between items-end mb-6");
   const left   = el("div", "");
   left.appendChild(el("h2", "text-2xl font-headline font-bold text-on-surface tracking-tight", "검토 대기"));
-  left.appendChild(el("p", "text-sm text-slate-400 mt-1", "검토 관문에 걸린 파편입니다. 만든 지 30일이 지나면 자동으로 거절됩니다."));
+  const intro = el("p", "text-sm text-slate-400 mt-1", REVIEW_INTRO);
+  left.appendChild(intro);
   header.appendChild(left);
 
   const filters = el("div", "flex gap-2 items-center");
@@ -240,6 +245,7 @@ export async function renderReview(container) {
       return;
     }
     const items = res.data?.items ?? [];
+    if (res.data?.retentionManualScopes === true) intro.textContent = `${REVIEW_INTRO} 자동 정리가 꺼진 범위는 제외합니다.`;
     for (const item of items) list.appendChild(renderReviewItem(item, decide));
     shown += items.length;
     countLine.textContent = shown === 0 ? "검토 대기 파편이 없습니다." : `표시 중 ${shown}건`;

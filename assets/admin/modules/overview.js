@@ -534,6 +534,19 @@ function opsRow(labelText, valueText, cls = "") {
 }
 
 /**
+ * 자동 정리가 꺼진 범위 요약(/stats의 retention). 없으면 null이다. 만료 삭제 0건이 고장으로 보이지 않게 덧붙인다.
+ *
+ * @param {{ globalMode: string, pending: boolean, autoAfter: string|null, manualScopes: number }|undefined} r
+ * @returns {string|null}
+ */
+export function retentionOffText(r) {
+  if (!r) return null;
+  if (r.globalMode === "manual") return "자동 정리 꺼짐(전역)";
+  if (r.pending)                 return `자동 정리 ${String(r.autoAfter ?? "").slice(0, 10)}까지 대기(전역)`;
+  return r.manualScopes > 0 ? `자동 정리 꺼진 범위 ${fmt(r.manualScopes)}곳` : null;
+}
+
+/**
  * 운영 상태 패널: 스케줄러 작업의 마지막 성공과 실패, 마지막 통합 실행, 기능 스위치 요약.
  *
  * @param {Object|null} stats - /stats 응답
@@ -567,11 +580,12 @@ export function renderOpsPanel(stats) {
   }
 
   const consolidation = stats?.lastConsolidation;
+  const cleanupOff    = retentionOffText(stats?.retention);
   panel.appendChild(opsRow(
     "마지막 통합 실행",
-    consolidation?.timestamp
+    (consolidation?.timestamp
       ? `${relativeTime(consolidation.timestamp)} · 만료 삭제 ${fmt(consolidation.expiredDeleted ?? 0)} · 병합 ${fmt(consolidation.duplicatesMerged ?? 0)}`
-      : "서버 시작 뒤 실행 기록 없음"
+      : "서버 시작 뒤 실행 기록 없음") + (cleanupOff ? ` · ${cleanupOff}` : "")
   ));
 
   const sw = stats?.switches;

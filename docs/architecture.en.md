@@ -925,7 +925,7 @@ The `fragments.workspace` column provides an additional isolation layer within t
 
 **Aliases**: each key may have workspace aliases (`key_workspace_aliases`). Before attaching the trusted context, `jsonrpc.handleToolsCall` checks whether the argument workspace is an alias and replaces it with the canonical name (`lib/keys/workspace-alias.js`); batch writes are rewritten per item. Permission checks, group shared-workspace checks, writes, and reads therefore all use the canonical name. A workspace name only has meaning inside one key, so another key's workspace with the same name is not visible.
 
-**Retention**: a maximum age in days can be set for a whole key or for one of its workspaces (`key_retention_policies`). The `retention_expire` consolidation stage (`lib/memory/consolidate/RetentionGC.js`) deletes older fragments with the same chunk rules as expiry deletion and keeps anchors.
+**Retention**: a maximum age in days can be set for a whole key or for one of its workspaces (`key_retention_policies`). The `retention_expire` consolidation stage (`lib/memory/consolidate/RetentionGC.js`) deletes older fragments with the same chunk rules as expiry deletion and keeps anchors. The same table sets no expiry (`no_expiry`) and automatic cleanup off (`auto_lifecycle`, `auto_resume_at`) per scope. In a scope with automatic cleanup off, consolidation and the write path never delete or close fragments by automatic judgement (`lib/memory/consolidate/RetentionGuard.js`, global switch `MEMENTO_RETENTION_MODE`).
 
 **Use cases**:
 - Developer switching between projects in the same session (`workspace: "memento-mcp"`, `workspace: "my-project"`)

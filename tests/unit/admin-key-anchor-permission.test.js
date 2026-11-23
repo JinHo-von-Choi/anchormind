@@ -39,7 +39,8 @@ const pool = {
   }
 };
 
-mock.module("../../lib/tools/db.js", { exports: { getPrimaryPool: () => pool } });
+/** 보존 판정(RetentionGuard)은 범위별 manual 정책 행이 없는 것으로 읽는다 */
+mock.module("../../lib/tools/db.js", { exports: { getPrimaryPool: () => pool, queryWithAgentVector: async () => ({ rows: [] }) } });
 mock.module("../../lib/sessions.js", { exports: { closeSessionsByKeyId: async () => 0 } });
 
 const realAudit = await import("../../lib/logging/audit.js");

@@ -20,7 +20,8 @@ const pool = {
   query  : async (sql) => { sqls.push(sql.trim()); return replies.shift() ?? { rows: [], rowCount: 0 }; },
   connect: async () => client
 };
-mock.module("../../lib/tools/db.js", { exports: { getPrimaryPool: () => pool } });
+/** 보존 판정(RetentionGuard)은 범위별 manual 정책 행이 없는 것으로 읽는다 */
+mock.module("../../lib/tools/db.js", { exports: { getPrimaryPool: () => pool, queryWithAgentVector: async () => ({ rows: [] }) } });
 mock.module("../../lib/sessions.js", { exports: { closeSessionsByKeyId: async () => 0 } });
 
 const { handleKeys } = await import("../../lib/admin/admin-keys.js");

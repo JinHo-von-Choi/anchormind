@@ -32,8 +32,9 @@ const mockPool = {
   }
 };
 
+/** 보존 판정(RetentionGuard)은 범위별 manual 정책 행이 없는 것으로 읽는다 */
 mock.module("../../lib/tools/db.js", {
-  namedExports: { getPrimaryPool: () => mockPool }
+  namedExports: { getPrimaryPool: () => mockPool, queryWithAgentVector: async () => ({ rows: [] }) }
 });
 
 /* ── MemoryManager mock ── */

@@ -82,6 +82,7 @@ describe("보존 정책 카드", () => {
     const saved = [];
     const card  = renderKeyRetentionCard({ id: "k-1" }, {
       load: async () => ({ ok: true, data: { policies: stored } }),
+      loadScopes: async () => ({ ok: true, data: { scopes: [] } }),
       save: async (id, body) => { saved.push([id, body]); stored = [...stored, { workspace: body.workspace, max_age_days: body.max_age_days }]; return { ok: true }; },
       ask : () => "proj-a=14"
     });
@@ -91,5 +92,51 @@ describe("보존 정책 카드", () => {
     await btn._listeners.click[0]();
     assert.deepEqual(saved, [["k-1", { workspace: "proj-a", max_age_days: 14 }]]);
     assert.ok(texts(card).includes("proj-a: delete after 14 days"));
+  });
+});
+
+describe("자동 정리 설정", async () => {
+  const { scopeNote, plannedChange, scopeState } = await import("../../assets/admin/modules/key-cleanup-settings.js");
+  const NOW = Date.parse("2026-11-23T00:00:00Z");
+
+  it("카드에는 자동 정리가 꺼졌거나 재개 대기이거나 만료 없음인 범위만 한 줄씩 더한다", async () => {
+    const card = renderKeyRetentionCard({ id: "k-1" }, {
+      load      : async () => ({ ok: true, data: { policies: [{ workspace: null, max_age_days: 90 }] } }),
+      loadScopes: async () => ({ ok: true, data: { scopes: [
+        { workspace: null, max_age_days: 90, no_expiry: false, auto_lifecycle: true, auto_resume_at: null },
+        { workspace: "team-a", max_age_days: null, no_expiry: false, auto_lifecycle: false, auto_resume_at: null,
+          effective: { expiry: 90, expirySource: "key" } },
+        { workspace: "archive", max_age_days: null, no_expiry: true, auto_lifecycle: true, auto_resume_at: null }
+      ] } })
+    });
+    await card.ready;
+    const all = texts(card);
+    assert.ok(all.includes("All workspaces: delete after 90 days"));
+    assert.ok(all.includes("team-a: auto cleanup off (expiry: inherits 90 days)"));
+    assert.ok(all.includes("archive: no expiry"));
+    assert.equal(all.filter((t) => t.startsWith("All workspaces")).length, 1);
+    assert.equal(scopeNote({ workspace: "w", auto_lifecycle: true, auto_resume_at: "2026-11-30T00:00:00Z" }, NOW),
+      "w: auto cleanup resumes 2026-11-30");
+  });
+
+  it("재개 대기 범위에서 Off를 고르면 재개를 취소하고, 다시 켤 때만 미리보기를 거친다", () => {
+    const pending = { stored: { autoLifecycle: true, resumeAt: "2026-11-30T00:00:00Z", noExpiry: false } };
+    assert.deepEqual(plannedChange({ workspace: "w", cleanupOn: false, noExpiry: false }, pending, true),
+      { body: { workspace: "w", autoLifecycle: false }, needsPreview: false });
+    assert.equal(plannedChange({ workspace: "w", cleanupOn: true, noExpiry: false }, pending, true), null);
+
+    const off = { stored: { autoLifecycle: false, resumeAt: null, noExpiry: true } };
+    assert.deepEqual(plannedChange({ workspace: null, cleanupOn: true, noExpiry: true }, off, true),
+      { body: { workspace: null, autoLifecycle: true }, needsPreview: true });
+    assert.deepEqual(plannedChange({ workspace: null, cleanupOn: false, noExpiry: false }, off, true),
+      { body: { workspace: null, noExpiry: false }, needsPreview: true });
+    /** retention.manage가 없으면 자동 정리는 보내지 않는다 */
+    assert.equal(plannedChange({ workspace: null, cleanupOn: true, noExpiry: true }, off, false), null);
+  });
+
+  it("정책 행도 파편도 없는 workspace는 키 전체 적용 값을 받는다", () => {
+    const data = { scopes: [], workspaces: [], keyEffective: { mode: "manual", modeSource: "key", expiry: 30, expirySource: "key" } };
+    assert.deepEqual(scopeState(data, "new-ws").effective, data.keyEffective);
+    assert.equal(scopeState(data, "new-ws").stored.autoLifecycle, true);
   });
 });

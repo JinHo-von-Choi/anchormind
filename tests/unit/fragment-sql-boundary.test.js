@@ -46,7 +46,9 @@ const ALLOWED = {
   "memory/consolidate/ConsolidatorGC.js": 12,
   "memory/consolidate/DigestBuilder.js": 5, // 정리 주기의 묶음 요약 생성: topic 묶음과 선호 묶음 선별, 묶음별 파편 조회, 출처가 닫힌 요약 판정. 묶음 집계와 요약 표 쓰기를 한 단계에 두어 FragmentReader에 일회성 집계 질의를 늘리지 않는다
   "memory/consolidate/FragmentGC.js": 11,
-  "memory/consolidate/RetentionGC.js": 2, // 보존 기간 삭제: 정책별 후보 CTE와 id 순 잠금 문장. FragmentGC의 만료 삭제와 같은 청크 규칙을 쓴다
+  "memory/consolidate/RetentionGC.js": 2,
+  "memory/consolidate/RetentionGuard.js": 1, // 관리 통계 retention 블록의 자동 정리 꺼진 범위 파편 수. 보존 정책 표와 한 문장으로 센다
+  "admin/RetentionPolicyStore.js": 5, // 범위 설정 화면의 workspace별 파편 수와, 자동 정리를 켜면 다음 주기에 손댈 수(강등, session_reflect 정리, 검토 자동 거절, 완전 중복)를 그 키 범위로 센다. 단계별 후보 조건을 한 모듈에 두고 아무것도 바꾸지 않는다 // 보존 기간 삭제: 정책별 후보 CTE와 id 순 잠금 문장. FragmentGC의 만료 삭제와 같은 청크 규칙을 쓴다
   "memory/consolidate/MemoryConsolidator.js": 13,
   "memory/consolidate/ChangeLog.js": 2, // 정리 단계의 닫기와 변경 기록을 한 문장(CTE)으로 만드는 공용 조각. 변경과 기록이 갈라지지 않게 데이터 계층 메서드가 아니라 SQL 조각으로 둔다
   "memory/consolidate/SessionLessons.js": 2, // 세션 사이 정리의 사례 선별(이미 제안한 사례 제외 EXISTS)과 사건 근거 파편의 등급을 사건 조회와 한 문장으로 읽는다

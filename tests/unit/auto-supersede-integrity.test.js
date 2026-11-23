@@ -66,6 +66,8 @@ function graphLinkerDb({ source, dedup = [], candidates = [] }) {
     if (n.includes("scored AS MATERIALIZED")) {
       return { rows: [...dedup.map(r => ({ kind: "dedup", ...r })), ...candidates.map(r => ({ kind: "candidate", ...r }))] };
     }
+    /** 보존 판정(RetentionGuard): 자동 정리가 꺼진 범위가 없다 */
+    if (n.includes("key_retention_policies")) return { rows: [{ any: false }] };
     throw new Error(`unexpected SQL: ${n.slice(0, 80)}`);
   };
 }

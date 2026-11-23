@@ -237,6 +237,25 @@ MCP `memory_consolidate` 도구는 master 키 세션 전용이다. 일반 키 �
 
 시맨틱 중복 제거 단계의 차단 건수는 `memento_consolidate_gate_blocked_total`로 노출된다. 라벨이 붙은 카운터라 첫 차단이 발생하기 전에는 값이 출력되지 않는다.
 
+## 보존 모드 운영
+
+자동 정리를 끈 범위(전역 `MEMENTO_RETENTION_MODE=manual`, 관리 콘솔 Cleanup Settings, `memento-mcp retention set --auto-cleanup off`)에서는 정리 주기가 파편을 지우거나 닫지 않는다. 지금 어디가 꺼져 있는지는 `memento-mcp retention status`, 관리 `/stats`의 `retention` 블록, 개요 화면의 통합 실행 줄로 본다. 전역 manual이면 건너뛴 단계가 정리 결과에 `skipped`(사유 `retention_manual`)로 남고 `memento_lifecycle_skipped_total`이 오른다.
+
+자동 정리가 꺼져도 다음 경우에는 파편이 지워지거나 닫힌다.
+
+- forget, 관리 콘솔의 직접 삭제와 병합, 모순 해소
+- 관리자가 정한 보존 기간 만료(`retention_expire`). 만료를 막으려면 그 범위에 만료 없음을 건다
+- 작업 기억 행, remember의 `supersedes`와 `slot` 대체, 정리 되돌리기
+- `memento-mcp cleanup --include-manual`
+
+자동 정리를 다시 켤 때는 그동안 쌓인 대상이 한 주기에 처리될 수 있다.
+
+1. `memento-mcp retention preview <key> [--workspace W]`로 다음 주기에 지워질 수, 강등될 수, 닫힐 수를 본다.
+2. 범위는 `retention set ... --auto-cleanup on --resume-after-days N --confirm`으로 켠다. N일 동안은 꺼진 것으로 다루므로 그 사이에 미리보기를 다시 보고 되돌릴 수 있다.
+3. 전역 manual을 끌 때는 `MEMENTO_RETENTION_MODE=auto`와 함께 `MEMENTO_RETENTION_AUTO_AFTER`(ISO 시각)를 두고, 그 시각 전에 미리보기를 확인한다.
+
+manual 범위에서 생긴 모순은 `contradicts` 링크만 남는다. 이 쌍은 auto로 되돌려도 자동 재탐지에서 빠지므로 관리 콘솔의 모순 처리 화면에서 해소한다. `workspace merge`는 보존 정책 행을 대상 workspace로 옮기고, 겹치면 보존 쪽이 이기도록 합친다. 내보내기와 가져오기(JSONL)는 보존 정책을 싣지 않으므로 설치를 옮기면 정책을 다시 정한다.
+
 ## 스위치 보고
 
 릴리스 보고마다 기능 스위치의 on/off 표를 싣는다. 표는 `scripts/switch-report.mjs`가 만든다.
@@ -370,11 +389,11 @@ SELECT count(*) FROM agent_memory.fragments
 - 빈 세션 요약: `type = 'fact'`, `content LIKE '%파편 0개 처리%'`, `importance < 0.3`
 - NLI 재귀 쓰레기: `content LIKE '[모순 해결]%'`, `access_count <= 1`, `importance < 0.3` (`--include-nli` 지정 시에만 처리)
 
-기본 실행은 `--dry-run` 모드로 삭제 대상 수와 샘플만 출력한다.
+기본 실행은 `--dry-run` 모드로 삭제 대상 수와 샘플만 출력한다. 자동 정리가 꺼진 범위의 파편은 건너뛰고 건너뛴 수를 보여 준다(`--include-manual`이면 함께 지운다). 삭제는 forget과 같은 삭제 문장과 삭제 뒤 정리(링크, 사례 사본, 색인)를 거친다.
 
 ### 선행 조건
 
-- `DATABASE_URL` 환경변수 설정
+- 서버와 같은 `POSTGRES_*` 환경변수, 없으면 `DATABASE_URL`
 - 실제 삭제 전 `--dry-run`으로 대상 규모 확인 필수
 
 ### 실행 명령

@@ -29,6 +29,8 @@ mock.module("../../lib/config.js", {
     /** 분할 자식이 거치는 의미 쓰기 관문과 서버 관문 의존성(ApiKeyStore)이 읽는 값 */
     writeGateEnabled       : () => true,
     provenanceEnabled      : () => true,
+    /** 분할 후보 질의의 보존 조건(RetentionGuard): 전역 auto */
+    retentionModeSetting: () => ({ mode: "auto", autoAfter: null, pending: false, effective: "auto" }),
     reviewQueueEnabled     : () => true,
     directiveOriginGateMode: () => "warn",
     sensitiveScanMode      : () => "mask",
@@ -107,7 +109,7 @@ function makeStubs() {
   const deleted  = [];
   let   tombstoned = false;
   const store = {
-    insert    : async (f) => { inserted.push(f); return f.id; },
+    insertDetailed: async (f) => { inserted.push(f); return { id: f.id, created: true }; },
     delete    : async (id) => { deleted.push(id); return true; },
     createLink: async () => {}
   };

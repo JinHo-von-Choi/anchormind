@@ -106,6 +106,8 @@ const ENTRY_POINTS = Object.freeze([
 const ALLOWED_SEMANTIC_CALLS = Object.freeze({
   "lib/memory/write/FragmentStore.js::insert":
     "FragmentStore 파사드가 FragmentWriter.insert로 위임한다. 파사드의 호출자를 검사한다",
+  "lib/memory/write/FragmentStore.js::insertDetailed":
+    "FragmentStore 파사드가 FragmentWriter.insertDetailed로 위임한다(새 행인지 함께 돌려준다). 파사드의 호출자를 검사한다",
   "lib/memory/write/FragmentStore.js::update":
     "FragmentStore 파사드가 FragmentWriter.update로 위임한다. 파사드의 호출자를 검사한다",
   [`${FI}::insertGuarded`]:

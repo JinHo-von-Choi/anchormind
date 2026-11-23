@@ -52,6 +52,8 @@ function openApp() {
   document.getElementById("app")?.classList.add("visible");
   renderCommandBar();
   startRouter();
+  /** 능력 목록은 화면이 바꿀 수 없는 항목을 미리 읽기 전용으로 보이는 데만 쓴다. 판정은 서버가 한다. */
+  api("/me").then((res) => { if (res.ok) state.capabilities = res.data?.capabilities ?? null; });
   /** healthFlags 실측 표시: 개요 화면과 같은 요청을 공유한다 */
   loadStats().then((res) => { if (res.ok) renderCommandBar(); });
 }
