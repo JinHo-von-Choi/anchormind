@@ -6,8 +6,8 @@
  *
  * 자동 정리가 꺼진 범위에서 만료 삭제와 permanent 강등이 파편을 건드리지 않는지, 같은 키의 다른 workspace는
  * 그대로 정리되는지, 재개 대기 중에는 꺼진 것으로 다루는지, 보존 기간이 workspace 행과 키 전체 행 사이에서
- * 어떻게 정해지는지, 낮은 importance로 같은 본문을 다시 저장해도 기존 permanent 등급이 그대로인지, part_of 묶음 보호를
- * 켜면 원본이 닫힌 분할 조각이 형제가 남아 있는 동안 만료 삭제와 permanent 강등을 피하는지 본다.
+ * 어떻게 정해지는지, 낮은 importance로 같은 본문을 다시 저장해도 기존 permanent 등급이 그대로인지, part_of 묶음 보호(기본
+ * 켜짐)로 원본이 닫힌 분할 조각이 형제가 남아 있는 동안 만료 삭제와 permanent 강등을 피하는지 본다.
  * 실행마다 전용 데이터베이스를 만들어 쓰고 끝나면 지운다.
  */
 import crypto                                  from "node:crypto";
@@ -202,8 +202,7 @@ describe("part_of 묶음 보호", () => {
     return pieces;
   }
 
-  it("켜면 형제가 남아 있는 분할 조각을 만료 삭제와 permanent 강등에서 빼고, 끄면 지금처럼 지운다. 미리보기 수도 같다", async () => {
-    process.env.MEMENTO_RETENTION_PROTECT_PART_OF = "true";
+  it("기본(켜짐)이면 형제가 남아 있는 분할 조각을 만료 삭제와 permanent 강등에서 빼고, false면 지운다. 미리보기 수도 같다", async () => {
     const [a, b] = await splitGroup();
     const [p]    = await splitGroup({ tier: "permanent" });
     const gc     = new FragmentGC();
@@ -218,15 +217,14 @@ describe("part_of 묶음 보호", () => {
     assert.ok(await rowOf(b));
     assert.equal((await rowOf(p)).ttl_tier, "permanent");
 
-    delete process.env.MEMENTO_RETENTION_PROTECT_PART_OF;
+    process.env.MEMENTO_RETENTION_PROTECT_PART_OF = "false";
     assert.deepEqual(await counts(), [2, 2]);
     await gc.deleteExpired();
     assert.equal(await rowOf(a), null);
     assert.equal(await rowOf(b), null);
   });
 
-  it("켜도 형제가 모두 닫힌 조각은 지운다", async () => {
-    process.env.MEMENTO_RETENTION_PROTECT_PART_OF = "true";
+  it("켜져 있어도 형제가 모두 닫힌 조각은 지운다", async () => {
     const [a, b] = await splitGroup();
     await directQuery(`UPDATE ${SCHEMA}.fragments SET valid_to = NOW() WHERE id = $1`, [b]);
     await new FragmentGC().deleteExpired();

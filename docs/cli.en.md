@@ -628,6 +628,7 @@ memento-mcp retention set codex-key --workspace proj --auto-cleanup on --resume-
 - Without `--workspace` the setting applies to the whole key. If the global setting, the whole key or the workspace has cleanup off, the scope is treated as off.
 - `--no-expiry` keeps the scope from being deleted by a retention period. `--inherit-expiry` removes no expiry so that the whole-key period applies. Retention days are changed with Set Policy in the admin console or `PUT /keys/:id/retention`.
 - Turning cleanup back on starts cleanup after `--resume-after-days` days (default 7, 0 is immediate). Until then the scope is treated as off, so you can run `preview` again and switch it back.
+- `preview` counts with the same conditions as the cycle. With part_of group protection on (`MEMENTO_RETENTION_PROTECT_PART_OF`), protected fragments are not counted.
 - Without `--confirm` nothing changes, and turning cleanup on or removing no expiry also shows the preview counts.
 - A change records the audit event `admin.key.retention_scope_update` in the outbox. With Redis on, running servers apply it at once; without Redis they apply it within a minute.
 

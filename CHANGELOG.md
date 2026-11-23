@@ -9,11 +9,12 @@
 - 관리 API `GET/PUT /keys/:id/retention/scopes`, `GET /keys/:id/retention/preview`, `GET /retention/scopes`. 자동 정리를 바꾸려면 `retention.manage` 능력이 더 필요하다. 감사 행위는 `admin.key.retention_scope_update`다. 기존 `GET/PUT /keys/:id/retention`의 요청과 응답은 그대로다.
 - 관리 콘솔 보존 정책 카드의 Cleanup Settings 모달. 개요, 검토 대기, 그룹 화면은 자동 정리가 꺼진 범위가 있을 때만 그 사실을 보여 준다.
 - CLI `memento-mcp retention status|preview|set`, `cleanup --include-manual`. `workspace merge`는 보존 정책 행을 함께 옮긴다. `health`는 환경 변수 문제를 보여 주고, `stats`는 자동 정리가 꺼진 범위를 보여 준다.
-- part_of 묶음 보호 `MEMENTO_RETENTION_PROTECT_PART_OF`(기본 false, 잘못된 값은 true). 켜면 `expired_delete`, `permanent_cold` 강등, `compress_old_fragments`가 아직 살아 있는 part_of 묶음(분할 조각, part_of로 묶은 하위 파편과 상위 파편)의 조각을 지우거나 내리거나 닫지 않는다. 대상 질의에 쓰는 부분 색인 `idx_fragment_links_part_of_from`, `idx_fragment_links_part_of_to`(migration-085)는 `scripts/ops/online-index.mjs`로 먼저 만들 수 있다.
+- part_of 묶음 보호 `MEMENTO_RETENTION_PROTECT_PART_OF`(기본 true, `false`만 끈다). `expired_delete`, `permanent_cold` 강등, `compress_old_fragments`가 아직 살아 있는 part_of 묶음(분할 조각, part_of로 묶은 하위 파편과 상위 파편)의 조각을 지우거나 내리거나 닫지 않는다. 보존 정책 미리보기와 키 통계 `expiringSoon`도 보호 중인 파편을 세지 않는다. 부분 색인 `idx_fragment_links_part_of_from`, `idx_fragment_links_part_of_to`(migration-085)는 `scripts/ops/online-index.mjs`로 먼저 만들 수 있다.
 - remember 응답의 `retention`, context `_meta.retention`, 할당량 초과 오류의 `retention_mode`(manual 범위에서만). 관리 `/stats`의 `retention` 블록과 지표 `memento_lifecycle_skipped_total{stage,reason}`.
 
 ### Changed
 
+- 업그레이드하면 아직 살아 있는 part_of 묶음의 조각(분할 조각 포함)은 만료 삭제, permanent 강등, 압축 대상에서 빠진다. 이전처럼 정리하려면 `MEMENTO_RETENTION_PROTECT_PART_OF=false`를 둔다.
 - `retention_expire`는 workspace 행이 기간을 정하지 않았으면 키 전체 행의 기간을 따르고, `no_expiry` 범위는 지우지 않는다.
 - `memento-mcp cleanup`은 forget과 같은 삭제 문장과 삭제 뒤 정리(링크, 사례 사본, 색인)를 거친다.
 

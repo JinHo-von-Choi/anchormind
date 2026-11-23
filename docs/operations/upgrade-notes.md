@@ -190,6 +190,8 @@ pg_repack --table=agent_memory.fragments --no-order <접속 옵션>
 
 효과는 `pg_stat_user_tables`의 `n_tup_hot_upd / n_tup_upd`로 본다.
 
+migration-085는 `fragment_links`에 부분 색인 `idx_fragment_links_part_of_from`, `idx_fragment_links_part_of_to`를 만든다. 링크가 수백만 건이면 `npm run migrate` 전에 `node scripts/ops/online-index.mjs --confirm --index idx_fragment_links_part_of_from --index idx_fragment_links_part_of_to`(접속 대상과 `--data-dir` 또는 `--free-bytes` 지정)로 먼저 만든다. 마이그레이션은 이미 있는 색인을 건너뛴다.
+
 ## 6. 관리자 workspace 바인딩 (migration-074)
 
 migration-074부터 관리자 계정의 workspace 바인딩은 그룹 범위와 함께 적어야 한다. 그룹 범위 없이 workspace만 적은 기존 바인딩은 남아 있지만 권한을 주지 않으므로, 그런 계정은 업그레이드 뒤에 해당 workspace를 볼 수 없다. 아래 질의로 대상 계정을 찾는다.

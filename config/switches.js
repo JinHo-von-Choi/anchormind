@@ -135,7 +135,7 @@ export const SWITCHES = Object.freeze([
   boolOn("MEMENTO_SESSION_SEGMENT", "세션", "유휴와 수명 기준으로 세션 세그먼트를 회전한다"),
   enumOf("MEMENTO_GC_THROUGHPUT", ["on", "off"], "on", "기억 처리", "만료 파편 정리가 주기당 삭제 상한까지 청크를 반복한다(off는 주기당 50건을 한 번에 지운다)", { off: ["off"] }),
   enumOf("MEMENTO_RETENTION_MODE", ["auto", "manual"], "auto", "기억 처리", "manual이면 정리 주기와 저장 경로가 자동 판단으로 파편을 지우거나 닫거나 permanent를 해제하지 않는다(보존 기간 만료와 forget은 그대로)", { invalid: "manual" }),
-  boolOff("MEMENTO_RETENTION_PROTECT_PART_OF", "기억 처리", "만료 삭제, permanent 강등, 오래된 파편 압축이 아직 살아 있는 part_of 묶음의 조각을 건드리지 않는다", { invalid: true }),
+  boolOn("MEMENTO_RETENTION_PROTECT_PART_OF", "기억 처리", "만료 삭제, permanent 강등, 오래된 파편 압축이 아직 살아 있는 part_of 묶음의 조각을 건드리지 않는다"),
   boolOn("MEMENTO_ENABLE_KUROMOJI", "기억 처리", "일본어 형태소 분석기(kuromoji)를 로드한다"),
 
   /* symbolic */

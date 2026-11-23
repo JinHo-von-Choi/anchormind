@@ -927,7 +927,7 @@ CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
 
 **별칭**: 키마다 workspace 별칭(`key_workspace_aliases`)을 둘 수 있다. `jsonrpc.handleToolsCall`은 신뢰 맥락을 붙이기 전에 인자의 workspace가 별칭인지 보고, 별칭이면 정식 이름으로 바꾸며(`lib/keys/workspace-alias.js`), 일괄 저장은 항목마다 바꾼다. 그래서 허가 판정과 그룹 공유 workspace 판정, 저장과 읽기가 모두 정식 이름을 쓴다. workspace 이름은 키 안에서만 통하므로 다른 키의 같은 이름 workspace는 보이지 않는다.
 
-**보존 기간**: 키 전체나 키의 workspace 하나에 최대 보존 일수를 둘 수 있다(`key_retention_policies`). 정리 주기의 `retention_expire` 단계(`lib/memory/consolidate/RetentionGC.js`)가 오래된 파편을 만료 삭제와 같은 청크 규칙으로 지우고, 앵커는 남긴다. 같은 표에서 범위마다 만료 없음(`no_expiry`)과 자동 정리 끄기(`auto_lifecycle`, `auto_resume_at`)를 정한다. 자동 정리가 꺼진 범위에서는 정리 주기와 저장 경로가 자동 판단으로 파편을 지우거나 닫지 않는다(`lib/memory/consolidate/RetentionGuard.js`, 전역 스위치 `MEMENTO_RETENTION_MODE`).
+**보존 기간**: 키 전체나 키의 workspace 하나에 최대 보존 일수를 둘 수 있다(`key_retention_policies`). 정리 주기의 `retention_expire` 단계(`lib/memory/consolidate/RetentionGC.js`)가 오래된 파편을 만료 삭제와 같은 청크 규칙으로 지우고, 앵커는 남긴다. 같은 표에서 범위마다 만료 없음(`no_expiry`)과 자동 정리 끄기(`auto_lifecycle`, `auto_resume_at`)를 정한다. 자동 정리가 꺼진 범위에서는 정리 주기와 저장 경로가 자동 판단으로 파편을 지우거나 닫지 않는다(`lib/memory/consolidate/RetentionGuard.js`, 전역 스위치 `MEMENTO_RETENTION_MODE`). 만료 삭제, permanent 강등, 압축은 살아 있는 part_of 묶음의 조각도 대상에서 뺀다(`MEMENTO_RETENTION_PROTECT_PART_OF`, 기본 켜짐). 이 판정은 활성 part_of 링크만 담는 부분 색인(migration-085)을 쓴다.
 
 **사용 시나리오**:
 - 개발자가 여러 프로젝트를 같은 Claude Code 세션에서 전환할 때 (`workspace: "memento-mcp"`, `workspace: "my-project"`)

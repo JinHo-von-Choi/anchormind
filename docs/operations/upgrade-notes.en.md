@@ -190,6 +190,8 @@ pg_repack --table=agent_memory.fragments --no-order <connection options>
 
 Check the effect with `n_tup_hot_upd / n_tup_upd` in `pg_stat_user_tables`.
 
+migration-085 creates the partial indexes `idx_fragment_links_part_of_from` and `idx_fragment_links_part_of_to` on `fragment_links`. With millions of links, build them before `npm run migrate` with `node scripts/ops/online-index.mjs --confirm --index idx_fragment_links_part_of_from --index idx_fragment_links_part_of_to` (give the target and `--data-dir` or `--free-bytes`). The migration skips indexes that already exist.
+
 ## 6. Admin workspace bindings (migration-074)
 
 From migration-074, a workspace binding on an admin account must carry a group scope. Existing bindings that name only a workspace remain but grant nothing, so those accounts cannot see that workspace after the upgrade. Find them with the query below.

@@ -256,6 +256,14 @@ MCP `memory_consolidate` 도구는 master 키 세션 전용이다. 일반 키 �
 
 manual 범위에서 생긴 모순은 `contradicts` 링크만 남는다. 이 쌍은 auto로 되돌려도 자동 재탐지에서 빠지므로 관리 콘솔의 모순 처리 화면에서 해소한다. `workspace merge`는 보존 정책 행을 대상 workspace로 옮기고, 겹치면 보존 쪽이 이기도록 합친다. 내보내기와 가져오기(JSONL)는 보존 정책을 싣지 않으므로 설치를 옮기면 정책을 다시 정한다.
 
+### part_of 묶음 보호
+
+자동 정리를 켠 범위에서도 묶음 일부만 사라지지 않도록, 만료 삭제, permanent 강등, 압축은 상위 파편이 열려 있거나, 열린 하위 파편이 있거나, 같은 상위 파편을 가리키는 열린 형제가 있는 파편을 건드리지 않는다. 의미 중복 병합과 대체 판정은 그대로 돈다. 기본으로 켜져 있고 `MEMENTO_RETENTION_PROTECT_PART_OF=false`로 끈다.
+
+- 판정에 쓰는 부분 색인은 migration-085가 만든다. 링크가 많은 설치는 마이그레이션 전에 `node scripts/ops/online-index.mjs --confirm --index idx_fragment_links_part_of_from --index idx_fragment_links_part_of_to`로 쓰기를 멈추지 않고 먼저 만든다([online-migration.md](online-migration.md)).
+- `retention preview`와 키 통계 `expiringSoon`은 보호 중인 파편을 빼고 센다.
+- 보호는 묶음이 살아 있는 동안 계속된다. 필요 없는 묶음은 forget으로 지우거나 unlink로 part_of 링크를 끊는다.
+
 ## 스위치 보고
 
 릴리스 보고마다 기능 스위치의 on/off 표를 싣는다. 표는 `scripts/switch-report.mjs`가 만든다.

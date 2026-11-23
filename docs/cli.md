@@ -627,6 +627,7 @@ memento-mcp retention set codex-key --workspace proj --auto-cleanup on --resume-
 - `--workspace`가 없으면 키 전체에 적용한다. 전역, 키 전체, workspace 가운데 하나라도 꺼져 있으면 그 범위는 꺼진 것으로 다룬다.
 - `--no-expiry`는 그 범위를 보존 기간으로 지우지 않는다. `--inherit-expiry`는 만료 없음을 풀고, 키 전체 기간을 따르게 한다. 보존 일수는 관리 콘솔의 Set Policy나 `PUT /keys/:id/retention`으로 바꾼다.
 - 꺼진 자동 정리를 다시 켜면 `--resume-after-days`일 뒤(기본 7, 0은 바로)부터 정리한다. 그 전에는 꺼진 것으로 다루므로, `preview`로 쌓인 정리 대상을 다시 보고 되돌릴 수 있다.
+- `preview`는 정리 주기와 같은 조건으로 센다. part_of 묶음 보호(`MEMENTO_RETENTION_PROTECT_PART_OF`)가 켜져 있으면 보호 중인 파편은 세지 않는다.
 - `--confirm`이 없으면 아무것도 바꾸지 않고, 자동 정리를 켜거나 만료 없음을 풀 때는 미리보기 수를 함께 보인다.
 - 바꾸면 감사 이벤트 `admin.key.retention_scope_update`를 outbox에 남긴다. Redis가 켜져 있으면 실행 중인 서버가 바로 반영하고, 없으면 최대 1분 뒤에 반영한다.
 

@@ -37,6 +37,7 @@ AnchorMind가 제공하는 기능, 응답 메타, 선택 모듈, 기술 스택�
 
 - 자동 정리: 중복 병합, 모순 탐지, 중요도 감쇠, 오래된 기억의 TTL 만료가 주기적으로 돈다. 만료 정리는 한 주기에 100건 단위로 반복한다 (`MEMENTO_GC_THROUGHPUT`).
 - 보존 모드: 키 전체나 workspace 하나, 또는 설치 전체(`MEMENTO_RETENTION_MODE=manual`)에서 자동 정리를 끈다. 그 범위의 파편은 자동으로 지워지거나, 병합·대체로 닫히거나, permanent에서 내려가지 않고 forget이나 관리자가 정한 보존 기간으로만 지워진다. 관리 콘솔의 Cleanup Settings와 `memento-mcp retention`으로 정하고, 다시 켤 때는 미리보기와 재개 대기 기간을 둔다.
+- part_of 묶음 보호: 자동 정리를 켠 범위에서도 만료 삭제, permanent 강등, 압축이 아직 살아 있는 part_of 묶음(긴 파편을 나눈 조각, part_of로 묶은 상위·하위 파편)의 조각을 건드리지 않는다. 묶음 일부만 사라져 남은 조각이 맥락 없이 검색되는 일을 막는다. 기본으로 켜져 있고 `MEMENTO_RETENTION_PROTECT_PART_OF=false`로 끈다.
 - 검증 보상: caseId가 있는 파편을 `amend(assertionStatus="verified")`로 검증하면 그 검증의 근거 파편 중요도가 오른다(`rejected`면 내려간다). 근거의 확신도만큼 반영하고, 같은 사례를 여러 번 검증해도 다른 근거에 누적되지 않는다 (`MEMENTO_CASE_BACKPROP_ENABLED`).
 - 링크 재조정: `tool_feedback`이 쌓이면 파편 사이 연결의 가중치가 바뀌고, 서로 모순되는 연결은 자동으로 격리된다 (`ENABLE_RECONSOLIDATION`).
 - 파편별 판정과 사용 사건: `tool_feedback`의 `fragment_judgments`로 파편마다 관련 여부를 남긴다. 관련 판정, `amend(assertionStatus="verified")`, 교훈의 helped와 failed, link 도구로 건 링크, 교훈 근거처럼 에이전트가 파편 id를 지목한 일은 노출 횟수와 따로 사용 사건으로 기록한다. shadow(기본)는 기록만 하고, on이면 context 온도 정렬의 가산점이 사용 사건을 따른다 (`MEMENTO_USE_SIGNAL`).
