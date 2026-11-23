@@ -186,7 +186,7 @@ export const NON_DATA_IMPORTS = Object.freeze({
   "../redis.js"                         : null,
   "../keys/invalidation.js"             : ["invalidateKeys"],
   "../keys/policy.js"                   : ["getAllowedWorkspaces", "WORKSPACE_LOOKUP_FAILED"],
-  "../memory/consolidate/RetentionGuard.js": ["lifecycleGuardSql", "manualScopeExistsSql", "globalLifecycleState", "hasManualScopes", "retentionSummary"],
+  "../memory/consolidate/RetentionGuard.js": ["lifecycleGuardSql", "partOfGuardSql", "manualScopeExistsSql", "globalLifecycleState", "hasManualScopes", "retentionSummary"],
   "../../config/switches.js"            : null,
   "../../config/memory.js"              : null
 });

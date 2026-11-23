@@ -53,6 +53,10 @@
     { "name": "idx_fragments_content_tokens", "table": "fragments",
       "definition": "ON agent_memory.fragments USING gin (content_tokens)" },
     { "name": "idx_fragments_world_time", "table": "fragments",
-      "definition": "ON agent_memory.fragments ((COALESCE(event_time, mention_time, created_at))) WHERE valid_to IS NULL" }
+      "definition": "ON agent_memory.fragments ((COALESCE(event_time, mention_time, created_at))) WHERE valid_to IS NULL" },
+    { "name": "idx_fragment_links_part_of_from", "table": "fragment_links",
+      "definition": "ON agent_memory.fragment_links (from_id, to_id) WHERE relation_type = 'part_of' AND deleted_at IS NULL" },
+    { "name": "idx_fragment_links_part_of_to", "table": "fragment_links",
+      "definition": "ON agent_memory.fragment_links (to_id, from_id) WHERE relation_type = 'part_of' AND deleted_at IS NULL" }
   ]
 }

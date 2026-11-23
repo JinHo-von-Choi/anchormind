@@ -31,6 +31,7 @@ mock.module("../../lib/config.js", {
     provenanceEnabled      : () => true,
     /** 분할 후보 질의의 보존 조건(RetentionGuard): 전역 auto */
     retentionModeSetting: () => ({ mode: "auto", autoAfter: null, pending: false, effective: "auto" }),
+    retentionProtectPartOfEnabled: () => false,
     reviewQueueEnabled     : () => true,
     directiveOriginGateMode: () => "warn",
     sensitiveScanMode      : () => "mask",

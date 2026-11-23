@@ -58,6 +58,7 @@ const RUNTIME = {
   MEMENTO_MISSING_WORKSPACE:                "cfg.missingWorkspacePolicy()",
   MEMENTO_GC_THROUGHPUT:                    "cfg.gcThroughputEnabled() ? 'on' : 'off'",
   MEMENTO_RETENTION_MODE:                   "cfg.retentionModeSetting().mode",
+  MEMENTO_RETENTION_PROTECT_PART_OF:        "cfg.retentionProtectPartOfEnabled()",
   MEMENTO_CONTEXT_ANNOTATE:                 "cfg.contextAnnotateEnabled() ? 'on' : 'off'",
   MEMENTO_PROVENANCE:                       "cfg.provenanceEnabled() ? 'on' : 'off'",
   MEMENTO_REVIEW_QUEUE:                     "cfg.reviewQueueEnabled() ? 'on' : 'off'",
