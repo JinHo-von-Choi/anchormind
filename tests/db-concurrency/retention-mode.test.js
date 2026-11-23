@@ -170,4 +170,20 @@ describe("낮은 importance 중복 저장", () => {
     assert.equal(again.id, first.id);
     assert.equal((await rowOf(first.id)).ttl_tier, "permanent");
   });
+
+  it("자동 정리가 꺼진 범위면 중복 저장 방지 장치의 응답에도 retention을 싣는다", async () => {
+    process.env.MEMENTO_REMEMBER_DUPLICATE_GUARD = "true";
+    try {
+      await scope({ workspace: "dup", autoLifecycle: false });
+      const mm  = new MemoryManager();
+      const ctx = { _keyId: key, _groupKeyIds: [key], workspace: "dup", agentId: "default" };
+      const content = `${RUN} 야간 배치는 끝나면 결과 요약을 운영 채널에 한 줄로 남긴다`;
+      await mm.remember({ ...ctx, content, topic: RUN, type: "fact", importance: 0.9 });
+      const again = await mm.remember({ ...ctx, content, topic: RUN, type: "fact", importance: 0.2 });
+      assert.equal(again.existing, true);
+      assert.deepEqual(again.retention, { mode: "manual" });
+    } finally {
+      delete process.env.MEMENTO_REMEMBER_DUPLICATE_GUARD;
+    }
+  });
 });
