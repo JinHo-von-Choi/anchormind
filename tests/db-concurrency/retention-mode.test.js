@@ -23,7 +23,7 @@ await prepareLaneDatabase();
 
 const { shutdownPool }       = await import("../../lib/tools/db.js");
 const { createApiKey }       = await import("../../lib/admin/ApiKeyStore.js");
-const { setRetentionPolicy, setRetentionScope, listRetentionPolicies, normalizeScopeInput } =
+const { setRetentionPolicy, setRetentionScope, listRetentionPolicies, normalizeScopeInput, previewRetentionScope } =
   await import("../../lib/admin/RetentionPolicyStore.js");
 const { FragmentGC }         = await import("../../lib/memory/consolidate/FragmentGC.js");
 const { deleteRetentionExpired } = await import("../../lib/memory/consolidate/RetentionGC.js");
@@ -202,11 +202,16 @@ describe("part_of 묶음 보호", () => {
     return pieces;
   }
 
-  it("켜면 형제가 남아 있는 분할 조각을 만료 삭제와 permanent 강등에서 빼고, 끄면 지금처럼 지운다", async () => {
+  it("켜면 형제가 남아 있는 분할 조각을 만료 삭제와 permanent 강등에서 빼고, 끄면 지금처럼 지운다. 미리보기 수도 같다", async () => {
     process.env.MEMENTO_RETENTION_PROTECT_PART_OF = "true";
     const [a, b] = await splitGroup();
     const [p]    = await splitGroup({ tier: "permanent" });
     const gc     = new FragmentGC();
+    const counts = async () => {
+      const { counts: c } = await previewRetentionScope(key, "ws-a");
+      return [c.expiredDelete, c.permanentDemote];
+    };
+    assert.deepEqual(await counts(), [0, 0]);
     await gc.deleteExpired();
     await gc.transitionTTL();
     assert.ok(await rowOf(a));
@@ -214,6 +219,7 @@ describe("part_of 묶음 보호", () => {
     assert.equal((await rowOf(p)).ttl_tier, "permanent");
 
     delete process.env.MEMENTO_RETENTION_PROTECT_PART_OF;
+    assert.deepEqual(await counts(), [2, 2]);
     await gc.deleteExpired();
     assert.equal(await rowOf(a), null);
     assert.equal(await rowOf(b), null);

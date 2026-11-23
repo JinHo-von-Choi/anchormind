@@ -10,7 +10,7 @@
 import { describe, it } from "node:test";
 import assert           from "node:assert/strict";
 
-import { FragmentGC }                                    from "../../lib/memory/consolidate/FragmentGC.js";
+import { FragmentGC, permanentDemoteSql }                from "../../lib/memory/consolidate/FragmentGC.js";
 import { FragmentSearch }                                from "../../lib/memory/read/FragmentSearch.js";
 import { sanitizeInsertImportance, FragmentWriter }      from "../../lib/memory/write/FragmentWriter.js";
 import { FragmentStore }                                 from "../../lib/memory/write/FragmentStore.js";
@@ -67,11 +67,13 @@ describe("co_retrieved spreading activation", () => {
 // ── permanent parole ────────────────────────────────────────────────
 
 describe("permanent parole", () => {
-    it("transitionTTL에 permanent→cold 강등 조건이 존재한다", () => {
+    it("transitionTTL이 permanent→cold 강등 조건(permanentDemoteSql)으로 cold로 내린다", () => {
         const src = FragmentGC.toString();
-        assert.ok(src.includes("permanent"));
-        assert.ok(src.includes("cold"));
-        assert.ok(src.includes("180 days"));
+        assert.ok(src.includes("permanentDemoteSql"));
+        assert.ok(src.includes("ttl_tier = 'cold'"));
+        const cond = permanentDemoteSql("f");
+        assert.ok(cond.includes("f.ttl_tier = 'permanent'"));
+        assert.ok(cond.includes("180 days"));
     });
 });
 
