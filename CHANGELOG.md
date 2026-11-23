@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.2.0] - 2026-11-23
+
 ### Added
 
 - 보존 모드. 자동 정리를 범위마다 끌 수 있다. 전역은 `MEMENTO_RETENTION_MODE`(auto, manual. 기본 auto, 잘못된 값은 manual), 키 전체나 workspace 하나는 `key_retention_policies`의 새 열 `auto_lifecycle`, `auto_resume_at`, `no_expiry`(migration-084)로 정한다. manual 범위에서는 정리 주기와 저장 경로가 자동 판단으로 파편을 지우거나(`expired_delete`, `purge_stale_reflections`), 닫거나(중복 병합, 의미 중복 병합, 대체 판정, 모순 해소, 분할, 압축, 저장 직후 완전 중복, 검토 자동 거절), permanent를 cold로 내리지 않는다. 순위 신호, forget, 관리자가 정한 보존 기간은 그대로다. 기본 동작은 바뀌지 않는다.
