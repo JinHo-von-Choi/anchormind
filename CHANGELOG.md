@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.3.0] - 2026-11-28
+
 ### Added
 
 - 선택형 Rust 토크나이저. `npm run build:native`로 모듈을 빌드하고 `MEMENTO_TOKEN_COUNTER=native` 또는 `MEMENTO_GARU_BACKEND=native`로 각각 켠다. 네이티브 모듈을 쓸 수 없으면 기존 JS·WASM 구현으로 돌아간다.
