@@ -49,7 +49,8 @@ Values accepted by numeric, enumerated and boolean environment variables. Handli
 | inner, outer (any other value is inner) | MEMENTO_SEMANTIC_THRESHOLD_MODE |
 | configured, local_only (any other value is configured) | MEMENTO_EGRESS_UNKNOWN_KEY |
 | none, all (any other value is none) | MEMENTO_LLM_CLI_TOOL_APPROVAL |
-| true, false (any other value is false) | MEMENTO_CONFIG_STRICT |
+| true, false (any other value is false) | MEMENTO_CONFIG_STRICT, MEMENTO_DB_REQUIRE_RLS |
+| true, false (any other value is true) | MEMENTO_ADMIN_LEGACY_ASSETS |
 | true, false (any other value fails startup in `MEMORY_CONFIG` validation) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (any other value is off) | MEMENTO_ADMIN_AUTH_BACKOFF, MEMENTO_SESSION_LESSONS |
 | auto, manual (any other value is manual) | MEMENTO_RETENTION_MODE |
@@ -101,6 +102,8 @@ The kind is determined automatically from the code and must match the registry.
 | DB_STATEMENT_TIMEOUT_MS | 30000 | Query time limit (ms) for user request paths. 0 means unlimited. Not applied to system and admin maintenance paths |
 | REQUEST_TIMEOUT_MS | 60000 | Request receive limit (ms). 0 means unlimited |
 | MEMENTO_CONFIG_STRICT | false | Reports problems in numeric, enumerated and boolean environment variables as one startup log line. A non-numeric value falls back to the default; a non-integer or out-of-range value is used as given and only reported (`MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`, `MEMENTO_SHUTDOWN_DEADLINE_MS`, `MEMENTO_SCORE_UPDATE_BATCH`, `MEMENTO_SESSION_KEY_RECHECK_MS`, `MEMENTO_DB_LOCK_RETRY_MAX` and `MEMENTO_LEXICAL_TIMEOUT_MS` fall back to the default when out of range). A whitespace-only value counts as unset. When `true`, startup stops with exit code 78 if any problem is found |
+| MEMENTO_DB_REQUIRE_RLS | false | When `true`, checks the primary and batch database roles and their effective row security before accepting requests. A failed or unverifiable preflight exits with code 78. See the [row-level security procedure](operations/row-level-security.md) after separating roles |
+| MEMENTO_ADMIN_LEGACY_ASSETS | true | Uses admin assets that older instances can serve. Set to `false` to enable the lightweight assets once every instance serves the new assets |
 | KEEP_ALIVE_TIMEOUT_MS | 75000 | Keep-Alive connection lifetime (ms). Match the proxy setting |
 | HEADERS_TIMEOUT_MS | 76000 | Request header receive limit (ms). Keep it larger than KEEP_ALIVE_TIMEOUT_MS |
 | LOG_LEVEL | info (debug when NODE_ENV is not production) | winston log level |

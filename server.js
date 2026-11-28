@@ -23,7 +23,7 @@ import http from "http";
 import { resolveClientIp, applyBaseResponseHeaders, recommendedSettingsGap } from "./lib/http/helpers.js";
 
 /** 설정 */
-import { PORT, BIND_HOST, ACCESS_KEY, AUTH_DISABLED, REDIS_ENABLED, wmPgFallbackEnabled, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI, SHUTDOWN_DEADLINE_MS, envInt, CONFIG_STRICT, getConfigIssues } from "./lib/config.js";
+import { PORT, BIND_HOST, ACCESS_KEY, AUTH_DISABLED, REDIS_ENABLED, wmPgFallbackEnabled, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI, SHUTDOWN_DEADLINE_MS, envInt, CONFIG_STRICT, DB_REQUIRE_RLS, getConfigIssues } from "./lib/config.js";
 import { MEMORY_CONFIG }          from "./config/memory.js";
 import { validateMemoryConfig }   from "./config/validate-memory-config.js";
 import { currentSwitchLine }      from "./config/switches.js";
@@ -44,7 +44,7 @@ import {
 
 /** 도구 (통계 저장용) */
 import { saveAccessStats } from "./lib/tools/index.js";
-import { shutdownPool, getPrimaryPool } from "./lib/tools/db.js";
+import { shutdownPool, getPrimaryPool, getBatchPool } from "./lib/tools/db.js";
 import { drainAllWorkers } from "./lib/memory/workers/registry.js";
 
 /** 메트릭 */
@@ -67,6 +67,7 @@ import { checkEmbeddingConsistency } from "./scripts/check-embedding-consistency
 
 /** 미적용 migration 검사 */
 import { warnPendingMigrations } from "./lib/memory/admin/PendingMigrations.js";
+import { inspectRuntimeRls } from "./lib/memory/admin/RuntimeRls.js";
 import { isRateLimitedAdminRequest } from "./lib/admin/admin-route-table.js";
 
 /** OpenAPI */
@@ -129,16 +130,23 @@ const IP_LIMITED_OAUTH_POSTS = new Map([
 /** 종료 절차가 DB 풀을 닫기 전에 처리 중인 요청이 끝나기를 기다린다. */
 const requestTracker = createRequestTracker();
 
+function applyAdminAssetResponseHeaders(pathname, res) {
+  if (pathname.startsWith(`${ADMIN_BASE}/assets/`)) {
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Cache-Control", "no-store");
+  }
+}
+
 const server = http.createServer(requestTracker.wrap(async (req, res) => {
   const startTime = process.hrtime.bigint();
 
   applyBaseResponseHeaders(res);
 
+  const url = new URL(req.url || "/", "http://localhost");
+  applyAdminAssetResponseHeaders(url.pathname, res);
   if (!validateOrigin(req, res)) {
     return;
   }
-
-  const url = new URL(req.url || "/", "http://localhost");
 
   /* GET /health, /health/live, /health/ready */
   if (req.method === "GET" && HEALTH_ROUTES.has(url.pathname)) {
@@ -262,8 +270,7 @@ const server = http.createServer(requestTracker.wrap(async (req, res) => {
   }
 
   if (req.method === "GET" && url.pathname.startsWith(`${ADMIN_BASE}/assets/`)) {
-    handleAdminStatic(req, res);
-    return;
+    return handleAdminStatic(req, res);
   }
 
   /* Admin API (라우트 표의 ipLimit 항목: 인증, 키 생성, 가져오기, 자기 정보에 IP별 rate limit 적용) */
@@ -352,6 +359,22 @@ if (configIssues.length > 0) {
 logInfo(currentSwitchLine());
 logInfo(describeWorkingMemoryBackend({ redisEnabled: REDIS_ENABLED, fallbackEnabled: wmPgFallbackEnabled() }));
 setAnchorAutoPromotionEnabled(MEMORY_CONFIG.consolidate?.autoPromoteAnchors !== false);
+
+if (DB_REQUIRE_RLS) {
+  try {
+    const checks = await Promise.all([
+      inspectRuntimeRls(getPrimaryPool()),
+      inspectRuntimeRls(getBatchPool())
+    ]);
+    if (checks.some(check => !check.ok)) {
+      console.error("[Startup] MEMENTO_DB_REQUIRE_RLS: runtime roles or table policies did not pass RLS preflight.");
+      process.exit(78);
+    }
+  } catch (err) {
+    console.error("[Startup] MEMENTO_DB_REQUIRE_RLS: RLS preflight could not be verified.", err?.code ?? "");
+    process.exit(78);
+  }
+}
 
 server.listen(PORT, BIND_HOST || undefined, () => {
   console.log(`Memento MCP HTTP server listening on ${BIND_HOST || "all interfaces"} port ${server.address().port}`);

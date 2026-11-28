@@ -76,7 +76,7 @@ function makeSlowSearch({ l2Rows, l3Rows, delayMs }) {
     searchByTopic    : async () => [],
     searchByType     : async () => [],
     getRecent        : async () => [],
-    getCachedFragment: async () => null,
+    getCachedFragments: async ids => ids.map(() => null),
     cacheFragment    : async () => {},
     index            : async () => {}
   };
@@ -93,6 +93,7 @@ function makeSlowSearch({ l2Rows, l3Rows, delayMs }) {
     touchLinked     : async () => {}
   };
   search.embeddingCache = { get: async () => null, set: () => {} };
+  search.pendingQueryEmbeddings = new Map();
   search._morphemeIndex = {
     textToMorphemeVector: async () => {
       throw new Error("morphemeIndex는 _skipMorpheme=true일 때 절대 호출되면 안 된다");

@@ -72,8 +72,8 @@ describe("admin index.html shell structure", () => {
     );
   });
 
-  test("includes Tailwind script from the console asset path", () => {
-    assert.ok(html.includes("/v1/internal/model/nothing/assets/vendor/tailwindcss-"), "Tailwind script not found");
+  test("includes compiled Tailwind utilities from the console asset path", () => {
+    assert.ok(html.includes("/v1/internal/model/nothing/assets/admin-utilities.css"));
   });
 
   test("includes JetBrains Mono font", () => {
@@ -88,8 +88,8 @@ describe("admin index.html shell structure", () => {
     assert.ok(html.includes("Material+Symbols+Outlined"), "Material Symbols not found");
   });
 
-  test("includes tailwind-config script", () => {
-    assert.ok(html.includes('id="tailwind-config"'), "tailwind-config not found");
+  test("does not need the browser Tailwind compiler", () => {
+    assert.doesNotMatch(html, /tailwind-config|vendor\/tailwindcss/);
   });
 
   test("has dark class on html element", () => {

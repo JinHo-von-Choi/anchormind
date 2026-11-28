@@ -35,6 +35,7 @@
   "scripts": {
     "start": "node server.js",
     "build:native": "node scripts/build-native-tokenizers.mjs",
+    "build:admin-css": "tailwindcss --config assets/admin/tailwind.config.mjs --input assets/admin/tailwind.input.css --output assets/admin/admin-utilities.css --minify",
     "test": "DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false node --experimental-test-module-mocks --test tests/unit/*.test.js tests/unit/*/*.test.js tests/structure/*.test.js",
     "test:coverage": "mkdir -p coverage && DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off REDIS_ENABLED=false CACHE_ENABLED=false node --experimental-test-module-mocks --test --experimental-test-coverage --test-coverage-exclude='tests/**' --test-reporter=dot --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info tests/unit/*.test.js tests/unit/*/*.test.js tests/structure/*.test.js && node scripts/check-coverage.js coverage/lcov.info",
     "test:integration": "DOTENV_CONFIG_PATH=.env.test MEMENTO_METRICS_DEFAULT=off node --experimental-test-module-mocks --test tests/integration/*.test.js tests/e2e/*.test.js",
@@ -73,9 +74,12 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@tailwindcss/container-queries": "0.1.1",
+    "@tailwindcss/forms": "0.5.10",
     "acorn": "^8.19.0",
     "audit-ci": "^7.1.0",
-    "eslint": "^10.15.0"
+    "eslint": "^10.15.0",
+    "tailwindcss": "3.4.17"
   },
   "overrides": {
     "fast-uri": "^3.1.5",

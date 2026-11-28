@@ -5,7 +5,7 @@
  * 작성일: 2026-04-07
  */
 
-import { state, navigate, beginRender, syncRoute }      from "./state.js";
+import { state, navigate, beginRender, syncRoute } from "./state.js";
 import { api, downloadToFile }                           from "./api.js";
 import { showToast, showModal, closeModal }              from "./ui.js";
 import { fmt, fmtDate, fmtPct, truncate, loadingHtml }  from "./format.js";
@@ -193,6 +193,8 @@ export function renderFragmentList(fragments) {
     const item = document.createElement("div");
     item.className = "bg-surface-container-low p-4 hover:bg-surface-container-high border-l border-transparent hover:border-primary/50 cursor-pointer" + (f.id === state.selectedFragment?.id ? " border-primary/50 bg-surface-container-high" : "");
     item.dataset.fragId = f.id;
+    item.tabIndex = 0;
+    item.setAttribute("role", "button");
 
     /* Top row */
     const topRow = document.createElement("div");
@@ -705,7 +707,6 @@ async function loadFragmentHistory(fragId, slot) {
 export function renderPagination() {
   const total   = state.memoryPages;
   const current = state.memoryPage;
-  if (total <= 1) return document.createDocumentFragment();
 
   const wrap = document.createElement("div");
   wrap.className = "flex gap-1 mt-4 justify-center items-center";
@@ -718,6 +719,7 @@ export function renderPagination() {
     const btn = document.createElement("button");
     btn.className = cls;
     btn.dataset.page = page;
+    btn.dataset.paginationControl = `page-${page}`;
     btn.textContent = label;
     if (page < 1 || page > total) {
       btn.disabled = true;
@@ -727,19 +729,44 @@ export function renderPagination() {
     return btn;
   }
 
-  function mkArrow(iconName, page) {
+  function mkArrow(iconName, page, label, disabled) {
     const btn = document.createElement("button");
     btn.className = arrowCls;
     btn.dataset.page = page;
+    btn.dataset.paginationControl = iconName;
+    btn.setAttribute("aria-label", label);
     const icon = document.createElement("span");
     icon.className = "material-symbols-outlined text-sm";
     icon.textContent = iconName;
     btn.appendChild(icon);
-    if (page < 1 || page > total) { btn.disabled = true; btn.style.opacity = "0.3"; }
+    if (disabled) { btn.disabled = true; btn.style.opacity = "0.3"; }
     return btn;
   }
 
-  wrap.appendChild(mkArrow("chevron_left", current - 1));
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.id = "memory-toggle-total";
+  toggle.dataset.paginationControl = "toggle";
+  toggle.className = btnCls;
+  toggle.textContent = state.memoryShowTotal ? "빠른 목록" : "정확한 총계 및 페이지";
+  wrap.appendChild(toggle);
+  wrap.appendChild(mkArrow("chevron_left", current - 1, "이전 페이지", current <= 1));
+
+  if (total === null) {
+    const label = document.createElement("span");
+    label.className = activeCls;
+    label.textContent = `${current} 페이지`;
+    wrap.appendChild(label);
+    wrap.appendChild(mkArrow("chevron_right", current + 1, "다음 페이지", !state.memoryHasMore));
+    return wrap;
+  }
+
+  if (Number.isInteger(state.memoryTotal)) {
+    const count = document.createElement("span");
+    count.className = "text-xs text-slate-400";
+    count.textContent = `총 ${fmt(state.memoryTotal)}건`;
+    wrap.appendChild(count);
+  }
 
   /* Window of 10 pages centered on current */
   const windowSize = 10;
@@ -774,7 +801,7 @@ export function renderPagination() {
     wrap.appendChild(mkBtn(String(total), total, btnCls));
   }
 
-  wrap.appendChild(mkArrow("chevron_right", current + 1));
+  wrap.appendChild(mkArrow("chevron_right", current + 1, "다음 페이지", !state.memoryHasMore));
 
   return wrap;
 }
@@ -787,10 +814,14 @@ function closeFragmentInspector() {
   if (!slot) return;
   slot.classList.remove("open");
   slot.textContent = "";
+  const previousId = state.selectedFragmentId;
   state.selectedFragment   = null;
   state.selectedFragmentId = null;
   syncRoute();
-  document.querySelectorAll("[data-frag-id]").forEach(el => el.classList.remove("frag-selected"));
+  document.querySelectorAll("[data-frag-id]").forEach(el => {
+    el.classList.remove("frag-selected");
+    if (el.dataset.fragId === previousId) el.focus();
+  });
 }
 
 document.addEventListener("keydown", e => {
@@ -969,6 +1000,56 @@ function slotError(message) {
   return el;
 }
 
+const pageCursors = new Map([[1, ""]]);
+
+function resetMemoryCursors() {
+  pageCursors.clear();
+  pageCursors.set(1, "");
+}
+
+function clearPageCursorsFrom(page) {
+  for (const cachedPage of pageCursors.keys()) {
+    if (cachedPage >= page) pageCursors.delete(cachedPage);
+  }
+}
+
+async function fetchMemoryPage(params, signal) {
+  const page = state.memoryPage;
+  params.set("page", page);
+  if (state.memoryShowTotal) return api("/memory/fragments?" + params, { signal });
+  params.set("include_total", "false");
+  const cursor = pageCursors.get(page);
+  if (cursor === undefined) return api("/memory/fragments?" + params, { signal });
+  const seek = new URLSearchParams(params);
+  seek.set("cursor", cursor);
+  const result = await api("/memory/fragments?" + seek, { signal });
+  if (result.data?.error === "invalid_cursor") {
+    seek.set("page", "1");
+    seek.set("cursor", "");
+    return { ...await api("/memory/fragments?" + seek, { signal }), restarted: true };
+  }
+  if (result.data?.error === "cursor_unavailable") return api("/memory/fragments?" + params, { signal });
+  return result;
+}
+
+function applyMemoryPage(result) {
+  if (result.restarted) {
+    state.memoryPage = 1;
+    resetMemoryCursors();
+    syncRoute();
+  }
+  const data = result.ok ? result.data ?? {} : {};
+  state.fragments = Array.isArray(data) ? data : data.items ?? data.fragments ?? [];
+  const nextPage = state.memoryPage + 1;
+  if (!state.memoryShowTotal && pageCursors.get(nextPage) !== data.nextCursor) {
+    clearPageCursorsFrom(nextPage);
+    if (typeof data.nextCursor === "string") pageCursors.set(nextPage, data.nextCursor);
+  }
+  state.memoryTotal = Number.isInteger(data.total) ? data.total : null;
+  state.memoryPages = state.memoryTotal === null ? null : Math.ceil(state.memoryTotal / (data.limit ?? 20)) || 1;
+  state.memoryHasMore = state.memoryPages === null ? data.hasMore === true : state.memoryPage < state.memoryPages;
+}
+
 /**
  * 메모리 운영 화면. 파편 목록, 검색 분석, 이상 징후를 따로 불러와 먼저 온 것부터 그린다.
  *
@@ -976,6 +1057,7 @@ function slotError(message) {
  */
 export async function renderMemory(container) {
   const ctx = beginRender();
+  resetMemoryCursors();
   syncRoute();
   container.textContent = "";
 
@@ -1021,37 +1103,36 @@ export async function renderMemory(container) {
   if (state.memoryFilter.type)     params.set("type",     state.memoryFilter.type);
   if (state.memoryFilter.key_id)   params.set("key_id",   state.memoryFilter.key_id);
   if (state.memoryFilter.group_id) params.set("group_id", state.memoryFilter.group_id);
-  params.set("page", state.memoryPage);
-
-  const loadMain = (async () => {
-    const [fragRes, groupsRes] = await Promise.all([
-      api("/memory/fragments?" + params, { signal: ctx.signal }),
-      api("/groups", { signal: ctx.signal })
-    ]);
-    if (!ctx.isCurrent()) return;
-    if (groupsRes.ok) state.groups = groupsRes.data ?? [];
-
-    if (fragRes.ok) {
-      const data = fragRes.data ?? {};
-      if (Array.isArray(fragRes.data)) {
-        state.fragments   = fragRes.data;
-        state.memoryPages = 1;
-      } else {
-        state.fragments   = data.items ?? data.fragments ?? [];
-        state.memoryPages = Math.ceil((data.total ?? 0) / (data.limit ?? 20)) || 1;
-      }
-    } else {
-      state.fragments = [];
-    }
-
-    filterSlot.textContent = "";
-    filterSlot.appendChild(renderMemoryFilters());
+  const paginationSlot = document.createElement("div");
+  let pageRequest;
+  const refreshPage = async () => {
+    pageRequest?.abort();
+    pageRequest = new AbortController();
+    const signal = AbortSignal.any([pageRequest.signal, ctx.signal]);
+    syncRoute();
+    const result = await fetchMemoryPage(new URLSearchParams(params), signal);
+    if (signal.aborted || !ctx.isCurrent()) return;
+    const active = document.activeElement;
+    const control = active && paginationSlot.contains(active) ? active.dataset.paginationControl : null;
+    applyMemoryPage(result);
     centerCol.textContent = "";
-    if (!fragRes.ok) centerCol.appendChild(slotError(`파편 조회 실패 (${fragRes.status || fragRes.error})`));
+    if (!result.ok) centerCol.appendChild(slotError(`파편 조회 실패 (${result.status || result.error})`));
     centerCol.appendChild(renderFragmentList(state.fragments));
-    centerCol.appendChild(renderPagination());
-    wireMemoryEvents(container);
+    centerCol.appendChild(paginationSlot);
+    paginationSlot.replaceChildren(renderPagination());
+    if (control) restorePaginationFocus(paginationSlot, control);
+    wireMemoryPagination(paginationSlot, refreshPage);
+    wireFragmentRows(centerCol);
     if (state.selectedFragmentId) showFragmentDetail(state.selectedFragmentId);
+  };
+  const loadMain = refreshPage();
+
+  const loadGroups = (async () => {
+    const result = await api("/groups", { signal: ctx.signal });
+    if (!ctx.isCurrent()) return;
+    if (result.ok) state.groups = result.data ?? [];
+    filterSlot.appendChild(renderMemoryFilters());
+    wireMemoryFilters(container);
   })();
 
   const loadAnalytics = (async () => {
@@ -1074,11 +1155,18 @@ export async function renderMemory(container) {
     anomalySlot.appendChild(renderAnomalyCards(state.anomalies));
   })();
 
-  await Promise.all([loadMain, loadAnalytics, loadAnomalies]);
+  await Promise.all([loadMain, loadGroups, loadAnalytics, loadAnomalies]);
 }
 
-/** 필터, 내보내기, 가져오기, 쪽 이동, 파편 선택 이벤트를 연결한다. */
-function wireMemoryEvents(container) {
+function restorePaginationFocus(slot, control) {
+  const enabled = [...slot.querySelectorAll("[data-pagination-control]")].filter(button => !button.disabled);
+  const same = enabled.find(button => button.dataset.paginationControl === control);
+  const current = enabled.find(button => button.dataset.paginationControl === `page-${state.memoryPage}`);
+  (same ?? current ?? enabled[0])?.focus();
+}
+
+/** 필터, 내보내기, 가져오기 이벤트를 연결한다. */
+function wireMemoryFilters(container) {
   /* Event: search (버튼 + 입력 Enter 공용) */
   const readFilterInputs = () => {
     state.memoryFilter.q        = document.getElementById("filter-q")?.value ?? "";
@@ -1107,17 +1195,31 @@ function wireMemoryEvents(container) {
   });
   document.getElementById("import-jsonl")?.addEventListener("click", () => openImportDialog(container));
 
-  /* Event: pagination */
-  container.querySelectorAll("[data-page]").forEach(btn => {
+}
+
+function wireFragmentRows(container) {
+  container.querySelectorAll("[data-frag-id]").forEach(el => {
+    el.addEventListener("click", () => showFragmentDetail(el.dataset.fragId));
+    el.addEventListener("keydown", event => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      showFragmentDetail(el.dataset.fragId);
+    });
+  });
+}
+
+function wireMemoryPagination(slot, refreshPage) {
+  slot.querySelector("#memory-toggle-total")?.addEventListener("click", () => {
+    state.memoryShowTotal = !state.memoryShowTotal;
+    resetMemoryCursors();
+    refreshPage();
+  });
+  slot.querySelectorAll("[data-page]").forEach(btn => {
     btn.addEventListener("click", () => {
       state.memoryPage         = parseInt(btn.dataset.page);
       state.selectedFragmentId = null;
-      renderMemory(container);
+      closeFragmentInspector();
+      refreshPage();
     });
-  });
-
-  /* Event: fragment click — 부분 렌더 (전체 재렌더·재호출 없음) */
-  container.querySelectorAll("[data-frag-id]").forEach(el => {
-    el.addEventListener("click", () => showFragmentDetail(el.dataset.fragId));
   });
 }

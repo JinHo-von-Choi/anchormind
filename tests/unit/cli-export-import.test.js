@@ -14,6 +14,26 @@ import assert from "node:assert/strict";
 import fs     from "node:fs";
 import path   from "node:path";
 import os     from "node:os";
+import { Readable } from "node:stream";
+import { withImportSnapshot } from "../../lib/memory/transfer/ImportSnapshot.js";
+
+it("재개 가져오기 스냅샷은 CRLF와 다중 바이트를 포함한 커밋 위치 다음부터 읽는다", async () => {
+  const first = '{"content":"한글 첫 줄","topic":"첫째"}\r\n';
+  const second = '{"content":"한글 둘째 줄","topic":"둘째"}';
+  const input = Buffer.from(first + "\r\n" + second);
+  const collect = async (records) => {
+    const items = [];
+    for await (const record of records) items.push(record);
+    return items;
+  };
+  await withImportSnapshot(Readable.from([input.subarray(0, 18), input.subarray(18)]), async ({ records }) => {
+    const all = await collect(records());
+    assert.deepEqual(all.map(row => [row.lineNo, row.byteEnd]), [[1, Buffer.byteLength(first)], [3, input.length]]);
+    assert.deepEqual(await collect(records(1, Buffer.byteLength(first))), all.slice(1));
+  });
+  await assert.rejects(withImportSnapshot(Readable.from([input]), () => assert.fail("oversized input was read"),
+    { maxBytes: input.length - 1 }), { statusCode: 413 });
+});
 
 /** ---- 헬퍼: 임시 JSONL 파일 ---- */
 function writeTempJsonl(rows) {

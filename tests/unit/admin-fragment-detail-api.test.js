@@ -60,6 +60,38 @@ beforeEach(() => {
 
 /* ── GET /memory/fragments — 목록 필드/검색 ── */
 describe("GET /memory/fragments 목록", () => {
+  it("기본 응답은 정확한 총계를 유지한다", async () => {
+    queryResults = [{ rows: [{ total_count: 42, id: "one" }] }];
+    const res = fakeRes();
+    await handleMemory({ method: "GET" }, res, makeUrl(`${ADMIN_BASE}/memory/fragments`));
+    assert.equal(queryCalls.length, 1);
+    assert.deepEqual(JSON.parse(res.body), { items: [{ id: "one" }], total: 42, page: 1, limit: 20 });
+  });
+
+  it("정확한 총계를 요청한 빈 페이지도 현재 총계를 반환한다", async () => {
+    queryResults = [{ rows: [{ total_count: 12, id: null }] }];
+    const res = fakeRes();
+    await handleMemory({ method: "GET" }, res, makeUrl(`${ADMIN_BASE}/memory/fragments?page=4`));
+    assert.deepEqual(JSON.parse(res.body), { items: [], total: 12, page: 4, limit: 20 });
+  });
+
+  it("총계 생략은 한 행을 더 읽어 다음 페이지를 알려 준다", async () => {
+    queryResults = [{ rows: [{ id: "three" }, { id: "four" }, { id: "five" }] }];
+    const res = fakeRes();
+    await handleMemory({ method: "GET" }, res, makeUrl(`${ADMIN_BASE}/memory/fragments?page=2&limit=2&include_total=false`));
+    assert.equal(queryCalls.length, 1);
+    assert.deepEqual(queryCalls[0].params, [3, 2]);
+    assert.deepEqual(JSON.parse(res.body), { items: [{ id: "three" }, { id: "four" }], hasMore: true, page: 2, limit: 2 });
+  });
+
+  it("총계 전용 조회에도 목록 필터를 적용한다", async () => {
+    queryResults = [{ rows: [{ total: 7 }] }];
+    const res = fakeRes();
+    await handleMemory({ method: "GET" }, res, makeUrl(`${ADMIN_BASE}/memory/fragments?type=fact&count_only=true`));
+    assert.equal(queryCalls.length, 1);
+    assert.deepEqual(queryCalls[0].params, ["fact"]);
+    assert.deepEqual(JSON.parse(res.body), { total: 7 });
+  });
   it("SELECT가 content alias·keywords·access_count를 포함한다", async () => {
     queryResults = [{ rows: [{ total: 0 }] }, { rows: [] }];
     const res = fakeRes();

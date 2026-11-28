@@ -720,5 +720,5 @@ export async function renderOverview(container) {
     document.body.appendChild(bs);
   }
 
-  await refresh();
+  await (auto.refresh ?? refresh)();
 }

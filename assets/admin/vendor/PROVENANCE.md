@@ -3,7 +3,7 @@
 작성자: 최진호
 작성일: 2026-10-03
 
-콘솔(`assets/admin/index.html`)이 읽는 외부 라이브러리 사본. 파일을 교체하면 이 표와 `tests/unit/admin-console-assets.test.js` 의 sha256 값을 함께 갱신한다.
+그래프가 필요할 때 D3를 읽는다. 이전 콘솔과 롤링 전환할 수 있도록 Tailwind 스크립트 URL을 유지한다. 현재 콘솔의 유틸리티 CSS는 `npm run build:admin-css`로 생성한다. 파일을 교체하면 이 표와 자산 시험의 sha256 값을 갱신하고, D3의 경우 그래프 모듈이 사용하는 버전 해시도 갱신한다.
 
 | 파일 | 버전 | 출처 | sha256 |
 |-|-|-|-|

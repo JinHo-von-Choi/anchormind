@@ -80,6 +80,10 @@ function createRedisMock() {
       return _strings.get(key) ?? null;
     },
 
+    async mget(...keys) {
+      return keys.map(key => _strings.get(key) ?? null);
+    },
+
     async expire() { return 1; },
 
     async del(key) {
@@ -300,6 +304,17 @@ describe("searchByTopic", () => {
 // ---------------------------------------------------------------------------
 
 describe("getCachedFragment", () => {
+  it("묶음 조회는 부분 miss, 순서, 그룹의 첫 namespace를 보존한다", async () => {
+    newRedis();
+    const idx = new FragmentIndex();
+    const first = { id: "a", content: "first" };
+    const second = { id: "b", content: "second" };
+    await idx.cacheFragment("a", first, "K1");
+    await idx.cacheFragment("a", { id: "a", content: "lower priority" }, "K2");
+    await idx.cacheFragment("b", second, "K2");
+    await idx.cacheFragment("other", { id: "other" }, "K3");
+    assert.deepEqual(await idx.getCachedFragments(["b", "other", "a"], ["K1", "K2"]), [second, null, first]);
+  });
 
   it("단일 keyId: K1 namespace에 cached → keyId=K1로 hit", async () => {
     newRedis();

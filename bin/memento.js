@@ -15,6 +15,7 @@
  */
 import { parseArgs } from '../lib/cli/parseArgs.js';
 import { resolveHookRemote } from '../lib/cli/_remoteSettings.js';
+import { withRowAuthorization } from '../lib/tools/row-authorization.js';
 
 /**
  * 현재 디렉터리의 .env를 불러오지 않는 명령.
@@ -36,6 +37,7 @@ const COMMANDS = {
   stats:      () => import('../lib/cli/stats.js'),
   health:     () => import('../lib/cli/health.js'),
   recall:     () => import('../lib/cli/recall.js'),
+  context:    () => import('../lib/cli/context.js'),
   remember:   () => import('../lib/cli/remember.js'),
   inspect:    () => import('../lib/cli/inspect.js'),
   update:     () => import('../lib/cli/update.js'),
@@ -55,7 +57,7 @@ const COMMANDS = {
 };
 
 /** 원격 모드를 지원하지 않는 로컬 전용 명령 목록 */
-const LOCAL_ONLY_COMMANDS = new Set(["serve", "migrate", "cleanup", "backfill", "health", "update", "export", "import", "benchmark", "anchor-scope", "audit", "admin", "group", "workspace", "retention"]);
+const LOCAL_ONLY_COMMANDS = new Set(["serve", "migrate", "cleanup", "backfill", "update", "export", "import", "benchmark", "anchor-scope", "audit", "admin", "group", "workspace", "retention"]);
 
 /**
  * hook 명령의 서버 주소와 키. 프로세스 환경 변수만 읽는다(.env 파일은 읽지 않는다). Claude Code 플러그인
@@ -70,7 +72,7 @@ function hookRemoteSettings() {
 
 /**
  * 명령별 진입점 의존성. hook은 같은 출처의 주소와 키 한 쌍을, init은 PATH 검색 정보를, admin은 프로세스
- * 환경 변수(접속 대상)를 받는다.
+ * 환경 변수(접속 대상)를 받는다. context와 health에는 원격 기본값만 준다.
  *
  * @param {string} cmd
  * @returns {object|undefined}
@@ -79,7 +81,15 @@ function commandOverrides(cmd) {
   if (IS_HOOK)         return { remoteSettings: hookRemoteSettings };
   if (cmd === "init")  return { searchPath: process.env.PATH ?? "", pathExt: process.env.PATHEXT ?? "" };
   if (cmd === "admin") return { env: process.env };
+  if (cmd === "context") return { remote: process.env.MEMENTO_CLI_REMOTE, key: process.env.MEMENTO_CLI_KEY };
+  if (cmd === "health") return { remote: process.env.MEMENTO_CLI_REMOTE };
   return undefined;
+}
+
+async function runCommand(cmd, args, remoteUrl) {
+  const mod = await COMMANDS[cmd]();
+  const run = () => mod.default(args, commandOverrides(cmd));
+  return remoteUrl || cmd === "serve" ? run() : withRowAuthorization({ isMaster: true }, run);
 }
 
 /**
@@ -97,6 +107,7 @@ function printUsage() {
     '  stats                       Show fragment statistics',
     '  health                      Check DB/Redis/embedding connectivity',
     '  recall <query> [--topic x]  Search fragments from terminal',
+    '  context [--view index]      Read full or compact MCP context',
     '  remember <content> --topic  Store a fragment from terminal',
     '  inspect <fragment-id>       Show fragment detail + 1-hop links',
     '  update [--execute] [--redetect]  Check and apply updates (default: dry-run)',
@@ -117,12 +128,12 @@ function printUsage() {
     'Options:',
     '  --help                      Show this help message',
     '  --json                      Output as JSON (where supported)',
-    '  --remote <URL>              MCP 원격 서버 URL (recall/remember/stats/inspect 전용)',
+    '  --remote <URL>              MCP 원격 서버 URL',
     '  --key <KEY>                 API 키 Bearer 토큰 (--remote 사용 시 필수)',
     '  --timeout <ms>              원격 요청 타임아웃 밀리초 (default: 30000)',
     '',
-    'Remote-capable commands: recall, remember, stats, inspect, session',
-    'Local-only commands: serve, migrate, cleanup, backfill, health, update, export, import, benchmark, anchor-scope, audit, admin, group, workspace, retention',
+    'Remote-capable commands: recall, remember, stats, inspect, context, health, session',
+    'Local-only commands: serve, migrate, cleanup, backfill, update, export, import, benchmark, anchor-scope, audit, admin, group, workspace, retention',
   ];
   console.log(lines.join('\n'));
 }
@@ -161,7 +172,7 @@ async function main() {
   const remoteUrl = args.remote || process.env.MEMENTO_CLI_REMOTE;
   if (remoteUrl && LOCAL_ONLY_COMMANDS.has(cmd)) {
     console.error(`'${cmd}' 명령은 로컬 전용입니다. --remote 플래그를 사용할 수 없습니다.`);
-    console.error('원격 모드를 지원하는 명령: recall, remember, stats, inspect');
+    console.error('원격 모드를 지원하는 명령: recall, remember, stats, inspect, context, health, session');
     process.exit(1);
   }
 
@@ -174,8 +185,7 @@ async function main() {
   }
 
   try {
-    const mod = await COMMANDS[cmd]();
-    await mod.default(args, commandOverrides(cmd));
+    await runCommand(cmd, args, remoteUrl);
   } catch (err) {
     console.error(`[${cmd}] ${err.message}`);
     if (args.verbose) {

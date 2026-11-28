@@ -46,6 +46,16 @@
 
 예외: 호출자가 `format_version`이나 `Accept`로 낮은 export 형식 버전을 명시하면 그 버전의 구조로 응답하므로, 낮은 버전에 없는 열이 빠지는 것은 호환을 깨는 변경이 아니라 요청한 형식이다(아래 「협상과 다운그레이드」).
 
+관리 REST 응답은 서버가 발급한 `X-Request-ID`를 싣는다. `Accept: application/problem+json`을 명시한 호출의 JSON 오류는 기존 HTTP 상태와 함께 `type`, `title`, `status`, `requestId`를 반환한다. 오류에 공개 오류 코드가 있으면 `code`를, 지원하지 않는 가져오기 형식 오류에는 `supported` 버전 목록을 추가한다. 기본 오류 본문은 그대로 사용할 수 있다.
+
+`GET /memory/fragments`의 기본 응답은 `items`, 정확한 `total`, `page`, `limit`이다. `include_total=false`는 `total` 대신 불리언 `hasMore`를 반환한다. `count_only=true`는 같은 범위와 필터의 정확한 `total`만 반환한다.
+
+`cursor=`를 보내면 첫 페이지를 `items`, `hasMore`, `nextCursor`, `limit`으로 받는다. 다음 요청에는 반환된 `nextCursor`와 같은 필터를 보낸다. 서버는 요청마다 현재 권한을 확인한다. 필터나 실효 권한이 달라졌거나 커서가 잘못되면 `400 invalid_cursor`를 반환하므로 `cursor=`로 다시 시작한다. 서명에는 인스턴스가 공유하는 `MEMENTO_ACCESS_KEY`를 쓰며 이 값이 없으면 `503 cursor_unavailable`을 반환한다. 조회 도중 최근에 추가된 행은 목록을 새로 열면 볼 수 있다.
+
+관리자 JSONL 가져오기에서 `POST /import/resumable?resume_id=<UUID>`로 재개 작업을 지정한다. 재시도할 때 같은 UUID, 원본 파일, 대상과 권한을 보낸다. 원본의 체크섬을 확인한 뒤 마지막 커밋 이후의 줄만 파싱한다. 완료된 작업은 저장된 결과를 반환한다. `409 import_in_progress`는 기존 실행이 끝난 뒤 재시도할 수 있으며 `409 import_resume_mismatch`는 파일·대상·주체를 확인해야 한다. 혼합 버전 운영 중 `404`가 오면 재개를 지원하는 인스턴스로 다시 요청한다.
+
+`GET /import/resumable?resume_id=<UUID>`는 같은 주체와 대상 옵션으로 작업 상태를 조회한다. `running`은 실행 중, `pending`은 원본 파일로 재개할 수 있는 상태다. `completed`는 원본 업로드 없이 완료 집계를 반환한다.
+
 ## 데이터베이스 스키마
 
 마이그레이션은 확장 후 축소(expand/contract)로 나눈다.

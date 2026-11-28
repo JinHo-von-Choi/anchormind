@@ -81,6 +81,8 @@ const RUNTIME = {
   MEMENTO_RERANKER_ENABLED:                 "cfg.RERANKER_ENABLED",
   MEMENTO_CASE_BACKPROP_ENABLED:            "cfg.CASE_BACKPROP_ENABLED",
   MEMENTO_CONFIG_STRICT:                    "cfg.CONFIG_STRICT",
+  MEMENTO_DB_REQUIRE_RLS:                  "cfg.DB_REQUIRE_RLS",
+  MEMENTO_ADMIN_LEGACY_ASSETS:              "cfg.ADMIN_LEGACY_ASSETS",
   UPDATE_CHECK_DISABLED:                    "cfg.UPDATE_CHECK_DISABLED",
   LLM_CONCURRENCY_ENABLED:                  "cfg.LLM_CONCURRENCY_ENABLED",
   MEMENTO_LLM_CLI_TOOL_APPROVAL:            "approval.cliToolApprovalMode()",

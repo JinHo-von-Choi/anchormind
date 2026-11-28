@@ -121,6 +121,42 @@ describe("파편 목록과 상세", () => {
     assert.equal(none.total, 0);
   });
 
+  it("커서는 NULL, 동점, 마이크로초 순서를 유지하고 필터·권한이 바뀌면 거부한다", async () => {
+    await client.query(`UPDATE agent_memory.fragments SET created_at = CASE
+      WHEN id = $1 THEN NULL
+      WHEN id = $2 THEN '2026-11-28T01:02:03.000001Z'::timestamptz
+      ELSE '2026-11-28T01:02:03.000002Z'::timestamptz END WHERE topic = $3`, [IDS.a, IDS.b, TAG]);
+    const filter = `?topic=${TAG}&limit=1&cursor=`;
+    const first = await memoryGet("owner", "/fragments", filter);
+    assert.equal(first.items[0].id, IDS.a);
+    assert.equal(first.hasMore, true);
+    assert.equal("total" in first, false);
+
+    const token = first.nextCursor;
+    const actual = [first.items[0].id];
+    let after = token;
+    for (let i = 0; i < 3; i++) {
+      const result = await memoryGet("owner", "/fragments", filter + after);
+      actual.push(result.items[0].id);
+      after = result.nextCursor;
+      assert.equal(result.hasMore, i < 2);
+    }
+    assert.equal(after, null);
+    const legacy = await memoryGet("owner", "/fragments", `?topic=${TAG}`);
+    assert.deepEqual(actual, [IDS.a, IDS.a2, IDS.foreign, IDS.b]);
+    assert.deepEqual(actual, legacy.items.map(row => row.id));
+
+    const tampered = (token[0] === "A" ? "B" : "A") + token.slice(1);
+    for (const [kind, query] of [["owner", filter + tampered], ["owner", filter + token + "&type=fact"],
+      ["reviewer", filter + token], ["owner", filter + token + "&count_only=true"]]) {
+      const pathname = `${ADMIN_BASE}/memory/fragments${query}`;
+      const { req, res, url } = requestFor(kind, pathname, "mem.read", kind === "reviewer" ? WS_A : null);
+      await handleMemory(req, res, url);
+      assert.equal(res.statusCode, 400);
+      assert.deepEqual(JSON.parse(res.body), { error: "invalid_cursor" });
+    }
+  });
+
   it("상세의 링크는 범위 안 파편만 싣고 범위 밖 파편 상세는 404다", async () => {
     const owner = await memoryGet("owner", `/fragments/${IDS.a}`);
     assert.deepEqual([...new Set(owner.links.map((l) => l.id))].sort(), [IDS.a2, IDS.b].sort());

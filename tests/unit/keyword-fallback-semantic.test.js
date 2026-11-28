@@ -72,7 +72,7 @@ function makeSearch({ l2Rows, l3Rows }) {
     searchByTopic   : async () => [],
     searchByType    : async () => [],
     getRecent       : async () => [],
-    getCachedFragment: async () => null,
+    getCachedFragments: async ids => ids.map(() => null),
     cacheFragment   : async () => {},
     index           : async () => {}
   };
@@ -88,6 +88,7 @@ function makeSearch({ l2Rows, l3Rows }) {
     touchLinked     : async () => {}
   };
   search.embeddingCache = { get: async () => null, set: () => {} };
+  search.pendingQueryEmbeddings = new Map();
   search._morphemeIndex = { textToMorphemeVector: async () => null };
   return search;
 }

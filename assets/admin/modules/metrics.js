@@ -479,11 +479,12 @@ export function mountMetricsView(container) {
 
     container.querySelector("#metrics-auto-refresh-slot")?.appendChild(auto.element);
     /* 수동 새로고침 버튼 이벤트 재등록 */
-    container.querySelector("#metrics-refresh-btn")?.addEventListener("click", refresh);
+    container.querySelector("#metrics-refresh-btn")?.addEventListener("click", refreshView);
   }
 
   /* 최초 로드 */
-  refresh();
+  const refreshView = auto.refresh ?? refresh;
+  refreshView();
 
   return {
     unmount() {

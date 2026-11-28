@@ -246,17 +246,22 @@ describe("renderFragmentInspector", () => {
    ================================================================ */
 
 describe("renderPagination", () => {
-  test("memoryPages <= 1이면 빈 fragment", () => {
-    state.memoryPages = 1;
+  test("총계 없는 마지막 페이지는 다음 페이지를 막고 총계 요청은 허용한다", () => {
+    state.memoryPages = null;
+    state.memoryPage = 2;
+    state.memoryHasMore = false;
     const el = renderPagination();
-    assert.equal(el.children.length, 0);
+    const buttons = flatQuery(el, "button");
+    assert.equal(buttons[0].id, "memory-toggle-total");
+    assert.equal(buttons[1].dataset.page, 1);
+    assert.ok(buttons[2].disabled);
   });
 
-  test("memoryPages=3이면 5개 버튼 (prev + 3 pages + next)", () => {
+  test("총계 모드는 빠른 목록 전환과 숫자 페이지를 함께 보여 준다", () => {
     state.memoryPages = 3;
     state.memoryPage  = 1;
     const wrap = renderPagination();
     const buttons = flatQuery(wrap, "button");
-    assert.equal(buttons.length, 5);
+    assert.deepEqual(buttons.slice(1).map(button => button.dataset.page), [0, 1, 2, 3, 2]);
   });
 });

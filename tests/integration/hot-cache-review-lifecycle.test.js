@@ -10,7 +10,7 @@ after(async () => {
 
 function harness(cached, current) {
   const search = new FragmentSearch();
-  search.index = { getCachedFragment: async () => cached.value };
+  search.index = { getCachedFragments: async () => [cached.value] };
   search.store = { getCacheValidation: async () => current.value ? [current.value] : [] };
   return () => search._tryHotCache(["f1"], "writer", null, {
     agentId: "default", viewerKeyId: "writer", workspace: null

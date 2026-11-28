@@ -12,6 +12,23 @@ const DENSE_EDGE_THRESHOLD = 5000;
 let denseGalaxy = null;
 let graphSimulation = null;
 let visibilityHandler = null;
+let graphRequest = null;
+let d3Loading = null;
+
+function loadD3() {
+  if (globalThis.d3) return Promise.resolve(globalThis.d3);
+  d3Loading ??= new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = new URL("../vendor/d3-7.9.0.min.js?v=f2094bbf6141b359722c4fe454eb6c4b0f", import.meta.url).href;
+    script.onload = () => globalThis.d3 ? resolve(globalThis.d3) : reject(new Error("D3 unavailable"));
+    script.onerror = () => reject(new Error("D3 unavailable"));
+    document.head.appendChild(script);
+  }).catch(error => {
+    d3Loading = null;
+    throw error;
+  });
+  return d3Loading;
+}
 
 const AGENT_PALETTE = ["#aa8855", "#557799", "#669944", "#cc7755", "#8878d0", "#50a8a0", "#c4a06a", "#a05580"];
 const TYPE_LEGEND_COLORS = {
@@ -77,6 +94,7 @@ async function renderGraph(container) {
   document.getElementById("graph-tooltip")?.remove();
   /** 다른 화면으로 옮기면 시뮬레이션, 애니메이션, 툴팁을 멈춘다 */
   onViewCleanup(() => {
+    graphRequest?.abort();
     disposeGraphRenderer();
     document.getElementById("graph-tooltip")?.remove();
   });
@@ -297,6 +315,9 @@ async function renderGraph(container) {
 let _moonRafId = null; // 위성 애니메이션 rAF ID — 재로딩 시 취소
 
 async function loadGraph() {
+  graphRequest?.abort();
+  const request = new AbortController();
+  graphRequest = request;
   disposeGraphRenderer();
   const topic   = document.getElementById("graph-topic")?.value   || "";
   const limit   = document.getElementById("graph-limit")?.value   || String(GRAPH_LIMIT_DEFAULT);
@@ -310,18 +331,14 @@ async function loadGraph() {
   if (keyId)   params.set("key_id",   keyId);
   else if (groupId) params.set("group_id", groupId);
 
-  const res = await api(`/memory/graph?${params.toString()}`);
+  const res = await api(`/memory/graph?${params.toString()}`, { signal: request.signal });
+  if (request.signal.aborted) return;
 
   if (!res.ok || !res.data) {
     showToast("그래프 데이터 로딩 실패", "error");
     return;
   }
   const data = res.data;
-
-  if (typeof d3 === "undefined") {
-    showToast("D3.js가 로드되지 않았습니다", "error");
-    return;
-  }
 
   const svgElement   = document.getElementById("graph-canvas");
   const denseCanvas  = document.getElementById("graph-canvas-dense");
@@ -347,6 +364,15 @@ async function loadGraph() {
     }
     return;
   }
+
+  let d3;
+  try {
+    d3 = await loadD3();
+  } catch {
+    if (!request.signal.aborted) showToast("그래프 라이브러리를 불러오지 못했습니다", "error");
+    return;
+  }
+  if (request.signal.aborted) return;
 
   denseCanvas.style.display = "none";
   svgElement.style.display = "block";

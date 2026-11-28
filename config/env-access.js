@@ -25,7 +25,7 @@ export const ENV_ACCESS = Object.freeze([
   {
     file  : "bin/memento.js",
     kind  : "cli",
-    vars  : ["(env)", "PATH", "PATHEXT", "MEMENTO_LOG_STDERR", "MEMENTO_CLI_REMOTE", "UPDATE_CHECK_DISABLED", "UPDATE_CHECK_INTERVAL_HOURS", "GITHUB_TOKEN"],
+    vars  : ["(env)", "PATH", "PATHEXT", "MEMENTO_LOG_STDERR", "MEMENTO_CLI_REMOTE", "MEMENTO_CLI_KEY", "UPDATE_CHECK_DISABLED", "UPDATE_CHECK_INTERVAL_HOURS", "GITHUB_TOKEN"],
     reason: "CLI 진입점이다. 명령에 따라 환경을 읽고 로그 출력 위치(MEMENTO_LOG_STDERR)를 정한다. 환경 전체는 훅 원격 주소 해석과 admin 명령에 넘긴다."
   },
   {
@@ -129,12 +129,6 @@ export const ENV_ACCESS = Object.freeze([
     kind  : "startup",
     vars  : ["NODE_ENV", "LOG_LEVEL"],
     reason: "로거 구성을 적재 때 한 번 고정한다."
-  },
-  {
-    file  : "lib/memory/embedding/EmbeddingCache.js",
-    kind  : "runtime",
-    vars  : ["EMBEDDING_MODEL"],
-    reason: "캐시 키에 넣을 모델 이름을 호출마다 읽는다."
   },
   {
     file  : "lib/memory/processors/EpisodeContinuityService.js",

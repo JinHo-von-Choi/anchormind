@@ -49,13 +49,9 @@ DB를 두 번째 방어선으로 세우려면 아래 절차가 필요하다. 이
 ```sql
 CREATE ROLE memento_runtime LOGIN PASSWORD '<강한 암호>' NOBYPASSRLS;
 GRANT USAGE ON SCHEMA agent_memory TO memento_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA agent_memory TO memento_runtime;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA agent_memory TO memento_runtime;
-ALTER DEFAULT PRIVILEGES IN SCHEMA agent_memory
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO memento_runtime;
 ```
 
-`.env`의 `POSTGRES_USER`를 이 계정으로 바꾼다. 마이그레이션은 종전 소유자 계정으로 계속 실행한다.
+사용하는 요청과 작업 경로에 맞춰 필요한 테이블·시퀀스·함수 권한을 부여한다. 스테이징에서 서버의 `POSTGRES_USER`를 이 계정으로 바꾸어 검증한다. 마이그레이션은 소유자 계정으로 실행한다.
 
 ### 2. 키 범위 전달 확인
 
@@ -73,7 +69,19 @@ node --test tests/structure/row-scope.test.js
 
 ### 3. 스테이징 검증
 
-운영과 같은 스키마의 별도 DB에서 FORCE를 켜고 전 도구 경로를 돌린다. 최소한 remember, recall, context, link, amend, forget, reflect, memory_stats가 정상 응답해야 한다.
+운영과 같은 스키마의 별도 DB에서 비소유자 런타임 역할로 전 도구 경로를 돌린다. 최소한 remember, recall, context, link, amend, forget, reflect, memory_stats, 관리자 가져오기와 작업자가 정상 응답해야 한다.
+
+```bash
+anchormind health --check-rls --strict --json
+```
+
+명령은 현재 CLI의 주 DB 접속을 검사한다. `MEMENTO_DB_REQUIRE_RLS=true`로 서버를 시작하면 주 DB와 배치 DB 모두에서 정책 적용, 표 소유자 권한, 우회 역할의 접근 가능성을 검사한다. 실패하면 요청 수신을 시작하기 전에 종료 코드 78로 끝난다. 이 검사는 권한 행렬과 업무별 동작 시험을 보완한다.
+
+마이그레이션 087 이후에는 후보 런타임 역할에 `ALTER ROLE memento_runtime IN DATABASE memento SET app.require_row_scope = 'on';`을 적용해 키·전역·서비스 스코프가 없는 트랜잭션을 거부할 수 있다. 새 연결부터 적용된다. 켜진 연결의 기동 점검은 `required_row_scope` 정책도 확인한다. 구 버전 앱이 사용하는 DB 역할에는 기존 설정을 유지한다.
+
+TLS는 `NODE_EXTRA_CA_CERTS`에 승인된 사설 CA 파일을 지정하고 인증서 이름과 같은 `POSTGRES_HOST`에 `PGSSLMODE=verify-full`로 연결해 확인한다. 배치 DB에 별도 URL을 쓰면 해당 URL에도 검증 옵션을 적용한다. 승인한 CA와 올바른 호스트 이름으로만 연결되는지 검증한 뒤 런타임 설정을 전환한다.
+
+소유자 경로까지 RLS를 적용하는 경우에는 마이그레이션·백업·복원 절차를 먼저 검증한 뒤 아래 설정도 시험한다.
 
 ```sql
 ALTER TABLE agent_memory.fragments      FORCE ROW LEVEL SECURITY;
@@ -92,25 +100,15 @@ SELECT count(*) FROM agent_memory.fragments WHERE key_id = '<키 B>';
 
 ### 4. 운영 적용
 
-스테이징에서 전 경로가 통과하면 같은 DDL을 운영에 적용한다. 적용 직후 `/health`와 recall 한 건을 확인한다.
+스테이징에서 전 경로가 통과하면 검증된 비소유자 역할과 동일한 정책으로 전환하고 연결 풀을 다시 연다. `/health/ready`와 허용된 호출, 범위가 제한된 호출을 확인한다.
+
+재개 가져오기의 체크포인트는 작업을 만든 DB 역할에 연결된다. 역할 교체 전에 `agent_memory.import_jobs`의 미완료 작업을 기존 역할에서 끝내고 신규 가져오기 요청을 잠시 멈춘다. 교체 후에는 새 역할로 가져오기를 재개한다.
 
 ---
 
 ## 되돌리기
 
-```sql
-ALTER TABLE agent_memory.fragments      NO FORCE ROW LEVEL SECURITY;
-ALTER TABLE agent_memory.fragment_links NO FORCE ROW LEVEL SECURITY;
-```
-
-정책과 ENABLE은 남겨도 무해하다. 소유자 접속으로 돌아가면 정책이 적용되지 않으므로 종전 동작이 된다.
-
-전면 해제가 필요하면 다음을 쓴다.
-
-```sql
-ALTER TABLE agent_memory.fragments      DISABLE ROW LEVEL SECURITY;
-ALTER TABLE agent_memory.fragment_links DISABLE ROW LEVEL SECURITY;
-```
+같은 비소유자 역할과 정책에서 검증한 앱 버전으로 되돌린다. 연결 풀을 다시 열고 기존 허용 경로와 제한 범위를 확인한다. 이 조건을 만족하는 버전이 없으면 검증을 마칠 때까지 영향받는 요청을 차단한다.
 
 ---
 

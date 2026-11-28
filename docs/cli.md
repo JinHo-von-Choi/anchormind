@@ -73,14 +73,15 @@ node bin/memento.js stats
 | `cleanup [--execute]` | 노이즈 파편 정리 (기본 dry-run) | 아니오 |
 | `backfill` | 누락된 임베딩 백필 | 아니오 |
 | `stats` | 파편/앵커/토픽 통계 | 예 |
-| `health` | DB/Redis/임베딩 연결 진단 | 아니오 |
+| `health` | 로컬 연결 진단 또는 원격 공개 준비 상태 | 예 |
 | `recall <query>` | 터미널 recall | 예 |
+| `context` | 전체 문맥 또는 짧은 목록 출력 | 예 |
 | `remember <content>` | 터미널 remember | 예 |
 | `inspect <id>` | 파편 상세 + 1-hop 링크 | 예 |
 | `session <sub>` | 세션 list / show / delete / rotate (master key 필요) | 예 |
 | `update [--execute] [--redetect]` | 업데이트 확인 및 적용 (기본 dry-run) | 아니오 |
 | `export [--topic x] [--type t] [--format-version n]` | 파편 JSONL 덤프(형식 버전 2 기본) | 아니오 |
-| `import [--input FILE] [--key id] [--restore]` | JSONL 흡수 (파일 또는 stdin) | 아니오 |
+| `import [--input FILE] [--key id] [--restore] [--resume UUID]` | JSONL 가져오기 | 아니오 |
 | `completion <shell>` | bash/zsh 보완 스크립트 출력 | 예 |
 | `benchmark [--goldset FILE]` | 골드셋 기반 회상 품질 계측 | 아니오 |
 | `anchor-scope [--execute]` | 승인된 공유 앵커 범위 점검·정규화, snapshot backfill (기본 dry-run) | 아니오 |
@@ -215,13 +216,25 @@ DB 연결, Redis 상태, 임베딩 provider 동작 여부를 진단한다.
 ```bash
 node bin/memento.js health
 node bin/memento.js health --format json
+node bin/memento.js health --strict --check-rls --json
+node bin/memento.js health --remote https://memento.example.com/mcp --strict
 ```
 
 환경 변수 값에 문제가 있으면 변수 이름, 문제, 대신 쓰는 값을 `Config` 줄로 함께 보여 준다(`--format json`은 `configIssues`). 예를 들어 `MEMENTO_RETENTION_MODE`를 잘못 쓰면 manual로 읽혔다는 것을 여기서 알 수 있다. 원본 값은 보여 주지 않는다.
 
+`--strict`는 필수 점검 실패, 적용 대기 마이그레이션, 서버 준비 실패에서 종료 코드 1을 반환한다. DB에만 있는 마이그레이션 이력은 JSON의 `migrations.databaseOnly`에 표시한다. `--check-rls`는 로컬 DB 역할의 행 수준 보안 적용 상태를 확인한다. 원격 모드는 서버의 공개 헬스 또는 준비 상태를 읽는다.
+
+엄격 모드의 로컬 준비 확인은 HTTP 200과 JSON의 `status: "ready"`를 요구한다. DB 점검 문장과 전체 로컬 진단에는 각각 5초와 12초의 제한을 둔다.
+
+### context
+
+`anchormind context --view index --workspace <name>`은 본문 대신 목록을 JSON으로 출력한다. `--view full`이 기본값이다. `--remote`와 `--key`로 원격 서버를 사용할 수 있다.
+
 ### recall
 
 터미널에서 파편 검색을 실행한다. 서버가 실행 중이지 않아도 로컬 DB에서 직접 동작한다. `--remote` 옵션으로 원격 서버를 경유할 수도 있다.
+
+`--pack`을 붙이면 MCP 답변 팩을 JSON으로 출력한다.
 
 ```bash
 # 기본 검색
@@ -436,6 +449,8 @@ node bin/memento.js import --input full.jsonl --restore
 ```
 
 주요 옵션: `--input <FILE>`, `--key <key_id>`(기록 대상 키, 없으면 마스터 범위), `--idempotent`, `--dry-run`, `--restore`, `--json`.
+
+`--input FILE --resume UUID`를 주면 커밋한 배치의 진행 지점을 저장한다. 중단 후 같은 UUID, 파일, DB 역할과 옵션으로 다시 실행한다. 완료한 작업은 저장한 요약을 반환한다. `--resume`은 파일 입력에만 쓸 수 있으며 `--dry-run`과 함께 쓰면 오류가 난다.
 
 파편 줄은 줄마다 의미 쓰기 관문을 거쳐(트랜잭션 밖) FragmentWriter로 기록하며 줄마다 트랜잭션을 연다.
 

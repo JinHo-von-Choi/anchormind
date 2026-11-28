@@ -63,7 +63,7 @@ function makeSearch({ l2Rows = [], lexicalRows = [], lexicalCalls = [] }) {
     searchByTopic    : async () => [],
     searchByType     : async () => [],
     getRecent        : async () => [],
-    getCachedFragment: async () => null,
+    getCachedFragments: async ids => ids.map(() => null),
     cacheFragment    : async () => {},
     index            : async () => {}
   };

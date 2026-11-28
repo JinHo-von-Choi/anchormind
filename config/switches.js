@@ -163,6 +163,8 @@ export const SWITCHES = Object.freeze([
   enumOf("MEMENTO_HOOK_ENDPOINTS", ["on", "off"], "on", "운영", "하네스 훅 엔드포인트 POST /hooks/{client}/{event}를 연다", { off: ["off"] }),
   enumOf("MEMENTO_AUDIT_DB", ["on", "off"], "on", "운영", "감사 이벤트를 outbox를 거쳐 admin_audit_events 해시 체인에 기록한다(파일 감사 로그는 계속된다)", { off: ["off"] }),
   boolOff("MEMENTO_CONFIG_STRICT", "운영", "환경 변수 값 문제가 있으면 기동을 멈춘다"),
+  boolOff("MEMENTO_DB_REQUIRE_RLS", "격리", "주 DB와 배치 DB의 런타임 RLS 사전 검사 실패 시 기동을 멈춘다"),
+  boolOn("MEMENTO_ADMIN_LEGACY_ASSETS", "운영", "구버전과 호환되는 관리자 자산을 참조한다"),
   boolOff("MEMENTO_LOG_STDERR", "운영", "콘솔 로그를 표준 오류로 보낸다(CLI는 serve를 뺀 명령에서 자동으로 켠다)"),
   boolOff("UPDATE_CHECK_DISABLED", "운영", "신규 버전 확인을 끈다"),
   boolOff("UPDATE_REQUIRE_SIGNED_TAG", "운영", "git 설치본 갱신에서 서명된 태그를 요구한다"),

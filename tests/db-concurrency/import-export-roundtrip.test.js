@@ -27,6 +27,7 @@ const { getPrimaryPool, shutdownPool } = await import("../../lib/tools/db.js");
 const { exportRecords }                = await import("../../lib/memory/transfer/FragmentExporter.js");
 const { ImportReport }                 = await import("../../lib/memory/transfer/ImportReport.js");
 const { runImport }                    = await import("../../lib/memory/transfer/ImportRunner.js");
+const { readImportJobStatus }          = await import("../../lib/memory/transfer/ImportJob.js");
 const { recordsFromLines }             = await import("../../lib/memory/transfer/importRecords.js");
 const { countTokens }                  = await import("../../lib/memory/write/FragmentFactory.js");
 const { loadImportRuntime }            = await import("../../lib/memory/transfer/importRuntime.js");
@@ -239,6 +240,92 @@ const hashSet = (rows) => rows.map(r => r.content_hash).sort();
 beforeEach(async () => {
   await directQuery(`TRUNCATE ${SCHEMA}.fragments CASCADE`);
   await directQuery(`DELETE FROM ${SCHEMA}.api_keys`);
+});
+
+it("재개 가져오기는 커밋 경계를 지키고 링크, 이력, 완료 감사를 한 번만 기록한다", async () => {
+  await reseedSource({ rows: COMPLIANT });
+  const lines = await exportLines();
+  lines.splice(1 + COMPLIANT.length, 0, ...Array(100).fill('{"record":"unknown"}'));
+  const ordinary = await importInto(lines);
+  const expectedLinks = await linkSet(directQuery);
+  const expectedHashes = hashSet(await targetFragments());
+  await directQuery(`TRUNCATE ${SCHEMA}.fragments CASCADE`);
+
+  const id = crypto.randomUUID();
+  const resume = { id, digest: sha(lines.join("\n")), actor: "test-owner", auditActor: "system" };
+  const runtime = await loadImportRuntime("cli");
+  const pool = getPrimaryPool();
+  const jobStatus = (actor = resume.actor, keyId = null) =>
+    readImportJobStatus(pool, { id, actor }, { keyId, restore: false });
+  const run = (input = skip => recordsFromLines(lines, { skip }), options = {}) => runImport(input, {
+    ...runtime, report: new ImportReport(), pool, failFast: true, resume, ...options
+  });
+  async function* interrupted(after) {
+    for await (const record of recordsFromLines(lines)) {
+      if (record.lineNo === after) throw new Error("fixture interrupted");
+      yield record;
+    }
+  }
+
+  let unlock;
+  const paused = new Promise(resolve => { unlock = resolve; });
+  let started;
+  const locked = new Promise(resolve => { started = resolve; });
+  async function* holdJob() {
+    started();
+    await paused;
+    throw new Error("fixture interrupted while holding the job");
+  }
+  const running = assert.rejects(run(holdJob()), /fixture interrupted while holding the job/);
+  try {
+    await locked;
+    assert.deepEqual(await jobStatus(), { status: "running", line: 0, checkpoint: null });
+    assert.equal(await jobStatus("other-owner"), null);
+    assert.equal(await jobStatus(resume.actor, "different-key"), null);
+    await assert.rejects(run(), { statusCode: 409, code: "import_in_progress" });
+  } finally {
+    unlock();
+    await running;
+  }
+
+  await assert.rejects(run(interrupted(2)), /fixture interrupted/);
+  assert.deepEqual(await targetFragments(), []);
+  await assert.rejects(run(interrupted(102)), /fixture interrupted/);
+  assert.deepEqual(hashSet(await targetFragments()), expectedHashes);
+  const { rows: [saved] } = await directQuery(`SELECT line, completed FROM ${SCHEMA}.import_jobs WHERE id = $1`, [id]);
+  assert.deepEqual(saved, { line: 100, completed: false });
+  assert.deepEqual(await jobStatus(), { status: "pending", line: 100, checkpoint: null });
+  await assert.rejects(run(undefined, { resume: { ...resume, digest: sha("different body") } }),
+    { statusCode: 409, code: "import_resume_mismatch" });
+
+  const completionFailure = {
+    async connect() {
+      const client = await pool.connect();
+      return {
+        getTransactionStatus: () => client.getTransactionStatus(),
+        query(sql, params) {
+          if (sql.includes("SET completed = true")) throw new Error("fixture completion interrupted");
+          return client.query(sql, params);
+        },
+        release: error => client.release(error)
+      };
+    }
+  };
+  const auditCount = async () => (await directQuery(`SELECT count(*)::int AS n FROM ${SCHEMA}.outbox_events
+     WHERE topic = 'audit.record' AND aggregate_id = $1 AND payload->>'action' = 'memory.import.completed'
+       AND payload->'actor'->>'kind' = 'system'`, [`import_job:${id}`])).rows[0].n;
+  await assert.rejects(run(undefined, { pool: completionFailure }), /fixture completion interrupted/);
+  assert.equal(await auditCount(), 0);
+
+  assert.deepEqual((await run()).toJSON(), ordinary);
+  assert.deepEqual((await run()).toJSON(), ordinary);
+  const completed = await jobStatus();
+  assert.equal(completed.status, "completed");
+  assert.equal(completed.line, ordinary.lines);
+  assert.deepEqual(await linkSet(directQuery), expectedLinks);
+  assert.equal((await directQuery(`SELECT count(*)::int AS n FROM ${SCHEMA}.fragment_versions`)).rows[0].n, VERSIONS.length);
+  assert.equal(await auditCount(), 1);
+  assert.equal((await directQuery(`SELECT count(*)::int AS n FROM ${SCHEMA}.import_job_batches WHERE job_id = $1`, [id])).rows[0].n, 0);
 });
 
 describe("저장 규칙을 지킨 데이터의 왕복", () => {

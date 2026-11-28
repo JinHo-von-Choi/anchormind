@@ -196,7 +196,7 @@ describe("FragmentSearch fallback noise — P0 회귀 가드 (동적)", () => {
       searchByTopic       : async () => [],
       searchByType        : async () => [],
       getRecent           : async () => NOISE_FRAGMENTS.map(f => f.id),
-      getCachedFragment   : async () => null,
+      getCachedFragments  : async ids => ids.map(() => null),
       cacheFragment       : async () => {},
     };
 
@@ -256,8 +256,7 @@ describe("FragmentSearch fallback noise — P0 회귀 가드 (동적)", () => {
       searchByTopic       : async () => [EXACT_FRAGMENT.id],
       searchByType        : async () => [],
       getRecent           : async () => NOISE_FRAGMENTS.map(f => f.id),
-      getCachedFragment   : async (id) =>
-        id === EXACT_FRAGMENT.id ? EXACT_FRAGMENT : null,
+      getCachedFragments  : async ids => ids.map(id => id === EXACT_FRAGMENT.id ? EXACT_FRAGMENT : null),
       cacheFragment       : async () => {},
     };
 

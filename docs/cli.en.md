@@ -72,14 +72,15 @@ Every command except `serve` sends server logs to stderr (the CLI sets `MEMENTO_
 | `cleanup [--execute]` | Clean up noisy fragments (dry-run by default) | No |
 | `backfill` | Backfill missing embeddings | No |
 | `stats` | Fragment / anchor / topic statistics | Yes |
-| `health` | DB / Redis / embedding connectivity diagnostics | No |
+| `health` | Local connectivity diagnostics or public remote readiness | Yes |
 | `recall <query>` | Terminal recall | Yes |
+| `context` | Full or compact context | Yes |
 | `remember <content>` | Terminal remember | Yes |
 | `inspect <id>` | Fragment detail + 1-hop links | Yes |
 | `session <sub>` | Session list / show / delete / rotate (master key required) | Yes |
 | `update [--execute] [--redetect]` | Check and apply updates (dry-run by default) | No |
 | `export [--topic x] [--type t] [--format-version n]` | Dump fragments as JSONL (format version 2 by default) | No |
-| `import [--input FILE] [--key id] [--restore]` | Ingest JSONL (file or stdin) | No |
+| `import [--input FILE] [--key id] [--restore] [--resume UUID]` | Import JSONL | No |
 | `completion <shell>` | Print bash/zsh completion script | Yes |
 | `benchmark [--goldset FILE]` | Measure recall quality against a goldset | No |
 | `anchor-scope [--execute]` | Inventory and normalize approved shared anchors, snapshot backfill (dry-run by default) | No |
@@ -214,13 +215,25 @@ Diagnose DB connectivity, Redis status, and embedding provider availability.
 ```bash
 node bin/memento.js health
 node bin/memento.js health --format json
+node bin/memento.js health --strict --check-rls --json
+node bin/memento.js health --remote https://memento.example.com/mcp --strict
 ```
 
 When an environment variable has a bad value, `Config` rows show the variable name, the problem and the value used instead (`configIssues` with `--format json`). For example, a mistyped `MEMENTO_RETENTION_MODE` shows up here as read as manual. The original value is not shown.
 
+`--strict` exits with code 1 when a required check fails, migrations are pending, or the server is unready. JSON reports database-only migration records in `migrations.databaseOnly`. `--check-rls` checks row security for the local database role. Remote mode reads the server's public health or readiness status.
+
+Strict local readiness requires HTTP 200 and a JSON `status: "ready"`. Database checks use a five-second statement timeout and the complete local diagnostic has a 12-second deadline.
+
+### context
+
+`anchormind context --view index --workspace <name>` prints a compact context index as JSON. The default is `--view full`. Use `--remote` and `--key` to call a remote server.
+
 ### recall
 
 Search fragments from the terminal. Works directly against the local DB without a running server. Use `--remote` to route through a remote MCP server.
+
+Use `--pack` to print the compact MCP answer pack as JSON.
 
 ```bash
 # Basic search
@@ -435,6 +448,8 @@ node bin/memento.js import --input full.jsonl --restore
 ```
 
 Main options: `--input <FILE>`, `--key <key_id>` (target key, master scope when omitted), `--idempotent`, `--dry-run`, `--restore`, `--json`.
+
+Use `--input FILE --resume UUID` to save progress in committed batches. After interruption, repeat the command with the same UUID, file, DB role, and options. A completed job returns its saved report. `--resume` requires a file and cannot be combined with `--dry-run`.
 
 Each fragment line passes the semantic write gate (outside the transaction) and is written through FragmentWriter in its own transaction.
 

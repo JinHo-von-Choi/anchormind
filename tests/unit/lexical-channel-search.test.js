@@ -75,7 +75,7 @@ function makeSearch({ l3Rows = [], lexicalRows = null, lexicalCalls = [] }) {
     searchByTopic    : async () => [],
     searchByType     : async () => [],
     getRecent        : async () => [],
-    getCachedFragment: async () => null,
+    getCachedFragments: async ids => ids.map(() => null),
     cacheFragment    : async () => {},
     index            : async () => {}
   };
@@ -94,6 +94,7 @@ function makeSearch({ l3Rows = [], lexicalRows = null, lexicalCalls = [] }) {
     };
   }
   search.embeddingCache = { get: async () => null, set: () => {} };
+  search.pendingQueryEmbeddings = new Map();
   search._morphemeIndex = { textToMorphemeVector: async () => null };
   return search;
 }

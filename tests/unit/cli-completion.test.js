@@ -31,9 +31,10 @@ async function captureCompletion(shellArg) {
 
 describe("completion — L6 shell completion", () => {
   // ── 서브명령 / 플래그 메타데이터 ──────────────────────────────
-  it("COMMANDS 배열에 23개 서브명령이 포함된다", () => {
-    assert.strictEqual(COMMAND_COUNT, 23);
-    assert.strictEqual(COMMANDS.length, 23);
+  it("COMMANDS 배열에 24개 서브명령이 포함된다", () => {
+    assert.strictEqual(COMMAND_COUNT, 24);
+    assert.strictEqual(COMMANDS.length, 24);
+    assert.ok(COMMANDS.includes("context"));
   });
 
   it("자동완성 목록이 bin/memento.js 디스패치 목록과 일치한다", () => {

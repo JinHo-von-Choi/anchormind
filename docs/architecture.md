@@ -263,7 +263,7 @@ assets/admin/
 ├── index.html         Admin SPA app shell (로그인 폼 + 컨테이너)
 ├── admin.css          Admin UI 스타일시트
 ├── admin.js           Admin UI 로직 (10개 내비게이션: 개요, API 키, 그룹, 메모리 운영, 세션, 로그, 감사 로그, 관리자 계정, 지식 그래프, 메트릭)
-└── vendor/            Tailwind CSS 3.4.17, d3 7.9.0 스크립트 사본. 콘솔 응답의 CSP는 `script-src 'self' 'unsafe-inline'`이며 외부 스크립트 호스트를 허용하지 않는다. 출처와 sha256은 `PROVENANCE.md`
+└── vendor/            그래프가 필요할 때 읽는 D3와 롤링 전환용 이전 Tailwind 스크립트. 기본 콘솔은 npm run build:admin-css로 만든 CSS를 읽는다. 스크립트 출처와 sha256은 PROVENANCE.md
 
 lib/http/
 └── helpers.js         HTTP SSE 스트림 헬퍼 및 요청 파싱 유틸리티

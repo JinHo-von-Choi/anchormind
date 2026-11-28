@@ -259,7 +259,7 @@ assets/admin/
 +-- index.html         Admin SPA app shell (login form + container)
 +-- admin.css          Admin UI stylesheet
 +-- admin.js           Admin UI logic (10 navigation sections: overview, API keys, groups, memory ops, sessions, logs, audit log, admin accounts, knowledge graph, metrics)
-+-- vendor/            Copies of the Tailwind CSS 3.4.17 and d3 7.9.0 scripts. The console response CSP is `script-src 'self' 'unsafe-inline'` and allows no external script host. Source and sha256 are in `PROVENANCE.md`
++-- vendor/            D3 loaded by the graph and the old Tailwind script for rolling upgrades. The current console uses CSS generated with npm run build:admin-css. Script sources and hashes are in PROVENANCE.md
 
 lib/http/
 +-- helpers.js         HTTP SSE stream helpers and request parsing utilities

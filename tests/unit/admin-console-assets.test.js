@@ -33,16 +33,37 @@ describe("관리 콘솔 스크립트 출처", () => {
     assert.doesNotMatch(html, /<script[^>]+src="(?:https?:)?\/\//);
   });
 
-  test("index.html 은 vendor 스크립트를 콘솔 자산 경로로 읽는다", () => {
+  test("첫 화면은 사전 빌드한 CSS를 사용하고 vendor 스크립트를 선요청하지 않는다", () => {
     for (const name of Object.keys(VENDORED)) {
-      assert.ok(html.includes(`${ADMIN_BASE}/assets/vendor/${name}`), `${name} 참조 없음`);
+      assert.ok(!html.includes(`${ADMIN_BASE}/assets/vendor/${name}`), `${name} 선요청`);
     }
+    assert.ok(html.includes(`${ADMIN_BASE}/assets/admin-utilities.css`));
+    const utilities = fs.readFileSync(path.join(ROOT, "assets", "admin", "admin-utilities.css"), "utf8");
+    assert.match(utilities, /\.bg-background\{/);
   });
 
   test("ADMIN_CSP script-src 는 외부 호스트를 포함하지 않는다", () => {
     assert.ok(scriptSrc.includes("'self'"), "script-src 'self' 없음");
     assert.doesNotMatch(scriptSrc, /https?:\/\//);
   });
+});
+
+test("같은 자산 해시는 버전 URL과 ETag 재검증에 쓰인다", async () => {
+  const file = `${ADMIN_BASE}/assets/admin-utilities.css`;
+  const request = (url, headers = {}) => new Promise(resolve => handleAdminStatic({ url, headers }, {
+    headers: {},
+    setHeader(key, value) { this.headers[key] = value; },
+    end(body) { resolve({ ...this, body }); }
+  }));
+  const normal = await request(file);
+  assert.equal(normal.statusCode, 200);
+  const hash = normal.headers.ETag.slice(1, -1);
+  const versioned = await request(`${file}?v=${hash}`);
+  assert.match(versioned.headers["Cache-Control"], /immutable/);
+  assert.equal(versioned.headers.Vary, "Origin");
+  const verified = await request(file, { "if-none-match": `W/${normal.headers.ETag}` });
+  assert.equal(verified.statusCode, 304);
+  assert.equal(verified.body, undefined);
 });
 
 describe("vendor 스크립트 파일", () => {

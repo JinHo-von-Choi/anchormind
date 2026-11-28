@@ -49,7 +49,8 @@
 | inner, outer (그 밖의 값은 inner) | MEMENTO_SEMANTIC_THRESHOLD_MODE |
 | configured, local_only (그 밖의 값은 configured) | MEMENTO_EGRESS_UNKNOWN_KEY |
 | none, all (그 밖의 값은 none) | MEMENTO_LLM_CLI_TOOL_APPROVAL |
-| true, false (그 밖의 값은 false) | MEMENTO_CONFIG_STRICT |
+| true, false (그 밖의 값은 false) | MEMENTO_CONFIG_STRICT, MEMENTO_DB_REQUIRE_RLS |
+| true, false (그 밖의 값은 true) | MEMENTO_ADMIN_LEGACY_ASSETS |
 | true, false (그 밖의 값은 `MEMORY_CONFIG` 검증에서 기동 실패) | MEMENTO_AUTO_PROMOTE_ANCHORS (true) |
 | on, off (그 밖의 값은 off) | MEMENTO_ADMIN_AUTH_BACKOFF, MEMENTO_SESSION_LESSONS |
 | auto, manual (그 밖의 값은 manual) | MEMENTO_RETENTION_MODE |
@@ -101,6 +102,8 @@
 | DB_STATEMENT_TIMEOUT_MS | 30000 | 사용자 요청 경로의 질의 시간 상한(ms). 0은 무제한. system·admin 유지보수 경로에는 적용하지 않는다 |
 | REQUEST_TIMEOUT_MS | 60000 | 요청 수신 상한(ms). 0은 무제한 |
 | MEMENTO_CONFIG_STRICT | false | 숫자·열거·불리언 환경 변수의 값 문제를 기동 시 한 줄로 기록한다. 숫자가 아닌 값은 기본값으로 돌아가고, 정수가 아니거나 허용 범위 밖인 값은 그대로 쓰며 기록만 한다(`MEMENTO_HEALTH_READY_DB_TIMEOUT_MS`, `MEMENTO_SHUTDOWN_DEADLINE_MS`, `MEMENTO_SCORE_UPDATE_BATCH`, `MEMENTO_SESSION_KEY_RECHECK_MS`, `MEMENTO_DB_LOCK_RETRY_MAX`, `MEMENTO_LEXICAL_TIMEOUT_MS`는 범위 밖이어도 기본값). 공백만 있는 값은 미설정과 같다. `true`면 문제가 있을 때 종료 코드 78로 멈춘다 |
+| MEMENTO_DB_REQUIRE_RLS | false | `true`이면 주 DB와 배치 DB의 런타임 역할과 RLS 정책을 수신 시작 전에 검사한다. 검사 실패 또는 확인 불가는 종료 코드 78이다. 역할을 분리한 다음 [행 수준 보안 적용 절차](operations/row-level-security.md)를 따른다 |
+| MEMENTO_ADMIN_LEGACY_ASSETS | true | 구버전과 호환되는 관리자 콘솔 자산을 사용한다. 모든 인스턴스가 새 자산을 제공하면 `false`로 경량 자산을 사용한다 |
 | KEEP_ALIVE_TIMEOUT_MS | 75000 | Keep-Alive 연결 유지 시간(ms). 프록시 설정과 맞춘다 |
 | HEADERS_TIMEOUT_MS | 76000 | 요청 헤더 수신 상한(ms). KEEP_ALIVE_TIMEOUT_MS보다 크게 둔다 |
 | LOG_LEVEL | info (NODE_ENV가 production이 아니면 debug) | winston 로그 레벨 |

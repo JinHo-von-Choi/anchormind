@@ -30,7 +30,8 @@ const LIB  = path.resolve(HERE, "..", "..", "lib");
 const ALLOWED = {
   "admin/ApiKeyStore.js": 2, // 키 삭제 전 그 키의 파편 수(닫힌 파편 포함)를 키 행 잠금과 같은 트랜잭션에서 센다
   "admin/admin-keys.js": 1,
-  "admin/admin-memory.js": 13, // 모순 결정은 링크·결정과 파편 만료를 한 트랜잭션에서 잠그고, replay·과거 시점 투영은 관리 범위로 읽는다
+  "admin/admin-memory.js": 11, // 모순 결정은 링크·결정과 파편 만료를 한 트랜잭션에서 잠그고, replay·과거 시점 투영은 관리 범위로 읽는다
+  "admin/fragment-list.js": 3, // 목록, 총계 전용, 정확한 목록의 하위 집계가 같은 관리 범위 술어를 적용한다
   "admin/admin-routes.js": 1,
   "admin/WorkspaceAliasStore.js": 5, // 운영자 workspace 병합 도구: 별칭 후보 집계, 병합 대상 행 잠금과 중복 판정(EXISTS), 중복 닫기, 이름 바꾸기를 한 트랜잭션에서 한다. 한 키 범위의 일회성 정리라 데이터 계층 객체에 두지 않는다
   "admin/stats-aggregates.js": 1, // /stats의 상위 topic 집계. 콘솔 갱신마다 다시 세지 않게 짧게 재사용하는 집계 모듈에 둔다

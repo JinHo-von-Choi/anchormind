@@ -11,7 +11,7 @@ after(async () => {
 
 function searchWith(cached, metadata) {
   const search = new FragmentSearch();
-  search.index = { getCachedFragment: async () => cached };
+  search.index = { getCachedFragments: async () => [cached] };
   search.store = { getCacheValidation: async () => metadata };
   return search;
 }

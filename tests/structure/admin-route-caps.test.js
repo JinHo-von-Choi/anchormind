@@ -32,6 +32,7 @@ const MARKERS   = new Set([CAP_PUBLIC, CAP_AUTHENTICATED]);
 
 /** 라우트 표 밖의 관리 모듈(선언, 저장소, 도우미) */
 const NON_ROUTE_MODULES = new Set([
+  "admin-response", "fragment-list", "fragment-list-cursor",
   "admin-route-table", "admin-audit-actions", "capabilities", "AdminAuthz", "ScopeFilter", "admin-auth",
   "admin-login-guard", "admin-metrics", "ApiKeyStore", "OAuthClientStore", "key-policy",
   "admin-principal", "admin-redact", "AdminUserStore", "admin-password", "admin-totp", "admin-seal",

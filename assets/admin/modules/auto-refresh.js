@@ -31,11 +31,40 @@ export function autoRefreshLabel({ paused, intervalMs, lastAt }) {
  *
  * @param {Function} run - 갱신 함수
  * @param {{ intervalMs?: number }} [options]
- * @returns {{ element: HTMLElement, markUpdated: (at?: number) => void, stop: () => void, isPaused: () => boolean }}
+ * @returns {{ element: HTMLElement, refresh: () => Promise<void>, markUpdated: (at?: number) => void, stop: () => void, isPaused: () => boolean }}
  */
 export function createAutoRefresh(run, { intervalMs = AUTO_REFRESH_MS } = {}) {
   let paused = false;
   let lastAt = null;
+  let inFlight = null;
+  let pendingManual = null;
+  let stopped = false;
+
+  async function runOnce() {
+    if (stopped) return;
+    const work = Promise.resolve().then(run);
+    inFlight = work;
+    try {
+      await work;
+    } finally {
+      inFlight = null;
+    }
+  }
+
+  function refresh() {
+    if (!inFlight) return runOnce();
+    pendingManual ??= inFlight.then(runManual, runManual);
+    return pendingManual;
+  }
+
+  function runManual() {
+    pendingManual = null;
+    return runOnce();
+  }
+
+  const refreshInBackground = () => {
+    if (!inFlight) runOnce().catch(error => console.error("자동 갱신 실패", error));
+  };
 
   const element = document.createElement("div");
   element.className = "flex items-center gap-2 text-[10px] font-mono text-slate-500";
@@ -57,27 +86,29 @@ export function createAutoRefresh(run, { intervalMs = AUTO_REFRESH_MS } = {}) {
 
   const visible = () => typeof document.visibilityState !== "string" || document.visibilityState !== "hidden";
   const timer   = setInterval(() => {
-    if (!paused && visible()) run();
+    if (!paused && visible()) refreshInBackground();
   }, intervalMs);
   const onVisibility = () => {
-    if (!paused && document.visibilityState === "visible") run();
+    if (!paused && document.visibilityState === "visible") refreshInBackground();
   };
   document.addEventListener("visibilitychange", onVisibility);
 
   toggle.addEventListener("click", () => {
     paused = !paused;
     paint();
-    if (!paused) run();
+    if (!paused) refreshInBackground();
   });
   paint();
 
   return {
     element,
+    refresh,
     markUpdated(at = Date.now()) {
       lastAt = at;
       paint();
     },
     stop() {
+      stopped = true;
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     },

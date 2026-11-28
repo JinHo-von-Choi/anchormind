@@ -29,6 +29,7 @@ const ROLE = `lane_rls_${crypto.randomBytes(4).toString("hex")}`;
 /** 역할을 지울 관리 접속. 데이터베이스를 지운 뒤에는 접속 정보를 다시 얻을 수 없어 미리 받아 둔다. */
 const SERVER_ADMIN = { ...directClientConfig(), database: "postgres" };
 const KEYS = { a: `rls-a-${crypto.randomUUID()}`, b: `rls-b-${crypto.randomUUID()}`, c: `rls-c-${crypto.randomUUID()}` };
+const ids = new Map();
 
 before(async () => {
   for (const id of Object.values(KEYS)) {
@@ -36,14 +37,20 @@ before(async () => {
   }
   const rows = [[KEYS.a, 2], [KEYS.b, 1], [KEYS.c, 1], [null, 1]];
   for (const [keyId, n] of rows) {
+    ids.set(keyId, []);
     for (let i = 0; i < n; i++) {
       const id = crypto.randomUUID();
+      ids.get(keyId).push(id);
       await directQuery(
         `INSERT INTO agent_memory.fragments (id, content, type, topic, importance, ttl_tier, agent_id, keywords, content_hash, key_id)
          VALUES ($1, 'rls ' || $1, 'fact', 'rls', 0.5, 'warm', 'default', '{}', md5($1), $2)`,
         [id, keyId]
       );
     }
+  }
+  for (const target of [ids.get(KEYS.a)[1], ids.get(KEYS.b)[0]]) {
+    await directQuery("INSERT INTO agent_memory.fragment_links (from_id, to_id, relation_type) VALUES ($1, $2, 'related')",
+      [ids.get(KEYS.a)[0], target]);
   }
   await directQuery(`CREATE ROLE ${ROLE} NOLOGIN NOBYPASSRLS`);
   await directQuery(`GRANT USAGE ON SCHEMA agent_memory TO ${ROLE}`);
@@ -80,6 +87,11 @@ async function asRuntime(vars, fn) {
     await client.query(`SET LOCAL ROLE ${ROLE}`);
     await client.query("SELECT set_config('app.current_agent_id', $1, true), set_config('app.current_key_id', $2, true), set_config('app.current_key_ids', $3, true)",
       [vars.agent ?? "default", vars.keyId ?? "", (vars.keyIds ?? []).join(",")]);
+    if (vars.strict) {
+      await client.query(`SELECT set_config('app.require_row_scope', 'on', true),
+        set_config('app.row_scope_kind', $1, true), set_config('app.row_scope_key', $2, true)`,
+      [vars.kind ?? "", vars.fallback ?? ""]);
+    }
     return await fn(client);
   } finally {
     await client.query("ROLLBACK").catch(() => {});
@@ -113,6 +125,33 @@ describe("행 수준 보안 키 목록 정책", () => {
        VALUES ($1, 'rls write', 'fact', 'rls', 0.5, 'warm', 'default', '{}', md5($1), $2)`,
       [crypto.randomUUID(), KEYS.c]
     )), /row-level security/);
+  });
+
+  it("범위 필수 모드는 빈 범위와 범위 밖 쓰기를 거부하고 두 링크 끝의 접근 범위를 검사한다", async () => {
+    const strict = { strict: true };
+    assert.deepEqual(await visibleKeys(strict), {});
+    assert.deepEqual(await visibleKeys({ ...strict, keyIds: [KEYS.a] }), {});
+    assert.deepEqual(await visibleKeys({ ...strict, agent: "system" }), {});
+    assert.deepEqual(await visibleKeys({ ...strict, kind: "global" }), { master: 1 });
+    assert.deepEqual(await visibleKeys({ ...strict, kind: "key", fallback: KEYS.c }), { [KEYS.c]: 1 });
+    assert.deepEqual(await visibleKeys({ ...strict, kind: "service", agent: "system" }),
+      { [KEYS.a]: 2, [KEYS.b]: 1, [KEYS.c]: 1, master: 1 });
+
+    const aOnly = { ...strict, kind: "key", keyIds: [KEYS.a] };
+    const both  = { ...aOnly, keyIds: [KEYS.a, KEYS.b] };
+    const targets = vars => asRuntime(vars, async client => (await client.query(
+      "SELECT to_id FROM agent_memory.fragment_links ORDER BY to_id"
+    )).rows.map(row => row.to_id));
+    assert.deepEqual(await targets(aOnly), [ids.get(KEYS.a)[1]]);
+    assert.deepEqual(await targets(both), [ids.get(KEYS.a)[1], ids.get(KEYS.b)[0]].sort());
+
+    const insert = vars => asRuntime(vars, client => client.query(
+      `INSERT INTO agent_memory.fragments (id, content, type, topic, importance, ttl_tier, agent_id, keywords, content_hash, key_id)
+       VALUES ($1, 'rls write', 'fact', 'rls', 0.5, 'warm', 'default', '{}', md5($1), $2)`,
+      [crypto.randomUUID(), KEYS.a]));
+    await assert.rejects(() => insert(strict), { code: "42501" });
+    await assert.rejects(() => insert({ ...aOnly, keyIds: [KEYS.b] }), { code: "42501" });
+    assert.equal((await insert(aOnly)).rowCount, 1);
   });
 
   it("키 격리 절이 넣은 키 목록이 queryWithAgentVector를 거쳐 app.current_key_ids로 넘어간다", async () => {

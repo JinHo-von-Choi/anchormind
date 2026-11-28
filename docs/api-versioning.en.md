@@ -46,6 +46,16 @@ Paths are `/v1/internal/model/nothing/...`. Adding a field or an optional parame
 
 Exception: when a caller names a lower export format version with `format_version` or `Accept`, the response has that version's structure, so columns missing from the lower version are the requested format and not a compatibility break (see "Negotiation and downgrade" below).
 
+Admin REST responses include a server-generated `X-Request-ID`. An explicit `Accept: application/problem+json` requests `type`, `title`, `status`, and `requestId` for JSON errors with the existing HTTP status. Public error codes appear as `code`, and unsupported import formats also return the `supported` versions. The default error body is still available.
+
+`GET /memory/fragments` returns `items`, the exact `total`, `page`, and `limit` by default. With `include_total=false`, it returns the boolean `hasMore` in place of `total`. Use `count_only=true` for the exact `total` under the same filters and scope.
+
+Use `cursor=` to get the first page with `items`, `hasMore`, `nextCursor`, and `limit`. Send the returned `nextCursor` with the same filters for the next page. The server checks current permissions on each request. If the filters or effective permissions change, or the cursor is invalid, `400 invalid_cursor` signals that the client should restart with `cursor=`. All instances use their shared `MEMENTO_ACCESS_KEY` to sign cursors. Without that key, cursor requests return `503 cursor_unavailable`. Start a fresh listing to see new rows ahead of the current position.
+
+For admin JSONL imports, `POST /import/resumable?resume_id=<UUID>` starts a resumable job. Retry with the same UUID, original file, destination, and authorization. After verifying the checksum, the server parses lines after the last committed batch. A completed job returns its stored result. For `409 import_in_progress`, retry after the active request finishes. For `409 import_resume_mismatch`, check the input, destination, and identity. In a mixed-version deployment, retry a `404` against an instance with resume support.
+
+`GET /import/resumable?resume_id=<UUID>` returns job status for the same identity and destination options. `running` indicates an active request, `pending` can be resumed with the original file, and `completed` returns the stored report without uploading the file again.
+
 ## Database schema
 
 Migrations are split into expand and contract.
