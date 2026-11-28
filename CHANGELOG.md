@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Added
+
+- 선택형 Rust 토크나이저. `npm run build:native`로 모듈을 빌드하고 `MEMENTO_TOKEN_COUNTER=native` 또는 `MEMENTO_GARU_BACKEND=native`로 각각 켠다. 네이티브 모듈을 쓸 수 없으면 기존 JS·WASM 구현으로 돌아간다.
+- JSONL 가져오기 재개. CLI의 `import --input FILE --resume UUID`와 관리 API의 `POST /import/resumable?resume_id=UUID`는 마지막 커밋 다음부터 시작한다. 같은 주체는 `GET /import/resumable?resume_id=UUID`로 상태와 완료 집계를 조회할 수 있다.
+- 관리 파편 목록의 선택형 커서와 총계 조회. `cursor=`로 시작하고 같은 필터와 `nextCursor`로 이어 본다. `include_total=false`는 정확한 총계 계산을 생략하고, `count_only=true`는 총계만 읽는다.
+- 관리 REST의 서버 발급 `X-Request-ID`와 선택형 `application/problem+json` 오류 응답. CLI에는 원격 및 엄격 헬스 점검, `health --check-rls`, `context --view index`, `recall --pack`을 추가했다.
+- 비소유자 DB 역할의 행 수준 보안 사전 점검과 키 범위 누락 차단 정책. 역할을 나눈 설치에서 `MEMENTO_DB_REQUIRE_RLS=true`로 기동을 검사하고, 해당 DB 역할에 `app.require_row_scope=on`을 설정해 범위 필수 모드를 켠다.
+
+### Changed
+
+- 관리자 콘솔의 빠른 목록은 커서를 쓰고 정확한 모드는 행과 총계를 같은 DB 스냅샷에서 읽는다. 페이지 이동 때 검색 분석을 다시 불러오지 않으며 갱신 뒤 키보드 포커스를 유지한다.
+- 경량 콘솔 모드는 컴파일된 CSS를 내려받고 그래프에서 D3를 불러온다. 구버전 인스턴스가 교체되면 `MEMENTO_ADMIN_LEGACY_ASSETS=false`로 켠다.
+- 검색의 Redis 캐시 읽기를 묶고, 동시에 들어온 동일 임베딩 질의는 계산 결과를 공유한다.
+
+### Upgrade
+
+- DB를 백업하고 `npm run migrate`로 마이그레이션 086·087을 적용한다. 비소유자 역할 또는 TLS 검증을 켜려면 [행 수준 보안 적용 절차](https://github.com/JinHo-von-Choi/anchormind/blob/v8.3.0/docs/operations/row-level-security.md)를 따른다.
+
 ## [8.2.0] - 2026-11-23
 
 ### Added
