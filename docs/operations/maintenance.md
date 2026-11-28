@@ -304,6 +304,7 @@ manual 범위에서 생긴 모순은 `contradicts` 링크만 남는다. 이 쌍�
 | `scripts/backfill-split-keywords.js` | keywords가 빈 split 자식 파편에 키워드 소급 생성 | 5.3.1 이하에서 생성된 split 자식이 키워드 검색에 잡히지 않을 때 | 일회성 |
 | `scripts/backfill-body-keywords.js` | 본문 식별자가 keywords에 없는 파편에 추출 결과 소급 병합 | 5.4.1 이하에서 keywords를 지정해 저장한 파편의 코드 식별자가 검색되지 않을 때 | 일회성 |
 | `scripts/benchmark-hot-path.js` | remember/recall/link/reflect 4개 hot path p50/p95/p99 측정 | Symbolic Memory feature flag 전환 전후 회귀 기준선 확보 | 조건부 |
+| `scripts/measure/tokenizers.mjs` | 토크나이저 구성별 MCP 배치 저장·검색·context 지연, 처리량, CPU·RSS 비교 | JS/WASM과 네이티브의 저장 결과 일치 및 도입 효과 검증 | 일회용 시험 서버 |
 | `scripts/switch-report.mjs` | 기능 스위치별 적용 값, 기본값, on/off, 기본과 다름을 마크다운 표로 출력 (`npm run switches`, 프로세스 환경만 읽음) | 릴리스 보고, 환경 변경 점검 | 릴리스마다 |
 | `scripts/run-e2e-tests.sh` | Docker 기반 E2E 테스트 실행 | CI/CD 파이프라인 또는 대규모 리팩터링 후 회귀 검증 | CI마다 또는 릴리즈 전 |
 | `scripts/smoke-test-symbolic.sh` | Symbolic Memory end-to-end smoke 검증 | MEMENTO_SYMBOLIC_* 플래그 전환 후 | 조건부 |
@@ -425,6 +426,27 @@ DATABASE_URL=postgresql://... node scripts/cleanup-noise.js --execute --include-
 조건부. 노이즈 파편이 recall 품질이나 context 토큰 예산에 영향을 준다고 판단될 때 1회성 실행. 정기 실행이 필요하면 월 1회를 기준으로 한다.
 
 ---
+
+## 토크나이저 구성 비교
+
+저장소에서 `npm run build:native`를 실행하고 일회용 PostgreSQL을 준비한다. `node scripts/measure/tokenizers.mjs --language ko`는 각 구성을 3회 실행하고 JSON 결과를 표준 출력에 쓴다. 혼합 텍스트는 `--language mixed`로 비교한다. 기본 시험 접속 값과 다른 포트를 쓰면 `POSTGRES_PORT`와 `DB_LANE_SERVER_ALLOW=localhost:<port>`를 함께 지정한다.
+
+Redis를 포함하려면 비어 있는 일회용 Redis를 준비하고 `--redis-port`에 기본 포트와 다른 포트를 지정한다. 실행마다 별도 Redis 논리 DB를 쓴다. 임베딩을 포함하려면 `--embeddings`와 `EMBEDDING_PROVIDER`, 필요에 따라 `EMBEDDING_BASE_URL`이나 `EMBEDDING_API_KEY`를 지정한다. PostgreSQL의 시험 DB는 각 실행 뒤 정리된다.
+
+### 기준선과 채택 조건
+
+아래는 Linux x64, Node 24, PostgreSQL 15에서 280자 안팎의 한글 파편을 사용해 측정한 3회 중앙값이다. Redis와 임베딩은 껐다. 매회 10개 파편을 담은 배치 저장 36건, 검색 144건, context 18건을 동시에 처리했다. CPU는 측정 구간의 서버 CPU 사용 시간이고 RSS는 측정 종료 시점의 서버 상주 메모리다.
+
+| 구성 | 배치 저장 p95 | 검색 p95 | context p95 | 처리량 | CPU | RSS |
+|---|---:|---:|---:|---:|---:|---:|
+| JS / WASM | 530ms | 636ms | 900ms | 20.9 요청/초 | 11.28초 | 669MiB |
+| Rust 토큰 계산 | 445ms | 521ms | 602ms | 24.5 요청/초 | 9.59초 | 639MiB |
+| 네이티브 Garu | 453ms | 598ms | 596ms | 22.9 요청/초 | 10.44초 | 601MiB |
+| 두 경로 모두 | 332ms | 401ms | 437ms | 28.6 요청/초 | 8.19초 | 615MiB |
+
+12회 모두 본문, 저장 토큰 수, 어휘 색인이 일치했다. 비교 도구는 별도 데이터에서 작은 예산과 넉넉한 예산으로 recall과 context를 실행하고 결과 파편, 순서, 토큰 합계도 비교한다. 저장 토큰 수가 없는 이전 행을 포함한다. 토큰 계산 교체는 저장·검색·context의 토큰 예산에 영향을 준다. Garu 교체는 한글 어휘 색인과 질의 토큰화, 형태소 벡터 입력에 영향을 준다. 정리 작업의 고유명사 추출은 WASM으로 실행한다.
+
+토큰 계산을 먼저 평가한다. 동일 설정에서 배치 저장 p95가 15% 이상 개선되고 recall·context p95 악화가 5% 이내면 스테이징에서 켠다. Garu는 토큰 계산을 이미 켠 상태에서 배치 저장 p95 또는 처리량이 추가로 10% 이상 개선되고 검색 품질이 유지될 때 켠다. Redis와 테스트 임베딩을 켠 혼합 언어 부하 1회에서 배치 저장 p95는 414ms에서 토큰 계산 교체 후 343ms, Garu 추가 후 319ms였다. Garu의 추가 개선은 약 7%였다. 실제 운영 설정의 채택 여부는 해당 환경에서 측정한다.
 
 ## benchmark-hot-path
 

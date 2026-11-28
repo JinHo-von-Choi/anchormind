@@ -226,7 +226,17 @@ export async function dropLaneDatabase() {
  */
 export async function createExtraLaneDatabase() {
   if (!lane) throw new Error("prepareLaneDatabase()를 먼저 호출해야 한다");
-  const { server } = lane;
+  return provisionLaneDatabase(lane.server);
+}
+
+/** 연결 환경을 바꾸지 않고 호출자가 정리할 수 있는 일회용 데이터베이스를 만든다. */
+export async function createIsolatedLaneDatabase(env = process.env) {
+  const server = resolveLaneServer(env);
+  assertLaneServer(server, env);
+  return provisionLaneDatabase(server);
+}
+
+async function provisionLaneDatabase(server) {
   const name       = newLaneDatabaseName();
   const config     = { host: server.host, port: server.port, user: server.user, password: server.password, database: name };
 

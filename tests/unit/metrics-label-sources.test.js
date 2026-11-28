@@ -96,6 +96,8 @@ const REVIEWED = new Map([
   ["lib/jsonrpc.js|recordToolExecution|name",                                     "TOOL_REGISTRY.get(name) 통과 후에만 도달한다"],
   ["lib/jsonrpc.js|recordError|method",                                           "METHOD_MAP 키의 처리기가 던진 경우에만 도달한다"],
   ["lib/jsonrpc.js|recordError|errorCode",                                        "서버 코드가 붙인 오류 코드"],
+  ["lib/native-tokenizers.js|inc|tokenizer",                                     "호출부가 지정한 cl100k 또는 garu"],
+  ["lib/native-tokenizers.js|inc|reason",                                        "네이티브 적재와 확인 시험이 정한 missing, load, initialize, mismatch"],
   ["lib/llm/index.js|inc|provider.name",                                          "등록된 provider 이름"],
   ["lib/llm/index.js|observe|provider.name",                                      "등록된 provider 이름"],
   ["lib/llm/index.js|dec|provider.name",                                          "등록된 provider 이름"],

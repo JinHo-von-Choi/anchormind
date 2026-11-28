@@ -1,0 +1,18 @@
+[package]
+name = "anchormind-tokenizers"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+garu-core = { git = "https://github.com/ongjin/garu.git", rev = "c096b045b2f973d448342ad502941641d87fc0a7" }
+napi = { version = "3", default-features = false, features = ["napi8"] }
+napi-derive = "3"
+tiktoken-rs = "=0.12.1"
+
+[build-dependencies]
+napi-build = "2"

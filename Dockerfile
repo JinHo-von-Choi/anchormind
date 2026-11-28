@@ -1,4 +1,11 @@
-FROM node:24-alpine
+FROM rust:1.97-alpine AS native-build
+
+RUN apk add --no-cache build-base git
+WORKDIR /build
+COPY native/ ./
+RUN cargo build --locked --release
+
+FROM node:24-alpine AS runtime
 
 WORKDIR /app
 
@@ -15,3 +22,8 @@ COPY --chown=node:node . .
 EXPOSE 57332
 
 CMD ["node", "server.js"]
+
+FROM runtime AS native
+COPY --from=native-build --chown=node:node /build/target/release/libanchormind_tokenizers.so /app/native/tokenizers.node
+
+FROM runtime AS standard

@@ -354,7 +354,7 @@ logInfo(describeWorkingMemoryBackend({ redisEnabled: REDIS_ENABLED, fallbackEnab
 setAnchorAutoPromotionEnabled(MEMORY_CONFIG.consolidate?.autoPromoteAnchors !== false);
 
 server.listen(PORT, BIND_HOST || undefined, () => {
-  console.log(`Memento MCP HTTP server listening on ${BIND_HOST || "all interfaces"} port ${PORT}`);
+  console.log(`Memento MCP HTTP server listening on ${BIND_HOST || "all interfaces"} port ${server.address().port}`);
   console.log("Streamable HTTP endpoints: POST/GET/DELETE /mcp");
   console.log("Legacy SSE endpoints: GET /sse, POST /message");
 

@@ -44,6 +44,7 @@ mock.module("../../lib/config.js", {
     contextAnchorTokenBudget: () => 1000,
     anchorTokenBudgetMode  : () => "warn",
     sensitiveScanEffectiveMode: () => "mask",
+    TOKEN_COUNTER_BACKEND: "js",
     eventTimeExtractEnabled   : () => true,
     /** ConsolidatorGC가 배경 쓰기 실패를 세는 lock-retry가 읽는 값 */
     envInt                 : (_name, fallback) => fallback,

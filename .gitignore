@@ -38,6 +38,8 @@ test-results/
 # Build output
 dist/
 build/
+/native/target/
+/native/tokenizers.node
 
 # Docs (generated reports)
 docs/reports/

@@ -58,6 +58,35 @@ jobs:
           set -e
           test "$code" -eq 78
 
+  native-tokenizers:
+    name: Native Tokenizers (Node 22 and Alpine)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: rustup toolchain install 1.97.1 --profile minimal
+      - run: RUSTUP_TOOLCHAIN=1.97.1 npm run build:native
+      - run: DOTENV_CONFIG_PATH=/dev/null MEMENTO_METRICS_DEFAULT=off node --test tests/unit/native-tokenizers.test.js
+      - run: docker build --target native -t anchormind-native-test .
+      - name: Load and run both tokenizers in the Alpine image
+        run: |
+          docker run --rm -i -e MEMENTO_TOKEN_COUNTER=native -e MEMENTO_GARU_BACKEND=native \
+            anchormind-native-test node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import { countTokens } from "./lib/memory/write/FragmentFactory.js";
+          import { tokenizeLocal } from "./lib/memory/embedding/MorphemeTokenizer.js";
+          import { register } from "./lib/metrics.js";
+          assert.equal(countTokens("hello world"), 2);
+          assert.ok((await tokenizeLocal("한국어 형태소 분석")).includes("한국어"));
+          const { values } = await register.getSingleMetric("memento_tokenizer_native_active").get();
+          assert.equal(values.length, 2);
+          assert.ok(values.every(({ value }) => value === 1));
+          JS
+
   e2e:
     name: E2E Tests (with DB)
     runs-on: ubuntu-latest

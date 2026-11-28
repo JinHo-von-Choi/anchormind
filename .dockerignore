@@ -1,5 +1,7 @@
 # Dependencies (컨테이너 내부 npm ci로 재설치 — 플랫폼별 네이티브 바이너리 확보)
 node_modules
+native/target
+native/tokenizers.node
 
 # VCS / 메타
 .git

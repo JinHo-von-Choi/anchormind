@@ -112,6 +112,14 @@ volumes:
   메이저 업그레이드는 볼륨 호환성 문제로 별도 절차(덤프·복원)가 필요하다.
 - `pgdata`·`redisdata` 볼륨은 백업 대상이다.
 
+## 네이티브 토크나이저 활성화
+
+Alpine에서 네이티브 모듈을 쓰려면 `docker build --target native -t anchormind:native .`로 이미지를 빌드한다. Compose의 `anchormind.build`를 쓰면 `target: native`를 지정한다. 호스트에서 Node를 직접 실행하는 설치는 서비스와 동일한 OS·아키텍처·libc에서 `npm run build:native`로 모듈을 만든다. 이 명령은 Cargo와 Rust 빌드 도구가 필요하다.
+
+1. `MEMENTO_TOKEN_COUNTER=native`로 `cl100k_base` 토큰 수 계산을 먼저 활성화한다. 배치 저장, 검색, context를 호출한 뒤 `/metrics`의 `memento_tokenizer_native_active{tokenizer="cl100k"}`가 `1`인지 확인한다.
+2. 한글 형태소 분석을 비교하려면 `MEMENTO_GARU_BACKEND=native`를 별도로 켠다. 한글이 든 본문을 저장하거나 검색한 뒤 `memento_tokenizer_native_active{tokenizer="garu"}`가 `1`인지 확인한다.
+3. `memento_tokenizer_fallback_total`이 증가하면 `reason` 라벨을 확인한다. 모듈을 쓰기 어렵거나 요청 지연이 악화되면 해당 값을 `js` 또는 `wasm`으로 되돌리고 서비스를 재시작한다. 기동이 불안정하면 직전 이미지로 재시작한다.
+
 ## restart 정책 선택
 
 `unless-stopped`를 기본으로 권장한다. 두 정책은 호스트 재부팅·엔진 재시작 시의 복구 동작이

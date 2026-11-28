@@ -113,6 +113,8 @@ export const SWITCHES = Object.freeze([
   boolOn("MEMENTO_WORKSPACE_DECAY", "검색", "workspace가 다른 파편의 순위 점수를 낮춘다"),
   enumOf("MEMENTO_CONTEXT_ANNOTATE", ["on", "off"], "on", "검색", "context 주입 줄 끝에 저장일과 assertion 주석을 붙인다", { off: ["off"] }),
   enumOf("MEMENTO_LEXICAL_CHANNEL", ["on", "off"], "on", "검색", "본문 형태소 토큰 전문 검색 후보를 RRF에 더하고 저장 시 content_tokens를 채운다", { off: ["off"] }),
+  enumOf("MEMENTO_TOKEN_COUNTER", ["js", "native"], "js", "기억 처리", "cl100k_base 토큰 수 계산 방식"),
+  enumOf("MEMENTO_GARU_BACKEND", ["wasm", "native"], "wasm", "기억 처리", "한글 구간의 Garu tokenize 실행 방식"),
   offDisables("MEMENTO_VECTOR_FORCE_INDEX", "검색", "벡터 검색에 인덱스 강제 planner 힌트를 쓴다"),
   boolOff("ENABLE_SPREADING_ACTIVATION", "검색", "recall의 contextText로 활성 확산 검색을 한다"),
   boolOff("MEMENTO_SYNTHETIC_QUERY_ENABLED", "검색", "파편 저장 시 LLM으로 합성 역질의를 만들어 색인한다"),
