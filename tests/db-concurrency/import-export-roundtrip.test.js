@@ -274,9 +274,9 @@ it("재개 가져오기는 커밋 경계를 지키고 링크, 이력, 완료 감
   async function* holdJob() {
     started();
     await paused;
-    throw new Error("fixture interrupted while holding the job");
+    yield* interrupted(2);
   }
-  const running = assert.rejects(run(holdJob()), /fixture interrupted while holding the job/);
+  const running = assert.rejects(run(holdJob()), /fixture interrupted/);
   try {
     await locked;
     assert.deepEqual(await jobStatus(), { status: "running", line: 0, checkpoint: null });
